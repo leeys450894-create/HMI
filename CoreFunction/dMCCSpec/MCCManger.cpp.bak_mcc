@@ -1,0 +1,140 @@
+// MCCManger.cpp : implementation file
+//
+
+#include "pch.h"
+#include "dMCCSpec.h"
+#include "MCCManger.h"
+
+#ifdef _DEBUG
+#define new DEBUG_NEW
+#undef THIS_FILE
+static char THIS_FILE[] = __FILE__;
+#endif
+
+/////////////////////////////////////////////////////////////////////////////
+// CMCCManger
+
+CMCCManger::CMCCManger()
+{
+}
+
+CMCCManger::~CMCCManger()
+{
+}
+
+
+BEGIN_MESSAGE_MAP(CMCCManger, CWnd)
+	//{{AFX_MSG_MAP(CMCCManger)
+		// NOTE - the ClassWizard will add and remove mapping macros here.
+	//}}AFX_MSG_MAP
+END_MESSAGE_MAP()
+
+
+/////////////////////////////////////////////////////////////////////////////
+// CMCCManger message handlers
+
+void CMCCManger::SetLogPath(CString str)
+{
+	m_dlgMCC->SetLogPath(str);
+}
+
+void CMCCManger::SetConfigPath(CString str)
+{
+	m_dlgMCC->SetConfigPath(str);
+}
+
+void CMCCManger::SetFilePath(CString str)
+{
+	m_dlgMCC->SetFilePath(str);
+}
+
+void CMCCManger::SetEQName(CString str)
+{
+	m_dlgMCC->SetEQName(str);
+
+	m_dlgMCC->SetMccILogHeader();
+}
+
+void CMCCManger::InitializeMCC(HWND hParent, CRect r) 
+{
+	// AlarmManager 윈도우 생성.
+	Create(NULL,NULL,WS_VISIBLE|WS_CHILD,CRect(0,0,0,0),this,1);
+	
+	// Alarm, Warning 다이얼로그 생성.
+	CreateMCCLogDlg(hParent, r);
+	
+//	CString strFileName = g_sAppPath + dfDEFAULT_ALARM_FILE_PATH;	
+//	m_bInitialized = TRUE;			// pwk 20130602 
+}
+
+void CMCCManger::CreateMCCLogDlg(HWND hParent, CRect r)
+{
+	if (!hParent) return;
+	
+	if (::IsWindow(m_dlgMCC->GetSafeHwnd()))
+	{
+		m_dlgMCC->DestroyWindow();
+	}
+	
+//	OleInitialize(NULL);
+	
+	m_dlgMCC = new CDlgnMCCReport(FromHandle(hParent));
+
+	m_dlgMCC->Create(IDD_DLG_MMC_LOG, FromHandle(hParent));
+
+	CRect rect;
+	m_dlgMCC->GetWindowRect(rect);
+	m_dlgMCC->MoveWindow(r.left,r.top, rect.Width(),rect.Height());	// jsyoon 20160226 add
+
+	if (::IsWindow(m_dlgMCC->GetSafeHwnd()))
+		m_dlgMCC->ShowWindow(SW_HIDE);
+}
+
+
+CWnd* CMCCManger::GetReportMCCWnd()
+{
+	return m_dlgMCC;
+}
+
+void CMCCManger::Finalize()
+{
+//	if (::IsWindow(m_dlgMCC->GetSafeHwnd()))
+//	{
+////		m_dlgMCC.KillThred();
+//		m_dlgMCC->EndDialog(0);
+//	}
+
+	// 2023.03.07 change
+	if (m_dlgMCC != nullptr)
+	{
+		m_dlgMCC->DestroyWindow();
+		delete m_dlgMCC;
+		m_dlgMCC = nullptr;
+		//m_dlgMCC->EndDialog(0);
+	}
+}
+
+void CMCCManger::KillThred()
+{
+	if (::IsWindow(m_dlgMCC->GetSafeHwnd()))
+	{
+		m_dlgMCC->KillThred();
+		m_dlgMCC->WaitTerminateWorkerThread();
+	}
+}
+
+
+int CMCCManger::AddMccQueue(int iFlag)
+{
+	if (::IsWindow(m_dlgMCC->GetSafeHwnd()))
+	{
+		m_dlgMCC->AddMccQueue(iFlag);
+	}
+
+	return 0;
+}
+
+VTM_MCC* CMCCManger::GetSharedMemory()
+{
+	return m_dlgMCC->m_pMCCMap;
+}

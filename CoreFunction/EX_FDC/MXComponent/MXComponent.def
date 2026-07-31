@@ -1,0 +1,23 @@
+; MXComponent.def : Declares the module parameters for the DLL.
+
+LIBRARY      "MXComponent"
+DESCRIPTION  'MXComponent Windows Dynamic Link Library'
+
+EXPORTS
+    ; Explicit exports can go here
+
+	API_MXComponent_Initialize
+	API_MXComponent_Close
+	API_MXComponent_GetErrorText
+	API_MXComponent_GetMemoryBit
+	API_MXComponent_SetMemoryBit
+	API_MXComponent_SetMemoryBitBlock
+	API_MXComponent_SetMemoryBitBlock2
+	API_MXComponent_GetMemoryBitBlock
+	API_MXComponent_GetMemoryWordBlock
+	API_MXComponent_SetMemoryWordBlock
+	API_MXComponent_GetMemoryWordBlock2
+	API_MXComponent_SetMemoryWordBlock2
+	API_MXComponent_GetMemoryWordBlock3
+	API_MXComponent_SetMemoryWordBlock3
+	

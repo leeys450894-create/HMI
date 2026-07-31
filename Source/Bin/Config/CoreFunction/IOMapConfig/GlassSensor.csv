@@ -1,0 +1,15 @@
+ADDRESS,
+D1501,Write Request (PC)
+D1505,Read Complete (PLC)
+D1510,Write Gls Sensor Value 1
+D1511,Write Gls Sensor Value 2
+D1512,Write Gls Sensor Value 3
+D1513,Write Gls Sensor Value 4
+D1514,Write Gls Sensor Value 5
+D1515,Write Gls Sensor Value 6
+D1550,Read Glas Sensor Value 1
+D1551,Read Glas Sensor Value 2
+D1552,Read Glas Sensor Value 3
+D1553,Read Glas Sensor Value 4
+D1554,Read Glas Sensor Value 5
+D1555,Read Glas Sensor Value 6

@@ -1,0 +1,1473 @@
+// DlgPLC.cpp : 구현 파일입니다.
+//
+
+#include "stdafx.h"
+#include "FDCSense.h"
+#include "DlgPLC.h"
+#include "afxdialogex.h"
+
+//#include "FDCSharedDefine.h"
+#include "FDCSEnseDlg.h"
+/*#include "FDCDefine.h"*/
+
+#include <direct.h>
+
+#ifdef _DEBUG
+#define new DEBUG_NEW
+#undef THIS_FILE
+static char THIS_FILE[] = __FILE__;
+#endif
+
+CFDCSenseDlg* g_pdlgMainPLC = NULL;
+
+// CDlgPLC 대화 상자입니다.
+
+IMPLEMENT_DYNAMIC(CDlgPLC, CDialog)
+
+CDlgPLC::CDlgPLC(CWnd* pParent /*=NULL*/)
+	: CDialog(CDlgPLC::IDD, pParent)
+{
+	m_strReceiveLog.Empty();
+	memset(m_chReceiveLog, NULL, 2000);		// eh.kim 20170719 add.
+
+	m_nMode = 0;
+	m_nSocketIndex = 1;
+	m_nStationNum = 5;
+	m_nUseSize = 2;
+	m_nUseGap  = 0;
+	
+
+	int i=0;
+	for (i=0; i<dfMAXFDCITEM; i++)
+	{
+		m_bFilterUse[i] = FALSE;
+		m_bFilter_Min[i] = 0;
+		m_bFilter_Max[i] = 100;
+		m_bFilter_Standard[i] = 50;
+		m_bFilterValue[i] = FALSE;
+	}
+
+	ZeroMemory(&m_valArray, sizeof(m_valArray));
+
+	for(i=0 ; i<dfMAXFDCITEM; i++)		// gdh 20180321 add
+	{
+		m_bShowFLog[i] = FALSE;
+	}
+
+	// eh.kim 20170206
+	m_iStartSafetyTime	= 0;
+	m_bStartSafety		= FALSE;
+	//
+
+	m_bStartSafetyPLCRead = FALSE;		// eh.kim 20171101 add.
+
+	// eh.kim 20180104 add.
+	m_bStartSafetyDefault = FALSE;	
+	m_iStartSafetyDefaultCount = 0;
+	//
+	
+	m_bSendOK = FALSE;
+
+//	m_strArray.RemoveAll();
+	m_strArrayForFLogList.RemoveAll();
+}
+
+CDlgPLC::~CDlgPLC()
+{
+}
+
+void CDlgPLC::DoDataExchange(CDataExchange* pDX)
+{
+	CDialog::DoDataExchange(pDX);
+	DDX_Control(pDX, IDC_LIST_PLC_LOG, m_lbPlcLog);
+	DDX_Control(pDX, IDC_LIST_DPLC_LOG, m_lbDPlcLog);
+}
+
+void CDlgPLC::SetMainPoint(void* pvoid)
+{
+	g_pdlgMainPLC = (CFDCSenseDlg*) pvoid;
+}
+
+
+BEGIN_MESSAGE_MAP(CDlgPLC, CDialog)
+	ON_BN_CLICKED(IDC_BTN_CONNET_PLC, &CDlgPLC::OnBnClickedBtnConnetPlc)
+//	ON_WM_TIMER()
+	ON_WM_DESTROY()
+END_MESSAGE_MAP()
+
+
+// CDlgPLC 메시지 처리기입니다.
+
+
+void CDlgPLC::OnBnClickedBtnConnetPlc()
+{
+	// TODO: Add your control notification handler code here
+	GetConfig();
+
+	SOCKET_OPEN stSockOpen;
+	stSockOpen.nSockMode = SOCKET_MODE_CLIENT;
+	stSockOpen.nPort = m_nPlcPort;
+	_tcscpy_s(stSockOpen.szIPAddr, _countof(stSockOpen.szIPAddr), m_szIPAddress);
+	CreateSocket(stSockOpen);
+}
+
+
+BOOL CDlgPLC::OnInitDialog()
+{
+	CDialog::OnInitDialog();
+
+	GetConfig();
+
+	// yj.nam 20180719 add (D10000, D10002, , D10004, , D10006, ...) 
+	int i = 0, j=0;
+	for (j=0; j<4; j++)
+	{
+		for(i=0; i<dfMAXFDCITEM ; i++)
+		{
+			if( j == 3)	// ASCII		8		// jsyoon 202005493
+				m_iRefAddressToWrite[j][i] = 10000 + (8*i) + (m_nUseGap * j);
+			else
+				m_iRefAddressToWrite[j][i] = 10000 + (m_nUseSize*i) + (m_nUseGap * j);
+
+// 			if( m_nUseSize == 3)
+// 				m_iRefAddressToWrite[j][i] = 10000 + (3*i) + (dfMAXSVITEM * j);
+// 			else
+// 				m_iRefAddressToWrite[j][i] = 10000 + (2*i);
+
+		}
+	}
+	//SetMStateCodeToSpread();
+
+	SOCKET_OPEN stSockOpen;
+	stSockOpen.nSockMode = SOCKET_MODE_CLIENT;	
+	stSockOpen.nPort = m_nPlcPort;
+	_tcscpy_s(stSockOpen.szIPAddr, _countof(stSockOpen.szIPAddr), m_szIPAddress);
+	CreateSocket(stSockOpen);
+
+//	SetTimer(1, 1000, NULL);	// jsyoon 20180906 remove 
+
+	pPLCReciveValue = new double[dfMAXFDCITEM];
+
+	return TRUE;  // return TRUE unless you set the focus to a control
+	// EXCEPTION: OCX Property Pages should return FALSE
+}
+
+void CDlgPLC::GetConfig() 
+{
+	char szValue[MAX_PATH];
+	ZeroMemory(szValue,MAX_PATH);
+
+	CString sPath;
+	sPath.Format("%s%s", m_strAppPath, dfDEFAULT_CONFIG_FILE_PATH);
+
+	TCHAR	szConfigFile[MAX_PATH];
+	_tcscpy_s(szConfigFile,_countof(szConfigFile), sPath);
+
+	CString strPLC;
+	strPLC = _T("PLC");
+	GetPrivateProfileString (strPLC,"TYPE","1",szValue,MAX_PATH,szConfigFile);
+	m_nMode = atoi(szValue);
+	GetPrivateProfileString (strPLC,"STATIONNUM","5",szValue,MAX_PATH,szConfigFile);
+	m_nStationNum = atoi(szValue);
+
+	GetPrivateProfileString (strPLC,"IP","127.0.0.1",szValue,MAX_PATH,szConfigFile);
+	m_szIPAddress = szValue;
+	GetPrivateProfileString (strPLC,"Port","1000",szValue,MAX_PATH,szConfigFile);
+	m_nPlcPort = atoi(szValue);
+	GetPrivateProfileString (strPLC,"OutOfService","0",szValue,MAX_PATH,szConfigFile);
+	m_bOutOfService = atoi(szValue);
+
+	// gdh 20180321 add
+	GetPrivateProfileString (strPLC, "FilterFLogList", "",szValue,MAX_PATH,szConfigFile);	
+	m_strFilterFLogList = szValue;
+
+	m_strArrayForFLogList.SetSize(0);
+	SplitString(m_strFilterFLogList, ',');
+	SetFilterFLogList();
+	m_strArrayForFLogList.RemoveAll();
+
+
+	GetPrivateProfileString (strPLC, "USESIZE", "2",szValue,MAX_PATH,szConfigFile);	
+	m_nUseSize = atoi(szValue);
+
+	// BOE 210
+	GetPrivateProfileString (strPLC, "USEGAP", "0",szValue,MAX_PATH,szConfigFile);	
+	m_nUseGap = atoi(szValue);
+	
+	////////////////////////////////////////////////////////////////
+
+	GetPrivateProfileString ("EQNAME","EFU_NUM","0",szValue,MAX_PATH,szConfigFile);
+	m_nUseEFUNum = atoi(szValue);
+
+	//sypark 20180502 add
+	GetPrivateProfileString ("UI DISPLAY","UseMonitorNum","0",szValue,MAX_PATH,szConfigFile);
+	m_nUseMonitorNum = atoi(szValue);
+	//
+
+	GetPrivateProfileString ("UI DISPLAY","UseMonitorNum","0",szValue,MAX_PATH,szConfigFile);
+	m_nUseMonitorNum = atoi(szValue);
+
+	if(g_pdlgMainPLC == NULL)
+		return;
+}
+
+// gdh 20180318 add
+void CDlgPLC::SetFilterFLogList()
+{
+	int i=0,j=0;
+	for(i=0; i<m_strArrayForFLogList.GetSize(); i++)
+	{
+		for(j=0; j<dfMAXFDCITEM; j++)
+		{
+			if( j == atoi(m_strArrayForFLogList.GetAt(i)) - 1)
+				m_bShowFLog[j] = TRUE;
+		}
+	}
+}
+// gdh 20180318 add
+void CDlgPLC::SplitString(CString strLine, char split) 
+{
+	CString strTok;
+	int cnt=0;
+	while(AfxExtractSubString(strTok, strLine, cnt, ',')) // 문자를 잘라준다. (AfxExtractSubString = strTok)
+	{
+		strTok.TrimLeft(); strTok.TrimRight();
+		m_strArrayForFLogList.Add(strTok);					
+		cnt++;				
+	} 
+}
+///////////////////////////////////////////////////////////////////////////////////////////////////
+BOOL CDlgPLC::DoWorkStartGetPLCMemoryBitAll()
+{
+	if (m_bOutOfService)
+	{
+		return TRUE;
+	}
+
+	if( !api_SocketCtrl_IsConnected(m_nSocketIndex) )
+		return FALSE;
+	
+	//char	*StopStr;
+	CString strReply;
+	CString strReadDate;
+	strReply.Empty();
+
+	CString strPLCData;
+	strPLCData.Empty();
+
+// 	if(GetReceiveData(&strReply, dfMAX_PLC_IN_CNTD*4+22, 1000))			//Changed PLC_READ_TIMEOUT(3000) --> 1000, 2011.02.23 by Jay Hong
+ 	{
+// 		CString strHeader;
+// 		strHeader = strReply.Left(22);
+// 		if(strHeader.Find("D00000FF03FF0001440000")<0)
+// 		{
+// 			EventDLog(strHeader);
+// 			return TRUE;
+// 		}//////////////////////////////////////////////////
+// 
+// 		//		if(CheckAndShowMsg((LPSTR)(LPCSTR)strReply))
+// 		{
+// 			//			strPLCData = strReply.Right(dfMAX_PLC_IN_CNT);
+// 			strPLCData = strReply.Mid(22, dfMAX_PLC_IN_CNTD*4);
+// 			
+// 
+// 			int ni = strPLCData.GetLength();
+// 			if(strReply.GetLength() < dfMAX_PLC_IN_CNTD*4)
+// 				return TRUE;
+// 
+// 			CString strLog;
+// 
+// 			for(int i=0;i<dfMAX_PLC_IN_CNTD;i++)
+// 			{
+// 				//				char a  = strPLCData.GetAt(i);		// '1' or '0' ASCII code
+// 
+// 				strReadDate = strPLCData.Mid(i*4, 4);
+// 				long Curpos = strtol(strReadDate, &StopStr, 16);
+// 
+// 				// 				m_bPLCData[i] = a - '0';			// 숫자로 변환
+// 				// 				m_pSystem->stSystem[VTM_PLC].m_bPLCData[i] = m_bPLCData[i];
+// 
+// 				strLog.Format("[RCVE] (%d) : %s : %d \n",i+1,strReadDate,Curpos);
+// 
+// 				EventDLog(strLog);
+// 			}
+// 
+// 			//			CheckInterlock();
+// 
+// 			return TRUE;
+// 		}
+		strPLCData = strReply;
+
+		EventDLog(strPLCData);
+
+		return TRUE;
+	}
+	return FALSE;
+
+}
+
+BOOL CDlgPLC::DoWorkStartGetPLCMemoryBit(CString strDeviceText,int iDeviceNum)
+{
+	if (m_bOutOfService)
+	{
+		return TRUE;
+	}
+
+	long lData = 0;
+//	API_MXComponent_GetMemoryBit(strDeviceText, iDeviceNum, &lData);
+
+	return lData;
+}
+
+BOOL CDlgPLC::DoWorkStartGetPLCSendRetrun()
+{
+	if (m_bOutOfService)
+	{
+		return TRUE;
+	}
+
+	return FALSE;
+}
+
+int CDlgPLC::SetMStateCodeToSpread()
+{
+	return 0;
+}
+
+// jsyoon 20180906 remove
+// void CDlgPLC::OnTimer(UINT_PTR nIDEvent)
+// {
+// 	if(nIDEvent == 1)
+// 	{
+// 		;
+// 		int iRow = 0, iMax;
+// 		short unStartBit =  PLC_D_WRITE_STARY_BIT;
+// 		FDCSPRED SpredData;
+// 		int i = 0, j = 0, k=0, l=0, u=0; 
+// 		iMax = m_strArray.GetSize();
+// 		
+// // 		iMax = m_strArray.GetSize();
+// // 		for (k=0; k < iMax; k++)
+// // 		{
+// // 			//_tcscpy_s(SpredData.cName, _countof(SpredData.cName), m_strArray.GetAt(k));
+// // 			SpredData.sDevice = unStartBit;
+// // 			SpredData.dVal    = m_valArray[k];
+// // 			g_pdlgMainPLC->SetSpredData(k, SpredData);
+// // 			unStartBit += 8;
+// // 		}
+// 
+// 		for (iRow=0; iRow < dfMAXFDCITEM; iRow++)
+// 		{
+// 			//_tcscpy_s(SpredData.cPARARMName, _countof(SpredData.cPARARMName), m_strArray.GetAt(k));
+// 
+// 			// jsyoon 20180528 change
+// 			SpredData.dVal    = m_valArray[iRow]; 
+// 			g_pdlgMainPLC->SetSpredData(iRow, SpredData);
+// 
+// // 			if(m_valArray[iRow] > 0)
+// // 			{
+// // 				SpredData.dVal    = m_valArray[iRow]; 
+// // 				g_pdlgMainPLC->SetSpredData(iRow, SpredData);
+// // 			}
+// // 			else
+// // 			{
+// // 				SpredData.dVal = 0.0;
+// // 				g_pdlgMainPLC->SetSpredData(iRow, SpredData);
+// // 			}		
+// 		}	
+// 	}
+// 
+// 	CDialog::OnTimer(nIDEvent);
+// }
+
+void CDlgPLC::CreateSocket(SOCKET_OPEN stSockOpen)
+{
+	if (m_bOutOfService)
+	{
+		return;
+	}
+	BOOL IsSet = FALSE;									// 설정이 되었는지 검사하는 변수 
+	CString str;
+	CString strLog;
+	BOOL bConnect = FALSE;
+
+	//	if(FALSE == IsSet)							// 설정이 되어 있지 않을 경우 
+	{
+		memcpy(&m_stSockOpen, &stSockOpen, sizeof(SOCKET_OPEN));
+
+		BOOL bInitialize = FALSE;
+		int nSockMode = stSockOpen.nSockMode;
+
+		int nPort = stSockOpen.nPort;
+		CString strIPAddr;
+
+		if(nSockMode == SOCKET_MODE_CLIENT)
+		{
+			if( m_nMode == 0 )
+			{
+				if(api_SocketCtrl_IsConnected(m_nSocketIndex))
+				{
+					// 현재 연결되었으면, 연결 해제.
+					api_SocketCtrl_Close(m_nSocketIndex);
+
+					strLog.Format("[CLOSED] by user, %d", m_nSocketIndex);
+					TRACE("%s\n", strLog);
+					EventLog(strLog);
+				}
+
+				strIPAddr = stSockOpen.szIPAddr;
+
+				TCHAR szIp[32];
+				_tcscpy_s(szIp, _countof(szIp), strIPAddr);
+				bInitialize = api_SocketCtrl_Initialize(m_nSocketIndex, this, nSockMode, nPort, szIp);
+
+			}
+			else
+			{
+//				if(API_MXComponent_Initialize(5, GetSafeHwnd()))
+				long lRet=0;
+//				bInitialize = api_Melsoft_Initialize(0, 5, GetSafeHwnd(), &lRet);
+				lRet = API_MXComponent_Initialize(0, m_nStationNum, GetSafeHwnd());
+				if( lRet == COMPONENT_SUCCESS )
+				{
+					bInitialize = TRUE;
+				}
+				strIPAddr.Format("%d", m_nStationNum);
+			}
+
+			if(bInitialize)
+			{
+				strLog.Format("[CONNECTED] (%s)", strIPAddr);
+				EventLog(strLog);
+			}
+			else
+			{
+				strLog.Format("[ERROR] Connect...Fail(%s)", strIPAddr);
+//					strLog = _T("Connect Socket...Fail!!!)";
+				EventLog(strLog);
+//					AfxMessageBox(strLog);
+				//					return;
+			}
+		}
+// 		else if(nSockMode == SOCKET_MODE_SERVER)
+// 		{
+// 			if( FALSE )
+// 			{
+// 				bInitialize = api_SocketCtrl_Initialize(m_nSocketIndex, this, nSockMode, nPort, strIPAddr);
+// 
+// 				if(!bInitialize)
+// 				{
+// 					CString strLog = "Create Socket...Fail!!!";
+// 	//				EventLog(strLog);
+// 					AfxMessageBox(strLog);
+// 					return;
+// 				}
+// 			}
+// 			else
+// 			{
+// 	//			if(API_MXComponent_Initialize(5, GetSafeHwnd()))
+// 				long lRet=0;
+// 				if( api_Melsoft_Initialize(0, 5, GetSafeHwnd(), &lRet))
+// 				{
+// 					CString strLog;
+// 					strLog = "[CONNECTED] PLC connection success!";
+// 				}
+// 				else
+// 				{
+// 					AfxMessageBox("PLC connection fail.");
+// 				}
+// 			}
+// 		}
+	}
+}
+
+void CDlgPLC::CloseSocket()
+{
+	CString strLog;
+	BOOL bRet = TRUE;
+	if( m_nMode == 0 )
+	{
+		if(api_SocketCtrl_IsConnected(m_nSocketIndex))
+		{
+			// 현재 연결되었으면, 연결 해제.
+			bRet = api_SocketCtrl_Close(m_nSocketIndex);
+		}
+	}
+	else
+	{
+		//				if(API_MXComponent_Initialize(5, GetSafeHwnd()))
+		long lRet=0;
+		//				bInitialize = api_Melsoft_Initialize(0, 5, GetSafeHwnd(), &lRet);
+		lRet = API_MXComponent_Close(0);
+		if( lRet == COMPONENT_SUCCESS )
+		{
+			bRet = TRUE;
+		}
+	}
+
+	strLog.Format("[CLOSED] by user, %d", m_nSocketIndex);
+	TRACE("%s\n", strLog);
+	EventLog(strLog);
+}
+
+void CDlgPLC::EventLog(CString &s)
+{
+	//	CString sLog = gf_MakeCurTimeString() + "   " + s;
+	CString strTemp, sLog;
+	strTemp.Format("%s", s);
+	if(strTemp.Find("[SEND]")>=0)
+		return;
+
+	sLog.Format("%s, %s", gf_MakeCurTimeString2(), s);
+
+	if (m_strReceiveLog.CompareNoCase(strTemp) != 0) //kjhg 20141121 add
+	{
+		g_pdlgMainPLC->WriteELog(sLog, 1);
+//		int nR = WriteFile(&m_fileCommLog, GetLogFileName(), sLog);
+
+		m_strReceiveLog.Format("%s", strTemp);
+	}
+
+	m_lbPlcLog.InsertString(-1, sLog);
+
+	if (m_lbPlcLog.GetCount() > 100)	// 100라인 정도까지만 출력
+		m_lbPlcLog.DeleteString(0);
+
+	m_lbPlcLog.SetCurSel(m_lbPlcLog.GetCount()-1);
+
+// 	if(sLog.Find("[SEND]")>=0)
+// 		return;
+
+// 	CString strTemp;
+// 	if( sLog.GetLength() < 2000)
+// 		strTemp = sLog;
+// 	else
+// 		strTemp = sLog.Left(1900);
+
+// 	if (m_strReceiveLog.CompareNoCase(strTemp) != 0) //kjhg 20141121 add
+// 	{
+// 		int nR = WriteFile(&m_fileCommLog, GetLogFileName(), sLog);
+// 	}
+// 
+// 	m_strReceiveLog = strTemp;
+}
+
+BOOL CDlgPLC::GetReceiveData(CString *reply, UINT nRcvSize, UINT nTimeout)
+{
+	DWORD  dwS, dwR, dwT=0;
+	DWORD  dwSleep = 100;
+
+	//UINT nSize = nRcvSize;
+	UINT nSize = 1;
+	CString Temp;
+	CString strLog="";
+	//BYTE* pByte;
+	//pByte = new BYTE[nSize + 1];
+
+	for (dwS=GetTickCount(); dwT<nTimeout;)  
+	{
+		if(api_SocketCtrl_GetReceiveDataSize(m_nSocketIndex)>= nSize)
+		{
+			for(int i= 0; i< g_pdlgMainPLC->m_nPLCCnt; i++)
+			{
+				CString strDeviceText, sTemp;
+				sTemp.Format("%s", g_pdlgMainPLC->m_spredFDC[i+dfDATASTARTROW].cSourceAddress);
+				strDeviceText = sTemp.Left(1);
+				int nDeviceNum = atoi(sTemp.Mid(1));
+
+				pPLCReciveValue[i] = DoWorkStartGetPLCMemoryBit(strDeviceText, nDeviceNum);
+
+				Temp.Format("%f",pPLCReciveValue[i-dfDATASTARTROW]);
+				strLog += Temp;
+
+			}
+			return TRUE;
+		}
+		else	//Added by Jay Hong : 2011.02.23
+		{
+			int nLen = api_SocketCtrl_GetReceiveDataSize(m_nSocketIndex);
+			if(nLen>0)
+			{
+				for(int i=0; i< g_pdlgMainPLC->m_nPLCCnt; i++)
+				{
+
+					CString strDeviceText, sTemp;
+					sTemp.Format("%s", g_pdlgMainPLC->m_spredFDC[i+dfDATASTARTROW].cSourceAddress);
+					strDeviceText = sTemp.Left(1);
+					int nDeviceNum = atoi(sTemp.Mid(1));
+
+					pPLCReciveValue[i] = DoWorkStartGetPLCMemoryBit(strDeviceText, nDeviceNum);
+
+					Temp.Format("%f",pPLCReciveValue[i]);
+					strLog += Temp;
+
+				}
+
+				return TRUE;
+			}
+		}
+
+		Sleep(10);
+		dwR = GetTickCount();
+
+		if (dwR >= dwS)  
+			dwT = dwR - dwS;
+		else
+			dwT = ((DWORD)0xFFFFFFFF) - (dwS - dwR);
+	}
+
+	//delete pByte;
+
+	CString strLog2;
+	strLog2.Format("Timeout...");
+	EventDLog(strLog2);
+
+	return TRUE;
+}
+
+void CDlgPLC::EventDLog(CString &s) //kjhg 20141121 add
+{
+	//	CString sLog = gf_MakeCurTimeString2() + "   " + s;
+	CString sLog;
+	sLog.Format("%s, %s",gf_MakeCurTimeString2(), s);
+
+	m_lbDPlcLog.InsertString(-1, sLog);
+
+	if (m_lbDPlcLog.GetCount() > 100)	// 100라인 정도까지만 출력
+		m_lbDPlcLog.DeleteString(0);
+
+	m_lbDPlcLog.SetCurSel(m_lbDPlcLog.GetCount()-1);
+
+
+	//20150327 Jay Hong removed
+	//m_lbDPlcLog.UpdateWindow();
+
+	// 	if(sLog.Find("[SEND]")>=0)
+	// 		return;
+	// 	
+	// 	CString strTemp = sLog;
+	// 	int nStart = strTemp.Find("D00000FF03FF0000CC0000");
+	// 	if(nStart>=0 && strTemp.GetLength()>=(dfMAX_PLC_IN_CNT+22))
+	// 	{
+	// 		strTemp = strTemp.Mid(nStart, dfMAX_PLC_IN_CNT);
+	// 		if(strTemp == m_strReceiveLog)
+	// 			return;
+	// 	}
+
+	//	m_strReceiveLog = strTemp;
+
+	//	int nR = WriteFile(&m_fileCommLog, GetLogFileName(), sLog);
+}
+
+CString CDlgPLC::gf_MakeCurTimeString()
+{
+	SYSTEMTIME st;
+	::GetLocalTime(&st);
+	CString sTime;
+	sTime.Format("%04d.%02d.%02d-%02d:%02d:%02d:%03d",st.wYear ,st.wMonth ,st.wDay ,st.wHour ,st.wMinute ,st.wSecond, st.wMilliseconds  );
+	return sTime;
+}
+
+CString CDlgPLC::gf_MakeCurTimeString2()
+{
+	SYSTEMTIME st;
+	::GetLocalTime(&st);
+
+	CString sTime;
+	sTime.Format("%02d:%02d:%02d:%03d",st.wHour ,st.wMinute ,st.wSecond, st.wMilliseconds );
+
+	return sTime;
+}
+
+CString CDlgPLC::GetLogFileName()
+{
+	SYSTEMTIME st;
+	::GetLocalTime(&st);
+	CTime ct(st);
+	CString strLogFileName;
+
+//	strLogFileName.Format("%s%s\\%02d\\PLC_WRITE.log", g_pdlgMainPLC->m_strRootPath, dfDEFAULT_CLOG_PATH, st.wDay);
+	strLogFileName.Format("%s%02d\\PLC_WRITE.log", g_pdlgMainPLC->m_strRootPath, st.wDay);
+
+	return strLogFileName;
+}
+
+int CDlgPLC::WriteFile(CFile *pFile, CString &sPath, CString sLog)
+{
+	sLog += "\r\n";
+	BOOL bNew = FALSE;
+	CFileStatus fs;
+	if (!CFile::GetStatus(sPath, fs))  //if not exist yet
+	{
+		_mkdir(sPath);// _mkdir;
+		bNew = TRUE;
+	}
+	else if (pFile->m_hFile != CFile::hFileNull)
+	{
+		CString s1 = fs.m_szFullName ;
+		if ((pFile->GetFilePath() != s1))
+		{
+			bNew = TRUE;
+		}
+	}
+
+	if (pFile->m_hFile != CFile::hFileNull && bNew)
+	{
+		pFile->Close();
+	}
+
+
+	CFileException* pError = NULL;
+	if (pFile->m_hFile == CFile::hFileNull)
+	{
+		UINT nOpenFlags = CFile::modeReadWrite | CFile::shareDenyWrite;
+		if (bNew)
+			nOpenFlags |= CFile::modeCreate;
+
+		if (!pFile->Open(sPath , nOpenFlags, pError))
+			return 0;
+	}
+	if (pFile->m_hFile != CFile::hFileNull)
+	{
+		pFile->SeekToEnd();
+		pFile->Write(sLog, sLog.GetLength()) ;
+		pFile->Flush();
+	}
+
+	return 1;
+}
+
+void CDlgPLC::Cmd_Send(CString strSend)
+{
+	if( api_SocketCtrl_IsConnected(m_nSocketIndex) )
+		api_SocketCtrl_SendData(m_nSocketIndex, (BYTE*)(LPCTSTR)strSend, strlen((LPCTSTR)strSend));
+
+	int iLen = 0;
+	iLen = strSend.GetLength();
+	CString strLog;
+	strLog.Format("[SEND] (%d) %s", iLen, strSend);
+	EventLog(strLog);
+}
+
+BOOL CDlgPLC::WriteDData(CString strName, int DDevice, double Val, BOOL bWrite)	//D10000번지 부터 데이터 쓰기 
+//BOOL CDlgPLC::WriteDData(BOOL bWrite)		//D10000번지 부터 데이터 쓰기 
+{
+
+	if (!(g_pdlgMainPLC->m_pFDCMap ))
+		return TRUE;
+
+// 	if(!m_bStartSafety || !m_bStartSafetyPLCRead || !m_bStartSafetyDefault)		// eh.kim 201801014 change.
+// 		return FALSE;
+	
+	int nRow = (DDevice - PLC_D_WRITE_STARY_BIT);
+	if (nRow == 0)
+	{
+		nRow = 1;
+	}
+	else
+	{
+		nRow = nRow/8 +1;
+	}
+
+	//FDCSPRED SpredData;
+ 	//strcpy(SpredData.cPARARMName, strName);
+ 	//SpredData.sDevice = DDevice;
+	//SpredData.dVal    = Val;
+// 
+ 	//g_pdlgMainPLC->SetSpredData(nRow-1, SpredData);	
+	//////////////////////////////////////////////////////////////////////////
+	CString str;
+	CString strLog;
+
+	if( bWrite )
+	{
+		long ldata = (long int)(Val);
+		long nRet = -1;
+		if(strName =="" || DDevice < 10000)
+		{
+			strLog.Format("%s\n",strLog);
+		}
+		else
+		{
+			;
+			//			nRet = API_MXComponent_SetMemoryWordBlock(strName, DDevice,1,&ldata);
+		}
+
+
+		Sleep(1);
+
+		if(nRet == 1)
+		{
+			str.Format("[%d], %s, %ld", DDevice, strName, ldata);		
+			if(DDevice = 10000)		//sypark 테스트 필요..
+			{
+				strLog.Format("[SEND] %s \n", str);
+				//strLog.Format("%s\n",strLog);
+			}
+		}
+		else
+		{
+			//strLog = _T("PLC not connection");
+		}
+
+// 		for(int i = 0; i < g_pdlgMainPLC->nFDCListCnt; i++)
+// 		{
+// 			CString strDeviceText, sTemp;
+// 			sTemp.Format("%s", g_pdlgMainPLC->m_spredFDC[i+dfDATASTARTROW].cSourceAddress);
+// 			strDeviceText = sTemp.Left(1);
+// 			int nDeviceNum = atoi(sTemp.Mid(1));
+// 
+// 			//long ldata = m_valArray[i];
+// 			long ldata = SpredData.dVal;
+// 			long nRet = API_MXComponent_SetMemoryWordBlock(strDeviceText, nDeviceNum,1,&ldata);
+// 
+// 			str.Format("%ld", m_valArray[i]);
+// 			strLog +=str;
+// 		}
+		
+		DWORD lLiveCheck = GetTickCount();
+
+		if( g_pdlgMainPLC->m_pFDCMap !=NULL)
+			g_pdlgMainPLC->m_pFDCMap->FDCValue.lLiveCheck = lLiveCheck;
+
+		if(strLog != "")
+			EventLog(strLog);	
+	}
+
+	return TRUE;
+}
+
+void CDlgPLC::WriteFDC_Filtering(BOOL bUse)		
+{
+	int i = 0, j = 0, k=0, l=0, u=0, t =0;
+	g_pdlgMainPLC->m_dSENSOR[0] = g_pdlgMainPLC->m_ffu.lLiveCheck;
+
+	for(i = 0; i< dfMAXNUM_H2O; i++)
+	{
+//		if(g_pdlgMainPLC->m_dSENSOR[serial_H2O_start + i] != 0)
+		{
+			g_pdlgMainPLC->m_dSENSOR[serial_H2O_start+i]= g_pdlgMainPLC->m_ffu.dTmp[dfStart_H20+i]; 
+		}
+	}
+
+	for(i = 0; i< dfMAXNUM_AZBIL; i++)
+	{
+		g_pdlgMainPLC->m_dSENSOR[serial_AZBIL_START+i]= g_pdlgMainPLC->m_ffu.dTmp[dfStart_AZBIL+i]; 
+	}
+
+	for(i = 0; i< dfMAXNUM_PM5500; i++)
+	{
+		g_pdlgMainPLC->m_dSENSOR[serial_PM5500_START+i]= g_pdlgMainPLC->m_ffu.dTmp[dfStart_PM5500+i]; 
+	}
+
+	//PC Temp 5개, Config에서 사용 유무 설정
+	for(i = 0; i< dfMAXNUM_PCTEMP; i++)
+	{
+	//	if(g_pdlgMainPLC->m_bUseTemp[i])	// jsyoon 2022.03.24 remove
+		{
+			g_pdlgMainPLC->m_dSENSOR[serial_pc_temp1_start+i]= g_pdlgMainPLC->m_ffu.dTemper[i]; 
+		}
+	}
+	//
+
+	for (i=0; i < dfMAXNUM_EFU; i++)
+	{
+		g_pdlgMainPLC->m_dSENSOR[serial_efu_start + i] = g_pdlgMainPLC->m_ffu.dEFU[i];
+
+		if(g_pdlgMainPLC->m_dSENSOR[serial_efu_start + i] != 0)
+		{
+			if(g_pdlgMainPLC->m_dSENSOR[serial_efu_start + i] > 1000)	//ksk 20150609 add
+				g_pdlgMainPLC->m_dSENSOR[serial_efu_start + i] = 1000;
+		}
+	}
+
+	for (i=0; i < dfMAXNUM_IONIZER; i++)
+	{
+		g_pdlgMainPLC->m_dSENSOR[serial_ionizer_connect_start + i] = g_pdlgMainPLC->m_ffu.bIonizerConnect[i];
+	}
+
+	for (i= 0 ; i < dfMAXNUM_IONIZER; i++)
+	{
+		g_pdlgMainPLC->m_dSENSOR[serial_ionizer_time_start + i] = g_pdlgMainPLC->m_ffu.dIonizerTime[i];
+	}
+
+	g_pdlgMainPLC->m_dSENSOR[serial_StaticElectric_start] = g_pdlgMainPLC->m_ffu.dStaticElectric;
+
+	for (i=0; i < dfMAXNUM_KMN2; i++)
+	{
+		g_pdlgMainPLC->m_dSENSOR[serial_KMN2Result_start + i] = g_pdlgMainPLC->m_ffu.dKMN2Result[i];
+	}
+
+	for (i=0; i < dfMAXNUM_ACCURA; i++)
+	{
+		j = 0;
+
+		// 4
+		g_pdlgMainPLC->m_dSENSOR[serial_ACCURA_start + (dfMAXACCURA_ITEM*i) + j] = g_pdlgMainPLC->m_stAccuraData[i].Vavg_ll_1; j++;
+		g_pdlgMainPLC->m_dSENSOR[serial_ACCURA_start + (dfMAXACCURA_ITEM*i) + j] = g_pdlgMainPLC->m_stAccuraData[i].lavg_1; j++;
+		g_pdlgMainPLC->m_dSENSOR[serial_ACCURA_start + (dfMAXACCURA_ITEM*i) + j] = g_pdlgMainPLC->m_stAccuraData[i].Ptot_1; j++;
+		g_pdlgMainPLC->m_dSENSOR[serial_ACCURA_start + (dfMAXACCURA_ITEM*i) + j] = g_pdlgMainPLC->m_stAccuraData[i].Net_1; j++;
+
+// 		g_pdlgMainPLC->m_dSENSOR[serial_ACCURA_start + (20*i) + j] = g_pdlgMainPLC->m_stAccuraData[i].N2_1; j++;
+// 		g_pdlgMainPLC->m_dSENSOR[serial_ACCURA_start + (20*i) + j] = g_pdlgMainPLC->m_stAccuraData[i].N2_1_Total; j++;
+// 		g_pdlgMainPLC->m_dSENSOR[serial_ACCURA_start + (20*i) + j] = g_pdlgMainPLC->m_stAccuraData[i].N2_2; j++;
+// 		g_pdlgMainPLC->m_dSENSOR[serial_ACCURA_start + (20*i) + j] = g_pdlgMainPLC->m_stAccuraData[i].N2_2_Total; j++;
+// 		g_pdlgMainPLC->m_dSENSOR[serial_ACCURA_start + (20*i) + j] = g_pdlgMainPLC->m_stAccuraData[i].CDA_1; j++;
+// 		g_pdlgMainPLC->m_dSENSOR[serial_ACCURA_start + (20*i) + j] = g_pdlgMainPLC->m_stAccuraData[i].CDA_1_Total; j++;
+
+		// 40
+		// jsyoon 20190318 change
+		for (k=0; k<20; k++)
+		{
+			g_pdlgMainPLC->m_dSENSOR[serial_ACCURA_start + (dfMAXACCURA_ITEM*i) + j] = g_pdlgMainPLC->m_stAccuraData[i].nValue[k]; j++;
+			g_pdlgMainPLC->m_dSENSOR[serial_ACCURA_start + (dfMAXACCURA_ITEM*i) + j] = g_pdlgMainPLC->m_stAccuraData[i].nValueTotal[k]; j++;
+		}
+	}
+
+	for(i = 0; i< dfMAXNUM_ESD; i++)
+	{
+//		if(g_pdlgMainPLC->m_dSENSOR[serial_ESD_START + i] != 0)
+		{
+			g_pdlgMainPLC->m_dSENSOR[serial_ESD_START+i]= g_pdlgMainPLC->m_ffu.dTmp[dfStart_ESD+i]; 
+		}
+	}
+
+	CString strTemp;
+	i = 0;
+	for(int iRow = 0;iRow < dfMAXFDCITEM; iRow++) 
+	{
+		if(g_pdlgMainPLC-> m_spredFDC[iRow].nSoureType == SOURCE_TYPE_PLC)
+		{
+			m_valArray[iRow] = g_pdlgMainPLC->m_dlgPLCRead.m_dPLCReadData[i]; i++;
+
+			strTemp.Format("%s", g_pdlgMainPLC->m_spredFDC[iRow].cSourceAddress);
+			int nDeviceNum = atoi(strTemp.Mid(1));
+		}
+		else if(g_pdlgMainPLC-> m_spredFDC[iRow].nSoureType == SOURCE_TYPE_SENSOR)		
+		{
+			strTemp.Format("%s", g_pdlgMainPLC->m_spredFDC[iRow].cSourceAddress);
+
+			j = atoi(strTemp);
+
+			m_valArray[iRow]    = g_pdlgMainPLC->m_dSENSOR[j]; j++;
+		}
+		else if(g_pdlgMainPLC-> m_spredFDC[iRow].nSoureType == SOURCE_TYPE_SHAHREMEMORY)
+		{
+			strTemp.Format("%s", g_pdlgMainPLC->m_pFDCMap->FDCValue.stMainWData[k].szData);
+
+			j = atoi(strTemp);
+
+			m_valArray[iRow]    = j;  k++;
+//			m_valArray[iRow]  = g_pdlgMainPLC->pShared[k]; k++;
+		}
+		else if(g_pdlgMainPLC-> m_spredFDC[iRow].nSoureType == SOURCE_TYPE_CAPA)
+		{
+			m_valArray[iRow]   = g_pdlgMainPLC->m_pCAPA[l]; l++;
+		}
+		else if(g_pdlgMainPLC-> m_spredFDC[iRow].nSoureType == SOURCE_TYPE_SELF)
+		{
+			m_valArray[iRow]    = g_pdlgMainPLC->m_pSelf[u]; u++;
+		}
+		else if(g_pdlgMainPLC-> m_spredFDC[iRow].nSoureType == SOURCE_TYPE_REG)		// jsyoon 20210129 add
+		{
+			m_valArray[iRow]   = g_pdlgMainPLC->m_pLampTime[t]; t++;
+		}
+		else
+		{
+			m_valArray[iRow] = 0.0;
+		}
+	}
+
+	if(bUse)
+	{
+		for ( i=0; i<dfMAXFDCITEM; i++)
+		{
+			m_bFilterValue[i] = FALSE;
+
+			if(m_bFilterUse[i] )
+			{
+				if( m_valArray[i] < m_bFilter_Min[i] ||
+					m_valArray[i] > m_bFilter_Max[i] )
+				{
+					m_valArray[i] = m_bFilter_Standard[i];
+					m_bFilterValue[i] = TRUE;
+				}
+			}
+		}
+	}
+
+	//share memory에 데이터쓰기
+	int nCnt = 0;
+	int nIndex = 0;
+	CString str;
+	for(int nShare = 0 ; nShare < dfMAXFDCITEM; nShare++)
+	{
+// 		int nSharemPriority = g_pdlgMainPLC->m_spredFDC[nShare].ShareMem_num;
+// 		if(nSharemPriority > 0 )
+		{
+			nIndex = g_pdlgMainPLC->nIndexNum_Share[nShare]; 
+			if( nIndex >= 0)
+			{
+				str.Format("%.2f", m_valArray[nShare]);
+				//TRACE("val : %f, str :%s \n",m_valArray[nIndex], str);
+
+				if( nIndex < FDC_WDATA_END)		// LYS 2026-07-30 was hardcoded 100; use real array bound
+				{
+					strcpy_s(g_pdlgMainPLC->m_pFDCMap->FDCValue.stFDCWData[nIndex].szData, str);
+
+					g_pdlgMainPLC->m_pFDCMap->FDCValue.stFDCWData[nIndex].nMin = m_bFilter_Min[nShare];		// jsyoon 20200831 add
+
+					g_pdlgMainPLC->m_pFDCMap->FDCValue.stFDCWData[nIndex].nMax = m_bFilter_Max[nShare];		// jsyoon 20200831 add
+				}
+			}
+
+// 			nIndex = g_pdlgMainPLC->nIndexNum_Share[nCnt]; 
+// 
+// 			str.Format("%.1f", m_valArray[nIndex]);
+// 			//TRACE("val : %f, str :%s \n",m_valArray[nIndex], str);
+// 
+// 			strcpy_s(g_pdlgMainPLC->m_pFDCMap->FDCValue.stFDCWData[nCnt].szData, str);
+// 			nCnt++;
+		}
+	
+	}
+
+	// sypark 20180502 remove
+// // 	//jhseo 20171107 add for monitoring
+// 	m_valArray[dfMAXFDCITEM-2] = g_pdlgMainPLC->m_dlgPLCRead.m_dPLCReadData[(g_pdlgMainPLC->m_nUiData[0] - PLC_D_READ_STARY_BIT)/2 + 1];
+// 	m_valArray[dfMAXFDCITEM-1] = g_pdlgMainPLC->m_dlgPLCRead.m_dPLCReadData[(g_pdlgMainPLC->m_nUiData[1] - PLC_D_READ_STARY_BIT)/2 + 1];
+
+// jsyoon 20180609 remove
+// 	//sypark 20180608 add	
+// 	for(int i=0 ; i < m_nUseMonitorNum *2; i=i+2)
+// 	{
+// 		m_valArray[dfMAXFDCITEM-(i+2)] = g_pdlgMainPLC->m_dlgPLCRead.m_dPLCReadData[(g_pdlgMainPLC->m_nUiMonitorData[0][i] - PLC_D_READ_STARY_BIT)/2 + 1];
+// 		m_valArray[dfMAXFDCITEM-(i+1)] = g_pdlgMainPLC->m_dlgPLCRead.m_dPLCReadData[(g_pdlgMainPLC->m_nUiMonitorData[1][i] - PLC_D_READ_STARY_BIT)/2 + 1];
+// 	}
+// 	//
+// 	//////////////////////////////////////////////////////////////////////////
+}
+
+void CDlgPLC::WriteFDC_Data(int uSVType)			
+{
+// 	int iRow = 0;
+// 	double dMfDataArray[dfMAXFDCITEM];
+// 	FDCSPRED SpredData;
+// 	ZeroMemory(&SpredData, sizeof(SpredData));
+// 	ZeroMemory(&dMfDataArray, sizeof(dMfDataArray));
+// 	for (iRow=0; iRow < dfMAXFDCITEM; iRow++)
+// 	{
+// 		if( g_pdlgMainPLC->m_spredFDC[i].uiMagnificaion > 0 )
+// 			dMfDataArray[nSVList] = (double)( m_valArray[i] * getPOW(g_pdlgMainPLC->m_spredFDC[i].uiMagnificaion));	
+// 		else if( g_pdlgMainPLC->m_spredFDC[i].uiMagnificaion < 0 )
+// 			dMfDataArray[nSVList] = (double)( m_valArray[i] / getPOW(g_pdlgMainPLC->m_spredFDC[i].uiMagnificaion * -1));	
+// 		else
+// 			dMfDataArray[nSVList] = (double)( m_valArray[i]);
+// 
+// 		SpredData.dVal    = dMfDataArray[iRow]; 
+// 		g_pdlgMainPLC->SetSpredData(iRow, SpredData);
+// 	}
+
+	if (m_bOutOfService)
+	{
+		return;
+	}
+
+	if (!(g_pdlgMainPLC->m_pFDCMap ))
+		return;
+	
+	CString strDeviceText, sTemp;
+//	sTemp.Format("%s", g_pdlgMainPLC->m_spredFDC[0].cDestination);
+	strDeviceText = sTemp.Left(1);
+	int nDeviceNum = atoi(sTemp.Mid(1));
+	int nFDCListCnt =0;
+	
+	nFDCListCnt = g_pdlgMainPLC->m_nFDCListCnt;
+
+	int i=0;
+// 	long lval[dfMAXFDCITEM*2];
+// 	ZeroMemory(&lval, sizeof(lval));
+// 	for(i=0; i<g_pdlgMainPLC->nFDCListCnt ; i++)
+// 	{
+// 		//lval[2*i] = (long int)m_valArray[i];
+// 		lval[2*i] = (long int)( m_valArray[i] * getPOW(g_pdlgMainPLC->m_spredFDC[i].uiMagnificaion));
+// 	}
+
+	// yj.nam 20180719 add to write values to "DESTINATION" address in FDC_LIST.xlsx
+	//////////////////////////////////////////////////////////////////////////
+	// Sort
+	int  iMaxDevice = 0;
+	int  iSortArray  [dfMAXFDCITEM];
+	int  iDeviceArray[dfMAXFDCITEM];
+	double dDataArray[dfMAXFDCITEM];
+
+	// INT / UINT / FLOAT / ASCII 구분하여 4번 쓰기 
+	ZeroMemory(&iSortArray,   sizeof(iSortArray));
+	ZeroMemory(&iDeviceArray, sizeof(iDeviceArray));
+	ZeroMemory(&dDataArray,   sizeof(dDataArray));
+	
+	CString strDestination;
+	int nSVList = 0;
+	for(i=0; i<g_pdlgMainPLC->m_nFDCListCnt; i++)
+	{
+		if( g_pdlgMainPLC->m_spredFDC[i].uSVType == uSVType )
+		{
+			strDestination.Format("%s", g_pdlgMainPLC->m_spredFDC[i].cDestination);
+			strDeviceText = strDestination.Left(1);
+			nDeviceNum = atoi(strDestination.Mid(1));
+			iDeviceArray[nSVList] = nDeviceNum;
+
+//			dDataArray[nSVList] = (double)( m_valArray[i] * getPOW(g_pdlgMainPLC->m_spredFDC[i].uiMagnificaion));	
+			dDataArray[nSVList] = m_valArray[i];	
+			nSVList++;
+		}
+	}
+
+	if( nSVList < 1)
+		return;
+
+	// 순서 초기화
+	for(i=0; i<dfMAXFDCITEM; i++)
+	{
+		iSortArray[i] = -1;
+	}
+
+	for(i=0; i<nSVList; i++)
+	{
+		for(int j=0; j<dfMAXFDCITEM; j++)
+ 		{
+ 			if( iDeviceArray[i] == m_iRefAddressToWrite[uSVType][j])
+ 			{
+ 				iSortArray[i] = j;
+				break;
+ 			}
+ 		}	
+	}
+
+	//
+	long lval[dfMAXFDCITEM];
+	ZeroMemory(&lval, sizeof(lval));
+
+	float fval[dfMAXFDCITEM];
+	ZeroMemory(&fval, sizeof(fval));
+
+	TCHAR tval[dfMAXFDCITEM][20];
+	ZeroMemory(&tval, sizeof(tval));
+	
+	bool bSortOn = false;
+	int nMaxNum = -1;
+	int iNum = 0, nMinNum = dfMAXFDCITEM, nStart = 0;
+	for(i=0; i<dfMAXFDCITEM; i++)
+	{
+		if( iSortArray[i] != -1 )
+		{
+			iNum = iSortArray[i];
+
+			if( uSVType == 0 || uSVType == 1)
+				lval[iNum] = (long)dDataArray[i];
+			else if( uSVType == 2)
+				fval[iNum] = (float)dDataArray[i];
+			else
+			{
+				// jsyoon 20200522 add
+				TCHAR	hVal[20], cVal[20];
+				memset(cVal,NULL,20);
+				sprintf(cVal, "%s", gcvt(dDataArray[i],16,hVal));
+
+				for (int j = 0; j<8; j++)
+				{ 
+					if (cVal[j] == NULL)
+					{
+						cVal[j] = '0';
+					}
+
+					if (cVal[7] == '.')
+					{
+						cVal[7] = '0';
+					}
+				}
+
+				memcpy(&tval[iNum],cVal,20);
+
+			}
+
+			if( iNum < nMinNum)
+			{
+				nMinNum = iNum;
+				nStart = iDeviceArray[i];
+
+				bSortOn = true;
+			}
+
+			if( iNum > nMaxNum)
+			{
+				nMaxNum = iNum;
+			}
+		}		
+	}
+
+	// jsyoon 20201221 add
+	if( bSortOn != true)
+	{
+		nStart = iDeviceArray[0];
+
+//		for(i=0; i<nSVList; i++)
+		for(i=0; i<nMaxNum; i++)
+		{
+			if( uSVType == 0 || uSVType == 1)
+				lval[i] = (long)dDataArray[i];
+			else if( uSVType == 2)
+				fval[i] = (float)dDataArray[i];
+			else
+				;
+		}
+	}
+	//////////////////////////////////////////////////////////////////////////
+	
+	//////////////////////////////////////////////////////////////////////////
+
+	//sypark 20180529 add
+	char szValue[256];
+	sTemp.Format("D%d", nStart );
+	_tcscpy_s(szValue, _countof(szValue), sTemp);
+	//
+
+	long lRet = 0;
+	int nRtn = 0;
+	{
+		if( uSVType == 0 || uSVType == 1 )
+			nRtn = API_MXComponent_SetMemoryWordBlock3(0, szValue, nMaxNum+1, &lval[0], m_nUseSize);		// jsyoon 20210504 change
+		//	nRtn = API_MXComponent_SetMemoryWordBlock3(0, szValue, nSVList, &lval[0], m_nUseSize);		// INT OR UINT
+		else if( uSVType == 2 )
+			nRtn = API_MXComponent_SetMemoryWordBlock(0, szValue, nMaxNum+1, &fval[0], m_nUseSize);		// jsyoon 20210504 change
+		//	nRtn = API_MXComponent_SetMemoryWordBlock(0, szValue, nSVList, &fval[0], m_nUseSize);		// FLOAT
+		else 
+		{
+			// jsyoon 20200522 add
+			TCHAR trval[20];
+			ZeroMemory(&trval, sizeof(trval));
+
+		//	for(i=0; i<nSVList; i++)
+			for(i=0; i<nMaxNum; i++)		// jsyoon 20210504 change
+			{
+				sTemp.Format("D%d", iDeviceArray[i]);		// 8 
+				_tcscpy_s(szValue, _countof(szValue), sTemp);
+				nRtn = API_MXComponent_SetMemoryWordBlock2(0, szValue, 8, tval[i]);		// ASCII
+
+	//			API_MXComponent_GetMemoryWordBlock2(0, sTemp, 8, &trval[0] );
+			}
+		}	
+
+		DWORD lLiveCheck = GetTickCount();
+		if( g_pdlgMainPLC->m_pFDCMap !=NULL)
+			g_pdlgMainPLC->m_pFDCMap->FDCValue.lLiveCheck = lLiveCheck;
+
+		CString str;
+		CString strLog;
+		strLog.Format("SEND(%d->%d), ", m_nStationNum, nRtn);
+		for(i = 0; i<g_pdlgMainPLC->m_nFDCListCnt;i ++)
+		{
+			str.Format("%.2f,", m_valArray[i]);
+			strLog +=str;
+		}
+
+		if( nRtn == 1)
+			m_bSendOK = TRUE;
+		else
+			m_bSendOK = FALSE;
+
+		EventLog(strLog);
+	}
+
+//	if(nRtn == 1)	
+// 
+// //	for(int i=0; i<dfMAXFDCITEM ; i++)
+// 	for(int i=0; i<g_pdlgMainPLC->nFDCListCnt ; i++)
+// 	{
+// // 		WriteDData(m_strArray.GetAt(i), unStartBit, m_valArray[i]);
+// // 		unStartBit+=8;
+// 
+// 		CString strDeviceText, sTemp;
+// 		sTemp.Format("%s", g_pdlgMainPLC->m_spredFDC[i+dfDATASTARTROW].cDestination);
+// 		strDeviceText = sTemp.Left(1);
+// 		int nDeviceNum = atoi(sTemp.Mid(1));
+// 
+// 		WriteDData(strDeviceText, nDeviceNum, m_valArray[i+dfDATASTARTROW]);
+// 	
+// 	}
+}
+
+void CDlgPLC::SleepX(DWORD dwDelay)
+{
+	DWORD	dwBeginCount = GetTickCount();
+	DWORD	dwRecentCount;
+	DWORD	dwTime;
+
+	while(TRUE)
+	{
+		dwRecentCount = GetTickCount();
+
+		dwTime = dwRecentCount - dwBeginCount;
+
+		if(dwTime >= dwDelay)
+			break;
+		else	// Message pumping
+		{
+			MSG   message;
+			while(::PeekMessage(&message, NULL, 0, 0, PM_REMOVE))
+			{
+				::TranslateMessage(&message);
+				::DispatchMessage(&message);
+			}
+		}
+	}
+}
+//
+BOOL CDlgPLC::ReadPLC_DData(BOOL bUse)		
+{
+	BOOL bRtn = FALSE;
+	CString strLog;
+//	if(API_MXComponent_Initialize(5, GetSafeHwnd()))
+	long lRet=0;
+//	if( api_Melsoft_Initialize(0, 5, GetSafeHwnd(), &lRet))
+	if( API_MXComponent_Initialize(0, m_nStationNum, GetSafeHwnd()) == COMPONENT_SUCCESS)
+	{	
+		strLog = "[CONNECTED] PLC connection success!";
+		EventLog(strLog);
+
+// 우선 읽어오는건 빼자
+// 		int nRtn = 0;
+// 		long lTempData = 0;
+// 		float fTempData = 0;
+// 		TCHAR   szValue[256];			/// D, 
+// 		szValue[0] = 0;
+// 
+// 		for(int i=0; i< dfMAXFDCITEM; i++)
+// 		{
+// 			CString strDeviceText, sTemp;
+// 			sTemp.Format("%s", g_pdlgMainPLC->m_spredFDC[i].cDestination);
+// 			_tcscpy_s(szValue, _countof(szValue), sTemp);
+// 			//		strDeviceText = sTemp.Left(1);		
+// 			//		int nDeviceNum = atoi(sTemp.Mid(1));
+// 			//		long nRet = API_MXComponent_GetMemoryWordBlock(strDeviceText, nDeviceNum, 1, &lTempData);
+// //			nRtn = api_Melsoft_ReadDeviceWordBlock(0, szValue, 1, &lTempData, &lRet);
+// 			nRtn = API_MXComponent_GetMemoryWordBlock(0, szValue, 1, &fTempData);
+// 
+// 			if(!nRtn)
+// 				break;
+// 
+// 			m_valArray[i] = (double)fTempData / getPOW(g_pdlgMainPLC->m_spredFDC[i].uiMagnificaion);
+// 			g_pdlgMainPLC->m_spredFDC[i].dVal = m_valArray[i];		
+// 		} 
+
+		bRtn = TRUE;
+	}
+	else
+	{
+		strLog = "[ERROR] PLC connection fail!";
+		EventLog(strLog);
+//		AfxMessageBox("PLC connection fail.");
+		
+		bRtn = FALSE;
+	}
+
+	return bRtn;
+}
+
+
+// eh.kim 20170719 add.
+void CDlgPLC::EventLog2(char *ch)
+{	
+
+// 	// eh.kim 20180105 add.
+// 	SYSTEMTIME st;
+// 	::GetLocalTime(&st);
+// 	//
+// 
+// 	char    chLog[2000];
+// 	memset(chLog, NULL, 2000);
+// 	//	sprintf(chLog, "%s, %s", gf_MakeCurTimeString2(), ch);		// eh.kim 20180105 change.
+// 	sprintf(chLog, "%02d:%02d:%02d:%03d, %s", st.wHour ,st.wMinute ,st.wSecond, st.wMilliseconds, ch);
+// 
+// 	m_lbPlcLog.InsertString(-1, (LPSTR)chLog);
+// 
+// 	if (m_lbPlcLog.GetCount() > 100)
+// 		m_lbPlcLog.DeleteString(0);
+// 
+// 	m_lbPlcLog.SetCurSel(m_lbPlcLog.GetCount()-1);
+// 
+// 	if(strFind(chLog, "[SEND]")>=0)
+// 		return;
+// 
+// 	if(strcmp(m_chReceiveLog, chLog))
+// 	{
+// 		int nR = WriteFile(&m_fileCommLog, GetLogFileName(), (LPSTR)chLog);
+// 	}
+// 
+// 	strcpy(m_chReceiveLog, chLog);
+}
+
+void CDlgPLC::OnDestroy()
+{
+	CDialog::OnDestroy();
+
+	delete pPLCReciveValue;
+
+//	api_SocketCtrl_Close(m_nSocketIndex);
+
+// 	long lret = 0;
+// 	api_Melsoft_Close(0, &lret);
+//	API_MXComponent_Close(0);
+
+	KillTimer(1);
+
+}
+//sypark 20180529 add
+int CDlgPLC::getPOW(int nNum)
+{
+	int nRnt =1; 
+
+	for(int i= 0; i< nNum; i++)
+		nRnt *= 10;
+
+	return nRnt;
+}
+
+BOOL CDlgPLC::PreTranslateMessage(MSG* pMsg)
+{
+	// TODO: 여기에 특수화된 코드를 추가 및/또는 기본 클래스를 호출합니다.
+	switch( pMsg->wParam )
+	{
+	case VK_ESCAPE:
+	case VK_RETURN:
+		return TRUE;
+	}
+
+	return CDialog::PreTranslateMessage(pMsg);
+}
+
+int CDlgPLC::WriteFDC_OffsetData(void)
+{
+	int i = 0;
+	double dMfDataArray[dfMAXFDCITEM];
+	FDCSPRED SpredData;
+	ZeroMemory(&SpredData, sizeof(SpredData));
+	ZeroMemory(&dMfDataArray, sizeof(dMfDataArray));
+
+	for (i=0; i < dfMAXFDCITEM; i++)
+	{
+		if( g_pdlgMainPLC->m_spredFDC[i].uiMagnificaion > 0 )
+			dMfDataArray[i] = (double)( m_valArray[i] * getPOW(g_pdlgMainPLC->m_spredFDC[i].uiMagnificaion));	
+		else if( g_pdlgMainPLC->m_spredFDC[i].uiMagnificaion < 0 )
+			dMfDataArray[i] = (double)( m_valArray[i] / getPOW(g_pdlgMainPLC->m_spredFDC[i].uiMagnificaion * -1));	
+		else
+			dMfDataArray[i] = (double)( m_valArray[i]);
+
+		SpredData.dVal    = dMfDataArray[i]; 
+		g_pdlgMainPLC->SetSpredData(i, SpredData);
+
+		m_valArray[i] = dMfDataArray[i];
+	}
+
+	return 0;
+}

@@ -1,0 +1,704 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<ClassDiagram MajorVersion="1" MinorVersion="1">
+  <Class Name="CDoWorkGlassSequenceEngine" Collapsed="true">
+    <Position X="3.5" Y="2.5" Width="2.5" />
+    <TypeIdentifier>
+      <HashCode>AOEgBAEgQkBQBEqoAEAAiIBAmQIUhQAAUACQIAiAQYA=</HashCode>
+      <FileName>DoWork\DoWorkGlassSequenceEngine.h</FileName>
+    </TypeIdentifier>
+  </Class>
+  <Class Name="CDoWorkGlassAdsorption" Collapsed="true">
+    <Position X="3.75" Y="3.25" Width="2.5" />
+    <TypeIdentifier>
+      <HashCode>AAAAAAAAAAEABAAEAQAAAAAAAAIIAAAAAAEABAgGAAA=</HashCode>
+      <FileName>DoWork\DoWorkGlassAdsorption.h</FileName>
+    </TypeIdentifier>
+  </Class>
+  <Class Name="CDoWorkGlassSWAlign" Collapsed="true">
+    <Position X="3.75" Y="4.25" Width="2.5" />
+    <TypeIdentifier>
+      <HashCode>AAAAAACAAAEABABEAAAAAAAAAAIIAAAAAAAABAgGAAA=</HashCode>
+      <FileName>DoWork\DoWorkGlassSWAlign.h</FileName>
+    </TypeIdentifier>
+  </Class>
+  <Class Name="CDoWorkGlassPreMeas" Collapsed="true">
+    <Position X="3.75" Y="5.25" Width="2.5" />
+    <TypeIdentifier>
+      <HashCode>AAQAAAAAAAUABAAEAAAAAAAAAAIIAAAAAAAABAgWAAA=</HashCode>
+      <FileName>DoWork\DoWorkGlassPreMeas.h</FileName>
+    </TypeIdentifier>
+  </Class>
+  <Class Name="CDoWorkGlassAGING" Collapsed="true">
+    <Position X="3.75" Y="6.25" Width="2.5" />
+    <TypeIdentifier>
+      <HashCode>AAAAAAAAAAEABBAEAAAAAAAEAAIIAAAAAAAABAgWAAA=</HashCode>
+      <FileName>DoWork\DoWorkGlassAGING.h</FileName>
+    </TypeIdentifier>
+  </Class>
+  <Class Name="CDoWorkGlassMeasure" Collapsed="true">
+    <Position X="3.75" Y="7.25" Width="2.5" />
+    <TypeIdentifier>
+      <HashCode>AAAAAAAAQAEABAAEAAAAAAAAAAIIAAQAAAAABAgWAAA=</HashCode>
+      <FileName>DoWork\DoWorkGlassMeasure.h</FileName>
+    </TypeIdentifier>
+  </Class>
+  <Class Name="CDoWorkGlassResult" Collapsed="true">
+    <Position X="3.75" Y="11.75" Width="2.5" />
+    <TypeIdentifier>
+      <HashCode>AAAAAAAAAAEgBAAEAABAAAAAAAIIAAAAAAAABAgGAAA=</HashCode>
+      <FileName>DoWork\DoWorkGlassResult.h</FileName>
+    </TypeIdentifier>
+  </Class>
+  <Class Name="CDoWorkGlassUnload" Collapsed="true">
+    <Position X="3.75" Y="12.75" Width="2.5" />
+    <TypeIdentifier>
+      <HashCode>AAAAAAAAAAEABEAEAAAAAAAAAAIIBAAAAAAABAgGAAA=</HashCode>
+      <FileName>DoWork\DoWorkGlassUnload.h</FileName>
+    </TypeIdentifier>
+  </Class>
+  <Class Name="CDoWorkGlassAdsorptionStep_ChangeMeasStatus" Collapsed="true">
+    <Position X="6.75" Y="3.25" Width="2.5" />
+    <TypeIdentifier>
+      <HashCode>AAAAAAAAAAAAAAAAAAAAAAAAAAAAgABAAAAAAAAAAAI=</HashCode>
+      <FileName>DoWork\DoWorkGlassAdsorptionStep.h</FileName>
+    </TypeIdentifier>
+  </Class>
+  <Class Name="CDoWorkGlassAdsorptionStep_CheckMeasStatus" Collapsed="true">
+    <Position X="9.5" Y="3.25" Width="2.5" />
+    <TypeIdentifier>
+      <HashCode>AAAAAAIAAAAAAAAAAAAAAAAAAAAAAAAAAAAAgAAAAAI=</HashCode>
+      <FileName>DoWork\DoWorkGlassAdsorptionStep.h</FileName>
+    </TypeIdentifier>
+  </Class>
+  <Class Name="CDoWorkGlassSWAlignStep_MoveAlignPosistion" Collapsed="true">
+    <Position X="6.75" Y="4.25" Width="2.5" />
+    <TypeIdentifier>
+      <HashCode>AAAAAAAAAIAAAAAAAAAAAAAAAAAAAAAAAIAAAAAAAAI=</HashCode>
+      <FileName>DoWork\DoWorkGlassSWAlignStep.h</FileName>
+    </TypeIdentifier>
+  </Class>
+  <Class Name="CDoWorkGlassSWAlignStep_AlignGlass" Collapsed="true">
+    <Position X="9.5" Y="4.25" Width="2.5" />
+    <TypeIdentifier>
+      <HashCode>AAAAAAAAAAAAAAAAAAAAAAAAAAAAAEAAAAAAAAACAAI=</HashCode>
+      <FileName>DoWork\DoWorkGlassSWAlignStep.h</FileName>
+    </TypeIdentifier>
+  </Class>
+  <Class Name="CDoWorkGlassPreMeasStep_P2P" Collapsed="true">
+    <Position X="6.75" Y="5.25" Width="2.5" />
+    <TypeIdentifier>
+      <HashCode>AAAAAAAAAAQAABAAAAAAAAAAAAAAAAAAAAAAAAAAAAI=</HashCode>
+      <FileName>DoWork\DoWorkGlassPreMeasStep.h</FileName>
+    </TypeIdentifier>
+  </Class>
+  <Class Name="CDoWorkGlassPreMeasStep_Contact" Collapsed="true">
+    <Position X="9.5" Y="5.25" Width="2.5" />
+    <TypeIdentifier>
+      <HashCode>AAAAAAAACAAAAAAAQAAAAAAAAAAAAAAAAAAAAAAAAAI=</HashCode>
+      <FileName>DoWork\DoWorkGlassPreMeasStep.h</FileName>
+    </TypeIdentifier>
+  </Class>
+  <Class Name="CDoWorkGlassPreMeasStep_OST" Collapsed="true">
+    <Position X="12.25" Y="5.25" Width="2.5" />
+    <TypeIdentifier>
+      <HashCode>AAAAAAAAAAAAAAAAAAABAAAAAAAAAAAAAAAAAAAAACI=</HashCode>
+      <FileName>DoWork\DoWorkGlassPreMeasStep.h</FileName>
+    </TypeIdentifier>
+  </Class>
+  <Class Name="CDoWorkGlassPreMeasStep_RTEST" Collapsed="true">
+    <Position X="15" Y="5.25" Width="2.75" />
+    <TypeIdentifier>
+      <HashCode>AAEAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAACAAI=</HashCode>
+      <FileName>DoWork\DoWorkGlassPreMeasStep.h</FileName>
+    </TypeIdentifier>
+  </Class>
+  <Class Name="CDoWorkGlassAGINGStep_Aging" Collapsed="true">
+    <Position X="6.75" Y="6.25" Width="2.5" />
+    <TypeIdentifier>
+      <HashCode>AAAAAAAAAAAAAAAAAAAAAAAAAAACAAAEAAAAAAAAAAI=</HashCode>
+      <FileName>DoWork\DoWorkGlassAGINGStep.h</FileName>
+    </TypeIdentifier>
+  </Class>
+  <Class Name="CDoWorkGlassAGINGStep_AgingDone" Collapsed="true">
+    <Position X="9.5" Y="6.25" Width="2.5" />
+    <TypeIdentifier>
+      <HashCode>AAABAAAAAAAAAAAAAAAAAABAAAAAAAAAAAAAAAAAAAI=</HashCode>
+      <FileName>DoWork\DoWorkGlassAGINGStep.h</FileName>
+    </TypeIdentifier>
+  </Class>
+  <Class Name="CDoWorkGlassMeasureStep_MoveMeasureArea" Collapsed="true">
+    <Position X="6.75" Y="7.25" Width="2.5" />
+    <TypeIdentifier>
+      <HashCode>AAAAAAgAAAAAAAAAAAAAABAAAAAAAAAAAAAAAAAAAAI=</HashCode>
+      <FileName>DoWork\DoWorkGlassMeasureStep.h</FileName>
+    </TypeIdentifier>
+  </Class>
+  <Class Name="CDoWorkGlassMeasureStep_Probe_Contact" Collapsed="true">
+    <Position X="9.5" Y="7.25" Width="2.5" />
+    <TypeIdentifier>
+      <HashCode>AAAAEAAAAAAAAAAAAAAAAAAAAAAAAAAAAQAAAAAAAAI=</HashCode>
+      <FileName>DoWork\DoWorkGlassMeasureStep.h</FileName>
+    </TypeIdentifier>
+  </Class>
+  <Class Name="CDoWorkGlassMeasureStep_Measure_WAD" Collapsed="true">
+    <Position X="12.25" Y="7.25" Width="2.5" />
+    <TypeIdentifier>
+      <HashCode>AAAAAAAAgAAAAAAAAAAAAAAAAAAAAAAAAAAAAAEAAAI=</HashCode>
+      <FileName>DoWork\DoWorkGlassMeasureStep.h</FileName>
+    </TypeIdentifier>
+  </Class>
+  <Class Name="CDoWorkGlassMeasureStep_Measure_TSP" Collapsed="true">
+    <Position X="15" Y="7.25" Width="2.75" />
+    <TypeIdentifier>
+      <HashCode>gAAAAAAAAAAAAAAAIAAAAAAAAAAAAAAAAAAAAAAAAAI=</HashCode>
+      <FileName>DoWork\DoWorkGlassMeasureStep.h</FileName>
+    </TypeIdentifier>
+  </Class>
+  <Class Name="CDoWorkGlassMeasureStep_Measure_VISION" Collapsed="true">
+    <Position X="18" Y="7.25" Width="2.75" />
+    <TypeIdentifier>
+      <HashCode>AAAAAAAAAAAgAAAAAAAAAAAAAIAAAAAAAAAAAAAAAAI=</HashCode>
+      <FileName>DoWork\DoWorkGlassMeasureStep.h</FileName>
+    </TypeIdentifier>
+  </Class>
+  <Class Name="CDoWorkGlassMeasureStep_Measure_COLOR" Collapsed="true">
+    <Position X="21" Y="7.25" Width="2.75" />
+    <TypeIdentifier>
+      <HashCode>AAAAAAAAIAAAAAAAACAAAAAAAAAAAAAAAAAAAAAAAAI=</HashCode>
+      <FileName>DoWork\DoWorkGlassMeasureStep.h</FileName>
+    </TypeIdentifier>
+  </Class>
+  <Class Name="CDoWorkGlassMeasureStep_Measure_ANGLE" Collapsed="true">
+    <Position X="24" Y="7.25" Width="2.75" />
+    <TypeIdentifier>
+      <HashCode>AAAABAABAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAI=</HashCode>
+      <FileName>DoWork\DoWorkGlassMeasureStep.h</FileName>
+    </TypeIdentifier>
+  </Class>
+  <Class Name="CDoWorkGlassResultStep_CompleteCheck" Collapsed="true">
+    <Position X="6.75" Y="11.75" Width="2.5" />
+    <TypeIdentifier>
+      <HashCode>ABAAAAAAAAAAAAAAAAAgAAAAAAAAAAAAAAAAAAAAAAI=</HashCode>
+      <FileName>DoWork\DoWorkGlassResultStep.h</FileName>
+    </TypeIdentifier>
+  </Class>
+  <Class Name="CDoWorkGlassUnloadStep_Move_Safety" Collapsed="true">
+    <Position X="6.75" Y="12.75" Width="2.5" />
+    <TypeIdentifier>
+      <HashCode>AAAAAAAEACAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAI=</HashCode>
+      <FileName>DoWork\DoWorkGlassUnloadStep.h</FileName>
+    </TypeIdentifier>
+  </Class>
+  <Class Name="CDoWorkGlassUnloadStep_ChangeUnloadStatus" Collapsed="true">
+    <Position X="9.5" Y="12.75" Width="2.5" />
+    <TypeIdentifier>
+      <HashCode>CAAAAAAAAAAAAAAAAAAAAAAAAAAAIAAAAAAAAAAAAAI=</HashCode>
+      <FileName>DoWork\DoWorkGlassUnloadStep.h</FileName>
+    </TypeIdentifier>
+  </Class>
+  <Class Name="CDoWorkGlassUnloadStep_CheckUnloadStatus" Collapsed="true">
+    <Position X="12.25" Y="12.75" Width="2.75" />
+    <TypeIdentifier>
+      <HashCode>gAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAgAAAAAAAAI=</HashCode>
+      <FileName>DoWork\DoWorkGlassUnloadStep.h</FileName>
+    </TypeIdentifier>
+  </Class>
+  <Class Name="CFunctionModuleEQStateChange" Collapsed="true">
+    <Position X="0.75" Y="15.25" Width="2.75" />
+    <TypeIdentifier>
+      <HashCode>ACAAAIAAAAEEBAAEAAAAAAAGsAIIAAAAIAAADAgMAEI=</HashCode>
+      <FileName>FunctionModule\FunctionModuleEQStateChange.h</FileName>
+    </TypeIdentifier>
+  </Class>
+  <Class Name="CFunctionModuleEQStateChangeStep_LPDown" Collapsed="true">
+    <Position X="5" Y="15.25" Width="3.25" />
+    <TypeIdentifier>
+      <HashCode>AAAAAAAAAACAAAAAAAAAAAAAAAAAAAAAAAAAAQAAAAI=</HashCode>
+      <FileName>FunctionModule\FunctionModuleEQStateChangeStep.h</FileName>
+    </TypeIdentifier>
+  </Class>
+  <Class Name="CFunctionModuleEQStateChangeStep_Ready" Collapsed="true">
+    <Position X="8.5" Y="15.25" Width="3.5" />
+    <TypeIdentifier>
+      <HashCode>AAAAAIAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAEAAAI=</HashCode>
+      <FileName>FunctionModule\FunctionModuleEQStateChangeStep.h</FileName>
+    </TypeIdentifier>
+  </Class>
+  <Class Name="CFunctionModuleEQStateChangeStep_LoaderXYRLoad" Collapsed="true">
+    <Position X="5" Y="16.25" Width="3.25" />
+    <TypeIdentifier>
+      <HashCode>AAAAAAAAAABAAAAAAAAAAAAAAAAAAAAEAAAAAAAAAAI=</HashCode>
+      <FileName>FunctionModule\FunctionModuleEQStateChangeStep.h</FileName>
+    </TypeIdentifier>
+  </Class>
+  <Class Name="CFunctionModuleEQStateChangeStep_LPUp" Collapsed="true">
+    <Position X="12.25" Y="16.25" Width="3.25" />
+    <TypeIdentifier>
+      <HashCode>AAAAAAAAAAAAIAAAAAAAAEAAAAAAAAAAAAAAAAAAAAI=</HashCode>
+      <FileName>FunctionModule\FunctionModuleEQStateChangeStep.h</FileName>
+    </TypeIdentifier>
+  </Class>
+  <Class Name="CFunctionModuleEQStateChangeStep_LoaderXYRMeas" Collapsed="true">
+    <Position X="5" Y="17.25" Width="3.25" />
+    <TypeIdentifier>
+      <HashCode>AQAAAAAAAAAAAAAAAAAAAAAAQAAAAAAAAAAAAAAAAAI=</HashCode>
+      <FileName>FunctionModule\FunctionModuleEQStateChangeStep.h</FileName>
+    </TypeIdentifier>
+  </Class>
+  <Class Name="CFunctionModuleEQStateChangeStep_Meas" Collapsed="true">
+    <Position X="8.5" Y="17.25" Width="3.5" />
+    <TypeIdentifier>
+      <HashCode>AAAAAACAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAo=</HashCode>
+      <FileName>FunctionModule\FunctionModuleEQStateChangeStep.h</FileName>
+    </TypeIdentifier>
+  </Class>
+  <Class Name="CCommTcpIpObjectAgingPG" Collapsed="true">
+    <Position X="13.5" Y="10" Width="2.25" />
+    <TypeIdentifier>
+      <HashCode>RABIEAgAREAQAgEUEABABQRFAAEBQAAgAAAEJRQEVBA=</HashCode>
+      <FileName>CommTcpIpObjectAgingPG.h</FileName>
+    </TypeIdentifier>
+  </Class>
+  <Class Name="CCommTcpIpObjectAngle" Collapsed="true">
+    <Position X="27" Y="10" Width="2.25" />
+    <TypeIdentifier>
+      <HashCode>QABADQgAQAAQgAkAEABABQBEAAEBAAAAAKAAAVAnVBA=</HashCode>
+      <FileName>CommTcpIpObjectAngle.h</FileName>
+    </TypeIdentifier>
+  </Class>
+  <Class Name="CCommTcpIpObjectCIM" Collapsed="true">
+    <Position X="11.25" Y="10" Width="2.25" />
+    <TypeIdentifier>
+      <HashCode>SUGBC4B5xC4wDAFoXAMqkUQQZEEFUUCQaMRID1qk2PU=</HashCode>
+      <FileName>CommTcpIpObjectCIM.h</FileName>
+    </TypeIdentifier>
+  </Class>
+  <Class Name="CCommTcpIpObjectColor" Collapsed="true">
+    <Position X="24.75" Y="10" Width="2.25" />
+    <TypeIdentifier>
+      <HashCode>YABADAgIQEAQgAkQkAHABQRGACEBAQAAAoAAgVwmVBA=</HashCode>
+      <FileName>CommTcpIpObjectColor.h</FileName>
+    </TypeIdentifier>
+  </Class>
+  <Class Name="CCommEthFunction" Collapsed="true">
+    <Position X="10.25" Y="9.25" Width="2.75" />
+    <TypeIdentifier>
+      <HashCode>QACQAQMAAAAACUBIkAkAgQAIEB1JwQIACoA6YABATAA=</HashCode>
+      <FileName>D:\SVN\repos\HMI\CoreFunction\CommEthFunction\CommEthFunction.h</FileName>
+    </TypeIdentifier>
+  </Class>
+  <Class Name="CCommTcpIpObjectLCR" Collapsed="true">
+    <Position X="29.25" Y="10" Width="2.25" />
+    <TypeIdentifier>
+      <HashCode>QABAAAgAQAAQAAEAEABABQREAAEBAAAIAAAQARQkVhA=</HashCode>
+      <FileName>CommTcpIpObjectLCR.h</FileName>
+    </TypeIdentifier>
+  </Class>
+  <Class Name="CCommTcpIpObjectPG" Collapsed="true">
+    <Position X="15.75" Y="10" Width="2.25" />
+    <TypeIdentifier>
+      <HashCode>QgBIEAgIREgQAgEEEABIBQREAAMBAAAAAEAEBRQEVBA=</HashCode>
+      <FileName>CommTcpIpObjectPG.h</FileName>
+    </TypeIdentifier>
+  </Class>
+  <Class Name="CCommTcpIpObjectTSP" Collapsed="true">
+    <Position X="20.25" Y="10" Width="2.25" />
+    <TypeIdentifier>
+      <HashCode>QABAAAgAQkAQAAEAEABABQREAAEBAAAAAAAQARQmVBA=</HashCode>
+      <FileName>CommTcpIpObjectTSP.h</FileName>
+    </TypeIdentifier>
+  </Class>
+  <Class Name="CCommTcpIpObjectVision" Collapsed="true">
+    <Position X="22.5" Y="10" Width="2.25" />
+    <TypeIdentifier>
+      <HashCode>QABAjQwMwAAQgAkAEAFAhQhEAgEDAAKABIACAVgvVBA=</HashCode>
+      <FileName>CommTcpIpObjectVision.h</FileName>
+    </TypeIdentifier>
+  </Class>
+  <Class Name="CCommTcpIpObjectWAD" Collapsed="true">
+    <Position X="18" Y="10" Width="2.25" />
+    <TypeIdentifier>
+      <HashCode>SABAAAkAQIAQgAEQEABABQREAAEBAAAAAAAAAVAnXBA=</HashCode>
+      <FileName>CommTcpIpObjectWAD.h</FileName>
+    </TypeIdentifier>
+  </Class>
+  <Class Name="CCommTcpIpFactoryMgr" Collapsed="true">
+    <Position X="5.75" Y="35.5" Width="1.75" />
+    <TypeIdentifier>
+      <HashCode>fDQAQECGFCKCIAxTEBgBARwBYAwRgAAKACgCAgGFIBA=</HashCode>
+      <FileName>Manager\CommTcpIpFactoryMgr.h</FileName>
+    </TypeIdentifier>
+  </Class>
+  <Class Name="CSequenceManager" Collapsed="true">
+    <Position X="0.5" Y="0.5" Width="2.5" />
+    <TypeIdentifier>
+      <HashCode>ACCAAACBGUAAQYKAAggUiIAIFAIAgCAEQAAABACHIKQ=</HashCode>
+      <FileName>Manager\SequenceManager.h</FileName>
+    </TypeIdentifier>
+  </Class>
+  <Class Name="CSystemInitialize" Collapsed="true">
+    <Position X="0.75" Y="1.5" Width="2.25" />
+    <TypeIdentifier>
+      <HashCode>AAAAAAAAAAkABAAEAAAAAQAAAAIIAAAAAAAABAgEAAA=</HashCode>
+      <FileName>DoWork\SystemInitialize.h</FileName>
+    </TypeIdentifier>
+  </Class>
+  <Class Name="CDoWorkGlassSequence" Collapsed="true">
+    <Position X="0.75" Y="2.5" Width="2.25" />
+    <TypeIdentifier>
+      <HashCode>ACAAAAAAAAFABAoMAAAAggAAAAIAwAAAAAAAFAgAAYw=</HashCode>
+      <FileName>DoWork\DoWorkGlassSequence.h</FileName>
+    </TypeIdentifier>
+  </Class>
+  <Class Name="CFunctionModuleEQState" Collapsed="true">
+    <Position X="0.75" Y="19.25" Width="3" />
+    <TypeIdentifier>
+      <HashCode>QCIjA0EcKp/BNBK2lCgQAiIuIKIIECcBgABAjgqiIoY=</HashCode>
+      <FileName>FunctionModule\FunctionModuleEQState.h</FileName>
+    </TypeIdentifier>
+  </Class>
+  <Class Name="CFunctionModuleProbeACC" Collapsed="true">
+    <Position X="0.75" Y="20.25" Width="3" />
+    <TypeIdentifier>
+      <HashCode>SICBMCUBQFEUBIEVCAUEJEAGCA5MAEACMEAERAsMAAA=</HashCode>
+      <FileName>FunctionModule\FunctionModuleProbeACC.h</FileName>
+    </TypeIdentifier>
+  </Class>
+  <Class Name="CDoWorkProbeSWAlign" Collapsed="true">
+    <Position X="3.75" Y="10.75" Width="2.5" />
+    <TypeIdentifier>
+      <HashCode>AAAkAAAAAAEABAAEAAAAAAAAAAIIAAAAAAAABAgGAAA=</HashCode>
+      <FileName>DoWork\DoWorkProbeSWAlign.h</FileName>
+    </TypeIdentifier>
+  </Class>
+  <Class Name="CDoWorkProbeSWAlignStep_Move" Collapsed="true">
+    <Position X="7" Y="10.75" Width="3.25" />
+    <TypeIdentifier>
+      <HashCode>AAAAAAAAAAAAAgAAAAAAAAAAAAAAAAAAAIAAAAAAAAI=</HashCode>
+      <FileName>DoWork\DoWorkProbeSWAlignStep.h</FileName>
+    </TypeIdentifier>
+  </Class>
+  <Class Name="CDoWorkProbeSWAlignStep_Align" Collapsed="true">
+    <Position X="10.5" Y="10.75" Width="3" />
+    <TypeIdentifier>
+      <HashCode>AAAAAAAAAAAABAAAAAAAAQAAAAAAAAAAAAAAAAAAAAI=</HashCode>
+      <FileName>DoWork\DoWorkProbeSWAlignStep.h</FileName>
+    </TypeIdentifier>
+  </Class>
+  <Class Name="CSystemInitializeStep_InitModule" Collapsed="true">
+    <Position X="3.5" Y="1.5" Width="2.5" />
+    <TypeIdentifier>
+      <HashCode>AAAAAAAAAAAAAAAAAAAAAAAACAAAAAAAAABAAAAAAAI=</HashCode>
+      <FileName>DoWork\SystemInitializeStep.h</FileName>
+    </TypeIdentifier>
+  </Class>
+  <Class Name="CSystemInitializeStep_CheckInterlock" Collapsed="true">
+    <Position X="6.25" Y="1.5" Width="2.5" />
+    <TypeIdentifier>
+      <HashCode>AAAAAAAAAAAAAAAgCAAAAAAAAAAAAAAAAAAAAAAAAAI=</HashCode>
+      <FileName>DoWork\SystemInitializeStep.h</FileName>
+    </TypeIdentifier>
+  </Class>
+  <Class Name="CSystemInitializeStep_InitIO" Collapsed="true">
+    <Position X="9" Y="1.5" Width="2.5" />
+    <TypeIdentifier>
+      <HashCode>AAAAAAAAAIAAAAAAAAAAAAAAAAAAAAAAAAAAAAAACQI=</HashCode>
+      <FileName>DoWork\SystemInitializeStep.h</FileName>
+    </TypeIdentifier>
+  </Class>
+  <Class Name="CSystemInitializeStep_InitMotion" Collapsed="true">
+    <Position X="11.75" Y="1.5" Width="2.5" />
+    <TypeIdentifier>
+      <HashCode>AAAAAAAAEAAAAwAAAAAAAAAAAAAAAAAABAAAAAAAAAI=</HashCode>
+      <FileName>DoWork\SystemInitializeStep.h</FileName>
+    </TypeIdentifier>
+  </Class>
+  <Class Name="CSystemInitializeStep_InitComplete" Collapsed="true">
+    <Position X="14.5" Y="1.5" Width="2.75" />
+    <TypeIdentifier>
+      <HashCode>AAAAAAAQAAAAAIAAAAAAAAAAAAAAAAAAAAAAAAAAAAI=</HashCode>
+      <FileName>DoWork\SystemInitializeStep.h</FileName>
+    </TypeIdentifier>
+  </Class>
+  <Class Name="CFunctionModuleEQStateChangeStep_Safety" Collapsed="true">
+    <Position X="17.5" Y="1.5" Width="3.25" />
+    <TypeIdentifier>
+      <HashCode>AAAAAAAAAAAAAAAAAAAAIAAIAAAAAAAAAAAAAAAAAAI=</HashCode>
+      <FileName>FunctionModule\FunctionModuleEQStateChangeStep.h</FileName>
+    </TypeIdentifier>
+  </Class>
+  <Class Name="CDlgTitleBar" Collapsed="true">
+    <Position X="1" Y="23.25" Width="2.5" />
+    <TypeIdentifier>
+      <HashCode>AQEBAAEAIAgAAQoAEJIAIAAgIAIBQACAAAAAQAAAAhA=</HashCode>
+      <FileName>DlgTitleBar.h</FileName>
+    </TypeIdentifier>
+  </Class>
+  <Class Name="CDlgMainForm" Collapsed="true">
+    <Position X="1" Y="24" Width="2.5" />
+    <TypeIdentifier>
+      <HashCode>AIEJBRkAIAhgAGQsJJAEACoskgIRwtAIkYZqAIAJQAQ=</HashCode>
+      <FileName>DlgMainForm.h</FileName>
+    </TypeIdentifier>
+  </Class>
+  <Class Name="CDlgNaviBar" Collapsed="true">
+    <Position X="1" Y="31" Width="2.5" />
+    <TypeIdentifier>
+      <HashCode>AwigBEEAAAAAAgAAABAIAAggMAAAAAgEAAIAAAAAAGA=</HashCode>
+      <FileName>DlgNaviBar.h</FileName>
+    </TypeIdentifier>
+  </Class>
+  <Class Name="CDlgSubOperate" Collapsed="true">
+    <Position X="3.75" Y="24.75" Width="2.25" />
+    <TypeIdentifier>
+      <HashCode>LKJAxCUilAqwEYVc0ZHAASggJAKyaESQ1AGUBYhIEC8=</HashCode>
+      <FileName>DlgSubOperate.h</FileName>
+    </TypeIdentifier>
+  </Class>
+  <Class Name="CDlgSubData" Collapsed="true">
+    <Position X="3.75" Y="25.5" Width="2.25" />
+    <TypeIdentifier>
+      <HashCode>AAAAAAEAAAAAAAAAABAABAAkAAAAAgEAgAAAAAAAQAA=</HashCode>
+      <FileName>DlgSubData.h</FileName>
+    </TypeIdentifier>
+  </Class>
+  <Class Name="CDlgSubRecipe" Collapsed="true">
+    <Position X="3.75" Y="26.25" Width="2.25" />
+    <TypeIdentifier>
+      <HashCode>AAABgAkAAAAQAAAAAFAAAQBgAAQAAAAAgAAAAAAACAA=</HashCode>
+      <FileName>DlgSubRecipe.h</FileName>
+    </TypeIdentifier>
+  </Class>
+  <Class Name="CDlgSubMaint" Collapsed="true">
+    <Position X="3.75" Y="27" Width="2.25" />
+    <TypeIdentifier>
+      <HashCode>IUCIBAMCAQAAAYQyABCAAAAhAAAGAQEAkIgUIApEgIg=</HashCode>
+      <FileName>DlgSubMaint.h</FileName>
+    </TypeIdentifier>
+  </Class>
+  <Class Name="CDlgSubLog" Collapsed="true">
+    <Position X="3.75" Y="27.75" Width="2.25" />
+    <TypeIdentifier>
+      <HashCode>AAAApAFgwB+AAAAAQBAMBCAgAIAAAAACAQAAAEAAgIA=</HashCode>
+      <FileName>DlgSubLog.h</FileName>
+    </TypeIdentifier>
+  </Class>
+  <Class Name="CDlgSubConfig" Collapsed="true">
+    <Position X="3.75" Y="28.5" Width="2.25" />
+    <TypeIdentifier>
+      <HashCode>mUBAgYkAIABQBCAAABAQACAghAAIAAMAyAAQQAAUgAE=</HashCode>
+      <FileName>DlgSubConfig.h</FileName>
+    </TypeIdentifier>
+  </Class>
+  <Class Name="CDlgSubAlarm" Collapsed="true">
+    <Position X="3.75" Y="29.25" Width="2.25" />
+    <TypeIdentifier>
+      <HashCode>AAAAAIEAAAAAAAAAgJAAICAgAAAAAAAAAAIIAgAACAA=</HashCode>
+      <FileName>DlgSubAlarm.h</FileName>
+    </TypeIdentifier>
+  </Class>
+  <Class Name="CDlgSubManual" Collapsed="true">
+    <Position X="3.75" Y="30" Width="2.25" />
+    <TypeIdentifier>
+      <HashCode>AAAAAAEAAACgAAAAYRCAAAQgCAAAAAEAgQQAAABAiAA=</HashCode>
+      <FileName>DlgSubManual.h</FileName>
+    </TypeIdentifier>
+  </Class>
+  <Class Name="CAuroraMgr" Collapsed="true">
+    <Position X="1" Y="32.5" Width="1.5" />
+    <TypeIdentifier>
+      <HashCode>ABEwFBwAEgAQKEAQAgBCYBAwQAhipQBAAABBMEQAAQQ=</HashCode>
+      <FileName>AuroraMgr.h</FileName>
+    </TypeIdentifier>
+  </Class>
+  <Class Name="CSystemConfigMgr" Collapsed="true">
+    <Position X="3" Y="32.5" Width="2" />
+    <TypeIdentifier>
+      <HashCode>LCFBKEsAAUj0AgQQEIARNA0EAImQkGCiACBAAB4YQAA=</HashCode>
+      <FileName>Manager\SystemConfigMgr.h</FileName>
+    </TypeIdentifier>
+  </Class>
+  <Class Name="CSeqTactTimeMgr" Collapsed="true">
+    <Position X="3" Y="37.75" Width="2" />
+    <TypeIdentifier>
+      <HashCode>iCAsAqBAUAASIYABgAAACBAQAACAgAAAAAQAJIREgAA=</HashCode>
+      <FileName>Manager\SeqTactTimeMgr.h</FileName>
+    </TypeIdentifier>
+  </Class>
+  <Class Name="CLogInControlMgr" Collapsed="true">
+    <Position X="3" Y="33.25" Width="2" />
+    <TypeIdentifier>
+      <HashCode>AAAQ0AACAAAgQAIAiQEAAIgAAQAogAECEAABAAAAAAA=</HashCode>
+      <FileName>Manager\LogInControlMgr.h</FileName>
+    </TypeIdentifier>
+  </Class>
+  <Class Name="CAlignCameraMgr" Collapsed="true">
+    <Position X="5.75" Y="32.5" Width="1.75" />
+    <TypeIdentifier>
+      <HashCode>ABAIIAAAAIAxgiBABGAAAQggQgghhEQAAUABAgQAgBg=</HashCode>
+      <FileName>Manager\AlignCameraMgr.h</FileName>
+    </TypeIdentifier>
+  </Class>
+  <Class Name="CNetworkConfigMgr" Collapsed="true">
+    <Position X="3" Y="34" Width="2" />
+    <TypeIdentifier>
+      <HashCode>AAQACCBAYAAkBAACAAAAAAgADAQAgAhCACAAAgIBAAA=</HashCode>
+      <FileName>Manager\NetworkConfigMgr.h</FileName>
+    </TypeIdentifier>
+  </Class>
+  <Class Name="CPositionConfigMgr" Collapsed="true">
+    <Position X="3" Y="34.75" Width="2" />
+    <TypeIdentifier>
+      <HashCode>AACAChQCIQOggAiADBAIAAgAEAAAgmEAAADEAAEAAAA=</HashCode>
+      <FileName>Manager\PositionConfigMgr.h</FileName>
+    </TypeIdentifier>
+  </Class>
+  <Class Name="CRecipeEditMgr" Collapsed="true">
+    <Position X="3" Y="35.5" Width="2" />
+    <TypeIdentifier>
+      <HashCode>DGIAABAQIQALAwiIAAADwR0QAgIAoQABgAQ4BNgRjAA=</HashCode>
+      <FileName>Recipe\RecipeEditMgr.h</FileName>
+    </TypeIdentifier>
+  </Class>
+  <Class Name="CShareMemoryMgr" Collapsed="true">
+    <Position X="3" Y="36.25" Width="2" />
+    <TypeIdentifier>
+      <HashCode>AADYgAAACAAgASCBAgAAAIggQAEIghBACRwABlEAMBo=</HashCode>
+      <FileName>Manager\ShareMemoryMgr.h</FileName>
+    </TypeIdentifier>
+  </Class>
+  <Class Name="CLightControlMgr" Collapsed="true">
+    <Position X="5.75" Y="33.25" Width="1.75" />
+    <TypeIdentifier>
+      <HashCode>QBQIAABAAAAgAiBAAEAIAQiQQAAIgAQgAQAIAgAEABE=</HashCode>
+      <FileName>Manager\LightControlMgr.h</FileName>
+    </TypeIdentifier>
+  </Class>
+  <Class Name="CMaintControlMgr" Collapsed="true">
+    <Position X="5.75" Y="34" Width="1.75" />
+    <TypeIdentifier>
+      <HashCode>uYpggx9VBsT0QAAoG2RaEUjQhk0RoCgeAkYgTQqAHIQ=</HashCode>
+      <FileName>Manager\MaintControlMgr.h</FileName>
+    </TypeIdentifier>
+  </Class>
+  <Class Name="CMotorControlMgr" Collapsed="true">
+    <Position X="8.25" Y="33.75" Width="1.75" />
+    <TypeIdentifier>
+      <HashCode>IUzIiCIBwgCiNihE2gQSQbk0VgEJiBioFQBYRxJeCRA=</HashCode>
+      <FileName>Manager\MotorControlMgr.h</FileName>
+    </TypeIdentifier>
+  </Class>
+  <Class Name="CIOMapControlMgr" Collapsed="true">
+    <Position X="8.25" Y="34.5" Width="1.75" />
+    <TypeIdentifier>
+      <HashCode>AkoMAAElTCAkCiJEQQAgD4xAUAIKoCAAFQBQHkgEKhA=</HashCode>
+      <FileName>Manager\IOMapControlMgr.h</FileName>
+    </TypeIdentifier>
+  </Class>
+  <Class Name="CAlarmMonitorMgr" Collapsed="true">
+    <Position X="3" Y="37" Width="2" />
+    <TypeIdentifier>
+      <HashCode>AIAAAAAAAIAAAAAAAAAAIAgAAAAAgAAIAAgAAAAABAA=</HashCode>
+      <FileName>Alarm\AlarmMonitorMgr.h</FileName>
+    </TypeIdentifier>
+  </Class>
+  <Class Name="CCommTcpIPMgr" Collapsed="true">
+    <Position X="5.75" Y="34.75" Width="1.75" />
+    <TypeIdentifier>
+      <HashCode>BARAAAAIAAAACABgAQAAAQAAAAABgAACACAAAAAAAAI=</HashCode>
+      <FileName>Manager\CommTcpIPMgr.h</FileName>
+    </TypeIdentifier>
+  </Class>
+  <Class Name="CDoWorkSequenceCIM" Collapsed="true">
+    <Position X="0.75" Y="21.25" Width="3" />
+    <TypeIdentifier>
+      <HashCode>AAABAgIA0AEEBAMECCAACEQAAAIAAAECAgAABAgOAAQ=</HashCode>
+      <FileName>DoWork\DoWorkSequenceCIM.h</FileName>
+    </TypeIdentifier>
+  </Class>
+  <Class Name="CDoWorkGlassRecipe" Collapsed="true">
+    <Position X="3.75" Y="8.25" Width="2.5" />
+    <TypeIdentifier>
+      <HashCode>AAgAAAAAAAEABAAEAAAAgAAAAAIIAAAAAAAABAgGAAA=</HashCode>
+      <FileName>DoWork\DoWorkGlassRecipe.h</FileName>
+    </TypeIdentifier>
+  </Class>
+  <Class Name="CMeasureSequenceItemEngine" Collapsed="true">
+    <Position X="0.75" Y="3.5" Width="2.5" />
+    <TypeIdentifier>
+      <HashCode>AOEAARIgQEBQBEqIAEAQiAhAmQIGgRAAUAWQIIiASYA=</HashCode>
+      <FileName>DoWork\MeasureSequenceItemEngine.h</FileName>
+    </TypeIdentifier>
+  </Class>
+  <Class Name="CAlarmMonitorToSensor" Collapsed="true">
+    <Position X="0.5" Y="39.25" Width="2" />
+    <TypeIdentifier>
+      <HashCode>gAABCAAAAQAQAAAAAQAAIAAAAiAQAAAIAAIAAAAAAAg=</HashCode>
+      <FileName>Alarm\AlarmMonitorToSensor.h</FileName>
+    </TypeIdentifier>
+  </Class>
+  <Class Name="CAlarmMonitorToSensorFAN" Collapsed="true">
+    <Position X="3" Y="39.25" Width="2.5" />
+    <TypeIdentifier>
+      <HashCode>gEQAAQAAQAEAQCIAAAAAAIAAAAAAARAYQAIAAAgEQAQ=</HashCode>
+      <FileName>Alarm\AlarmMonitorToSensorFAN.h</FileName>
+    </TypeIdentifier>
+  </Class>
+  <Class Name="CAlarmMonitorToSensorIsolater" Collapsed="true">
+    <Position X="3" Y="40" Width="2.5" />
+    <TypeIdentifier>
+      <HashCode>gEUAAQAAQAEAAAAAAAAAAAAAAAAAARAYQAIBAAgEQAQ=</HashCode>
+      <FileName>Alarm\AlarmMonitorToSensorIsolater.h</FileName>
+    </TypeIdentifier>
+  </Class>
+  <Class Name="CAlarmMonitorToSensorPressure" Collapsed="true">
+    <Position X="3" Y="40.75" Width="2.5" />
+    <TypeIdentifier>
+      <HashCode>gEQAAAAAQIEAQCAAAAAAAAABAAAAARAIQAIAAAggQAQ=</HashCode>
+      <FileName>Alarm\AlarmMonitorToSensorPressure.h</FileName>
+    </TypeIdentifier>
+  </Class>
+  <Class Name="CAlarmMonitorToSensorSmoke" Collapsed="true">
+    <Position X="3" Y="41.5" Width="2.5" />
+    <TypeIdentifier>
+      <HashCode>gFQAAQAAQQEAAAAAAAAAAAAAAAAAARAQQAIAAAgEQAQ=</HashCode>
+      <FileName>Alarm\AlarmMonitorToSensorSmoke.h</FileName>
+    </TypeIdentifier>
+  </Class>
+  <Class Name="CAlarmMonitorToSensorTemperature" Collapsed="true">
+    <Position X="3" Y="42.25" Width="2.75" />
+    <TypeIdentifier>
+      <HashCode>gEQAAQAAQAEBAAAAAAAAAAAAAQAAARAYQAIAAAgEQAQ=</HashCode>
+      <FileName>Alarm\AlarmMonitorToSensorTemperature.h</FileName>
+    </TypeIdentifier>
+  </Class>
+  <Class Name="CAlarmMonitorToSensorTemperatureLow" Collapsed="true">
+    <Position X="3" Y="43" Width="3" />
+    <TypeIdentifier>
+      <HashCode>gEQQAQAAQAEAAAAAAAAAAAAAAAAAARAYQAIEACwEQAQ=</HashCode>
+      <FileName>Alarm\AlarmMonitorToSensorTemperatureLow.h</FileName>
+    </TypeIdentifier>
+  </Class>
+  <Class Name="CAlarmMonitorToSensorVacSwitch" Collapsed="true">
+    <Position X="3" Y="43.75" Width="3" />
+    <TypeIdentifier>
+      <HashCode>gEAAAAAAQIAAQCAAAAAAAAAAAAAAARBAQAJAAAgAQAQ=</HashCode>
+      <FileName>Alarm\AlarmMonitorToSensorVacSwitch.h</FileName>
+    </TypeIdentifier>
+  </Class>
+  <Class Name="CAlarmMonitorToLampTime" Collapsed="true">
+    <Position X="3" Y="44.5" Width="2.5" />
+    <TypeIdentifier>
+      <HashCode>gEQAAQAAQAEAAAAAAAAJAAAAAAAAARAQQAIAAAgEQAQ=</HashCode>
+      <FileName>Alarm\AlarmMonitorToLampTime.h</FileName>
+    </TypeIdentifier>
+  </Class>
+  <Class Name="CAlarmMonitorToSafetyPLC" Collapsed="true">
+    <Position X="3" Y="45.25" Width="2.5" />
+    <TypeIdentifier>
+      <HashCode>gEQAAAAAQIEAAAAAAAIAAAAAAAgAATAIQAIAAAgAQAQ=</HashCode>
+      <FileName>Alarm\AlarmMonitorToSafetyPLC.h</FileName>
+    </TypeIdentifier>
+  </Class>
+  <Font Name="맑은 고딕" Size="9" />
+</ClassDiagram>

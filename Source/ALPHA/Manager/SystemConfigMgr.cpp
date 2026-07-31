@@ -1,0 +1,158 @@
+//#include "stdafx.h"
+#include "pch.h"
+#include "SystemConfigMgr.h"
+
+#include "Common\IniHelper.h"
+#include "common/CommonFunc.h"
+
+#ifdef _DEBUG
+#define new DEBUG_NEW
+#endif
+
+CSystemConfigMgr::CSystemConfigMgr(CString strConfigPath)
+	: m_pIniHelper(new CIniHelper)
+	, m_pIniGlassExist(new CIniHelper)
+	, m_strConfigPath(strConfigPath)
+{
+	SetName(_T("SYSTEM_CONFIG_MGR"));
+
+	m_pIniHelper->SetFilePath(m_strConfigPath + _T("\\SystemConfig.ini"));
+
+	m_pIniGlassExist->SetFilePath(m_strConfigPath + dfDEFAULT_GLASSEXIST_FILE);
+
+	LinkIniFile(false);
+
+	GlassExistFile(false);
+}
+
+CSystemConfigMgr::~CSystemConfigMgr()
+{
+	Finalize();
+}
+
+bool CSystemConfigMgr::LinkIniFile(bool bSave)
+{
+	//-----------------------------------------------------------------------
+	// Application 파라미터
+	//-----------------------------------------------------------------------
+	m_pIniHelper->Link(bSave, _T("APP_PARA"),	_T("LICENSE"),					&m_strPgmLicense,				(CString)_T(""));
+	m_pIniHelper->Link(bSave, _T("APP_PARA"),	_T("DUPLICATE_EXECUTION"),		&m_bDuplicateExecution,			false);
+	m_pIniHelper->Link(bSave, _T("APP_PARA"),	_T("AUTO_CHANGE_INLINE_MODE"),	&m_bAutoChangeInlineMode,		true);
+	m_pIniHelper->Link(bSave, _T("APP_PARA"),	_T("LANGUAGE_TYPE"),			&m_iLanguageType,				0);
+
+	//-----------------------------------------------------------------------
+	// 알람 모니터 사용 여부 설정
+	//-----------------------------------------------------------------------
+#ifdef _DEBUG
+	m_pIniHelper->Link(bSave, _T("OPT_PARA"), _T("USE_ALARM_MONITOR"),			&m_bUseAlarmMonitor,			false);
+	m_pIniHelper->Link(bSave, _T("OPT_PARA"), _T("USE_HARDWARE_SENSOR"),		&m_bUseHardwareSensor,			false);
+	m_pIniHelper->Link(bSave, _T("OPT_PARA"), _T("USE_HARDWARE_MOTOR"),			&m_bUseHardwareMotor,			false);
+	m_pIniHelper->Link(bSave, _T("OPT_PARA"), _T("USE_TEACHKEY_MONITOR"),		&m_bUseTeachKeyMonitor,			false);
+	
+
+#else
+	m_pIniHelper->Link(bSave, _T("OPT_PARA"), _T("USE_ALARM_MONITOR"),			&m_bUseAlarmMonitor,			true);
+	m_pIniHelper->Link(bSave, _T("OPT_PARA"), _T("USE_HARDWARE_SENSOR"),		&m_bUseHardwareSensor,			true);
+	m_pIniHelper->Link(bSave, _T("OPT_PARA"), _T("USE_HARDWARE_MOTOR"),			&m_bUseHardwareMotor,			true);
+	m_pIniHelper->Link(bSave, _T("OPT_PARA"), _T("USE_TEACHKEY_MONITOR"),		&m_bUseTeachKeyMonitor,			true);
+#endif
+
+	// LYS 2026-07-03 Resume inspection option
+	m_pIniHelper->Link(bSave, _T("OPT_PARA"), _T("USE_RESUME_INSPECTION"),		&m_bUseResumeInspection,		false);
+
+	m_pIniHelper->Link(bSave, _T("OPT_PARA"), _T("RESUME_EXPIRE_HOURS"),			&m_nResumeExpireHours,			0);
+
+	// LYS 2026-07-23 WAD Multi Meas option
+	m_pIniHelper->Link(bSave, _T("OPT_PARA"), _T("WAD_MULTI_RCP_PATH"),			&m_strWadMultiRcpPath,			(CString)_T("D:\\HBS\\PARAM_OCP\\PARAM\\MultiMeasRcp\\"));
+
+	//-----------------------------------------------------------------------
+	// 결과 관련 파라미터
+	//-----------------------------------------------------------------------
+	m_pIniHelper->Link(bSave, _T("OUTPUT_DATA"), _T("USE_UPLOAD_RESULT_DATA_AND_IMAGE_SAVE"),		&m_bUseUploadResultDataAndImageSave,			true);
+	m_pIniHelper->Link(bSave, _T("OUTPUT_DATA"), _T("UPLOAD_RESULT_DATA_AND_IMAGE_SAVE_DIR_PATH"),	&m_strUploadResultDataAndImageSaveFolderPath,	(CString)_T("D:\\PG_SW_CIERESULT\\"));
+	m_pIniHelper->Link(bSave, _T("OUTPUT_DATA"), _T("USE_BACKUP_RESULT_DATA_AND_IMAGE_SAVE"),		&m_bUseBackupResultDataAndImageSave,			false);
+	m_pIniHelper->Link(bSave, _T("OUTPUT_DATA"), _T("BACKUP_RESULT_DATA_AND_IMAGE_SAVE_DIR_PATH"),	&m_strBackupResultDataAndImageSaveFolderPath,	(CString)_T("D:\\PG_SW_CIERESULT_LOCAL\\"));
+
+	// Path
+	m_pIniHelper->Link(bSave, _T("OUTPUT_PATH"), _T("RECIPE_PATH"), &m_strRecipePath, (CString)_T("D:\\UTG\\"));
+	m_pIniHelper->Link(bSave, _T("OUTPUT_PATH"), _T("LOG_PATH"), &m_strLogPath, (CString)_T("D:\\UTG\\"));
+	m_pIniHelper->Link(bSave, _T("OUTPUT_PATH"), _T("CIM_PATH"), &m_strUploadCIMFolderPath, (CString)_T("D:\\CIMDATA\\"));
+	m_pIniHelper->Link(bSave, _T("OUTPUT_PATH"), _T("RESULT_PATH"), &m_strResultPath, (CString)_T("D:\\Result\\"));
+	
+
+	//-----------------------------------------------------------------------
+	// 통신 패킷 방식 변경으로 인한 옵션
+	//-----------------------------------------------------------------------
+	m_pIniHelper->Link(bSave, _T("COMM_LINK_TYPE"), _T("STRING"),			&m_bCommunicationTypeString,	false);
+	
+	m_pIniHelper->Link(bSave, _T("USER_OPTION"), _T("ModelChangeAlarm"), &m_bModelChangeAlarm, false);
+	m_pIniHelper->Link(bSave, _T("USER_OPTION"), _T("CurGlsOneAlarm"), &m_bCurGlsOneAlarm, false);
+	m_pIniHelper->Link(bSave, _T("USER_OPTION"), _T("CIMAlarmNotReport"), &m_bCIMAlarmNotReport, false);  // LYS 2026-07-20 fix duplicate INI key
+	CString strExcept;
+	m_pIniHelper->Link(bSave, _T("USER_OPTION"), _T("EXCEPT_STR"), &strExcept, (CString)_T(""));
+
+
+	//-----------------------------------------------------------------------
+	// 화질 면계측 동시측정 옵션 
+	//-----------------------------------------------------------------------
+	m_pIniHelper->Link(bSave, _T("INSPECT_TEST"), _T("USE_VISION_COLOR"), &m_bUseVisionColorInsp, false);
+	
+
+	//-----------------------------------------------------------------------
+	// LYS 2026-06-26 Equipment Type option (HMI/OCP)
+	//-----------------------------------------------------------------------
+	m_pIniHelper->Link(bSave, _T("EQUIP_TYPE"), _T("MACHINE_TYPE"), &m_strMachineType, (CString)_T("HMI"));
+	m_bIsOCP = (m_strMachineType.CompareNoCase(_T("OCP")) == 0);
+
+	memset(m_chrExcept, 0, sizeof(TCHAR) * EXCEPT_STR_MAX);
+	_stscanf((LPCTSTR)strExcept, _T("%c %c %c %c %c"), &m_chrExcept[0], &m_chrExcept[1], &m_chrExcept[2], &m_chrExcept[3], &m_chrExcept[4]);
+
+	
+	return m_pIniHelper->IsReadEnable();
+}
+
+void CSystemConfigMgr::Finalize()
+{
+	if(m_pIniHelper)
+	{
+		delete m_pIniHelper;
+		m_pIniHelper = nullptr;
+	}
+
+	if (m_pIniGlassExist)
+	{
+		delete m_pIniGlassExist;
+		m_pIniGlassExist = nullptr;
+	}
+}
+
+
+bool CSystemConfigMgr::GlassExistFile(bool bSave)
+{
+	//-----------------------------------------------------------------------
+	// Glass Exist
+	//-----------------------------------------------------------------------
+	m_pIniGlassExist->Link(bSave, _T("GlassExist"), _T("GlassExist"), &m_bGlassExist, false);
+
+	m_pIniGlassExist->Link(bSave, _T("GlassExist"), _T("STOPGLASSID"), &m_strStopGlassID, (CString)_T("NONE"));
+
+	return m_pIniGlassExist->IsReadEnable();
+}
+
+
+bool CSystemConfigMgr::ReadGalssExistFile()
+{
+	// TODO: 여기에 구현 코드 추가.
+	GlassExistFile();
+
+	return m_bGlassExist;
+}
+
+
+void CSystemConfigMgr::WriteGalssExistFile(bool bExist)
+{
+	// TODO: 여기에 구현 코드 추가.
+	m_bGlassExist = bExist;
+
+	GlassExistFile(true);
+}

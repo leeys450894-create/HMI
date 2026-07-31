@@ -1,0 +1,19 @@
+; ProbeHistory.def : Declares the module parameters for the DLL.
+
+LIBRARY      "ProbeHistory"
+DESCRIPTION  'ProbeHistory Windows Dynamic Link Library'
+
+EXPORTS
+    ; Explicit exports can go here
+
+
+	ProbeHistory_InitializeReport
+	ProbeHistory_GetReportProbeHistoryWnd
+	ProbeHistory_FinalizeReport
+	ProbeHistory_SetProbeHistory
+	ProbeHistory_Insert
+    ProbeHistory_Update_ContactCnt
+    ProbeHistory_Update_UnmountTime
+	ProbeHistory_SetSavePath
+
+	Probe_Update_Language

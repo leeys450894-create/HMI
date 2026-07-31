@@ -1,0 +1,141 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Project ToolsVersion="4.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <ItemGroup>
+    <Filter Include="소스 파일">
+      <UniqueIdentifier>{4FC737F1-C7A5-4376-A066-2A32D752A2FF}</UniqueIdentifier>
+      <Extensions>cpp;c;cc;cxx;c++;cppm;ixx;def;odl;idl;hpj;bat;asm;asmx</Extensions>
+    </Filter>
+    <Filter Include="헤더 파일">
+      <UniqueIdentifier>{93995380-89BD-4b04-88EB-625FBE52EBFB}</UniqueIdentifier>
+      <Extensions>h;hh;hpp;hxx;h++;hm;inl;inc;ipp;xsd</Extensions>
+    </Filter>
+    <Filter Include="리소스 파일">
+      <UniqueIdentifier>{67DA6AB6-F800-4c08-8B7A-83BB121AAD01}</UniqueIdentifier>
+      <Extensions>rc;ico;cur;bmp;dlg;rc2;rct;bin;rgs;gif;jpg;jpeg;jpe;resx;tiff;tif;png;wav;mfcribbon-ms</Extensions>
+    </Filter>
+    <Filter Include="API">
+      <UniqueIdentifier>{85b7b098-b211-440f-b33a-b8645a59f620}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="FreeSrc">
+      <UniqueIdentifier>{48c2c185-0bb8-43db-98e2-4353eab4c558}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="FPSpreadDll">
+      <UniqueIdentifier>{affc80e9-348c-4281-8f92-45fcb433ef5b}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="ShareManager">
+      <UniqueIdentifier>{84d3dcde-67d3-44c5-8d20-cc74930a3a8c}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Include">
+      <UniqueIdentifier>{3845b092-280a-45e2-aa34-2e4d5ebe27bf}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Config">
+      <UniqueIdentifier>{0e0ed5a9-4a50-4db0-8992-9cd47fc174dd}</UniqueIdentifier>
+    </Filter>
+  </ItemGroup>
+  <ItemGroup>
+    <ClCompile Include="dSACC.cpp">
+      <Filter>소스 파일</Filter>
+    </ClCompile>
+    <ClCompile Include="CDlgSACC.cpp">
+      <Filter>소스 파일</Filter>
+    </ClCompile>
+    <ClCompile Include="SACCManger.cpp">
+      <Filter>소스 파일</Filter>
+    </ClCompile>
+    <ClCompile Include="..\common\AutoEdit.cpp">
+      <Filter>FreeSrc</Filter>
+    </ClCompile>
+    <ClCompile Include="..\common\InfoWnd.cpp">
+      <Filter>FreeSrc</Filter>
+    </ClCompile>
+    <ClCompile Include="..\common\MySpreadDll.cpp">
+      <Filter>FPSpreadDll</Filter>
+    </ClCompile>
+    <ClCompile Include="..\common\StaticSpread.cpp">
+      <Filter>FPSpreadDll</Filter>
+    </ClCompile>
+    <ClCompile Include="..\common\FarPoint64\Ssdllmfc.cpp">
+      <Filter>FPSpreadDll</Filter>
+    </ClCompile>
+    <ClCompile Include="pch.cpp">
+      <Filter>소스 파일</Filter>
+    </ClCompile>
+    <ClCompile Include="..\common\CommonFunc.cpp">
+      <Filter>FreeSrc</Filter>
+    </ClCompile>
+    <ClCompile Include="ShareManager.cpp">
+      <Filter>ShareManager</Filter>
+    </ClCompile>
+    <ClCompile Include="API_SACC.cpp">
+      <Filter>ShareManager</Filter>
+    </ClCompile>
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="res\dSACC.rc2">
+      <Filter>리소스 파일</Filter>
+    </None>
+    <None Include="dSACC.def">
+      <Filter>API</Filter>
+    </None>
+    <None Include="Config\ProbeChange.ini">
+      <Filter>Config</Filter>
+    </None>
+  </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="framework.h">
+      <Filter>헤더 파일</Filter>
+    </ClInclude>
+    <ClInclude Include="targetver.h">
+      <Filter>헤더 파일</Filter>
+    </ClInclude>
+    <ClInclude Include="Resource.h">
+      <Filter>헤더 파일</Filter>
+    </ClInclude>
+    <ClInclude Include="dSACC.h">
+      <Filter>헤더 파일</Filter>
+    </ClInclude>
+    <ClInclude Include="CDlgSACC.h">
+      <Filter>헤더 파일</Filter>
+    </ClInclude>
+    <ClInclude Include="API_SACC.h">
+      <Filter>API</Filter>
+    </ClInclude>
+    <ClInclude Include="SACCManger.h">
+      <Filter>헤더 파일</Filter>
+    </ClInclude>
+    <ClInclude Include="..\common\AutoEdit.h">
+      <Filter>FreeSrc</Filter>
+    </ClInclude>
+    <ClInclude Include="..\common\InfoWnd.h">
+      <Filter>FreeSrc</Filter>
+    </ClInclude>
+    <ClInclude Include="..\common\MySpreadDll.h">
+      <Filter>FPSpreadDll</Filter>
+    </ClInclude>
+    <ClInclude Include="..\common\StaticSpread.h">
+      <Filter>FPSpreadDll</Filter>
+    </ClInclude>
+    <ClInclude Include="pch.h">
+      <Filter>헤더 파일</Filter>
+    </ClInclude>
+    <ClInclude Include="..\common\CommonFunc.h">
+      <Filter>FreeSrc</Filter>
+    </ClInclude>
+    <ClInclude Include="ShareManager.h">
+      <Filter>ShareManager</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\Source\Include\IOMapAddressDefine.h">
+      <Filter>Include</Filter>
+    </ClInclude>
+  </ItemGroup>
+  <ItemGroup>
+    <ResourceCompile Include="dSACC.rc">
+      <Filter>리소스 파일</Filter>
+    </ResourceCompile>
+  </ItemGroup>
+  <ItemGroup>
+    <Library Include="..\common\FarPoint64\Lib\SPR64DU80.lib">
+      <Filter>FPSpreadDll</Filter>
+    </Library>
+  </ItemGroup>
+</Project>

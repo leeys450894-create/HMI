@@ -1,0 +1,24 @@
+; SocketControl.def : Declares the module parameters for the DLL.
+
+LIBRARY      "SocketControl"
+DESCRIPTION  'SocketControl Windows Dynamic Link Library'
+
+EXPORTS
+    ; Explicit exports can go here
+
+	api_SocketCtrl_Initialize
+	api_SocketCtrl_Close
+	api_SocketCtrl_GetLocalIP
+	api_SocketCtrl_GetServerIPAddress
+	api_SocketCtrl_GetClientIPAddress
+	api_SocketCtrl_SendData
+	api_SocketCtrl_GetReceiveData
+	api_SocketCtrl_GetClientPort
+	api_SocketCtrl_GetReceiveDataSize
+	api_SocketCtrl_GetServerPort
+	api_SocketCtrl_IsConnected
+	api_SocketCtrl_SetModeChange
+	api_SocketCtrl_SetServerIPAddress
+	api_SocketCtrl_SetServerPort
+
+

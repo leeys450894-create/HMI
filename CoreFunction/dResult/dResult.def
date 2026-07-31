@@ -1,0 +1,17 @@
+﻿; dResult.def : DLL에 대한 모듈 매개 변수를 선언합니다.
+
+LIBRARY      "dResult"
+DESCRIPTION  'dResult Windows Dynamic Link Library'
+
+EXPORTS
+    ; 명시적 내보내기를 여기에 사용할 수 있습니다.
+
+        API_Result_Initialize
+        API_Result_FinalizeReport
+        API_Result_Upload
+		API_Result_DataClear
+        API_Result_SaveResult
+        API_Result_SetConfigPath
+        API_Result_SetSearchMode
+        API_Result_GetReportmWnd
+		API_Result_SaveResultDone

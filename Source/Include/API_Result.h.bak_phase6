@@ -1,0 +1,134 @@
+#if _MSC_VER > 1000
+#pragma once
+#endif 
+
+typedef struct {
+	char		InnerID[32];
+	char		StartTime[32];
+	char		EndTime[32];
+	char		Judge_CELL[32];
+	char		Judge_PTN[32];
+	char		Judge_SPC[32];
+	char		WRGBData[4][6][32];		// W,R,G,B
+	char		Date[100][32];
+}IPCDATA1, * PIPCDATA1;					// 특성
+
+typedef struct {
+	char		ARTime[32];
+	char		ARName[32];
+	char		DR_Count[32];
+	char		DR_Name[32];
+	char		DR_XY[32];
+	char		DR_IMGXY[32];
+	char		DR_RGB[32];
+	char		DR_IMGName[4096];
+}IPCDATA2, * PIPCDATA2;					// 화질
+
+struct S_ResultData
+{
+	CString strBeginTime;
+	CString strEndTime;
+	CString strGlassID;
+
+	double fRX_Avr;
+	double fGX_Avr;
+	double fBY_Avr;
+
+	double fR_EFY_Avr;
+	double fG_EFY_Avr;
+	double fB_EFY_Avr;
+
+	double fEFY_Out;
+	double fElectric_Out;
+	double fInspect_Skip;
+	double fRTestError;
+	double fDisplayError;
+
+	int	nPercent[10];		// jsyoon 20171113 add
+
+	CString strAPD_Path;
+
+	S_ResultData() {
+		Clear();
+	}
+
+	void Clear() {
+
+		strBeginTime = _T("");
+		strEndTime = _T("");
+		strGlassID = _T("");
+
+		fRX_Avr = 0.0;
+		fGX_Avr = 0.0;
+		fBY_Avr = 0.0;
+
+		fR_EFY_Avr = 0.0;
+		fG_EFY_Avr = 0.0;
+		fB_EFY_Avr = 0.0;
+
+		fEFY_Out = 0.0;
+		fElectric_Out = 0.0;
+		fInspect_Skip = 0.0;
+		fRTestError = 0.0;
+		fDisplayError = 0.0;
+
+		ZeroMemory(&nPercent, sizeof(nPercent));
+
+		strAPD_Path = _T("");
+	}
+};
+
+typedef struct {
+	TCHAR		szName[32];
+	TCHAR		szData[260];
+	int         nReason;     // jsyoon 20210531 add
+}RsDATA, * PsRDATA;
+
+// 공유메모리 업로드 구조체
+typedef struct
+{
+	// 기본 정보
+	TCHAR szLotID[32];
+	TCHAR szGlassID[32];
+	TCHAR szRecipeID[32];
+	TCHAR szResultPath[260];		// 저장 경로
+	TCHAR szResultFile[260];		// 경로는 미 포함	// 저장 경로 내에 \\Result
+	TCHAR szImageFile[260];			// 경로는 미 포함	// 저장 경로 내에 \\Image
+
+	int nMeasMode;			// 위 번호 참조
+	int nUseResultFile;		// Result File 사용유무
+
+	int iCurArea;			// 현재 Area 번호
+	int iCurStep;			// 현재 Step 번호
+	int iPanelNo;			// 현재 Panel 번호
+	int iMeasArea;			// 현재 Panel 번호
+	int nCntData;			// stData 개수
+	RsDATA  stData[100];		// 측정위치, 결과파일
+
+	// CS 
+	int m_iProbe;				// 측정Probe
+	int m_iTValue;				// Recipe Param t-VALUE 설정 시
+	int m_nMeasType;			// Recipe Param CS 측정 타입
+	int m_nMeasAreaCnt;			// 측정 Area 총 개수
+	int m_nMaxMeasureRcpFlag;	// 측정한 Recipe 개수, 멀티레시피 최대 10개
+	int m_iRetryCnt;
+	int m_iRetryReason;
+	TCHAR szCellData[2048];		// Panel Data 통계용
+
+}RSRITEMDATA, * PRSRITEMDATA;
+
+#define df_MEAS_SPI_MAX  50
+#define df_DATA_COL_MAX  10
+#define df_MEAS_SPI_MAX_ITEM  df_MEAS_SPI_MAX	
+
+void WINAPI API_Result_Initialize(HWND hParentWnd, CRect r);
+void WINAPI API_Result_FinalizeReport();
+int  WINAPI API_Result_Upload(PRSRITEMDATA result);
+void WINAPI API_Result_DataClear();
+bool WINAPI API_Result_SaveResult(bool bSaveFile, bool bRemote, CString strStart);
+void WINAPI API_Result_SetConfigPath(CString str);
+void WINAPI API_Result_SetSearchMode(int iMode);
+CWnd* WINAPI API_Result_GetReportmWnd();
+bool WINAPI API_Result_SaveResultDone();
+
+

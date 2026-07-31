@@ -1,0 +1,15 @@
+Address,Probe Card
+D2100,EQ Unload Data
+D2110,Probe Module #1
+D2120,Probe Module #2
+D2130,Probe Module #3
+D2140,Probe Module #4
+D2150,Probe Module #5
+D2210,Load Slot
+D2220,Unload Slot
+D2400,EQ Load Data
+D2410,CST Slot #1
+D2420,CST Slot #2
+D2430,CST Slot #3
+D2440,CST Slot #4
+D2450,CST Slot #5

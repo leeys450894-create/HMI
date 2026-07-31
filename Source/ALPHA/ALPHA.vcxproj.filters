@@ -1,0 +1,2312 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Project ToolsVersion="4.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <ItemGroup>
+    <Filter Include="소스 파일">
+      <UniqueIdentifier>{4FC737F1-C7A5-4376-A066-2A32D752A2FF}</UniqueIdentifier>
+      <Extensions>cpp;c;cc;cxx;c++;cppm;ixx;def;odl;idl;hpj;bat;asm;asmx</Extensions>
+    </Filter>
+    <Filter Include="헤더 파일">
+      <UniqueIdentifier>{93995380-89BD-4b04-88EB-625FBE52EBFB}</UniqueIdentifier>
+      <Extensions>h;hh;hpp;hxx;h++;hm;inl;inc;ipp;xsd</Extensions>
+    </Filter>
+    <Filter Include="문서 파일">
+      <UniqueIdentifier>{9147f150-b7a0-4bb6-b99e-66b4dc9eb43a}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="문서 파일\01_SPEC">
+      <UniqueIdentifier>{eec358e2-5d4e-46d2-8061-bf9dac7c1363}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="문서 파일\05_DR자료">
+      <UniqueIdentifier>{7d861a0a-b786-4962-9382-ee20e69fa761}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="문서 파일\07_설계문서">
+      <UniqueIdentifier>{f3ca4dda-0b76-4c29-8a96-2ca50e273346}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="문서 파일\11_장비매뉴얼">
+      <UniqueIdentifier>{5eb8fc8d-9c4a-4ca8-85a3-f234b1de2051}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="소스 파일\DIALOG">
+      <UniqueIdentifier>{f66db437-d6bb-45b1-826c-b96affa6d626}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="소스 파일\DIALOG\POPUP">
+      <UniqueIdentifier>{5ec8eaa4-60d2-4698-994d-25ecd40ef398}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="소스 파일\Manager">
+      <UniqueIdentifier>{28894cd9-7327-4028-b6ce-1ae1a7dcbad5}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="소스 파일\Manager\Base">
+      <UniqueIdentifier>{e9f3a276-acb3-4da0-bc5a-303f160e336a}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="문서 파일\06_SCHEDULE">
+      <UniqueIdentifier>{14de993f-7060-4062-87b7-72df433dedff}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="리소스 파일">
+      <UniqueIdentifier>{67DA6AB6-F800-4c08-8B7A-83BB121AAD01}</UniqueIdentifier>
+      <Extensions>rc;ico;cur;bmp;dlg;rc2;rct;bin;rgs;gif;jpg;jpeg;jpe;resx;tiff;tif;png;wav;mfcribbon-ms</Extensions>
+    </Filter>
+    <Filter Include="ConfigurationFile">
+      <UniqueIdentifier>{20d8add8-d408-4732-bbbe-52a5c3375f12}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="ConfigurationFile\IOMapConfig">
+      <UniqueIdentifier>{527c3c24-b549-4e66-9cdc-f92125be4cf8}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="ConfigurationFile\MotorConfig">
+      <UniqueIdentifier>{11260536-c17d-41dc-9edc-4f69eeff1ba4}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="ConfigurationFile\AlarmConfig">
+      <UniqueIdentifier>{c6305b81-b5ca-4f0e-a902-5e50a192375a}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="ConfigurationFile\Config_Bin">
+      <UniqueIdentifier>{8c4f74e6-a84b-4e9a-8df1-41e1a8c6fab0}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="CoreFunction">
+      <UniqueIdentifier>{652739c5-7f8c-46db-b15b-7ee40b223dcd}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="CoreFunction\Func_Log">
+      <UniqueIdentifier>{4dca9bca-2f89-4826-8650-8e95fa20b95c}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="CoreFunction\Func_Log\LogAccessor">
+      <UniqueIdentifier>{57fea57f-47c7-43b7-80c8-292acca7f80a}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="CoreFunction\Func_Log\LogAccessor\File_access">
+      <UniqueIdentifier>{61dbd4bb-9004-499f-9f28-84bd79037387}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="CoreFunction\Func_Log\LogWrapper">
+      <UniqueIdentifier>{1edc5874-e0fe-48ce-8e22-14e2be828639}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="CoreFunction\Func_Log\LogWrapper\spdlog">
+      <UniqueIdentifier>{1f6522d6-c27a-4d11-85a7-2ef8172aaeb8}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="CoreFunction\Func_Log\LogWrapper\spdlog\details">
+      <UniqueIdentifier>{4ec5ba47-6964-4eae-8b70-d8591df0daf8}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="CoreFunction\Func_Log\LogWrapper\spdlog\fmt">
+      <UniqueIdentifier>{bd6e01d4-da1b-46d9-afd4-5b84e9740d7d}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="CoreFunction\Func_Log\LogWrapper\spdlog\fmt\bundled">
+      <UniqueIdentifier>{38baf910-847a-40dd-88d5-9d5c12bf8b85}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="CoreFunction\Func_Log\LogWrapper\spdlog\sinks">
+      <UniqueIdentifier>{2aa0ad73-09ce-412f-acc4-2c283a474b09}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="CoreFunction\Common">
+      <UniqueIdentifier>{18010f20-e517-46b7-bf31-f17a9b2c81b9}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="CoreFunction\Common\XLS">
+      <UniqueIdentifier>{541b39bb-0ce8-4abe-be9d-04a3864cae23}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="CoreFunction\Common\MFCGridControl">
+      <UniqueIdentifier>{0cdef8da-51dc-4870-bcfd-f89dc29faf61}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="CoreFunction\Common\MFCGridControl\GridCtrl_src">
+      <UniqueIdentifier>{9658ca2a-0dfe-4b75-8442-f354e003046c}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="CoreFunction\Common\MFCGridControl\NewCellTypes">
+      <UniqueIdentifier>{64987e72-902a-4def-8c90-9ae1eb5b36f1}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="CoreFunction\Common\XButtonXP">
+      <UniqueIdentifier>{3ab652cb-1f1f-46c1-b91a-068dc097cbc2}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="CoreFunction\Common\Chart">
+      <UniqueIdentifier>{c72ab8f9-b1cc-4270-afeb-e5c7ddb991f3}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="CoreFunction\Common\IMAQImageCtrl">
+      <UniqueIdentifier>{500d2f59-1b88-4e54-a45c-0ab555528741}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="CoreFunction\Common\FPSpreadDll">
+      <UniqueIdentifier>{1d5c1ee9-8348-4169-aaba-f24abcda0f4f}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="CoreFunction\Func_ShareMem">
+      <UniqueIdentifier>{57a511d8-b793-4500-bba2-730fb58a5edf}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="CoreFunction\Func_IOMap">
+      <UniqueIdentifier>{d034ebd2-71fc-475e-a361-84e7f2c2dd8d}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="CoreFunction\Func_IOMap\McProtocol">
+      <UniqueIdentifier>{cd4cd4c6-7e14-4aa0-9f88-bde447ad1d44}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="CoreFunction\Func_IOMap\McProtocol\McAddressScanner">
+      <UniqueIdentifier>{8943107b-e5c1-41c9-ad6b-d72a379bdfbc}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="CoreFunction\Func_LightControler">
+      <UniqueIdentifier>{39ede87c-d627-4408-be10-aa71e2752038}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="CoreFunction\Func_LightControler\SPO">
+      <UniqueIdentifier>{fef25447-bf98-4675-b2a1-e6d0de687ccc}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="CoreFunction\Func_Motion">
+      <UniqueIdentifier>{0d141ad6-8736-481a-a34c-8bb7bf81eb4c}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="CoreFunction\Func_Motion\ACS">
+      <UniqueIdentifier>{8650bb24-584d-4b49-9840-659e88a7ff8d}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="CoreFunction\Func_Motion\ACS\dll">
+      <UniqueIdentifier>{36458751-b1d2-49fd-a4da-c1f8347f6688}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="CoreFunction\Func_Motion\ACS\Lib">
+      <UniqueIdentifier>{87a28d37-8d0d-448a-8f7c-023c035c3761}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="CoreFunction\Func_Motion\ACS\Include">
+      <UniqueIdentifier>{5270b7f7-9faa-443b-8884-954ddb0fca8a}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="CoreFunction\Func_CommEth">
+      <UniqueIdentifier>{b88fd3f1-8c12-4d43-a68a-0ca4810a2b4b}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="CoreFunction\Func_CommEth\Socket Object">
+      <UniqueIdentifier>{3c1afb17-bf89-41e5-98ac-0a334fc770fc}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="CoreFunction\Func_Comm232">
+      <UniqueIdentifier>{956aeb9f-61dd-432e-ae9f-5c35d529c6fc}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="CoreFunction\Func_FrameGrabber">
+      <UniqueIdentifier>{30fcca48-b063-4d5c-aeb1-888a38782ab3}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="CoreFunction\Common\NI">
+      <UniqueIdentifier>{52c0ad22-9326-4ffe-b40b-80c039739960}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="CoreFunction\Common\NI\Include">
+      <UniqueIdentifier>{7c5d656c-08ae-4a12-836e-02f8ee8be8c4}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="CoreFunction\Common\NI\Lib">
+      <UniqueIdentifier>{4edd4d48-1264-4889-a0cb-aae375922189}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="CoreFunction\Func_FTP">
+      <UniqueIdentifier>{9ddcf09c-f0bc-4eae-bbc5-e036bc870df2}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="CoreFunction\Func_FrameGrabber\GigECamera_Basler">
+      <UniqueIdentifier>{05a94aa2-474c-4347-bdcd-c7a53725a05e}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="CoreFunction\Func_LightControler\CAS">
+      <UniqueIdentifier>{ea81a44f-6a5d-4178-911d-3145c6eb24c4}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="CoreFunction\Func_LightControler\ECS">
+      <UniqueIdentifier>{5d7954ef-6176-47ed-b1a0-5e1754a52e28}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="CoreFunction\Func_LightControler\XCITE">
+      <UniqueIdentifier>{ff04a098-d0e6-4729-b6b6-b6583d94702d}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="CoreFunction\Func_Alarm">
+      <UniqueIdentifier>{5a3fd16e-44e4-43e3-bc46-805be4b9e4a6}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="CoreFunction\Func_Alarm\Include">
+      <UniqueIdentifier>{3f82f3a2-76e1-40ee-9dbb-5701723c1190}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="소스 파일\Manager\HMI">
+      <UniqueIdentifier>{c98d0327-176e-446a-bf7f-c22007127de3}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="소스 파일\DIALOG\HMI">
+      <UniqueIdentifier>{3fa1c1c3-29c9-41a4-9d6f-d1666efe4fb7}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="소스 파일\DIALOG\Base">
+      <UniqueIdentifier>{b682f048-6014-4c74-bf00-220b1e9c38ff}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="헤더 파일\DIALOG">
+      <UniqueIdentifier>{3ab84991-7f76-455c-b3e9-945de0304f9d}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="헤더 파일\Include">
+      <UniqueIdentifier>{f1d8e55e-ae6c-4450-9774-b219c9fa5257}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="헤더 파일\Manager">
+      <UniqueIdentifier>{f1a42f50-2922-4b42-ae4f-43b44472b791}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="헤더 파일\Manager\Base">
+      <UniqueIdentifier>{f9a8ec8b-6baa-435a-ab5d-0fbade4f35eb}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="헤더 파일\Manager\HMI">
+      <UniqueIdentifier>{38d69b79-c915-4ed2-ac1b-a5a0c1f5cc8b}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="헤더 파일\DIALOG\Base">
+      <UniqueIdentifier>{8ad5aa05-bb41-46a7-b6ef-573402fce6e4}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="헤더 파일\DIALOG\HMI">
+      <UniqueIdentifier>{e8e60a44-e95a-4625-8502-4999fecd3628}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="헤더 파일\DIALOG\POPUP">
+      <UniqueIdentifier>{787d3a07-798d-4893-9949-76c7a4df2b1a}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="소스 파일\Sequence">
+      <UniqueIdentifier>{7e3ae545-6f05-4a5f-9b29-08c1554a357d}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="소스 파일\Sequence\3.Function">
+      <UniqueIdentifier>{a5a8d785-bff3-465e-be08-57ea4e9fb89a}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="소스 파일\Sequence\3.Function\2.EQStateChange">
+      <UniqueIdentifier>{0b5bab04-720b-4848-87a8-fcb9d3a5190b}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="소스 파일\Sequence\3.Function\4.CIM">
+      <UniqueIdentifier>{133895f8-9f6e-4d73-a701-eb8a42794d48}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="소스 파일\Sequence\3.Function\4.CIM\FTP">
+      <UniqueIdentifier>{b6ccb7d1-c2f2-4331-a9d3-268d02af54c7}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="소스 파일\Sequence\3.Function\1.EQState">
+      <UniqueIdentifier>{dc223f39-d368-4e28-9ced-69a0ea676b15}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="소스 파일\Sequence\4.Alarm">
+      <UniqueIdentifier>{83eeee7f-2caa-4932-ac05-f53a4b63df8e}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="소스 파일\Sequence\4.Alarm\AlarmMonitorTo">
+      <UniqueIdentifier>{4db95e00-00ee-440a-8020-531a85b690b3}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="소스 파일\Sequence\NotUse">
+      <UniqueIdentifier>{ee61fc12-5748-4018-a344-f29cb20666d5}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="소스 파일\Sequence\Base">
+      <UniqueIdentifier>{4235e5b7-3942-4efe-93aa-2ee84063dea0}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="소스 파일\Sequence\2.Measure Sequence">
+      <UniqueIdentifier>{341ff33e-e62e-4220-864b-76e807ecdb21}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="소스 파일\Sequence\2.Measure Sequence\0.Sequence">
+      <UniqueIdentifier>{dfc46f89-9e88-4b3e-b36e-fe5dd4605b5b}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="소스 파일\Sequence\2.Measure Sequence\1.SequenceItem">
+      <UniqueIdentifier>{14d5a862-02fe-48e9-99a9-3f7331ab6466}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="소스 파일\Sequence\2.Measure Sequence\2.1.ChangeStage">
+      <UniqueIdentifier>{6695a4f7-50c3-4eff-aa54-339181cf642c}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="소스 파일\Sequence\2.Measure Sequence\2.2.ChangeRecipe">
+      <UniqueIdentifier>{fca7df34-5c8f-4b87-b119-1cdcc49dc3dc}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="소스 파일\Sequence\2.Measure Sequence\2.3.Align">
+      <UniqueIdentifier>{40f2d4d7-6815-49f1-b485-b153ce740b21}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="소스 파일\Sequence\2.Measure Sequence\2.4. Pre_Measure">
+      <UniqueIdentifier>{824c11a3-f4e4-4fe2-a2bc-a97f2cca9c8a}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="소스 파일\Sequence\2.Measure Sequence\2.5.Measure">
+      <UniqueIdentifier>{77cbd295-ce73-464c-b85a-280a706e7981}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="소스 파일\Sequence\2.Measure Sequence\2.6. Result">
+      <UniqueIdentifier>{6acac04b-faa1-4cc6-89d1-630342038b6f}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="소스 파일\Sequence\2.Measure Sequence\2.0.Sequence Engine">
+      <UniqueIdentifier>{1e53ef0d-b08e-4cc2-a721-88a069636f90}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="소스 파일\Sequence\4.Alarm\AlarmMonitorToSensor">
+      <UniqueIdentifier>{f103c844-993e-4e62-9c30-2d532afdd72b}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="소스 파일\Sequence\1.Initialize">
+      <UniqueIdentifier>{27cf350a-d1ab-4918-a11e-2dbaa00caa12}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="소스 파일\Sequence\3.Function\3.SACC">
+      <UniqueIdentifier>{d3a5ce8a-7be6-4930-8cb6-3022dcb8abfb}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="소스 파일\Aurora">
+      <UniqueIdentifier>{2a5d3545-a845-43ee-9e3b-00da0a8e9ce5}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="소스 파일\Manager\CoreMgr">
+      <UniqueIdentifier>{434b0afd-1d24-4698-8729-16115ddcd590}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="헤더 파일\Aurora">
+      <UniqueIdentifier>{68ae1a2d-6b25-4474-b07c-02e7dc08d082}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="소스 파일\DIALOG\Sub">
+      <UniqueIdentifier>{18a3bdcf-f0de-4c59-90b9-e023ef867b86}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="헤더 파일\DIALOG\Sub">
+      <UniqueIdentifier>{a35a03ee-04af-4809-a6c9-13038a3c11f6}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="헤더 파일\Sequence">
+      <UniqueIdentifier>{67372412-a491-4c2f-9f83-f2c570b3f804}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="헤더 파일\Manager\CoreMgr">
+      <UniqueIdentifier>{d761d325-1a40-45c5-b667-46b43215a2f5}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="헤더 파일\Sequence\2.Measure Sequence">
+      <UniqueIdentifier>{2dc576a8-20aa-4ca6-bd0f-044aada3b187}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="헤더 파일\Sequence\1.Initialize">
+      <UniqueIdentifier>{bf8482ba-23e0-4c9b-a3e9-b594f58d3881}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="헤더 파일\Sequence\4.Alarm">
+      <UniqueIdentifier>{103ba258-da8a-4d63-837b-f0522ced1449}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="헤더 파일\Sequence\4.Alarm\AlarmMonitorTo">
+      <UniqueIdentifier>{3503cd40-9781-4231-933f-95e624fe0c29}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="헤더 파일\Sequence\3.Function">
+      <UniqueIdentifier>{737093b4-ee29-42f9-ae8a-6294ed01dc16}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="헤더 파일\Sequence\4.Alarm\AlarmMonitorToSensor">
+      <UniqueIdentifier>{8b8f57cf-af0b-4f87-95d0-3b98835d99ea}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="헤더 파일\Sequence\3.Function\1.EQState">
+      <UniqueIdentifier>{0550dec4-8cfb-475f-9ed1-1d38cbeb7525}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="헤더 파일\Sequence\3.Function\2.EQStateChange">
+      <UniqueIdentifier>{d09794a6-aed9-4dca-b9da-5cc6810d5229}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="헤더 파일\Sequence\3.Function\3.SACC">
+      <UniqueIdentifier>{d1ee3748-0089-4440-94e2-a18226b77662}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="헤더 파일\Sequence\Base">
+      <UniqueIdentifier>{19857c52-33d5-403a-b51b-87fa8f7706b4}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="헤더 파일\Sequence\NotUse">
+      <UniqueIdentifier>{980e8bdf-3097-4c80-8b38-beb0c46a7751}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="헤더 파일\Sequence\3.Function\4.CIM">
+      <UniqueIdentifier>{b90e0c54-d918-4b60-b341-7a1d22f5f56d}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="헤더 파일\Sequence\3.Function\4.CIM\FTP">
+      <UniqueIdentifier>{5fa17ff6-65e7-46e2-b22f-e5d99326f1c2}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="헤더 파일\Sequence\2.Measure Sequence\0.Sequence">
+      <UniqueIdentifier>{ff4532b6-e771-4ba6-a5b8-11fd2166a625}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="헤더 파일\Sequence\2.Measure Sequence\1.SequenceItem">
+      <UniqueIdentifier>{bc4b7dee-8853-4083-b1cd-31ba16e626d4}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="헤더 파일\Sequence\2.Measure Sequence\2.0.Sequence Engine">
+      <UniqueIdentifier>{7169a5c1-b3e9-41d3-bdf3-9d70b8b69e5d}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="헤더 파일\Sequence\2.Measure Sequence\2.1.ChangeStage">
+      <UniqueIdentifier>{4c646bec-099b-4db2-a9fb-d0988901b44e}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="헤더 파일\Sequence\2.Measure Sequence\2.2.ChangeRecipe">
+      <UniqueIdentifier>{1caeca19-45be-4427-9e84-ab9c3d854bfe}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="헤더 파일\Sequence\2.Measure Sequence\2.3.Align">
+      <UniqueIdentifier>{9fa94558-3d34-4052-a992-dc8b870362a0}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="헤더 파일\Sequence\2.Measure Sequence\2.4. Pre_Measure">
+      <UniqueIdentifier>{698e975a-d020-4175-8eb4-29e9d08a4dd1}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="헤더 파일\Sequence\2.Measure Sequence\2.5.Measure">
+      <UniqueIdentifier>{27a829ae-e458-4d60-af02-31761b33be4a}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="헤더 파일\Sequence\2.Measure Sequence\2.6. Result">
+      <UniqueIdentifier>{40ed20cd-2018-4cd1-b38c-7ac1f3256041}</UniqueIdentifier>
+    </Filter>
+  </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="framework.h">
+      <Filter>헤더 파일</Filter>
+    </ClInclude>
+    <ClInclude Include="targetver.h">
+      <Filter>헤더 파일</Filter>
+    </ClInclude>
+    <ClInclude Include="Resource.h">
+      <Filter>헤더 파일</Filter>
+    </ClInclude>
+    <ClInclude Include="pch.h">
+      <Filter>헤더 파일</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\CoreFunction\LogFunction\LogDefine.h">
+      <Filter>CoreFunction\Func_Log</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\CoreFunction\LogFunction\LogAccessor\LogFileAccessor.h">
+      <Filter>CoreFunction\Func_Log\LogAccessor</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\CoreFunction\LogFunction\LogWrapper\LogWrapper.h">
+      <Filter>CoreFunction\Func_Log\LogWrapper</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\CoreFunction\LogFunction\LogAccessor\file_access\FileAccessor.h">
+      <Filter>CoreFunction\Func_Log\LogAccessor\File_access</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\CoreFunction\LogFunction\LogWrapper\spdlog\async.h">
+      <Filter>CoreFunction\Func_Log\LogWrapper\spdlog</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\CoreFunction\LogFunction\LogWrapper\spdlog\async_logger.h">
+      <Filter>CoreFunction\Func_Log\LogWrapper\spdlog</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\CoreFunction\LogFunction\LogWrapper\spdlog\common.h">
+      <Filter>CoreFunction\Func_Log\LogWrapper\spdlog</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\CoreFunction\LogFunction\LogWrapper\spdlog\formatter.h">
+      <Filter>CoreFunction\Func_Log\LogWrapper\spdlog</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\CoreFunction\LogFunction\LogWrapper\spdlog\logger.h">
+      <Filter>CoreFunction\Func_Log\LogWrapper\spdlog</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\CoreFunction\LogFunction\LogWrapper\spdlog\spdlog.h">
+      <Filter>CoreFunction\Func_Log\LogWrapper\spdlog</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\CoreFunction\LogFunction\LogWrapper\spdlog\tweakme.h">
+      <Filter>CoreFunction\Func_Log\LogWrapper\spdlog</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\CoreFunction\LogFunction\LogWrapper\spdlog\version.h">
+      <Filter>CoreFunction\Func_Log\LogWrapper\spdlog</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\CoreFunction\LogFunction\LogWrapper\spdlog\fmt\bin_to_hex.h">
+      <Filter>CoreFunction\Func_Log\LogWrapper\spdlog\fmt</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\CoreFunction\LogFunction\LogWrapper\spdlog\fmt\fmt.h">
+      <Filter>CoreFunction\Func_Log\LogWrapper\spdlog\fmt</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\CoreFunction\LogFunction\LogWrapper\spdlog\fmt\ostr.h">
+      <Filter>CoreFunction\Func_Log\LogWrapper\spdlog\fmt</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\CoreFunction\LogFunction\LogWrapper\spdlog\sinks\android_sink.h">
+      <Filter>CoreFunction\Func_Log\LogWrapper\spdlog\sinks</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\CoreFunction\LogFunction\LogWrapper\spdlog\sinks\ansicolor_sink.h">
+      <Filter>CoreFunction\Func_Log\LogWrapper\spdlog\sinks</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\CoreFunction\LogFunction\LogWrapper\spdlog\sinks\base_sink.h">
+      <Filter>CoreFunction\Func_Log\LogWrapper\spdlog\sinks</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\CoreFunction\LogFunction\LogWrapper\spdlog\sinks\basic_file_sink.h">
+      <Filter>CoreFunction\Func_Log\LogWrapper\spdlog\sinks</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\CoreFunction\LogFunction\LogWrapper\spdlog\sinks\daily_file_sink.h">
+      <Filter>CoreFunction\Func_Log\LogWrapper\spdlog\sinks</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\CoreFunction\LogFunction\LogWrapper\spdlog\sinks\dist_sink.h">
+      <Filter>CoreFunction\Func_Log\LogWrapper\spdlog\sinks</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\CoreFunction\LogFunction\LogWrapper\spdlog\sinks\msvc_sink.h">
+      <Filter>CoreFunction\Func_Log\LogWrapper\spdlog\sinks</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\CoreFunction\LogFunction\LogWrapper\spdlog\sinks\null_sink.h">
+      <Filter>CoreFunction\Func_Log\LogWrapper\spdlog\sinks</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\CoreFunction\LogFunction\LogWrapper\spdlog\sinks\ostream_sink.h">
+      <Filter>CoreFunction\Func_Log\LogWrapper\spdlog\sinks</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\CoreFunction\LogFunction\LogWrapper\spdlog\sinks\rotating_file_sink.h">
+      <Filter>CoreFunction\Func_Log\LogWrapper\spdlog\sinks</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\CoreFunction\LogFunction\LogWrapper\spdlog\sinks\sink.h">
+      <Filter>CoreFunction\Func_Log\LogWrapper\spdlog\sinks</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\CoreFunction\LogFunction\LogWrapper\spdlog\sinks\stdout_color_sinks.h">
+      <Filter>CoreFunction\Func_Log\LogWrapper\spdlog\sinks</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\CoreFunction\LogFunction\LogWrapper\spdlog\sinks\stdout_sinks.h">
+      <Filter>CoreFunction\Func_Log\LogWrapper\spdlog\sinks</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\CoreFunction\LogFunction\LogWrapper\spdlog\sinks\syslog_sink.h">
+      <Filter>CoreFunction\Func_Log\LogWrapper\spdlog\sinks</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\CoreFunction\LogFunction\LogWrapper\spdlog\sinks\systemd_sink.h">
+      <Filter>CoreFunction\Func_Log\LogWrapper\spdlog\sinks</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\CoreFunction\LogFunction\LogWrapper\spdlog\sinks\wincolor_sink.h">
+      <Filter>CoreFunction\Func_Log\LogWrapper\spdlog\sinks</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\CoreFunction\LogFunction\LogWrapper\spdlog\fmt\bundled\chrono.h">
+      <Filter>CoreFunction\Func_Log\LogWrapper\spdlog\fmt\bundled</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\CoreFunction\LogFunction\LogWrapper\spdlog\fmt\bundled\color.h">
+      <Filter>CoreFunction\Func_Log\LogWrapper\spdlog\fmt\bundled</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\CoreFunction\LogFunction\LogWrapper\spdlog\fmt\bundled\core.h">
+      <Filter>CoreFunction\Func_Log\LogWrapper\spdlog\fmt\bundled</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\CoreFunction\LogFunction\LogWrapper\spdlog\fmt\bundled\format.h">
+      <Filter>CoreFunction\Func_Log\LogWrapper\spdlog\fmt\bundled</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\CoreFunction\LogFunction\LogWrapper\spdlog\fmt\bundled\format-inl.h">
+      <Filter>CoreFunction\Func_Log\LogWrapper\spdlog\fmt\bundled</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\CoreFunction\LogFunction\LogWrapper\spdlog\fmt\bundled\locale.h">
+      <Filter>CoreFunction\Func_Log\LogWrapper\spdlog\fmt\bundled</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\CoreFunction\LogFunction\LogWrapper\spdlog\fmt\bundled\ostream.h">
+      <Filter>CoreFunction\Func_Log\LogWrapper\spdlog\fmt\bundled</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\CoreFunction\LogFunction\LogWrapper\spdlog\fmt\bundled\posix.h">
+      <Filter>CoreFunction\Func_Log\LogWrapper\spdlog\fmt\bundled</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\CoreFunction\LogFunction\LogWrapper\spdlog\fmt\bundled\printf.h">
+      <Filter>CoreFunction\Func_Log\LogWrapper\spdlog\fmt\bundled</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\CoreFunction\LogFunction\LogWrapper\spdlog\fmt\bundled\ranges.h">
+      <Filter>CoreFunction\Func_Log\LogWrapper\spdlog\fmt\bundled</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\CoreFunction\LogFunction\LogWrapper\spdlog\fmt\bundled\time.h">
+      <Filter>CoreFunction\Func_Log\LogWrapper\spdlog\fmt\bundled</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\CoreFunction\common\IniHelper.h">
+      <Filter>CoreFunction\Common</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\CoreFunction\ShareMemFunction\CPtrnInfo.h">
+      <Filter>CoreFunction\Func_ShareMem</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\CoreFunction\ShareMemFunction\OtherPPADefine.h">
+      <Filter>CoreFunction\Func_ShareMem</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\CoreFunction\ShareMemFunction\ShareMem.h">
+      <Filter>CoreFunction\Func_ShareMem</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\CoreFunction\ShareMemFunction\ShareMemFunction.h">
+      <Filter>CoreFunction\Func_ShareMem</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\CoreFunction\CoreFunction.h">
+      <Filter>CoreFunction</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\CoreFunction\IOMapFunction\McProtocol\McAddressScannerImpl.h">
+      <Filter>CoreFunction\Func_IOMap\McProtocol\McAddressScanner</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\CoreFunction\IOMapFunction\McProtocol\McCaddressScanner.h">
+      <Filter>CoreFunction\Func_IOMap\McProtocol\McAddressScanner</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\CoreFunction\IOMapFunction\McProtocol\McDaddressScanner.h">
+      <Filter>CoreFunction\Func_IOMap\McProtocol\McAddressScanner</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\CoreFunction\IOMapFunction\McProtocol\McFaddressScanner.h">
+      <Filter>CoreFunction\Func_IOMap\McProtocol\McAddressScanner</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\CoreFunction\IOMapFunction\McProtocol\McGaddressScanner.h">
+      <Filter>CoreFunction\Func_IOMap\McProtocol\McAddressScanner</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\CoreFunction\IOMapFunction\McProtocol\McMaddressScanner.h">
+      <Filter>CoreFunction\Func_IOMap\McProtocol\McAddressScanner</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\CoreFunction\IOMapFunction\McProtocol\McPaddressScanner.h">
+      <Filter>CoreFunction\Func_IOMap\McProtocol\McAddressScanner</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\CoreFunction\IOMapFunction\McProtocol\McProtocolManager.h">
+      <Filter>CoreFunction\Func_IOMap\McProtocol</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\CoreFunction\IOMapFunction\DataStructure.h">
+      <Filter>CoreFunction\Func_IOMap</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\CoreFunction\IOMapFunction\IOMapFunction.h">
+      <Filter>CoreFunction\Func_IOMap</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\CoreFunction\IOMapFunction\IOMapImpl.h">
+      <Filter>CoreFunction\Func_IOMap</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\CoreFunction\CommEthFunction\ClientSocket.h">
+      <Filter>CoreFunction\Func_CommEth\Socket Object</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\CoreFunction\CommEthFunction\CommEthFunction.h">
+      <Filter>CoreFunction\Func_CommEth\Socket Object</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\CoreFunction\CommEthFunction\ServerSocket.h">
+      <Filter>CoreFunction\Func_CommEth\Socket Object</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\CoreFunction\CommEthFunction\EthernetManagerTCP.h">
+      <Filter>CoreFunction\Func_CommEth</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\CoreFunction\CommEthFunction\EthernetManagerTCPDefine.h">
+      <Filter>CoreFunction\Func_CommEth</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\CoreFunction\CommEthFunction\EthernetSocket.h">
+      <Filter>CoreFunction\Func_CommEth</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\CoreFunction\common\XLS\XLAutomation.h">
+      <Filter>CoreFunction\Common\XLS</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\CoreFunction\common\XLS\XLEzAutomation.h">
+      <Filter>CoreFunction\Common\XLS</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\CoreFunction\Comm232Function\Comm232Config.h">
+      <Filter>CoreFunction\Func_Comm232</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\CoreFunction\Comm232Function\Comm232Function.h">
+      <Filter>CoreFunction\Func_Comm232</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\CoreFunction\Comm232Function\CommSerialDefine.h">
+      <Filter>CoreFunction\Func_Comm232</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\CoreFunction\LightFunction\LightFunction.h">
+      <Filter>CoreFunction\Func_LightControler</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\CoreFunction\LightFunction\LightImpl.h">
+      <Filter>CoreFunction\Func_LightControler</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\CoreFunction\LightFunction\SPO\CommSerialObjectSPO.h">
+      <Filter>CoreFunction\Func_LightControler\SPO</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\CoreFunction\MotorFunction\AxisType.h">
+      <Filter>CoreFunction\Func_Motion</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\CoreFunction\MotorFunction\MotorFunction.h">
+      <Filter>CoreFunction\Func_Motion</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\CoreFunction\MotorFunction\MotorImpl.h">
+      <Filter>CoreFunction\Func_Motion</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\CoreFunction\MotorFunction\MotorCtrl_ACS\ACSC.h">
+      <Filter>CoreFunction\Func_Motion\ACS</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\CoreFunction\MotorFunction\MotorCtrl_ACS\MotorControl_ACS.h">
+      <Filter>CoreFunction\Func_Motion\ACS</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\CoreFunction\MotorFunction\MotorCtrl_ACS\include\ACSC.h">
+      <Filter>CoreFunction\Func_Motion\ACS\Include</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\CoreFunction\common\TimeChecker.h">
+      <Filter>CoreFunction\Common</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\CoreFunction\common\BinaryHelper.h">
+      <Filter>CoreFunction\Common</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\CoreFunction\FrameGrabberFunction\FrameGrabberFunction.h">
+      <Filter>CoreFunction\Func_FrameGrabber</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\CoreFunction\FrameGrabberFunction\FrameGrabberImpl.h">
+      <Filter>CoreFunction\Func_FrameGrabber</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\CoreFunction\FrameGrabberFunction\FrameGrabberImplDefine.h">
+      <Filter>CoreFunction\Func_FrameGrabber</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\CoreFunction\common\MFCGridControl\GridCtrl_src\CellRange.h">
+      <Filter>CoreFunction\Common\MFCGridControl\GridCtrl_src</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\CoreFunction\common\MFCGridControl\GridCtrl_src\GridCell.h">
+      <Filter>CoreFunction\Common\MFCGridControl\GridCtrl_src</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\CoreFunction\common\MFCGridControl\GridCtrl_src\GridCellBase.h">
+      <Filter>CoreFunction\Common\MFCGridControl\GridCtrl_src</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\CoreFunction\common\MFCGridControl\GridCtrl_src\GridCtrl.h">
+      <Filter>CoreFunction\Common\MFCGridControl\GridCtrl_src</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\CoreFunction\common\MFCGridControl\GridCtrl_src\GridDropTarget.h">
+      <Filter>CoreFunction\Common\MFCGridControl\GridCtrl_src</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\CoreFunction\common\MFCGridControl\GridCtrl_src\InPlaceEdit.h">
+      <Filter>CoreFunction\Common\MFCGridControl\GridCtrl_src</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\CoreFunction\common\MFCGridControl\GridCtrl_src\MemoryDC.h">
+      <Filter>CoreFunction\Common\MFCGridControl\GridCtrl_src</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\CoreFunction\common\MFCGridControl\GridCtrl_src\TitleTip.h">
+      <Filter>CoreFunction\Common\MFCGridControl\GridCtrl_src</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\CoreFunction\common\MFCGridControl\NewCellTypes\CheckComboBox.h">
+      <Filter>CoreFunction\Common\MFCGridControl\NewCellTypes</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\CoreFunction\common\MFCGridControl\NewCellTypes\GridCellButton.h">
+      <Filter>CoreFunction\Common\MFCGridControl\NewCellTypes</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\CoreFunction\common\MFCGridControl\NewCellTypes\GridCellCheck.h">
+      <Filter>CoreFunction\Common\MFCGridControl\NewCellTypes</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\CoreFunction\common\MFCGridControl\NewCellTypes\GridCellCheckCombo.h">
+      <Filter>CoreFunction\Common\MFCGridControl\NewCellTypes</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\CoreFunction\common\MFCGridControl\NewCellTypes\GridCellCombo.h">
+      <Filter>CoreFunction\Common\MFCGridControl\NewCellTypes</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\CoreFunction\common\MFCGridControl\NewCellTypes\GridCellDateTime.h">
+      <Filter>CoreFunction\Common\MFCGridControl\NewCellTypes</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\CoreFunction\common\MFCGridControl\NewCellTypes\GridCellNumeric.h">
+      <Filter>CoreFunction\Common\MFCGridControl\NewCellTypes</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\CoreFunction\common\MFCGridControl\NewCellTypes\GridURLCell.h">
+      <Filter>CoreFunction\Common\MFCGridControl\NewCellTypes</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\CoreFunction\common\XButtonXP\CreateGrayscaleIcon.h">
+      <Filter>CoreFunction\Common\XButtonXP</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\CoreFunction\common\XButtonXP\OddButton.h">
+      <Filter>CoreFunction\Common\XButtonXP</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\CoreFunction\common\XButtonXP\XButtonXP.h">
+      <Filter>CoreFunction\Common\XButtonXP</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\CoreFunction\common\XButtonXP\XThemeHelper.h">
+      <Filter>CoreFunction\Common\XButtonXP</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\CoreFunction\common\BtnST.h">
+      <Filter>CoreFunction\Common</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\CoreFunction\common\WinMgr.h">
+      <Filter>CoreFunction\Common</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\CoreFunction\common\MyLabelTimer.h">
+      <Filter>CoreFunction\Common</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\CoreFunction\common\Label.h">
+      <Filter>CoreFunction\Common</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\CoreFunction\common\RawDataHelper.h">
+      <Filter>CoreFunction\Common</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\CoreFunction\common\Registry.h">
+      <Filter>CoreFunction\Common</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\CoreFunction\common\XStringHelper.h">
+      <Filter>CoreFunction\Common</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\CoreFunction\common\IMAQImageCtrl\IMAQImage.h">
+      <Filter>CoreFunction\Common\IMAQImageCtrl</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\CoreFunction\common\IMAQImageCtrl\IMAQImageCtrl.h">
+      <Filter>CoreFunction\Common\IMAQImageCtrl</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\CoreFunction\LogFunction\LogWrapper\spdlog\details\async_logger_impl.h">
+      <Filter>CoreFunction\Func_Log\LogWrapper\spdlog\details</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\CoreFunction\LogFunction\LogWrapper\spdlog\details\circular_q.h">
+      <Filter>CoreFunction\Func_Log\LogWrapper\spdlog\details</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\CoreFunction\LogFunction\LogWrapper\spdlog\details\console_globals.h">
+      <Filter>CoreFunction\Func_Log\LogWrapper\spdlog\details</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\CoreFunction\LogFunction\LogWrapper\spdlog\details\file_helper.h">
+      <Filter>CoreFunction\Func_Log\LogWrapper\spdlog\details</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\CoreFunction\LogFunction\LogWrapper\spdlog\details\fmt_helper.h">
+      <Filter>CoreFunction\Func_Log\LogWrapper\spdlog\details</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\CoreFunction\LogFunction\LogWrapper\spdlog\details\log_msg.h">
+      <Filter>CoreFunction\Func_Log\LogWrapper\spdlog\details</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\CoreFunction\LogFunction\LogWrapper\spdlog\details\logger_impl.h">
+      <Filter>CoreFunction\Func_Log\LogWrapper\spdlog\details</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\CoreFunction\LogFunction\LogWrapper\spdlog\details\mpmc_blocking_q.h">
+      <Filter>CoreFunction\Func_Log\LogWrapper\spdlog\details</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\CoreFunction\LogFunction\LogWrapper\spdlog\details\null_mutex.h">
+      <Filter>CoreFunction\Func_Log\LogWrapper\spdlog\details</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\CoreFunction\LogFunction\LogWrapper\spdlog\details\os.h">
+      <Filter>CoreFunction\Func_Log\LogWrapper\spdlog\details</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\CoreFunction\LogFunction\LogWrapper\spdlog\details\pattern_formatter.h">
+      <Filter>CoreFunction\Func_Log\LogWrapper\spdlog\details</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\CoreFunction\LogFunction\LogWrapper\spdlog\details\periodic_worker.h">
+      <Filter>CoreFunction\Func_Log\LogWrapper\spdlog\details</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\CoreFunction\LogFunction\LogWrapper\spdlog\details\registry.h">
+      <Filter>CoreFunction\Func_Log\LogWrapper\spdlog\details</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\CoreFunction\LogFunction\LogWrapper\spdlog\details\thread_pool.h">
+      <Filter>CoreFunction\Func_Log\LogWrapper\spdlog\details</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\CoreFunction\common\LedButton.h">
+      <Filter>CoreFunction\Common</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\CoreFunction\common\Chart\ChartMarker.h">
+      <Filter>CoreFunction\Common\Chart</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\CoreFunction\common\Chart\ChartOrbit.h">
+      <Filter>CoreFunction\Common\Chart</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\CoreFunction\common\Chart\ChartSpec.h">
+      <Filter>CoreFunction\Common\Chart</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\CoreFunction\common\Chart\SetScaleDlg.h">
+      <Filter>CoreFunction\Common\Chart</Filter>
+    </ClInclude>
+    <ClInclude Include="Manager\IOMapAddressDefine.h">
+      <Filter>헤더 파일\Include</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\CoreFunction\common\FarPoint64\Ssdllmfc.h">
+      <Filter>CoreFunction\Common\FPSpreadDll</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\CoreFunction\common\MySpreadDll.h">
+      <Filter>CoreFunction\Common\FPSpreadDll</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\CoreFunction\common\StaticSpread.h">
+      <Filter>CoreFunction\Common\FPSpreadDll</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\CoreFunction\common\CommonFunc.h">
+      <Filter>CoreFunction\Common</Filter>
+    </ClInclude>
+    <ClInclude Include="..\Include\AlarmIDList.h">
+      <Filter>헤더 파일\Include</Filter>
+    </ClInclude>
+    <ClInclude Include="Manager\CommTcpIpDefine.h">
+      <Filter>헤더 파일\Include</Filter>
+    </ClInclude>
+    <ClInclude Include="..\Include\DefinesCIM.h">
+      <Filter>헤더 파일\Include</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\CoreFunction\common\IMAQImageCtrl\FineCentering.h">
+      <Filter>CoreFunction\Common\IMAQImageCtrl</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\CoreFunction\common\NI\x64\Include\niimaq.h">
+      <Filter>CoreFunction\Common\NI\Include</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\CoreFunction\common\NI\x64\Include\NIIMAQdx.h">
+      <Filter>CoreFunction\Common\NI\Include</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\CoreFunction\common\NI\x64\Include\nimachinevision.h">
+      <Filter>CoreFunction\Common\NI\Include</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\CoreFunction\common\NI\x64\Include\niocr.h">
+      <Filter>CoreFunction\Common\NI\Include</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\CoreFunction\common\NI\x64\Include\nivision.h">
+      <Filter>CoreFunction\Common\NI\Include</Filter>
+    </ClInclude>
+    <ClInclude Include="..\Include\API_RECIPE.h">
+      <Filter>헤더 파일\Include</Filter>
+    </ClInclude>
+    <ClInclude Include="..\Include\preDefine.h">
+      <Filter>헤더 파일\Include</Filter>
+    </ClInclude>
+    <ClInclude Include="..\Include\RecipeShareMem.h">
+      <Filter>헤더 파일\Include</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\CoreFunction\CommFtpFunction\CommFtpFunction.h">
+      <Filter>CoreFunction\Func_FTP</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\CoreFunction\CommFtpFunction\EthernetManagerFTP.h">
+      <Filter>CoreFunction\Func_FTP</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\CoreFunction\CommFtpFunction\EthernetManagerFTPDefine.h">
+      <Filter>CoreFunction\Func_FTP</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\CoreFunction\CommFtpFunction\xNetFTP.h">
+      <Filter>CoreFunction\Func_FTP</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\CoreFunction\common\AutoEdit.h">
+      <Filter>CoreFunction\Common</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\CoreFunction\common\InfoWnd.h">
+      <Filter>CoreFunction\Common</Filter>
+    </ClInclude>
+    <ClInclude Include="..\Include\OutRecipeFunc.h">
+      <Filter>헤더 파일\Include</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\CoreFunction\FrameGrabberFunction\GigECamera_Basler\FrameGrabber_BS4M.h">
+      <Filter>CoreFunction\Func_FrameGrabber\GigECamera_Basler</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\CoreFunction\FrameGrabberFunction\GigECamera_Basler\FrameGrabber_GigE_BS4M.h">
+      <Filter>CoreFunction\Func_FrameGrabber\GigECamera_Basler</Filter>
+    </ClInclude>
+    <ClInclude Include="..\Include\FDCSheardDefine.h">
+      <Filter>헤더 파일\Include</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\CoreFunction\common\crc16.h">
+      <Filter>CoreFunction\Common</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\CoreFunction\LightFunction\CAS\CommSerialObjectCAS.h">
+      <Filter>CoreFunction\Func_LightControler\CAS</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\CoreFunction\LightFunction\ECS\CommSerialObjectECS.h">
+      <Filter>CoreFunction\Func_LightControler\ECS</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\CoreFunction\LightFunction\XCITE\CommSerialObjectXCITE.h">
+      <Filter>CoreFunction\Func_LightControler\XCITE</Filter>
+    </ClInclude>
+    <ClInclude Include="..\Include\AlarmDefine.h">
+      <Filter>헤더 파일\Include</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\CoreFunction\dll_Alarm\Include\AlarmDefine.h">
+      <Filter>CoreFunction\Func_Alarm\Include</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\CoreFunction\dll_Alarm\Include\API_Alarm.h">
+      <Filter>CoreFunction\Func_Alarm\Include</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\CoreFunction\common\PingTest.h">
+      <Filter>CoreFunction\Common</Filter>
+    </ClInclude>
+    <ClInclude Include="Manager\CCommTcpIpObjectMotion.h">
+      <Filter>헤더 파일\Manager\HMI</Filter>
+    </ClInclude>
+    <ClInclude Include="Manager\CCommTcpIpObjectSysTime.h">
+      <Filter>헤더 파일\Manager\HMI</Filter>
+    </ClInclude>
+    <ClInclude Include="Manager\CommTcpIpFactoryMgr.h">
+      <Filter>헤더 파일\Manager\HMI</Filter>
+    </ClInclude>
+    <ClInclude Include="Manager\MaintControlMgr.h">
+      <Filter>헤더 파일\Manager\HMI</Filter>
+    </ClInclude>
+    <ClInclude Include="Manager\ResumeInfoMgr.h">
+      <Filter>헤더 파일\Manager\HMI</Filter>
+    </ClInclude>
+    <ClInclude Include="Manager\WadMultiMeasMgr.h">
+      <Filter>헤더 파일\Manager\HMI</Filter>
+    </ClInclude>
+    <ClInclude Include="Recipe\RecipeEditMgr.h">
+      <Filter>헤더 파일\Manager\HMI</Filter>
+    </ClInclude>
+    <ClInclude Include="Manager\AlignCameraMgr.h">
+      <Filter>헤더 파일\Manager\Base</Filter>
+    </ClInclude>
+    <ClInclude Include="Manager\CommTcpIPMgr.h">
+      <Filter>헤더 파일\Manager\Base</Filter>
+    </ClInclude>
+    <ClInclude Include="Manager\IOMapControlMgr.h">
+      <Filter>헤더 파일\Manager\Base</Filter>
+    </ClInclude>
+    <ClInclude Include="Manager\LightControlMgr.h">
+      <Filter>헤더 파일\Manager\Base</Filter>
+    </ClInclude>
+    <ClInclude Include="Manager\LogInControlMgr.h">
+      <Filter>헤더 파일\Manager\Base</Filter>
+    </ClInclude>
+    <ClInclude Include="Manager\MotorControlMgr.h">
+      <Filter>헤더 파일\Manager\Base</Filter>
+    </ClInclude>
+    <ClInclude Include="Manager\NetworkConfigMgr.h">
+      <Filter>헤더 파일\Manager\Base</Filter>
+    </ClInclude>
+    <ClInclude Include="Manager\PositionConfigMgr.h">
+      <Filter>헤더 파일\Manager\Base</Filter>
+    </ClInclude>
+    <ClInclude Include="Recipe\RecipeData.h">
+      <Filter>헤더 파일\Manager\Base</Filter>
+    </ClInclude>
+    <ClInclude Include="Manager\SeqTactTimeMgr.h">
+      <Filter>헤더 파일\Manager\Base</Filter>
+    </ClInclude>
+    <ClInclude Include="Manager\SequenceManager.h">
+      <Filter>헤더 파일\Manager\Base</Filter>
+    </ClInclude>
+    <ClInclude Include="Manager\ShareMemoryMgr.h">
+      <Filter>헤더 파일\Manager\Base</Filter>
+    </ClInclude>
+    <ClInclude Include="Manager\SystemConfigMgr.h">
+      <Filter>헤더 파일\Manager\Base</Filter>
+    </ClInclude>
+    <ClInclude Include="FTP_Link_CIM.h">
+      <Filter>헤더 파일\Sequence\3.Function\4.CIM\FTP</Filter>
+    </ClInclude>
+    <ClInclude Include="FTP_Link_Interface.h">
+      <Filter>헤더 파일\Sequence\3.Function\4.CIM\FTP</Filter>
+    </ClInclude>
+    <ClInclude Include="TransporterResult.h">
+      <Filter>헤더 파일\Sequence\3.Function\4.CIM\FTP</Filter>
+    </ClInclude>
+    <ClInclude Include="Alarm\AlarmMonitorToDoorOpen.h">
+      <Filter>헤더 파일\Sequence\4.Alarm\AlarmMonitorTo</Filter>
+    </ClInclude>
+    <ClInclude Include="Alarm\AlarmMonitorToDoorOpenState.h">
+      <Filter>헤더 파일\Sequence\4.Alarm\AlarmMonitorTo</Filter>
+    </ClInclude>
+    <ClInclude Include="Alarm\AlarmMonitorToDoorVoice.h">
+      <Filter>헤더 파일\Sequence\4.Alarm\AlarmMonitorTo</Filter>
+    </ClInclude>
+    <ClInclude Include="Alarm\AlarmMonitorToEmergency.h">
+      <Filter>헤더 파일\Sequence\4.Alarm\AlarmMonitorTo</Filter>
+    </ClInclude>
+    <ClInclude Include="Alarm\AlarmMonitorToEmergencyButton.h">
+      <Filter>헤더 파일\Sequence\4.Alarm\AlarmMonitorTo</Filter>
+    </ClInclude>
+    <ClInclude Include="Alarm\AlarmMonitorToMcOFF.h">
+      <Filter>헤더 파일\Sequence\4.Alarm\AlarmMonitorTo</Filter>
+    </ClInclude>
+    <ClInclude Include="Alarm\AlarmMonitorToMcOFFState.h">
+      <Filter>헤더 파일\Sequence\4.Alarm\AlarmMonitorTo</Filter>
+    </ClInclude>
+    <ClInclude Include="Alarm\AlarmMonitorToTeachKEY.h">
+      <Filter>헤더 파일\Sequence\4.Alarm\AlarmMonitorTo</Filter>
+    </ClInclude>
+    <ClInclude Include="Alarm\AlarmMonitorToTeachKEYLock.h">
+      <Filter>헤더 파일\Sequence\4.Alarm\AlarmMonitorTo</Filter>
+    </ClInclude>
+    <ClInclude Include="Alarm\AlarmController.h">
+      <Filter>헤더 파일\Sequence\4.Alarm</Filter>
+    </ClInclude>
+    <ClInclude Include="Alarm\AlarmMonitorImpl.h">
+      <Filter>헤더 파일\Sequence\4.Alarm</Filter>
+    </ClInclude>
+    <ClInclude Include="Alarm\AlarmMonitorMgr.h">
+      <Filter>헤더 파일\Sequence\4.Alarm</Filter>
+    </ClInclude>
+    <ClInclude Include="DlgNaviBar.h">
+      <Filter>헤더 파일\DIALOG\Base</Filter>
+    </ClInclude>
+    <ClInclude Include="DlgMainForm.h">
+      <Filter>헤더 파일\DIALOG\Base</Filter>
+    </ClInclude>
+    <ClInclude Include="DlgTitleBar.h">
+      <Filter>헤더 파일\DIALOG\Base</Filter>
+    </ClInclude>
+    <ClInclude Include="D_AuroraDlgWin.h">
+      <Filter>헤더 파일\DIALOG\Base</Filter>
+    </ClInclude>
+    <ClInclude Include="MainSubDlgWin.h">
+      <Filter>헤더 파일\DIALOG\Base</Filter>
+    </ClInclude>
+    <ClInclude Include="DlgALPHA.h">
+      <Filter>헤더 파일\DIALOG\Base</Filter>
+    </ClInclude>
+    <ClInclude Include="UIMeasPathDlg.h">
+      <Filter>헤더 파일\DIALOG\HMI</Filter>
+    </ClInclude>
+    <ClInclude Include="DlgAlignCCD.h">
+      <Filter>헤더 파일\DIALOG\HMI</Filter>
+    </ClInclude>
+    <ClInclude Include="DlgSubConfigModuleFile.h">
+      <Filter>헤더 파일\DIALOG\HMI</Filter>
+    </ClInclude>
+    <ClInclude Include="DlgSubConfigMotionFile.h">
+      <Filter>헤더 파일\DIALOG\HMI</Filter>
+    </ClInclude>
+    <ClInclude Include="DlgSubMaint_ETCFile.h">
+      <Filter>헤더 파일\DIALOG\HMI</Filter>
+    </ClInclude>
+    <ClInclude Include="DlgSubMaint_IOFile.h">
+      <Filter>헤더 파일\DIALOG\HMI</Filter>
+    </ClInclude>
+    <ClInclude Include="DlgSubMaint_MotionFile.h">
+      <Filter>헤더 파일\DIALOG\HMI</Filter>
+    </ClInclude>
+    <ClInclude Include="DlgSubManual_AgingSet.h">
+      <Filter>헤더 파일\DIALOG\HMI</Filter>
+    </ClInclude>
+    <ClInclude Include="DlgSubManual_MultiMeas.h">
+      <Filter>헤더 파일\DIALOG\HMI</Filter>
+    </ClInclude>
+    <ClInclude Include="DlgSubManual_AgingTest.h">
+      <Filter>헤더 파일\DIALOG\HMI</Filter>
+    </ClInclude>
+    <ClInclude Include="DlgSubManual_AutoContact.h">
+      <Filter>헤더 파일\DIALOG\HMI</Filter>
+    </ClInclude>
+    <ClInclude Include="DlgSubManual_Ionizer.h">
+      <Filter>헤더 파일\DIALOG\HMI</Filter>
+    </ClInclude>
+    <ClInclude Include="DlgSubManual_Meas.h">
+      <Filter>헤더 파일\DIALOG\HMI</Filter>
+    </ClInclude>
+    <ClInclude Include="DlgSubManual_STEP.h">
+      <Filter>헤더 파일\DIALOG\HMI</Filter>
+    </ClInclude>
+    <ClInclude Include="DlgSubOperate.h">
+      <Filter>헤더 파일\DIALOG\HMI</Filter>
+    </ClInclude>
+    <ClInclude Include="CD_PopUp_Alarm_F.h">
+      <Filter>헤더 파일\DIALOG\POPUP</Filter>
+    </ClInclude>
+    <ClInclude Include="CD_PopUp_Motion_Move.h">
+      <Filter>헤더 파일\DIALOG\POPUP</Filter>
+    </ClInclude>
+    <ClInclude Include="CD_SelectColor.h">
+      <Filter>헤더 파일\DIALOG\POPUP</Filter>
+    </ClInclude>
+    <ClInclude Include="D_CCD_Review.h">
+      <Filter>헤더 파일\DIALOG\POPUP</Filter>
+    </ClInclude>
+    <ClInclude Include="D_DisplayMessage.h">
+      <Filter>헤더 파일\DIALOG\POPUP</Filter>
+    </ClInclude>
+    <ClInclude Include="D_InputPassWord.h">
+      <Filter>헤더 파일\DIALOG\POPUP</Filter>
+    </ClInclude>
+    <ClInclude Include="D_LogInMgr.h">
+      <Filter>헤더 파일\DIALOG\POPUP</Filter>
+    </ClInclude>
+    <ClInclude Include="D_MainOperateInitializing.h">
+      <Filter>헤더 파일\DIALOG\POPUP</Filter>
+    </ClInclude>
+    <ClInclude Include="D_MeasureCycle.h">
+      <Filter>헤더 파일\DIALOG\POPUP</Filter>
+    </ClInclude>
+    <ClInclude Include="D_MoveHomePosition.h">
+      <Filter>헤더 파일\DIALOG\POPUP</Filter>
+    </ClInclude>
+    <ClInclude Include="D_PM_MODE.h">
+      <Filter>헤더 파일\DIALOG\POPUP</Filter>
+    </ClInclude>
+    <ClInclude Include="D_SelectMeasOrUnload.h">
+      <Filter>헤더 파일\DIALOG\POPUP</Filter>
+    </ClInclude>
+    <ClInclude Include="D_SetLampTime.h">
+      <Filter>헤더 파일\DIALOG\POPUP</Filter>
+    </ClInclude>
+    <ClInclude Include="D_SystemHostMode.h">
+      <Filter>헤더 파일\DIALOG\POPUP</Filter>
+    </ClInclude>
+    <ClInclude Include="DlgSMarkUI.h">
+      <Filter>헤더 파일\DIALOG\POPUP</Filter>
+    </ClInclude>
+    <ClInclude Include="DlgSubMeasure_Progress.h">
+      <Filter>헤더 파일\DIALOG\POPUP</Filter>
+    </ClInclude>
+    <ClInclude Include="D_RoiSet.h">
+      <Filter>헤더 파일\DIALOG\POPUP</Filter>
+    </ClInclude>
+    <ClInclude Include="DoWork\DoWorkSequenceCIMStep.h">
+      <Filter>헤더 파일\Sequence\3.Function\4.CIM</Filter>
+    </ClInclude>
+    <ClInclude Include="DoWork\DoWorkSequenceCIM.h">
+      <Filter>헤더 파일\Sequence\3.Function\4.CIM</Filter>
+    </ClInclude>
+    <ClInclude Include="CommTcpIpObjectCIM.h">
+      <Filter>헤더 파일\Sequence\3.Function\4.CIM</Filter>
+    </ClInclude>
+    <ClInclude Include="DoWork\DoWorkGlassRecipe.h">
+      <Filter>헤더 파일\Sequence\2.Measure Sequence\2.2.ChangeRecipe</Filter>
+    </ClInclude>
+    <ClInclude Include="DoWork\DoWorkGlassRecipeStep.h">
+      <Filter>헤더 파일\Sequence\2.Measure Sequence\2.2.ChangeRecipe</Filter>
+    </ClInclude>
+    <ClInclude Include="DoWork\DoWorkGlassAGING.h">
+      <Filter>헤더 파일\Sequence\2.Measure Sequence\2.4. Pre_Measure</Filter>
+    </ClInclude>
+    <ClInclude Include="DoWork\DoWorkGlassAGINGStep.h">
+      <Filter>헤더 파일\Sequence\2.Measure Sequence\2.4. Pre_Measure</Filter>
+    </ClInclude>
+    <ClInclude Include="DoWork\DoWorkGlassPreMeas.h">
+      <Filter>헤더 파일\Sequence\2.Measure Sequence\2.4. Pre_Measure</Filter>
+    </ClInclude>
+    <ClInclude Include="DoWork\DoWorkGlassPreMeasStep.h">
+      <Filter>헤더 파일\Sequence\2.Measure Sequence\2.4. Pre_Measure</Filter>
+    </ClInclude>
+    <ClInclude Include="DoWork\DoWorkGlassResult.h">
+      <Filter>헤더 파일\Sequence\2.Measure Sequence\2.6. Result</Filter>
+    </ClInclude>
+    <ClInclude Include="DoWork\DoWorkGlassResultStep.h">
+      <Filter>헤더 파일\Sequence\2.Measure Sequence\2.6. Result</Filter>
+    </ClInclude>
+    <ClInclude Include="DoWork\DoWorkGlassAdsorption.h">
+      <Filter>헤더 파일\Sequence\2.Measure Sequence\2.1.ChangeStage</Filter>
+    </ClInclude>
+    <ClInclude Include="DoWork\DoWorkGlassAdsorptionStep.h">
+      <Filter>헤더 파일\Sequence\2.Measure Sequence\2.1.ChangeStage</Filter>
+    </ClInclude>
+    <ClInclude Include="DoWork\DoWorkGlassReady.h">
+      <Filter>헤더 파일\Sequence\2.Measure Sequence\2.1.ChangeStage</Filter>
+    </ClInclude>
+    <ClInclude Include="DoWork\DoWorkGlassReadyStep.h">
+      <Filter>헤더 파일\Sequence\2.Measure Sequence\2.1.ChangeStage</Filter>
+    </ClInclude>
+    <ClInclude Include="DoWork\DoWorkGlassUnload.h">
+      <Filter>헤더 파일\Sequence\2.Measure Sequence\2.1.ChangeStage</Filter>
+    </ClInclude>
+    <ClInclude Include="DoWork\DoWorkGlassUnloadStep.h">
+      <Filter>헤더 파일\Sequence\2.Measure Sequence\2.1.ChangeStage</Filter>
+    </ClInclude>
+    <ClInclude Include="CommTcpIpObjectAgingPG.h">
+      <Filter>헤더 파일\Sequence\2.Measure Sequence\2.5.Measure</Filter>
+    </ClInclude>
+    <ClInclude Include="CommTcpIpObjectAngle.h">
+      <Filter>헤더 파일\Sequence\2.Measure Sequence\2.5.Measure</Filter>
+    </ClInclude>
+    <ClInclude Include="CommTcpIpObjectColor.h">
+      <Filter>헤더 파일\Sequence\2.Measure Sequence\2.5.Measure</Filter>
+    </ClInclude>
+    <ClInclude Include="CommTcpIpObjectLCR.h">
+      <Filter>헤더 파일\Sequence\2.Measure Sequence\2.5.Measure</Filter>
+    </ClInclude>
+    <ClInclude Include="CommTcpIpObjectPG.h">
+      <Filter>헤더 파일\Sequence\2.Measure Sequence\2.5.Measure</Filter>
+    </ClInclude>
+    <ClInclude Include="CommTcpIpObjectPGMon.h">
+      <Filter>헤더 파일\Sequence\2.Measure Sequence\2.5.Measure</Filter>
+    </ClInclude>
+    <ClInclude Include="CommTcpIpObjectTSP.h">
+      <Filter>헤더 파일\Sequence\2.Measure Sequence\2.5.Measure</Filter>
+    </ClInclude>
+    <ClInclude Include="CommTcpIpObjectVision.h">
+      <Filter>헤더 파일\Sequence\2.Measure Sequence\2.5.Measure</Filter>
+    </ClInclude>
+    <ClInclude Include="CommTcpIpObjectWAD.h">
+      <Filter>헤더 파일\Sequence\2.Measure Sequence\2.5.Measure</Filter>
+    </ClInclude>
+    <ClInclude Include="DoWork\DoWorkGlassMeasure.h">
+      <Filter>헤더 파일\Sequence\2.Measure Sequence\2.5.Measure</Filter>
+    </ClInclude>
+    <ClInclude Include="DoWork\DoWorkGlassMeasureStep.h">
+      <Filter>헤더 파일\Sequence\2.Measure Sequence\2.5.Measure</Filter>
+    </ClInclude>
+    <ClInclude Include="DoWork\DoWorkGlassSWAlign.h">
+      <Filter>헤더 파일\Sequence\2.Measure Sequence\2.3.Align</Filter>
+    </ClInclude>
+    <ClInclude Include="DoWork\DoWorkGlassSWAlignStep.h">
+      <Filter>헤더 파일\Sequence\2.Measure Sequence\2.3.Align</Filter>
+    </ClInclude>
+    <ClInclude Include="DoWork\DoWorkProbeSWAlign.h">
+      <Filter>헤더 파일\Sequence\2.Measure Sequence\2.3.Align</Filter>
+    </ClInclude>
+    <ClInclude Include="DoWork\DoWorkProbeSWAlignStep.h">
+      <Filter>헤더 파일\Sequence\2.Measure Sequence\2.3.Align</Filter>
+    </ClInclude>
+    <ClInclude Include="DoWork\SystemInitialize.h">
+      <Filter>헤더 파일\Sequence\1.Initialize</Filter>
+    </ClInclude>
+    <ClInclude Include="DoWork\SystemInitializeStep.h">
+      <Filter>헤더 파일\Sequence\1.Initialize</Filter>
+    </ClInclude>
+    <ClInclude Include="DoWork\DoWorkGlassSequence.h">
+      <Filter>헤더 파일\Sequence\2.Measure Sequence\0.Sequence</Filter>
+    </ClInclude>
+    <ClInclude Include="DoWork\MeasureSequenceItemEngine.h">
+      <Filter>헤더 파일\Sequence\2.Measure Sequence\1.SequenceItem</Filter>
+    </ClInclude>
+    <ClInclude Include="DoWork\MeasureSequenceItemImpl.h">
+      <Filter>헤더 파일\Sequence\2.Measure Sequence\1.SequenceItem</Filter>
+    </ClInclude>
+    <ClInclude Include="WindowEventHandler.h">
+      <Filter>헤더 파일\DIALOG\Base</Filter>
+    </ClInclude>
+    <ClInclude Include="ALPHA.h">
+      <Filter>헤더 파일\Aurora</Filter>
+    </ClInclude>
+    <ClInclude Include="AuroraFuncDefine.h">
+      <Filter>헤더 파일\Aurora</Filter>
+    </ClInclude>
+    <ClInclude Include="AuroraMgr.h">
+      <Filter>헤더 파일\Aurora</Filter>
+    </ClInclude>
+    <ClInclude Include="AuroraMgrPool.h">
+      <Filter>헤더 파일\Aurora</Filter>
+    </ClInclude>
+    <ClInclude Include="AuroraSubMgr.h">
+      <Filter>헤더 파일\Aurora</Filter>
+    </ClInclude>
+    <ClInclude Include="DlgSubAlarm.h">
+      <Filter>헤더 파일\DIALOG\Sub</Filter>
+    </ClInclude>
+    <ClInclude Include="DlgSubConfig.h">
+      <Filter>헤더 파일\DIALOG\Sub</Filter>
+    </ClInclude>
+    <ClInclude Include="DlgSubConfigLoginFile.h">
+      <Filter>헤더 파일\DIALOG\Sub</Filter>
+    </ClInclude>
+    <ClInclude Include="DlgSubData.h">
+      <Filter>헤더 파일\DIALOG\Sub</Filter>
+    </ClInclude>
+    <ClInclude Include="DlgSubLog.h">
+      <Filter>헤더 파일\DIALOG\Sub</Filter>
+    </ClInclude>
+    <ClInclude Include="DlgSubLogFile.h">
+      <Filter>헤더 파일\DIALOG\Sub</Filter>
+    </ClInclude>
+    <ClInclude Include="DlgSubMaint.h">
+      <Filter>헤더 파일\DIALOG\Sub</Filter>
+    </ClInclude>
+    <ClInclude Include="DlgSubManual.h">
+      <Filter>헤더 파일\DIALOG\Sub</Filter>
+    </ClInclude>
+    <ClInclude Include="DlgSubRecipe.h">
+      <Filter>헤더 파일\DIALOG\Sub</Filter>
+    </ClInclude>
+    <ClInclude Include="..\Include\DefinesSys.h">
+      <Filter>헤더 파일\Include</Filter>
+    </ClInclude>
+    <ClInclude Include="Manager\SACCMgr.h">
+      <Filter>헤더 파일\Manager\CoreMgr</Filter>
+    </ClInclude>
+    <ClInclude Include="Manager\ResultMgr.h">
+      <Filter>헤더 파일\Manager\CoreMgr</Filter>
+    </ClInclude>
+    <ClInclude Include="Manager\RecipeMgr.h">
+      <Filter>헤더 파일\Manager\CoreMgr</Filter>
+    </ClInclude>
+    <ClInclude Include="Manager\MCCLogMgr.h">
+      <Filter>헤더 파일\Manager\CoreMgr</Filter>
+    </ClInclude>
+    <ClInclude Include="Alarm\AlarmMonitorToSensor.h">
+      <Filter>헤더 파일\Sequence\4.Alarm\AlarmMonitorToSensor</Filter>
+    </ClInclude>
+    <ClInclude Include="Alarm\AlarmMonitorToSensorCurtain.h">
+      <Filter>헤더 파일\Sequence\4.Alarm\AlarmMonitorToSensor</Filter>
+    </ClInclude>
+    <ClInclude Include="Alarm\AlarmMonitorToSensorFAN.h">
+      <Filter>헤더 파일\Sequence\4.Alarm\AlarmMonitorToSensor</Filter>
+    </ClInclude>
+    <ClInclude Include="Alarm\AlarmMonitorToSensorHandSwitch.h">
+      <Filter>헤더 파일\Sequence\4.Alarm\AlarmMonitorToSensor</Filter>
+    </ClInclude>
+    <ClInclude Include="Alarm\AlarmMonitorToSensorIsolater.h">
+      <Filter>헤더 파일\Sequence\4.Alarm\AlarmMonitorToSensor</Filter>
+    </ClInclude>
+    <ClInclude Include="Alarm\AlarmMonitorToSensorPressure.h">
+      <Filter>헤더 파일\Sequence\4.Alarm\AlarmMonitorToSensor</Filter>
+    </ClInclude>
+    <ClInclude Include="Alarm\AlarmMonitorToSensorSmoke.h">
+      <Filter>헤더 파일\Sequence\4.Alarm\AlarmMonitorToSensor</Filter>
+    </ClInclude>
+    <ClInclude Include="Alarm\AlarmMonitorToSensorTemperature.h">
+      <Filter>헤더 파일\Sequence\4.Alarm\AlarmMonitorToSensor</Filter>
+    </ClInclude>
+    <ClInclude Include="Alarm\AlarmMonitorToSensorTemperatureLow.h">
+      <Filter>헤더 파일\Sequence\4.Alarm\AlarmMonitorToSensor</Filter>
+    </ClInclude>
+    <ClInclude Include="Alarm\AlarmMonitorToSensorVacSwitch.h">
+      <Filter>헤더 파일\Sequence\4.Alarm\AlarmMonitorToSensor</Filter>
+    </ClInclude>
+    <ClInclude Include="Alarm\AlarmMonitorToLampTime.h">
+      <Filter>헤더 파일\Sequence\4.Alarm\AlarmMonitorToSensor</Filter>
+    </ClInclude>
+    <ClInclude Include="Alarm\AlarmMonitorToSafetyPLC.h">
+      <Filter>헤더 파일\Sequence\4.Alarm\AlarmMonitorToSensor</Filter>
+    </ClInclude>
+    <ClInclude Include="FunctionModule\FunctionModuleEQState.h">
+      <Filter>헤더 파일\Sequence\3.Function\1.EQState</Filter>
+    </ClInclude>
+    <ClInclude Include="FunctionModule\FunctionModuleEQStateChange.h">
+      <Filter>헤더 파일\Sequence\3.Function\2.EQStateChange</Filter>
+    </ClInclude>
+    <ClInclude Include="FunctionModule\FunctionModuleEQStateChangeStep.h">
+      <Filter>헤더 파일\Sequence\3.Function\2.EQStateChange</Filter>
+    </ClInclude>
+    <ClInclude Include="FunctionModule\FunctionModuleProbeACC.h">
+      <Filter>헤더 파일\Sequence\3.Function\3.SACC</Filter>
+    </ClInclude>
+    <ClInclude Include="FunctionModule\FunctionModuleProbeACCStep.h">
+      <Filter>헤더 파일\Sequence\3.Function\3.SACC</Filter>
+    </ClInclude>
+    <ClInclude Include="FunctionModule\FunctionModuleEQInterlock.h">
+      <Filter>헤더 파일\Sequence\NotUse</Filter>
+    </ClInclude>
+    <ClInclude Include="BaseSequenceBody.h">
+      <Filter>헤더 파일\Sequence\Base</Filter>
+    </ClInclude>
+    <ClInclude Include="BaseSequenceImpl.h">
+      <Filter>헤더 파일\Sequence\Base</Filter>
+    </ClInclude>
+    <ClInclude Include="DoWork\MeasureSequenceItemFactory.h">
+      <Filter>헤더 파일\Sequence\NotUse</Filter>
+    </ClInclude>
+    <ClInclude Include="DoWork\DoWorkGlassSequenceEngine.h">
+      <Filter>헤더 파일\Sequence\2.Measure Sequence\2.0.Sequence Engine</Filter>
+    </ClInclude>
+    <ClInclude Include="DoWork\DoWorkGlassSequenceImpl.h">
+      <Filter>헤더 파일\Sequence\2.Measure Sequence\2.0.Sequence Engine</Filter>
+    </ClInclude>
+    <ClInclude Include="SystemParamShare.h">
+      <Filter>헤더 파일\Aurora</Filter>
+    </ClInclude>
+  </ItemGroup>
+  <ItemGroup>
+    <ClCompile Include="ALPHA.cpp">
+      <Filter>소스 파일</Filter>
+    </ClCompile>
+    <ClCompile Include="pch.cpp">
+      <Filter>소스 파일</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\CoreFunction\LogFunction\LogAccessor\LogFileAccessor.cpp">
+      <Filter>CoreFunction\Func_Log\LogAccessor</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\CoreFunction\LogFunction\LogWrapper\LogWrapper.cpp">
+      <Filter>CoreFunction\Func_Log\LogWrapper</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\CoreFunction\LogFunction\LogAccessor\file_access\FileAccessor.cpp">
+      <Filter>CoreFunction\Func_Log\LogAccessor\File_access</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\CoreFunction\common\IniHelper.cpp">
+      <Filter>CoreFunction\Common</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\CoreFunction\ShareMemFunction\CPtrnInfo.cpp">
+      <Filter>CoreFunction\Func_ShareMem</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\CoreFunction\ShareMemFunction\ShareMemFunction.cpp">
+      <Filter>CoreFunction\Func_ShareMem</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\CoreFunction\IOMapFunction\McProtocol\McAddressScannerImpl.cpp">
+      <Filter>CoreFunction\Func_IOMap\McProtocol\McAddressScanner</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\CoreFunction\IOMapFunction\McProtocol\McCaddressScanner.cpp">
+      <Filter>CoreFunction\Func_IOMap\McProtocol\McAddressScanner</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\CoreFunction\IOMapFunction\McProtocol\McDaddressScanner.cpp">
+      <Filter>CoreFunction\Func_IOMap\McProtocol\McAddressScanner</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\CoreFunction\IOMapFunction\McProtocol\McFaddressScanner.cpp">
+      <Filter>CoreFunction\Func_IOMap\McProtocol\McAddressScanner</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\CoreFunction\IOMapFunction\McProtocol\McGaddressScanner.cpp">
+      <Filter>CoreFunction\Func_IOMap\McProtocol\McAddressScanner</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\CoreFunction\IOMapFunction\McProtocol\McMaddressScanner.cpp">
+      <Filter>CoreFunction\Func_IOMap\McProtocol\McAddressScanner</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\CoreFunction\IOMapFunction\McProtocol\McPaddressScanner.cpp">
+      <Filter>CoreFunction\Func_IOMap\McProtocol\McAddressScanner</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\CoreFunction\IOMapFunction\McProtocol\McProtocolManager.cpp">
+      <Filter>CoreFunction\Func_IOMap\McProtocol</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\CoreFunction\IOMapFunction\IOMapFunction.cpp">
+      <Filter>CoreFunction\Func_IOMap</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\CoreFunction\IOMapFunction\IOMapImpl.cpp">
+      <Filter>CoreFunction\Func_IOMap</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\CoreFunction\CommEthFunction\ClientSocket.cpp">
+      <Filter>CoreFunction\Func_CommEth\Socket Object</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\CoreFunction\CommEthFunction\CommEthFunction.cpp">
+      <Filter>CoreFunction\Func_CommEth\Socket Object</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\CoreFunction\CommEthFunction\ServerSocket.cpp">
+      <Filter>CoreFunction\Func_CommEth\Socket Object</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\CoreFunction\CommEthFunction\EthernetManagerTCP.cpp">
+      <Filter>CoreFunction\Func_CommEth</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\CoreFunction\CommEthFunction\EthernetSocket.cpp">
+      <Filter>CoreFunction\Func_CommEth</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\CoreFunction\common\XLS\XLAutomation.cpp">
+      <Filter>CoreFunction\Common\XLS</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\CoreFunction\common\XLS\XLEzAutomation.cpp">
+      <Filter>CoreFunction\Common\XLS</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\CoreFunction\Comm232Function\Comm232Config.cpp">
+      <Filter>CoreFunction\Func_Comm232</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\CoreFunction\Comm232Function\Comm232Function.cpp">
+      <Filter>CoreFunction\Func_Comm232</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\CoreFunction\LightFunction\LightFunction.cpp">
+      <Filter>CoreFunction\Func_LightControler</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\CoreFunction\LightFunction\LightImpl.cpp">
+      <Filter>CoreFunction\Func_LightControler</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\CoreFunction\LightFunction\SPO\CommSerialObjectSPO.cpp">
+      <Filter>CoreFunction\Func_LightControler\SPO</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\CoreFunction\MotorFunction\AxisType.cpp">
+      <Filter>CoreFunction\Func_Motion</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\CoreFunction\MotorFunction\MotorFunction.cpp">
+      <Filter>CoreFunction\Func_Motion</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\CoreFunction\MotorFunction\MotorImpl.cpp">
+      <Filter>CoreFunction\Func_Motion</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\CoreFunction\MotorFunction\MotorCtrl_ACS\MotorControl_ACS.cpp">
+      <Filter>CoreFunction\Func_Motion\ACS</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\CoreFunction\common\TimeChecker.cpp">
+      <Filter>CoreFunction\Common</Filter>
+    </ClCompile>
+    <ClCompile Include="DoWork\SystemInitialize.cpp">
+      <Filter>소스 파일\Sequence\1.Initialize</Filter>
+    </ClCompile>
+    <ClCompile Include="DoWork\SystemInitializeStep.cpp">
+      <Filter>소스 파일\Sequence\1.Initialize</Filter>
+    </ClCompile>
+    <ClCompile Include="DoWork\DoWorkGlassReady.cpp">
+      <Filter>소스 파일\Sequence\2.Measure Sequence\2.1.ChangeStage</Filter>
+    </ClCompile>
+    <ClCompile Include="DoWork\DoWorkGlassReadyStep.cpp">
+      <Filter>소스 파일\Sequence\2.Measure Sequence\2.1.ChangeStage</Filter>
+    </ClCompile>
+    <ClCompile Include="DoWork\MeasureSequenceItemImpl.cpp">
+      <Filter>소스 파일\Sequence\2.Measure Sequence\1.SequenceItem</Filter>
+    </ClCompile>
+    <ClCompile Include="DoWork\MeasureSequenceItemEngine.cpp">
+      <Filter>소스 파일\Sequence\2.Measure Sequence\1.SequenceItem</Filter>
+    </ClCompile>
+    <ClCompile Include="Manager\IOMapControlMgr.cpp">
+      <Filter>소스 파일\Manager\Base</Filter>
+    </ClCompile>
+    <ClCompile Include="Manager\LightControlMgr.cpp">
+      <Filter>소스 파일\Manager\Base</Filter>
+    </ClCompile>
+    <ClCompile Include="Manager\MotorControlMgr.cpp">
+      <Filter>소스 파일\Manager\Base</Filter>
+    </ClCompile>
+    <ClCompile Include="Manager\PositionConfigMgr.cpp">
+      <Filter>소스 파일\Manager\Base</Filter>
+    </ClCompile>
+    <ClCompile Include="Recipe\RecipeData.cpp">
+      <Filter>소스 파일\Manager\Base</Filter>
+    </ClCompile>
+    <ClCompile Include="Manager\SeqTactTimeMgr.cpp">
+      <Filter>소스 파일\Manager\Base</Filter>
+    </ClCompile>
+    <ClCompile Include="Manager\ShareMemoryMgr.cpp">
+      <Filter>소스 파일\Manager\Base</Filter>
+    </ClCompile>
+    <ClCompile Include="Manager\SystemConfigMgr.cpp">
+      <Filter>소스 파일\Manager\Base</Filter>
+    </ClCompile>
+    <ClCompile Include="Manager\CommTcpIpFactoryMgr.cpp">
+      <Filter>소스 파일\Manager\HMI</Filter>
+    </ClCompile>
+    <ClCompile Include="DoWork\DoWorkGlassSWAlign.cpp">
+      <Filter>소스 파일\Sequence\2.Measure Sequence\2.3.Align</Filter>
+    </ClCompile>
+    <ClCompile Include="DoWork\DoWorkGlassSWAlignStep.cpp">
+      <Filter>소스 파일\Sequence\2.Measure Sequence\2.3.Align</Filter>
+    </ClCompile>
+    <ClCompile Include="Manager\AlignCameraMgr.cpp">
+      <Filter>소스 파일\Manager\Base</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\CoreFunction\common\BinaryHelper.cpp">
+      <Filter>CoreFunction\Common</Filter>
+    </ClCompile>
+    <ClCompile Include="Manager\NetworkConfigMgr.cpp">
+      <Filter>소스 파일\Manager\Base</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\CoreFunction\FrameGrabberFunction\FrameGrabberFunction.cpp">
+      <Filter>CoreFunction\Func_FrameGrabber</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\CoreFunction\FrameGrabberFunction\FrameGrabberImpl.cpp">
+      <Filter>CoreFunction\Func_FrameGrabber</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\CoreFunction\common\MFCGridControl\GridCtrl_src\GridCell.cpp">
+      <Filter>CoreFunction\Common\MFCGridControl\GridCtrl_src</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\CoreFunction\common\MFCGridControl\GridCtrl_src\GridCellBase.cpp">
+      <Filter>CoreFunction\Common\MFCGridControl\GridCtrl_src</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\CoreFunction\common\MFCGridControl\GridCtrl_src\GridCtrl.cpp">
+      <Filter>CoreFunction\Common\MFCGridControl\GridCtrl_src</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\CoreFunction\common\MFCGridControl\GridCtrl_src\GridDropTarget.cpp">
+      <Filter>CoreFunction\Common\MFCGridControl\GridCtrl_src</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\CoreFunction\common\MFCGridControl\GridCtrl_src\InPlaceEdit.cpp">
+      <Filter>CoreFunction\Common\MFCGridControl\GridCtrl_src</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\CoreFunction\common\MFCGridControl\GridCtrl_src\TitleTip.cpp">
+      <Filter>CoreFunction\Common\MFCGridControl\GridCtrl_src</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\CoreFunction\common\MFCGridControl\NewCellTypes\CheckComboBox.cpp">
+      <Filter>CoreFunction\Common\MFCGridControl\NewCellTypes</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\CoreFunction\common\MFCGridControl\NewCellTypes\GridCellButton.cpp">
+      <Filter>CoreFunction\Common\MFCGridControl\NewCellTypes</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\CoreFunction\common\MFCGridControl\NewCellTypes\GridCellCheck.cpp">
+      <Filter>CoreFunction\Common\MFCGridControl\NewCellTypes</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\CoreFunction\common\MFCGridControl\NewCellTypes\GridCellCheckCombo.cpp">
+      <Filter>CoreFunction\Common\MFCGridControl\NewCellTypes</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\CoreFunction\common\MFCGridControl\NewCellTypes\GridCellCombo.cpp">
+      <Filter>CoreFunction\Common\MFCGridControl\NewCellTypes</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\CoreFunction\common\MFCGridControl\NewCellTypes\GridCellDateTime.cpp">
+      <Filter>CoreFunction\Common\MFCGridControl\NewCellTypes</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\CoreFunction\common\MFCGridControl\NewCellTypes\GridCellNumeric.cpp">
+      <Filter>CoreFunction\Common\MFCGridControl\NewCellTypes</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\CoreFunction\common\MFCGridControl\NewCellTypes\GridURLCell.cpp">
+      <Filter>CoreFunction\Common\MFCGridControl\NewCellTypes</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\CoreFunction\common\XButtonXP\OddButton.cpp">
+      <Filter>CoreFunction\Common\XButtonXP</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\CoreFunction\common\XButtonXP\XButtonXP.cpp">
+      <Filter>CoreFunction\Common\XButtonXP</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\CoreFunction\common\XButtonXP\XThemeHelper.cpp">
+      <Filter>CoreFunction\Common\XButtonXP</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\CoreFunction\common\BtnST.cpp">
+      <Filter>CoreFunction\Common</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\CoreFunction\common\WinMgr.cpp">
+      <Filter>CoreFunction\Common</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\CoreFunction\common\MyLabelTimer.cpp">
+      <Filter>CoreFunction\Common</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\CoreFunction\common\Label.cpp">
+      <Filter>CoreFunction\Common</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\CoreFunction\common\RawDataHelper.cpp">
+      <Filter>CoreFunction\Common</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\CoreFunction\common\Registry.cpp">
+      <Filter>CoreFunction\Common</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\CoreFunction\common\WinRect.cpp">
+      <Filter>CoreFunction\Common</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\CoreFunction\common\XStringHelper.cpp">
+      <Filter>CoreFunction\Common</Filter>
+    </ClCompile>
+    <ClCompile Include="Manager\CommTcpIPMgr.cpp">
+      <Filter>소스 파일\Manager\Base</Filter>
+    </ClCompile>
+    <ClCompile Include="D_MainOperateInitializing.cpp">
+      <Filter>소스 파일\DIALOG\POPUP</Filter>
+    </ClCompile>
+    <ClCompile Include="D_MeasureCycle.cpp">
+      <Filter>소스 파일\DIALOG\POPUP</Filter>
+    </ClCompile>
+    <ClCompile Include="D_MoveHomePosition.cpp">
+      <Filter>소스 파일\DIALOG\POPUP</Filter>
+    </ClCompile>
+    <ClCompile Include="D_DisplayMessage.cpp">
+      <Filter>소스 파일\DIALOG\POPUP</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\CoreFunction\common\Chart\ChartMarker.cpp">
+      <Filter>CoreFunction\Common\Chart</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\CoreFunction\common\Chart\ChartOrbit.cpp">
+      <Filter>CoreFunction\Common\Chart</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\CoreFunction\common\Chart\ChartSpec.cpp">
+      <Filter>CoreFunction\Common\Chart</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\CoreFunction\common\Chart\och2dmfc.cpp">
+      <Filter>CoreFunction\Common\Chart</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\CoreFunction\common\Chart\SetScaleDlg.cpp">
+      <Filter>CoreFunction\Common\Chart</Filter>
+    </ClCompile>
+    <ClCompile Include="D_SetLampTime.cpp">
+      <Filter>소스 파일\DIALOG\POPUP</Filter>
+    </ClCompile>
+    <ClCompile Include="D_LogInMgr.cpp">
+      <Filter>소스 파일\DIALOG\POPUP</Filter>
+    </ClCompile>
+    <ClCompile Include="D_PM_MODE.cpp">
+      <Filter>소스 파일\DIALOG\POPUP</Filter>
+    </ClCompile>
+    <ClCompile Include="D_InputPassWord.cpp">
+      <Filter>소스 파일\DIALOG\POPUP</Filter>
+    </ClCompile>
+    <ClCompile Include="Manager\LogInControlMgr.cpp">
+      <Filter>소스 파일\Manager\Base</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\CoreFunction\common\IMAQImageCtrl\IMAQImage.cpp">
+      <Filter>CoreFunction\Common\IMAQImageCtrl</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\CoreFunction\common\IMAQImageCtrl\IMAQImageCtrl.cpp">
+      <Filter>CoreFunction\Common\IMAQImageCtrl</Filter>
+    </ClCompile>
+    <ClCompile Include="Alarm\AlarmController.cpp">
+      <Filter>소스 파일\Sequence\4.Alarm</Filter>
+    </ClCompile>
+    <ClCompile Include="Alarm\AlarmMonitorImpl.cpp">
+      <Filter>소스 파일\Sequence\4.Alarm</Filter>
+    </ClCompile>
+    <ClCompile Include="Alarm\AlarmMonitorMgr.cpp">
+      <Filter>소스 파일\Sequence\4.Alarm</Filter>
+    </ClCompile>
+    <ClCompile Include="Manager\MaintControlMgr.cpp">
+      <Filter>소스 파일\Manager\HMI</Filter>
+    </ClCompile>
+    <ClCompile Include="Manager\ResumeInfoMgr.cpp">
+      <Filter>소스 파일\Manager\HMI</Filter>
+    </ClCompile>
+    <ClCompile Include="Manager\WadMultiMeasMgr.cpp">
+      <Filter>소스 파일\Manager\HMI</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\CoreFunction\common\LedButton.cpp">
+      <Filter>CoreFunction\Common</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\CoreFunction\common\FarPoint64\Ssdllmfc.cpp">
+      <Filter>CoreFunction\Common\FPSpreadDll</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\CoreFunction\common\MySpreadDll.cpp">
+      <Filter>CoreFunction\Common\FPSpreadDll</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\CoreFunction\common\StaticSpread.cpp">
+      <Filter>CoreFunction\Common\FPSpreadDll</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\CoreFunction\common\CommonFunc.cpp">
+      <Filter>CoreFunction\Common</Filter>
+    </ClCompile>
+    <ClCompile Include="CommTcpIpObjectVision.cpp">
+      <Filter>소스 파일\Sequence\2.Measure Sequence\2.5.Measure</Filter>
+    </ClCompile>
+    <ClCompile Include="CommTcpIpObjectAgingPG.cpp">
+      <Filter>소스 파일\Sequence\2.Measure Sequence\2.5.Measure</Filter>
+    </ClCompile>
+    <ClCompile Include="CommTcpIpObjectAngle.cpp">
+      <Filter>소스 파일\Sequence\2.Measure Sequence\2.5.Measure</Filter>
+    </ClCompile>
+    <ClCompile Include="CommTcpIpObjectColor.cpp">
+      <Filter>소스 파일\Sequence\2.Measure Sequence\2.5.Measure</Filter>
+    </ClCompile>
+    <ClCompile Include="CommTcpIpObjectLCR.cpp">
+      <Filter>소스 파일\Sequence\2.Measure Sequence\2.5.Measure</Filter>
+    </ClCompile>
+    <ClCompile Include="CommTcpIpObjectPG.cpp">
+      <Filter>소스 파일\Sequence\2.Measure Sequence\2.5.Measure</Filter>
+    </ClCompile>
+    <ClCompile Include="CommTcpIpObjectPGMon.cpp">
+      <Filter>소스 파일\Sequence\2.Measure Sequence\2.5.Measure</Filter>
+    </ClCompile>
+    <ClCompile Include="CommTcpIpObjectTSP.cpp">
+      <Filter>소스 파일\Sequence\2.Measure Sequence\2.5.Measure</Filter>
+    </ClCompile>
+    <ClCompile Include="CommTcpIpObjectWAD.cpp">
+      <Filter>소스 파일\Sequence\2.Measure Sequence\2.5.Measure</Filter>
+    </ClCompile>
+    <ClCompile Include="DoWork\DoWorkGlassMeasure.cpp">
+      <Filter>소스 파일\Sequence\2.Measure Sequence\2.5.Measure</Filter>
+    </ClCompile>
+    <ClCompile Include="DoWork\DoWorkGlassMeasureStep.cpp">
+      <Filter>소스 파일\Sequence\2.Measure Sequence\2.5.Measure</Filter>
+    </ClCompile>
+    <ClCompile Include="DoWork\DoWorkGlassAdsorption.cpp">
+      <Filter>소스 파일\Sequence\2.Measure Sequence\2.1.ChangeStage</Filter>
+    </ClCompile>
+    <ClCompile Include="DoWork\DoWorkGlassAdsorptionStep.cpp">
+      <Filter>소스 파일\Sequence\2.Measure Sequence\2.1.ChangeStage</Filter>
+    </ClCompile>
+    <ClCompile Include="DoWork\DoWorkGlassUnload.cpp">
+      <Filter>소스 파일\Sequence\2.Measure Sequence\2.1.ChangeStage</Filter>
+    </ClCompile>
+    <ClCompile Include="DoWork\DoWorkGlassUnloadStep.cpp">
+      <Filter>소스 파일\Sequence\2.Measure Sequence\2.1.ChangeStage</Filter>
+    </ClCompile>
+    <ClCompile Include="DoWork\DoWorkGlassResult.cpp">
+      <Filter>소스 파일\Sequence\2.Measure Sequence\2.6. Result</Filter>
+    </ClCompile>
+    <ClCompile Include="DoWork\DoWorkGlassResultStep.cpp">
+      <Filter>소스 파일\Sequence\2.Measure Sequence\2.6. Result</Filter>
+    </ClCompile>
+    <ClCompile Include="DoWork\DoWorkProbeSWAlign.cpp">
+      <Filter>소스 파일\Sequence\2.Measure Sequence\2.3.Align</Filter>
+    </ClCompile>
+    <ClCompile Include="DoWork\DoWorkProbeSWAlignStep.cpp">
+      <Filter>소스 파일\Sequence\2.Measure Sequence\2.3.Align</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\CoreFunction\common\IMAQImageCtrl\FineCentering.cpp">
+      <Filter>CoreFunction\Common\IMAQImageCtrl</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\CoreFunction\common\NI\x64\Include\NIMachineVision.c">
+      <Filter>CoreFunction\Common\NI\Include</Filter>
+    </ClCompile>
+    <ClCompile Include="DoWork\DoWorkGlassPreMeas.cpp">
+      <Filter>소스 파일\Sequence\2.Measure Sequence\2.4. Pre_Measure</Filter>
+    </ClCompile>
+    <ClCompile Include="DoWork\DoWorkGlassAGING.cpp">
+      <Filter>소스 파일\Sequence\2.Measure Sequence\2.4. Pre_Measure</Filter>
+    </ClCompile>
+    <ClCompile Include="DoWork\DoWorkGlassPreMeasStep.cpp">
+      <Filter>소스 파일\Sequence\2.Measure Sequence\2.4. Pre_Measure</Filter>
+    </ClCompile>
+    <ClCompile Include="DoWork\DoWorkGlassAGINGStep.cpp">
+      <Filter>소스 파일\Sequence\2.Measure Sequence\2.4. Pre_Measure</Filter>
+    </ClCompile>
+    <ClCompile Include="DoWork\DoWorkGlassRecipe.cpp">
+      <Filter>소스 파일\Sequence\2.Measure Sequence\2.2.ChangeRecipe</Filter>
+    </ClCompile>
+    <ClCompile Include="DoWork\DoWorkGlassRecipeStep.cpp">
+      <Filter>소스 파일\Sequence\2.Measure Sequence\2.2.ChangeRecipe</Filter>
+    </ClCompile>
+    <ClCompile Include="D_SelectMeasOrUnload.cpp">
+      <Filter>소스 파일\DIALOG\POPUP</Filter>
+    </ClCompile>
+    <ClCompile Include="FTP_Link_CIM.cpp">
+      <Filter>소스 파일\Sequence\3.Function\4.CIM\FTP</Filter>
+    </ClCompile>
+    <ClCompile Include="FTP_Link_Interface.cpp">
+      <Filter>소스 파일\Sequence\3.Function\4.CIM\FTP</Filter>
+    </ClCompile>
+    <ClCompile Include="TransporterResult.cpp">
+      <Filter>소스 파일\Sequence\3.Function\4.CIM\FTP</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\CoreFunction\CommFtpFunction\CommFtpFunction.cpp">
+      <Filter>CoreFunction\Func_FTP</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\CoreFunction\CommFtpFunction\EthernetManagerFTP.cpp">
+      <Filter>CoreFunction\Func_FTP</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\CoreFunction\CommFtpFunction\xNetFTP.cpp">
+      <Filter>CoreFunction\Func_FTP</Filter>
+    </ClCompile>
+    <ClCompile Include="D_SystemHostMode.cpp">
+      <Filter>소스 파일\DIALOG\POPUP</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\CoreFunction\common\AutoEdit.cpp">
+      <Filter>CoreFunction\Common</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\CoreFunction\common\InfoWnd.cpp">
+      <Filter>CoreFunction\Common</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\CoreFunction\FrameGrabberFunction\GigECamera_Basler\FrameGrabber_BS4M.cpp">
+      <Filter>CoreFunction\Func_FrameGrabber\GigECamera_Basler</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\CoreFunction\FrameGrabberFunction\GigECamera_Basler\FrameGrabber_GigE_BS4M.cpp">
+      <Filter>CoreFunction\Func_FrameGrabber\GigECamera_Basler</Filter>
+    </ClCompile>
+    <ClCompile Include="D_CCD_Review.cpp">
+      <Filter>소스 파일\DIALOG\POPUP</Filter>
+    </ClCompile>
+    <ClCompile Include="CD_PopUp_Motion_Move.cpp">
+      <Filter>소스 파일\DIALOG\POPUP</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\CoreFunction\common\crc16.cpp">
+      <Filter>CoreFunction\Common</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\CoreFunction\LightFunction\CAS\CommSerialObjectCAS.cpp">
+      <Filter>CoreFunction\Func_LightControler\CAS</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\CoreFunction\LightFunction\ECS\CommSerialObjectECS.cpp">
+      <Filter>CoreFunction\Func_LightControler\ECS</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\CoreFunction\LightFunction\XCITE\CommSerialObjectXCITE.cpp">
+      <Filter>CoreFunction\Func_LightControler\XCITE</Filter>
+    </ClCompile>
+    <ClCompile Include="DlgSubMeasure_Progress.cpp">
+      <Filter>소스 파일\DIALOG\POPUP</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\CoreFunction\common\PingTest.cpp">
+      <Filter>CoreFunction\Common</Filter>
+    </ClCompile>
+    <ClCompile Include="DlgSMarkUI.cpp">
+      <Filter>소스 파일\DIALOG\POPUP</Filter>
+    </ClCompile>
+    <ClCompile Include="CD_SelectColor.cpp">
+      <Filter>소스 파일\DIALOG\POPUP</Filter>
+    </ClCompile>
+    <ClCompile Include="CD_PopUp_Alarm_F.cpp">
+      <Filter>소스 파일\DIALOG\POPUP</Filter>
+    </ClCompile>
+    <ClCompile Include="Recipe\RecipeEditMgr.cpp">
+      <Filter>소스 파일\Manager\HMI</Filter>
+    </ClCompile>
+    <ClCompile Include="Manager\CCommTcpIpObjectMotion.cpp">
+      <Filter>소스 파일\Manager\HMI</Filter>
+    </ClCompile>
+    <ClCompile Include="Manager\CCommTcpIpObjectSysTime.cpp">
+      <Filter>소스 파일\Manager\HMI</Filter>
+    </ClCompile>
+    <ClCompile Include="DlgMainForm.cpp">
+      <Filter>소스 파일\DIALOG\Base</Filter>
+    </ClCompile>
+    <ClCompile Include="DlgTitleBar.cpp">
+      <Filter>소스 파일\DIALOG\Base</Filter>
+    </ClCompile>
+    <ClCompile Include="DlgNaviBar.cpp">
+      <Filter>소스 파일\DIALOG\Base</Filter>
+    </ClCompile>
+    <ClCompile Include="DlgAlignCCD.cpp">
+      <Filter>소스 파일\DIALOG\HMI</Filter>
+    </ClCompile>
+    <ClCompile Include="DlgSubConfigMotionFile.cpp">
+      <Filter>소스 파일\DIALOG\HMI</Filter>
+    </ClCompile>
+    <ClCompile Include="DlgSubConfigModuleFile.cpp">
+      <Filter>소스 파일\DIALOG\HMI</Filter>
+    </ClCompile>
+    <ClCompile Include="DlgSubMaint_MotionFile.cpp">
+      <Filter>소스 파일\DIALOG\HMI</Filter>
+    </ClCompile>
+    <ClCompile Include="DlgSubMaint_IOFile.cpp">
+      <Filter>소스 파일\DIALOG\HMI</Filter>
+    </ClCompile>
+    <ClCompile Include="DlgSubMaint_ETCFile.cpp">
+      <Filter>소스 파일\DIALOG\HMI</Filter>
+    </ClCompile>
+    <ClCompile Include="DlgSubManual_AgingSet.cpp">
+      <Filter>소스 파일\DIALOG\HMI</Filter>
+    </ClCompile>
+    <ClCompile Include="DlgSubManual_MultiMeas.cpp">
+      <Filter>소스 파일\DIALOG\HMI</Filter>
+    </ClCompile>
+    <ClCompile Include="DlgSubManual_AgingTest.cpp">
+      <Filter>소스 파일\DIALOG\HMI</Filter>
+    </ClCompile>
+    <ClCompile Include="DlgSubManual_AutoContact.cpp">
+      <Filter>소스 파일\DIALOG\HMI</Filter>
+    </ClCompile>
+    <ClCompile Include="DlgSubManual_Ionizer.cpp">
+      <Filter>소스 파일\DIALOG\HMI</Filter>
+    </ClCompile>
+    <ClCompile Include="DlgSubManual_Meas.cpp">
+      <Filter>소스 파일\DIALOG\HMI</Filter>
+    </ClCompile>
+    <ClCompile Include="DlgSubManual_STEP.cpp">
+      <Filter>소스 파일\DIALOG\HMI</Filter>
+    </ClCompile>
+    <ClCompile Include="DlgSubOperate.cpp">
+      <Filter>소스 파일\DIALOG\HMI</Filter>
+    </ClCompile>
+    <ClCompile Include="D_RoiSet.cpp">
+      <Filter>소스 파일\DIALOG\POPUP</Filter>
+    </ClCompile>
+    <ClCompile Include="UIMeasPathDlg.cpp">
+      <Filter>소스 파일\DIALOG\HMI</Filter>
+    </ClCompile>
+    <ClCompile Include="MainSubDlgWin.cpp">
+      <Filter>소스 파일\DIALOG\Base</Filter>
+    </ClCompile>
+    <ClCompile Include="D_AuroraDlgWin.cpp">
+      <Filter>소스 파일\DIALOG\Base</Filter>
+    </ClCompile>
+    <ClCompile Include="DlgALPHA.cpp">
+      <Filter>소스 파일\DIALOG\Base</Filter>
+    </ClCompile>
+    <ClCompile Include="Alarm\AlarmMonitorToDoorOpen.cpp">
+      <Filter>소스 파일\Sequence\4.Alarm\AlarmMonitorTo</Filter>
+    </ClCompile>
+    <ClCompile Include="Alarm\AlarmMonitorToDoorOpenState.cpp">
+      <Filter>소스 파일\Sequence\4.Alarm\AlarmMonitorTo</Filter>
+    </ClCompile>
+    <ClCompile Include="Alarm\AlarmMonitorToDoorVoice.cpp">
+      <Filter>소스 파일\Sequence\4.Alarm\AlarmMonitorTo</Filter>
+    </ClCompile>
+    <ClCompile Include="Alarm\AlarmMonitorToEmergency.cpp">
+      <Filter>소스 파일\Sequence\4.Alarm\AlarmMonitorTo</Filter>
+    </ClCompile>
+    <ClCompile Include="Alarm\AlarmMonitorToEmergencyButton.cpp">
+      <Filter>소스 파일\Sequence\4.Alarm\AlarmMonitorTo</Filter>
+    </ClCompile>
+    <ClCompile Include="Alarm\AlarmMonitorToMcOFF.cpp">
+      <Filter>소스 파일\Sequence\4.Alarm\AlarmMonitorTo</Filter>
+    </ClCompile>
+    <ClCompile Include="Alarm\AlarmMonitorToMcOFFState.cpp">
+      <Filter>소스 파일\Sequence\4.Alarm\AlarmMonitorTo</Filter>
+    </ClCompile>
+    <ClCompile Include="Alarm\AlarmMonitorToTeachKEY.cpp">
+      <Filter>소스 파일\Sequence\4.Alarm\AlarmMonitorTo</Filter>
+    </ClCompile>
+    <ClCompile Include="Alarm\AlarmMonitorToTeachKEYLock.cpp">
+      <Filter>소스 파일\Sequence\4.Alarm\AlarmMonitorTo</Filter>
+    </ClCompile>
+    <ClCompile Include="WindowEventHandler.cpp">
+      <Filter>소스 파일\DIALOG\Base</Filter>
+    </ClCompile>
+    <ClCompile Include="FunctionModule\FunctionModuleEQStateChange.cpp">
+      <Filter>소스 파일\Sequence\3.Function\2.EQStateChange</Filter>
+    </ClCompile>
+    <ClCompile Include="FunctionModule\FunctionModuleEQStateChangeStep.cpp">
+      <Filter>소스 파일\Sequence\3.Function\2.EQStateChange</Filter>
+    </ClCompile>
+    <ClCompile Include="FunctionModule\FunctionModuleProbeACC.cpp">
+      <Filter>소스 파일\Sequence\3.Function\3.SACC</Filter>
+    </ClCompile>
+    <ClCompile Include="FunctionModule\FunctionModuleProbeACCStep.cpp">
+      <Filter>소스 파일\Sequence\3.Function\3.SACC</Filter>
+    </ClCompile>
+    <ClCompile Include="CommTcpIpObjectCIM.cpp">
+      <Filter>소스 파일\Sequence\3.Function\4.CIM</Filter>
+    </ClCompile>
+    <ClCompile Include="DoWork\DoWorkSequenceCIM.cpp">
+      <Filter>소스 파일\Sequence\3.Function\4.CIM</Filter>
+    </ClCompile>
+    <ClCompile Include="DoWork\DoWorkSequenceCIMStep.cpp">
+      <Filter>소스 파일\Sequence\3.Function\4.CIM</Filter>
+    </ClCompile>
+    <ClCompile Include="FunctionModule\FunctionModuleEQState.cpp">
+      <Filter>소스 파일\Sequence\3.Function\1.EQState</Filter>
+    </ClCompile>
+    <ClCompile Include="FunctionModule\FunctionModuleEQInterlock.cpp">
+      <Filter>소스 파일\Sequence\NotUse</Filter>
+    </ClCompile>
+    <ClCompile Include="DoWork\MeasureSequenceItemFactory.cpp">
+      <Filter>소스 파일\Sequence\NotUse</Filter>
+    </ClCompile>
+    <ClCompile Include="BaseSequenceBody.cpp">
+      <Filter>소스 파일\Sequence\Base</Filter>
+    </ClCompile>
+    <ClCompile Include="BaseSequenceImpl.cpp">
+      <Filter>소스 파일\Sequence\Base</Filter>
+    </ClCompile>
+    <ClCompile Include="DoWork\DoWorkGlassSequenceEngine.cpp">
+      <Filter>소스 파일\Sequence\2.Measure Sequence\2.0.Sequence Engine</Filter>
+    </ClCompile>
+    <ClCompile Include="DoWork\DoWorkGlassSequenceImpl.cpp">
+      <Filter>소스 파일\Sequence\2.Measure Sequence\2.0.Sequence Engine</Filter>
+    </ClCompile>
+    <ClCompile Include="DoWork\DoWorkGlassSequence.cpp">
+      <Filter>소스 파일\Sequence\2.Measure Sequence\0.Sequence</Filter>
+    </ClCompile>
+    <ClCompile Include="Manager\SequenceManager.cpp">
+      <Filter>소스 파일\Sequence</Filter>
+    </ClCompile>
+    <ClCompile Include="Alarm\AlarmMonitorToSensor.cpp">
+      <Filter>소스 파일\Sequence\4.Alarm\AlarmMonitorToSensor</Filter>
+    </ClCompile>
+    <ClCompile Include="Alarm\AlarmMonitorToSensorCurtain.cpp">
+      <Filter>소스 파일\Sequence\4.Alarm\AlarmMonitorToSensor</Filter>
+    </ClCompile>
+    <ClCompile Include="Alarm\AlarmMonitorToSensorFAN.cpp">
+      <Filter>소스 파일\Sequence\4.Alarm\AlarmMonitorToSensor</Filter>
+    </ClCompile>
+    <ClCompile Include="Alarm\AlarmMonitorToSensorHandSwitch.cpp">
+      <Filter>소스 파일\Sequence\4.Alarm\AlarmMonitorToSensor</Filter>
+    </ClCompile>
+    <ClCompile Include="Alarm\AlarmMonitorToSensorIsolater.cpp">
+      <Filter>소스 파일\Sequence\4.Alarm\AlarmMonitorToSensor</Filter>
+    </ClCompile>
+    <ClCompile Include="Alarm\AlarmMonitorToSensorPressure.cpp">
+      <Filter>소스 파일\Sequence\4.Alarm\AlarmMonitorToSensor</Filter>
+    </ClCompile>
+    <ClCompile Include="Alarm\AlarmMonitorToSensorSmoke.cpp">
+      <Filter>소스 파일\Sequence\4.Alarm\AlarmMonitorToSensor</Filter>
+    </ClCompile>
+    <ClCompile Include="Alarm\AlarmMonitorToSensorTemperature.cpp">
+      <Filter>소스 파일\Sequence\4.Alarm\AlarmMonitorToSensor</Filter>
+    </ClCompile>
+    <ClCompile Include="Alarm\AlarmMonitorToSensorTemperatureLow.cpp">
+      <Filter>소스 파일\Sequence\4.Alarm\AlarmMonitorToSensor</Filter>
+    </ClCompile>
+    <ClCompile Include="Alarm\AlarmMonitorToSensorVacSwitch.cpp">
+      <Filter>소스 파일\Sequence\4.Alarm\AlarmMonitorToSensor</Filter>
+    </ClCompile>
+    <ClCompile Include="Alarm\AlarmMonitorToSafetyPLC.cpp">
+      <Filter>소스 파일\Sequence\4.Alarm\AlarmMonitorToSensor</Filter>
+    </ClCompile>
+    <ClCompile Include="Alarm\AlarmMonitorToLampTime.cpp">
+      <Filter>소스 파일\Sequence\4.Alarm\AlarmMonitorToSensor</Filter>
+    </ClCompile>
+    <ClCompile Include="AuroraMgr.cpp">
+      <Filter>소스 파일\Aurora</Filter>
+    </ClCompile>
+    <ClCompile Include="SystemParamShare.cpp">
+      <Filter>소스 파일\Aurora</Filter>
+    </ClCompile>
+    <ClCompile Include="Manager\SACCMgr.cpp">
+      <Filter>소스 파일\Manager\CoreMgr</Filter>
+    </ClCompile>
+    <ClCompile Include="Manager\MCCLogMgr.cpp">
+      <Filter>소스 파일\Manager\CoreMgr</Filter>
+    </ClCompile>
+    <ClCompile Include="Manager\ResultMgr.cpp">
+      <Filter>소스 파일\Manager\CoreMgr</Filter>
+    </ClCompile>
+    <ClCompile Include="Manager\RecipeMgr.cpp">
+      <Filter>소스 파일\Manager\CoreMgr</Filter>
+    </ClCompile>
+    <ClCompile Include="DlgSubRecipe.cpp">
+      <Filter>소스 파일\DIALOG\Sub</Filter>
+    </ClCompile>
+    <ClCompile Include="DlgSubAlarm.cpp">
+      <Filter>소스 파일\DIALOG\Sub</Filter>
+    </ClCompile>
+    <ClCompile Include="DlgSubConfig.cpp">
+      <Filter>소스 파일\DIALOG\Sub</Filter>
+    </ClCompile>
+    <ClCompile Include="DlgSubConfigLoginFile.cpp">
+      <Filter>소스 파일\DIALOG\Sub</Filter>
+    </ClCompile>
+    <ClCompile Include="DlgSubData.cpp">
+      <Filter>소스 파일\DIALOG\Sub</Filter>
+    </ClCompile>
+    <ClCompile Include="DlgSubLog.cpp">
+      <Filter>소스 파일\DIALOG\Sub</Filter>
+    </ClCompile>
+    <ClCompile Include="DlgSubLogFile.cpp">
+      <Filter>소스 파일\DIALOG\Sub</Filter>
+    </ClCompile>
+    <ClCompile Include="DlgSubMaint.cpp">
+      <Filter>소스 파일\DIALOG\Sub</Filter>
+    </ClCompile>
+    <ClCompile Include="DlgSubManual.cpp">
+      <Filter>소스 파일\DIALOG\Sub</Filter>
+    </ClCompile>
+  </ItemGroup>
+  <ItemGroup>
+    <ResourceCompile Include="ALPHA.rc">
+      <Filter>리소스 파일</Filter>
+    </ResourceCompile>
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="res\ALPHA.rc2">
+      <Filter>리소스 파일</Filter>
+    </None>
+    <None Include="..\..\CoreFunction\LogFunction\LogWrapper\spdlog\fmt\bundled\LICENSE.rst">
+      <Filter>CoreFunction\Func_Log\LogWrapper\spdlog\fmt\bundled</Filter>
+    </None>
+    <None Include="..\..\CoreFunction\MotorFunction\MotorCtrl_ACS\dll\ACSCL_x64.dll">
+      <Filter>CoreFunction\Func_Motion\ACS\dll</Filter>
+    </None>
+    <None Include="..\..\Doc\07_설계문서\03_SW설계문서.xlsx">
+      <Filter>문서 파일\07_설계문서</Filter>
+    </None>
+    <None Include="..\..\Doc\05_DR자료모음\HMI Stage Position 검토_211123.dwg">
+      <Filter>문서 파일\05_DR자료</Filter>
+    </None>
+    <None Include="..\..\Doc\01_SPEC\BOM\분판 CELL_AGING-검사기_알파-양산_(925150ASL-288M-LUKAS-M606S-GS1174-SACC)_BOM_211202_SW_NEW.xlsx">
+      <Filter>문서 파일\01_SPEC</Filter>
+    </None>
+    <None Include="..\..\Doc\01_SPEC\PC 견적서\IV5300-GX (AVI-M606s) 면계측 검사 2021-12-02.pdf">
+      <Filter>문서 파일\01_SPEC</Filter>
+    </None>
+    <None Include="..\..\Doc\01_SPEC\PC 견적서\IL4100-G3 (HBS-CIM) - 2021-12-02.pdf">
+      <Filter>문서 파일\01_SPEC</Filter>
+    </None>
+    <None Include="..\..\Doc\01_SPEC\PC 견적서\IH5000-G2 (AVI-29M) 2021-12-02.pdf">
+      <Filter>문서 파일\01_SPEC</Filter>
+    </None>
+    <None Include="..\..\Doc\01_SPEC\PC 견적서\IH5000-G2 (AVI-12M) 2021-12-02.pdf">
+      <Filter>문서 파일\01_SPEC</Filter>
+    </None>
+    <None Include="..\..\Doc\06_SCHEDULE\분판 CELL 알파검사기 제작 Schedule_20211207.xlsx">
+      <Filter>문서 파일\06_SCHEDULE</Filter>
+    </None>
+    <None Include="..\..\Doc\07_설계문서\분판 CELL Axis Name_211201.pptx">
+      <Filter>문서 파일\07_설계문서</Filter>
+    </None>
+    <None Include="..\..\Doc\07_설계문서\제어기 견적_분판 CELL(20211118).xlsx">
+      <Filter>문서 파일\07_설계문서</Filter>
+    </None>
+    <None Include="..\..\Doc\07_설계문서\HBS_분판 CELL 검사기 SW 대응 자료.pptx">
+      <Filter>문서 파일\07_설계문서</Filter>
+    </None>
+    <None Include="..\..\Doc\07_설계문서\SDC 분판 Cell _M-Memory Map.xlsx">
+      <Filter>문서 파일\07_설계문서</Filter>
+    </None>
+    <None Include="ConfigurationFile\CoreFunction\IOMapConfig\SACC.csv">
+      <Filter>ConfigurationFile\IOMapConfig</Filter>
+    </None>
+    <None Include="ConfigurationFile\CoreFunction\IOMapConfig\ProbeCard.csv">
+      <Filter>ConfigurationFile\IOMapConfig</Filter>
+    </None>
+    <None Include="ConfigurationFile\CoreFunction\IOMapConfig\M.csv">
+      <Filter>ConfigurationFile\IOMapConfig</Filter>
+    </None>
+    <None Include="ConfigurationFile\CoreFunction\IOMapConfig\F.csv">
+      <Filter>ConfigurationFile\IOMapConfig</Filter>
+    </None>
+    <None Include="ConfigurationFile\CoreFunction\IOMapConfig\D.csv">
+      <Filter>ConfigurationFile\IOMapConfig</Filter>
+    </None>
+    <None Include="ConfigurationFile\CoreFunction\IOMapConfig\PLC_READY.csv">
+      <Filter>ConfigurationFile\IOMapConfig</Filter>
+    </None>
+    <None Include="ConfigurationFile\CoreFunction\IOMapConfig\PLC_MEAS.csv">
+      <Filter>ConfigurationFile\IOMapConfig</Filter>
+    </None>
+    <None Include="ConfigurationFile\CoreFunction\IOMapConfig\PLC_LOAD.csv">
+      <Filter>ConfigurationFile\IOMapConfig</Filter>
+    </None>
+    <None Include="ConfigurationFile\CoreFunction\MotorConfig\Config_Motion_ACS.dat">
+      <Filter>ConfigurationFile\MotorConfig</Filter>
+    </None>
+    <None Include="ConfigurationFile\CoreFunction\AlarmConfig\Alarm.dat">
+      <Filter>ConfigurationFile\AlarmConfig</Filter>
+    </None>
+    <None Include="ConfigurationFile\CoreFunction\AlarmConfig\Alarm.xls">
+      <Filter>ConfigurationFile\AlarmConfig</Filter>
+    </None>
+    <None Include="ConfigurationFile\CoreFunction\AlarmConfig\AlarmMessage.csv">
+      <Filter>ConfigurationFile\AlarmConfig</Filter>
+    </None>
+    <None Include="ConfigurationFile\CoreFunction\AlarmConfig\AlarmMessage.dat">
+      <Filter>ConfigurationFile\AlarmConfig</Filter>
+    </None>
+    <None Include="ConfigurationFile\CoreFunction\AlarmConfig\ReportSource.mdb">
+      <Filter>ConfigurationFile\AlarmConfig</Filter>
+    </None>
+    <None Include="ConfigurationFile\AutoFocus.ini">
+      <Filter>ConfigurationFile\Config_Bin</Filter>
+    </None>
+    <None Include="ConfigurationFile\Config.ini">
+      <Filter>ConfigurationFile\Config_Bin</Filter>
+    </None>
+    <None Include="ConfigurationFile\Config_MCC.ini">
+      <Filter>ConfigurationFile\Config_Bin</Filter>
+    </None>
+    <None Include="ConfigurationFile\FTP_CIM.ini">
+      <Filter>ConfigurationFile\Config_Bin</Filter>
+    </None>
+    <None Include="ConfigurationFile\LoginInfo.ini">
+      <Filter>ConfigurationFile\Config_Bin</Filter>
+    </None>
+    <None Include="ConfigurationFile\MeasureItem.ini">
+      <Filter>ConfigurationFile\Config_Bin</Filter>
+    </None>
+    <None Include="ConfigurationFile\Network.ini">
+      <Filter>ConfigurationFile\Config_Bin</Filter>
+    </None>
+    <None Include="ConfigurationFile\Position.ini">
+      <Filter>ConfigurationFile\Config_Bin</Filter>
+    </None>
+    <None Include="ConfigurationFile\SystemConfig.ini">
+      <Filter>ConfigurationFile\Config_Bin</Filter>
+    </None>
+    <None Include="ConfigurationFile\VisionConfig.ini">
+      <Filter>ConfigurationFile\Config_Bin</Filter>
+    </None>
+    <None Include="ConfigurationFile\CoreFunction\CoreFunction.ini">
+      <Filter>ConfigurationFile</Filter>
+    </None>
+    <None Include="ConfigurationFile\CoreFunction\IOMapConfig\PLCMAdress.csv">
+      <Filter>ConfigurationFile\IOMapConfig</Filter>
+    </None>
+    <None Include="ConfigurationFile\CoreFunction\IOMapConfig\PLCMAdress_정리.xlsx">
+      <Filter>ConfigurationFile\IOMapConfig</Filter>
+    </None>
+    <None Include="..\..\Doc\07_설계문서\MCC SUMMARY SHEET(HB솔루션_HMI)2022.01.24.xlsx">
+      <Filter>문서 파일\07_설계문서</Filter>
+    </None>
+    <None Include="ClassDiagram2.cd" />
+    <None Include="..\..\Doc\07_설계문서\HBS_분판 CELL 검사기 SW 대응 자료_PC구성.pptx">
+      <Filter>문서 파일\07_설계문서</Filter>
+    </None>
+    <None Include="..\..\Doc\05_DR자료모음\SDC HMI 광학계 거리 정보_220214.pptx">
+      <Filter>문서 파일\05_DR자료</Filter>
+    </None>
+    <None Include="..\..\CoreFunction\LightFunction\CAS\Manual\CVT-Emini Series Protocol Manual(kor).pdf">
+      <Filter>CoreFunction\Func_LightControler\CAS</Filter>
+    </None>
+    <None Include="..\..\CoreFunction\LightFunction\XCITE\Manual\035-00425R05 X-Cite Products Software Development Kit-SDK(Mktg ONLY).pdf">
+      <Filter>CoreFunction\Func_LightControler\XCITE</Filter>
+    </None>
+    <None Include="ConfigurationFile\GlassInfo.ini">
+      <Filter>ConfigurationFile\Config_Bin</Filter>
+    </None>
+  </ItemGroup>
+  <ItemGroup>
+    <Image Include="res\ALPHA.ico">
+      <Filter>리소스 파일</Filter>
+    </Image>
+    <Image Include="res\logo.bmp">
+      <Filter>리소스 파일</Filter>
+    </Image>
+    <Image Include="res\bitmap1.bmp">
+      <Filter>리소스 파일</Filter>
+    </Image>
+    <Image Include="res\Navigator\Menu_d.bmp">
+      <Filter>리소스 파일</Filter>
+    </Image>
+    <Image Include="res\Navigator\Menu_dis.bmp">
+      <Filter>리소스 파일</Filter>
+    </Image>
+    <Image Include="res\Navigator\Menu_u.bmp">
+      <Filter>리소스 파일</Filter>
+    </Image>
+    <Image Include="res\Navigator\cycle_icon.ico">
+      <Filter>리소스 파일</Filter>
+    </Image>
+    <Image Include="res\Navigator\pause_icon.ico">
+      <Filter>리소스 파일</Filter>
+    </Image>
+    <Image Include="res\Navigator\resume_icon.ico">
+      <Filter>리소스 파일</Filter>
+    </Image>
+    <Image Include="res\Navigator\stop_icon.ico">
+      <Filter>리소스 파일</Filter>
+    </Image>
+    <Image Include="res\Warning\no_touch.bmp">
+      <Filter>리소스 파일</Filter>
+    </Image>
+    <Image Include="res\navigator\bitmap1.bmp">
+      <Filter>리소스 파일</Filter>
+    </Image>
+    <Image Include="res\Bitmap\bmpArrow00001.bmp">
+      <Filter>리소스 파일</Filter>
+    </Image>
+    <Image Include="res\Bitmap\bmpArrow00002.bmp">
+      <Filter>리소스 파일</Filter>
+    </Image>
+    <Image Include="res\Bitmap\bmpArrow00003.bmp">
+      <Filter>리소스 파일</Filter>
+    </Image>
+    <Image Include="res\Bitmap\bmpArrow00004.bmp">
+      <Filter>리소스 파일</Filter>
+    </Image>
+    <Image Include="res\Bitmap\btn_redg.bmp">
+      <Filter>리소스 파일</Filter>
+    </Image>
+    <Image Include="res\Bitmap\bmpArrow00005.bmp">
+      <Filter>리소스 파일</Filter>
+    </Image>
+    <Image Include="res\check32.bmp">
+      <Filter>리소스 파일</Filter>
+    </Image>
+    <Image Include="res\checkno32.bmp">
+      <Filter>리소스 파일</Filter>
+    </Image>
+  </ItemGroup>
+  <ItemGroup>
+    <Library Include="..\..\CoreFunction\MotorFunction\MotorCtrl_ACS\lib\ACSCL_x64.LIB">
+      <Filter>CoreFunction\Func_Motion\ACS\Lib</Filter>
+    </Library>
+    <Library Include="..\..\CoreFunction\common\FarPoint64\Lib\SPR64DU80.lib">
+      <Filter>CoreFunction\Common\FPSpreadDll</Filter>
+    </Library>
+    <Library Include="..\..\CoreFunction\common\NI\x64\Lib\imaq.lib">
+      <Filter>CoreFunction\Common\NI\Lib</Filter>
+    </Library>
+    <Library Include="..\..\CoreFunction\common\NI\x64\Lib\niimaqdx.lib">
+      <Filter>CoreFunction\Common\NI\Lib</Filter>
+    </Library>
+    <Library Include="..\..\CoreFunction\common\NI\x64\Lib\nivision.lib">
+      <Filter>CoreFunction\Common\NI\Lib</Filter>
+    </Library>
+  </ItemGroup>
+  <ItemGroup>
+    <Text Include="ToDo.txt">
+      <Filter>문서 파일</Filter>
+    </Text>
+  </ItemGroup>
+</Project>

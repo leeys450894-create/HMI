@@ -1,0 +1,819 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>테스트 모드 (IDD_DLG_TEST_MODE) - 기능 요약</title>
+<style>
+  :root {
+    --primary: #1a56db;
+    --primary-light: #e8effc;
+    --success: #059669;
+    --success-light: #d1fae5;
+    --warning: #d97706;
+    --warning-light: #fef3c7;
+    --danger: #dc2626;
+    --danger-light: #fee2e2;
+    --purple: #7c3aed;
+    --purple-light: #ede9fe;
+    --teal: #0d9488;
+    --teal-light: #ccfbf1;
+    --gray-50: #f9fafb;
+    --gray-100: #f3f4f6;
+    --gray-200: #e5e7eb;
+    --gray-300: #d1d5db;
+    --gray-500: #6b7280;
+    --gray-700: #374151;
+    --gray-900: #111827;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    font-family: 'Segoe UI', 'Malgun Gothic', sans-serif;
+    background: var(--gray-50);
+    color: var(--gray-900);
+    line-height: 1.6;
+  }
+  .container { max-width: 1100px; margin: 0 auto; padding: 40px 24px; }
+
+  /* Header */
+  .header {
+    background: linear-gradient(135deg, #312e81, #4f46e5);
+    color: white;
+    padding: 48px 40px;
+    border-radius: 16px;
+    margin-bottom: 36px;
+    box-shadow: 0 4px 20px rgba(79,70,229,0.3);
+  }
+  .header h1 { font-size: 2.2rem; font-weight: 700; margin-bottom: 8px; }
+  .header .subtitle { font-size: 1.1rem; opacity: 0.85; }
+  .header .meta { margin-top: 16px; font-size: 0.85rem; opacity: 0.7; display: flex; gap: 24px; }
+
+  /* Section */
+  .section {
+    background: white;
+    border-radius: 12px;
+    padding: 32px;
+    margin-bottom: 24px;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.08);
+    border: 1px solid var(--gray-200);
+  }
+  .section h2 {
+    font-size: 1.35rem;
+    color: var(--primary);
+    margin-bottom: 20px;
+    padding-bottom: 10px;
+    border-bottom: 2px solid var(--primary-light);
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+  .section h2 .num {
+    background: var(--primary);
+    color: white;
+    width: 30px; height: 30px;
+    border-radius: 50%;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 0.85rem;
+    flex-shrink: 0;
+  }
+  .section h3 {
+    font-size: 1.05rem;
+    color: var(--gray-700);
+    margin: 20px 0 10px;
+  }
+
+  /* Flow Chart */
+  .flow {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 0;
+    margin: 24px 0;
+  }
+  .flow-node {
+    padding: 10px 20px;
+    border-radius: 8px;
+    font-size: 0.88rem;
+    font-weight: 600;
+    text-align: center;
+    min-width: 180px;
+  }
+  .flow-node.start { background: var(--primary); color: white; border-radius: 24px; }
+  .flow-node.process { background: var(--primary-light); color: var(--primary); border: 2px solid var(--primary); }
+  .flow-node.decision { background: var(--warning-light); color: #92400e; border: 2px solid var(--warning); border-radius: 4px; min-width: 200px; }
+  .flow-node.success { background: var(--success-light); color: #065f46; border: 2px solid var(--success); }
+  .flow-node.danger { background: var(--danger-light); color: #991b1b; border: 2px solid var(--danger); }
+  .flow-node.gray { background: var(--gray-100); color: var(--gray-700); border: 2px solid var(--gray-300); }
+  .flow-node.purple { background: var(--purple-light); color: var(--purple); border: 2px solid var(--purple); }
+  .flow-node.teal { background: var(--teal-light); color: #134e4a; border: 2px solid var(--teal); }
+  .flow-arrow { display: flex; flex-direction: column; align-items: center; color: var(--gray-500); font-size: 0.75rem; padding: 2px 0; }
+  .flow-arrow .line { width: 2px; height: 20px; background: var(--gray-400); }
+  .flow-arrow .tri { font-size: 0.7rem; line-height: 1; }
+  .flow-label { font-size: 0.72rem; color: var(--gray-500); margin: 0 4px; white-space: nowrap; }
+  .flow-branch { display: flex; align-items: flex-start; justify-content: center; gap: 20px; }
+  .flow-branch-col { display: flex; flex-direction: column; align-items: center; gap: 0; }
+
+  /* Table */
+  table { width: 100%; border-collapse: collapse; font-size: 0.88rem; margin: 12px 0; }
+  th { background: var(--gray-100); text-align: left; padding: 10px 14px; font-weight: 600; border-bottom: 2px solid var(--gray-200); color: var(--gray-700); }
+  td { padding: 10px 14px; border-bottom: 1px solid var(--gray-100); }
+  tr:hover td { background: var(--gray-50); }
+
+  /* Card Grid */
+  .card-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin: 16px 0; }
+  .card-grid.col3 { grid-template-columns: 1fr 1fr 1fr; }
+  .card-grid.col4 { grid-template-columns: 1fr 1fr 1fr 1fr; }
+  .card {
+    border: 1px solid var(--gray-200);
+    border-radius: 10px;
+    padding: 18px;
+    background: var(--gray-50);
+  }
+  .card h4 { font-size: 0.95rem; margin-bottom: 8px; color: var(--gray-700); }
+  .card p, .card li { font-size: 0.85rem; color: var(--gray-500); }
+  .card ul { list-style: none; padding: 0; }
+  .card ul li { padding: 3px 0; }
+  .card ul li::before { content: "- "; color: var(--gray-300); }
+
+  /* Badge */
+  .badge { display: inline-block; padding: 2px 10px; border-radius: 12px; font-size: 0.75rem; font-weight: 600; }
+  .badge.blue { background: var(--primary-light); color: var(--primary); }
+  .badge.green { background: var(--success-light); color: #065f46; }
+  .badge.purple { background: var(--purple-light); color: var(--purple); }
+  .badge.teal { background: var(--teal-light); color: #134e4a; }
+  .badge.orange { background: var(--warning-light); color: #92400e; }
+
+  /* Code block */
+  .code-block {
+    background: #1e293b;
+    color: #e2e8f0;
+    border-radius: 10px;
+    padding: 20px 24px;
+    font-family: 'Consolas', 'D2Coding', monospace;
+    font-size: 0.82rem;
+    line-height: 1.8;
+    margin: 12px 0;
+    overflow-x: auto;
+  }
+  .code-block .kw { color: #c084fc; }
+  .code-block .fn { color: #60a5fa; }
+  .code-block .str { color: #fde68a; }
+  .code-block .cmt { color: #64748b; }
+  .code-block .num { color: #34d399; }
+  .code-block .type { color: #f472b6; }
+
+  /* Note */
+  .note { background: #fffbeb; border-left: 4px solid var(--warning); padding: 14px 18px; border-radius: 0 8px 8px 0; font-size: 0.85rem; color: #92400e; margin: 16px 0; }
+  .note.info { background: #eff6ff; border-left-color: var(--primary); color: #1e40af; }
+
+  /* UI Mockup */
+  .ui-mockup {
+    border: 2px solid var(--gray-300);
+    border-radius: 10px;
+    padding: 16px;
+    background: var(--gray-100);
+    margin: 16px 0;
+    font-size: 0.82rem;
+  }
+  .ui-mockup .title-bar {
+    background: var(--gray-700);
+    color: white;
+    padding: 6px 12px;
+    border-radius: 6px 6px 0 0;
+    font-weight: 600;
+    margin: -16px -16px 12px -16px;
+    font-size: 0.85rem;
+  }
+  .ui-row { display: flex; align-items: center; gap: 10px; margin-bottom: 10px; flex-wrap: wrap; }
+  .ui-radio { display: inline-flex; align-items: center; gap: 4px; padding: 4px 10px; background: white; border: 1px solid var(--gray-300); border-radius: 6px; font-size: 0.78rem; }
+  .ui-radio.active { background: var(--primary-light); border-color: var(--primary); color: var(--primary); font-weight: 600; }
+  .ui-radio.disabled { background: var(--gray-200); color: var(--gray-500); }
+  .ui-btn { padding: 6px 16px; border-radius: 6px; font-size: 0.78rem; font-weight: 600; border: none; cursor: pointer; }
+  .ui-btn.blue { background: var(--primary); color: white; }
+  .ui-btn.green { background: var(--success); color: white; }
+  .ui-btn.orange { background: var(--warning); color: white; }
+  .ui-btn.red { background: var(--danger); color: white; }
+  .ui-btn.gray { background: var(--gray-500); color: white; }
+  .ui-grid {
+    display: grid;
+    grid-template-columns: repeat(6, 1fr);
+    gap: 2px;
+    background: var(--gray-300);
+    border: 2px solid var(--gray-400);
+    border-radius: 6px;
+    overflow: hidden;
+    margin: 8px 0;
+  }
+  .ui-cell {
+    background: white;
+    padding: 6px 4px;
+    text-align: center;
+    font-size: 0.72rem;
+    font-weight: 500;
+  }
+  .ui-cell.selected { background: #87ceea; font-weight: 700; }
+  .ui-cell.disabled { background: var(--gray-200); color: var(--gray-400); }
+  .ui-label { font-size: 0.78rem; color: var(--gray-500); padding: 4px 8px; background: white; border: 1px solid var(--gray-200); border-radius: 4px; }
+
+  /* Dual Architecture */
+  .arch-split {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 20px;
+    margin: 16px 0;
+  }
+  .arch-box {
+    border: 2px solid var(--gray-200);
+    border-radius: 12px;
+    padding: 20px;
+    background: white;
+  }
+  .arch-box h4 {
+    font-size: 1rem;
+    margin-bottom: 12px;
+    padding-bottom: 8px;
+    border-bottom: 2px solid;
+  }
+  .arch-box.dll h4 { color: var(--purple); border-bottom-color: var(--purple-light); }
+  .arch-box.app h4 { color: var(--teal); border-bottom-color: var(--teal-light); }
+
+  /* Step indicator */
+  .step-row {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    margin: 6px 0;
+    font-size: 0.85rem;
+  }
+  .step-num {
+    width: 24px; height: 24px;
+    border-radius: 50%;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 0.72rem;
+    font-weight: 700;
+    color: white;
+    flex-shrink: 0;
+  }
+
+  .footer { text-align: center; padding: 24px; color: var(--gray-500); font-size: 0.8rem; }
+
+  @media print {
+    body { background: white; }
+    .container { padding: 0; }
+    .section { break-inside: avoid; box-shadow: none; border: 1px solid #ddd; }
+    .header { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+  }
+</style>
+</head>
+<body>
+<div class="container">
+
+<!-- ======== HEADER ======== -->
+<div class="header">
+  <h1>테스트 모드 (TEST MODE)</h1>
+  <div class="subtitle">IDD_DLG_TEST_MODE - 수동 셀 이동 및 프로브 접촉 기능</div>
+  <div class="meta">
+    <span>Dialog ID: IDD_DLG_TEST_MODE (2006)</span>
+    <span>프로젝트: ALPHA HMI</span>
+    <span>작성자: LYS</span>
+  </div>
+</div>
+
+<!-- ======== 1. 개요 ======== -->
+<div class="section">
+  <h2><span class="num">1</span> 개요</h2>
+  <p style="font-size:0.95rem; margin-bottom:16px;">
+    테스트 모드는 엔지니어가 <strong>Glass 그리드에서 셀을 수동으로 선택</strong>하여
+    스테이지/헤드 이동 및 프로브 접촉 동작을 실행할 수 있는 기능입니다.
+    <strong>자동 시퀀스를 실행하지 않고</strong> 디버깅 및 캘리브레이션 목적으로 사용됩니다.
+  </p>
+
+  <div class="card-grid col4">
+    <div class="card" style="border-left: 4px solid var(--primary);">
+      <h4>MOVE (이동)</h4>
+      <p>선택된 셀 위치로 스테이지 + 헤드 이동</p>
+    </div>
+    <div class="card" style="border-left: 4px solid var(--warning);">
+      <h4>PRE-CONTACT (사전접촉)</h4>
+      <p>프로브를 사전 접촉 위치로 접근</p>
+    </div>
+    <div class="card" style="border-left: 4px solid var(--success);">
+      <h4>CONTACT (접촉)</h4>
+      <p>프로브 완전 접촉 (End + OD)</p>
+    </div>
+    <div class="card" style="border-left: 4px solid var(--danger);">
+      <h4>UNCONTACT (접촉해제)</h4>
+      <p>프로브 후퇴</p>
+    </div>
+  </div>
+</div>
+
+<!-- ======== 2. UI 레이아웃 ======== -->
+<div class="section">
+  <h2><span class="num">2</span> 다이얼로그 UI 레이아웃</h2>
+
+  <div class="ui-mockup">
+    <div class="title-bar">TEST MODE (IDD_DLG_TEST_MODE) &mdash; 790 x 420</div>
+
+    <div class="ui-row">
+      <span style="font-size:0.78rem; font-weight:600; color:var(--gray-700);">스테이지:</span>
+      <span class="ui-radio disabled">&#9679; REAR STAGE (고정)</span>
+      <span style="width:20px;"></span>
+      <span style="font-size:0.78rem; font-weight:600; color:var(--gray-700);">모드:</span>
+      <span class="ui-radio active">&#9679; Review</span>
+      <span class="ui-radio">&#9675; WAD</span>
+      <span class="ui-radio">&#9675; Vision</span>
+      <span class="ui-radio">&#9675; Angle</span>
+      <span style="flex:1;"></span>
+      <span class="ui-btn gray">닫기</span>
+    </div>
+
+    <div style="display:flex; gap:16px;">
+      <div style="flex:1;">
+        <div style="font-size:0.72rem; color:var(--gray-500); margin-bottom:4px;">Glass 셀 그리드 (Stick x Cell)</div>
+        <div class="ui-grid">
+          <div class="ui-cell">A01</div><div class="ui-cell">A02</div><div class="ui-cell">A03</div>
+          <div class="ui-cell">A04</div><div class="ui-cell">A05</div><div class="ui-cell">A06</div>
+          <div class="ui-cell selected">B01</div><div class="ui-cell">B02</div><div class="ui-cell">B03</div>
+          <div class="ui-cell">B04</div><div class="ui-cell">B05</div><div class="ui-cell">B06</div>
+          <div class="ui-cell">C01</div><div class="ui-cell">C02</div><div class="ui-cell">C03</div>
+          <div class="ui-cell">C04</div><div class="ui-cell">C05</div><div class="ui-cell disabled">-</div>
+          <div class="ui-cell">D01</div><div class="ui-cell">D02</div><div class="ui-cell">D03</div>
+          <div class="ui-cell">D04</div><div class="ui-cell disabled">-</div><div class="ui-cell disabled">-</div>
+        </div>
+        <div style="font-size:0.72rem; color:var(--gray-400);">행 = Cell, 열 = Stick &nbsp;|&nbsp; 회색 = 비활성 &nbsp;|&nbsp; 파란색 = 선택됨</div>
+      </div>
+
+      <div style="display:flex; flex-direction:column; gap:8px; min-width:200px;">
+        <span class="ui-btn blue" style="text-align:center;">MOVE (이동)</span>
+        <div style="height:4px;"></div>
+        <span class="ui-btn orange" style="text-align:center;">PRE-CONTACT</span>
+        <span class="ui-btn green" style="text-align:center;">CONTACT</span>
+        <span class="ui-btn red" style="text-align:center;">UNCONTACT</span>
+        <div style="height:4px;"></div>
+        <span class="ui-label">선택됨: Stick 2, Cell 1</span>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ======== 3. 이중 구현 아키텍처 ======== -->
+<div class="section">
+  <h2><span class="num">3</span> 이중 구현 아키텍처</h2>
+  <p style="font-size:0.88rem; color:var(--gray-500); margin-bottom:16px;">
+    테스트 모드는 서로 다른 통신 경로를 사용하는 <strong>2개의 독립된 구현체</strong>가 존재합니다.
+  </p>
+
+  <div class="arch-split">
+    <div class="arch-box dll">
+      <h4>dfcRecipe DLL (IPC 방식)</h4>
+      <p style="font-size:0.82rem; color:var(--gray-500); margin-bottom:10px;">
+        <code>CoreFunction/dll_Recipe/dfcRecipe/DlgTestMode.cpp</code>
+      </p>
+      <div class="step-row"><span class="step-num" style="background:var(--purple);">1</span> <code>g_inRcpInfo</code>에서 레시피 읽기 (DLL 내부)</div>
+      <div class="step-row"><span class="step-num" style="background:var(--purple);">2</span> 위치 데이터를 <code>VTM_RECIPE</code> 공유 메모리에 패킹</div>
+      <div class="step-row"><span class="step-num" style="background:var(--purple);">3</span> <code>WM_RECIPE_EVENT</code> 메시지를 부모 윈도우에 전송</div>
+      <div class="step-row"><span class="step-num" style="background:var(--purple);">4</span> App 측 <code>CRecipeEditMgr</code>가 수신하여 모션 실행</div>
+    </div>
+    <div class="arch-box app">
+      <h4>Source/ALPHA (직접 호출 방식)</h4>
+      <p style="font-size:0.82rem; color:var(--gray-500); margin-bottom:10px;">
+        <code>Source/ALPHA/DlgTestMode.cpp</code>
+      </p>
+      <div class="step-row"><span class="step-num" style="background:var(--teal);">1</span> <code>CRecipeEditMgr</code>에서 레시피 직접 읽기</div>
+      <div class="step-row"><span class="step-num" style="background:var(--teal);">2</span> 프로세스 내에서 헤드 위치 계산</div>
+      <div class="step-row"><span class="step-num" style="background:var(--teal);">3</span> <code>CMaintControlMgr</code> 모션 API 직접 호출</div>
+      <div class="step-row"><span class="step-num" style="background:var(--teal);">4</span> 즉시 동기 결과 반환 및 상태 업데이트</div>
+    </div>
+  </div>
+
+  <div class="note info">
+    <strong>핵심 차이점:</strong> DLL 버전은 공유 메모리 + 윈도우 메시지(IPC)로 통신합니다.
+    ALPHA 버전은 매니저 API를 직접 호출합니다(인프로세스). 두 방식 모두 동일한 모터 동작을 수행합니다.
+  </div>
+</div>
+
+<!-- ======== 4. 동작 흐름 ======== -->
+<div class="section">
+  <h2><span class="num">4</span> 동작 흐름</h2>
+
+  <h3>4.1 다이얼로그 열기 및 그리드 생성</h3>
+  <div class="flow">
+    <div class="flow-node start">레시피 페이지: "TEST MODE" 버튼 클릭</div>
+    <div class="flow-arrow"><div class="line"></div><div class="tri">&#9660;</div></div>
+    <div class="flow-node process">CDlgTestMode::ShowWindow(SW_SHOW)</div>
+    <div class="flow-arrow"><div class="line"></div><div class="tri">&#9660;</div></div>
+    <div class="flow-node purple">g_outRcpInfo에 레시피 로드<br><small>GetRecipeMgr()->LoadRcpFile(strRcpName)</small></div>
+    <div class="flow-arrow"><div class="line"></div><div class="tri">&#9660;</div></div>
+    <div class="flow-node process">SetViewSelectCell() / PopulateCellGrid()</div>
+    <div class="flow-arrow"><div class="line"></div><div class="tri">&#9660;</div></div>
+    <div class="flow-node gray" style="min-width:300px;">
+      레시피 데이터로 그리드 생성<br>
+      <small>행 = Cell &nbsp;|&nbsp; 열 = Stick &nbsp;|&nbsp; 라벨 = CellID (A01, B02...)</small>
+    </div>
+    <div class="flow-arrow"><div class="line"></div><div class="tri">&#9660;</div></div>
+    <div class="flow-node success">기본 선택: (0, 0) 하늘색 하이라이트</div>
+  </div>
+
+  <h3>4.2 MOVE (이동) 동작</h3>
+  <div class="flow">
+    <div class="flow-node start">사용자: 그리드에서 셀 클릭 &rarr; 모드 선택 &rarr; MOVE 클릭</div>
+    <div class="flow-arrow"><div class="line"></div><div class="tri">&#9660;</div></div>
+    <div class="flow-node decision">셀이 선택되었는가?</div>
+    <div class="flow-arrow"><div class="line"></div><div class="tri">&#9660;</div></div>
+
+    <div class="flow-branch" style="gap:40px;">
+      <div class="flow-branch-col">
+        <div class="flow-label" style="color:var(--danger);">아니오</div>
+        <div class="flow-arrow"><div class="line"></div><div class="tri">&#9660;</div></div>
+        <div class="flow-node danger">오류: "셀을 먼저 선택하세요"</div>
+      </div>
+      <div class="flow-branch-col">
+        <div class="flow-label" style="color:var(--success);">예</div>
+        <div class="flow-arrow"><div class="line"></div><div class="tri">&#9660;</div></div>
+        <div class="flow-node process" style="min-width:280px;">
+          <strong>Step 1: ManualMoveStick</strong><br>
+          <small>프로브 UnContact (Z1~Z5 후퇴) &rarr; Sleep(500ms)</small>
+        </div>
+        <div class="flow-arrow"><div class="line"></div><div class="tri">&#9660;</div></div>
+        <div class="flow-node teal" style="min-width:280px;">
+          <strong>Step 2: 스테이지 이동</strong><br>
+          <small>AXIS_LOADER_R (회전) &rarr; AXIS_X (직선 이동)</small>
+        </div>
+        <div class="flow-arrow"><div class="line"></div><div class="tri">&#9660;</div></div>
+        <div class="flow-node purple" style="min-width:280px;">
+          <strong>Step 3: 헤드 이동 (모드별)</strong><br>
+          <small>2-헤드 페어링 + 모드별 Z 위치</small>
+        </div>
+        <div class="flow-arrow"><div class="line"></div><div class="tri">&#9660;</div></div>
+        <div class="flow-node success">상태: "Move OK - Stick X, Cell Y"</div>
+      </div>
+    </div>
+  </div>
+
+  <h3>4.3 CONTACT (접촉) 동작</h3>
+  <div class="flow">
+    <div class="flow-node start">사용자: PRE-CONTACT / CONTACT / UNCONTACT 클릭</div>
+    <div class="flow-arrow"><div class="line"></div><div class="tri">&#9660;</div></div>
+
+    <div class="flow-branch" style="gap:16px;">
+      <div class="flow-branch-col">
+        <div class="flow-node" style="background:var(--warning-light); color:#92400e; border:2px solid var(--warning); font-size:0.82rem; min-width:160px;">
+          <strong>PRE-CONTACT</strong><br>
+          <small>ProbeZ5 &rarr; 사전접촉위치<br>(SPEED_HIGH)</small>
+        </div>
+      </div>
+      <div class="flow-branch-col">
+        <div class="flow-node" style="background:var(--success-light); color:#065f46; border:2px solid var(--success); font-size:0.82rem; min-width:180px;">
+          <strong>CONTACT</strong><br>
+          <small>ProbeZ5 &rarr; 사전접촉위치<br>&rarr; 최종접촉위치 + OD<br>(HIGH &rarr; LOW 2단계)</small>
+        </div>
+      </div>
+      <div class="flow-branch-col">
+        <div class="flow-node" style="background:var(--danger-light); color:#991b1b; border:2px solid var(--danger); font-size:0.82rem; min-width:160px;">
+          <strong>UNCONTACT</strong><br>
+          <small>ProbeZ5 &rarr; 후퇴<br>(SPEED_HIGH)</small>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ======== 5. 모드 상세 ======== -->
+<div class="section">
+  <h2><span class="num">5</span> 테스트 모드 - 4가지 모드 (헤드 이동)</h2>
+
+  <table>
+    <thead>
+      <tr><th>모드</th><th>헤드 축</th><th>Z 위치</th><th>모션 API</th><th>용도</th></tr>
+    </thead>
+    <tbody>
+      <tr>
+        <td><span class="badge blue">0: Review</span></td>
+        <td>Y1, Y2, X2</td>
+        <td>Z2 = <strong>ReviewZ</strong><br>Z1 = SafetyZ2</td>
+        <td><code>MoveCmdPosReview()</code></td>
+        <td>육안 검토 위치</td>
+      </tr>
+      <tr>
+        <td><span class="badge green">1: WAD</span></td>
+        <td>Y1, Y2, X2</td>
+        <td>Z2 = <strong>SpecZ</strong><br>Z1 = SafetyZ2</td>
+        <td><code>MoveCmdPosWAD()</code></td>
+        <td>WAD 특성 측정 위치</td>
+      </tr>
+      <tr>
+        <td><span class="badge purple">2: Vision</span></td>
+        <td>Y3, Y4, X3</td>
+        <td>Z1 = <strong>QualityZ</strong><br>Z2 = SafetyZ1</td>
+        <td><code>MoveCmdPosVision()</code></td>
+        <td>화상 검사 위치</td>
+      </tr>
+      <tr>
+        <td><span class="badge orange">3: Angle</span></td>
+        <td>Y1, Y2, X2</td>
+        <td>Z2 = <strong>AngleZ</strong><br>Z1 = SafetyZ2</td>
+        <td><code>MoveCmdPosAngle()</code></td>
+        <td>시야각 측정 위치</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <div class="note">
+    <strong>2-헤드 페어링 로직:</strong> Y1/Y2 (또는 Y3/Y4)는 쌍(pair) 헤드입니다.
+    인접 셀 간 간격이 HeadGap보다 크면 두 헤드가 각각 다른 셀로 분리됩니다.
+    간격이 HeadGap 이하이면 두 헤드 모두 동일 셀 중심으로 수렴합니다.
+  </div>
+</div>
+
+<!-- ======== 6. 공유 메모리 (DLL) ======== -->
+<div class="section">
+  <h2><span class="num">6</span> DLL 공유 메모리 데이터 패킹</h2>
+  <p style="font-size:0.88rem; color:var(--gray-500); margin-bottom:12px;">
+    dfcRecipe DLL은 모든 위치 데이터를 <code>VTM_RECIPE::m_sRunState</code> 공유 메모리에 패킹한 후,
+    윈도우 메시지로 App에 신호를 보냅니다.
+  </p>
+
+  <div class="code-block">
+    <span class="cmt">// S_RecipeRunState 구조체 패킹</span><br>
+    <span class="type">m_dwData1</span> = <span class="str">M_CMD_TEST_MODE</span> <span class="cmt">// 명령 ID (0x19)</span><br>
+    <span class="type">m_dwData2</span> = <span class="num">0</span>=이동 | <span class="num">1</span>=사전접촉 | <span class="num">2</span>=접촉 | <span class="num">3</span>=접촉해제<br>
+    <span class="type">m_dwData3</span> = m_nTestMode <span class="cmt">// 0~3 (Review/WAD/Vision/Angle)</span><br>
+    <br>
+    <span class="cmt">// fData[] &mdash; double 정밀도 위치 데이터</span><br>
+    <span class="type">fData[0]</span> = Stick 인덱스 &nbsp; <span class="type">fData[1]</span> = Cell 인덱스<br>
+    <span class="type">fData[2]</span> = StageY &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; <span class="type">fData[3]</span> = StageR (회전)<br>
+    <span class="type">fData[4]</span> = CellX &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; <span class="type">fData[5]</span> = CellY<br>
+    <span class="type">fData[6]</span> = Stick0 StageY &nbsp; <span class="type">fData[7]</span> = Cell 개수<br>
+    <span class="type">fData[8]</span> = ReviewZ &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp; <span class="type">fData[9]</span> = SpecZ<br>
+    <span class="type">fData[10+]</span> = 전체 Cell X 위치 <span class="cmt">(2-헤드 페어링용)</span><br>
+    <br>
+    <span class="cmt">// nData[] &mdash; int 정밀도 (x1000 스케일)</span><br>
+    <span class="type">nData[0]</span> = QualityZ*1000 &nbsp; <span class="type">nData[1]</span> = AngleZ*1000<br>
+    <span class="type">nData[2]</span> = OffsetY*1000 &nbsp;&nbsp; <span class="type">nData[3]</span> = OffsetR*1000<br>
+    <span class="type">nData[4]</span> = HeadReviewY*1000<br>
+    <span class="type">nData[5]</span> = BackHeadGap*1000 &nbsp; <span class="type">nData[6]</span> = FrontHeadGap*1000<br>
+    <br>
+    <span class="cmt">// App에 신호 전송</span><br>
+    <span class="fn">::PostMessage</span>(m_hWnd, <span class="str">WM_RECIPE_EVENT</span>, <span class="str">M_RCP_TEST_MODE</span>, sub_cmd);
+  </div>
+</div>
+
+<!-- ======== 7. 모션 시퀀스 ======== -->
+<div class="section">
+  <h2><span class="num">7</span> MOVE 모션 시퀀스 (ManualMoveToCell)</h2>
+
+  <div class="flow">
+    <div class="flow-node start">ManualMoveToCell() 호출</div>
+    <div class="flow-arrow"><div class="line"></div><div class="tri">&#9660;</div></div>
+
+    <div class="flow-node danger" style="min-width:320px;">
+      <strong>Step 1: 프로브 UnContact (안전)</strong><br>
+      <small>AXIS_PROBE_Z1 ~ Z5 후퇴 (SPEED_HIGH)<br>Sleep(500ms) 기구 안정 대기</small>
+    </div>
+    <div class="flow-arrow"><div class="line"></div><div class="tri">&#9660;</div></div>
+
+    <div class="flow-node teal" style="min-width:320px;">
+      <strong>Step 2: 스테이지 이동 (ManualMoveStick)</strong><br>
+      <small>AXIS_LOADER_R &rarr; 대상 Stick 회전<br>AXIS_X &rarr; 대상 Stick Y위치 직선이동</small>
+    </div>
+    <div class="flow-arrow"><div class="line"></div><div class="tri">&#9660;</div></div>
+
+    <div class="flow-node purple" style="min-width:320px;">
+      <strong>Step 3: 헤드 위치 계산</strong><br>
+      <small>HeadX = CellY + GlassContactPos + OffsetX<br>Left/Right = 셀 경계 &plusmn; HeadGap (2-헤드 페어링)</small>
+    </div>
+    <div class="flow-arrow"><div class="line"></div><div class="tri">&#9660;</div></div>
+
+    <div class="flow-node decision" style="min-width:320px;">모드 선택?</div>
+    <div class="flow-arrow"><div class="line"></div><div class="tri">&#9660;</div></div>
+
+    <div class="flow-branch" style="gap:8px;">
+      <div class="flow-branch-col">
+        <div class="flow-label" style="font-weight:700; color:var(--primary);">Review</div>
+        <div class="flow-arrow"><div class="line"></div><div class="tri">&#9660;</div></div>
+        <div class="flow-node process" style="min-width:120px; font-size:0.78rem;">
+          Y1,Y2,X2<br>Z2=ReviewZ<br><small>MoveCmdPos<br>Review()</small>
+        </div>
+      </div>
+      <div class="flow-branch-col">
+        <div class="flow-label" style="font-weight:700; color:var(--success);">WAD</div>
+        <div class="flow-arrow"><div class="line"></div><div class="tri">&#9660;</div></div>
+        <div class="flow-node process" style="min-width:120px; font-size:0.78rem;">
+          Y1,Y2,X2<br>Z2=SpecZ<br><small>MoveCmdPos<br>WAD()</small>
+        </div>
+      </div>
+      <div class="flow-branch-col">
+        <div class="flow-label" style="font-weight:700; color:var(--purple);">Vision</div>
+        <div class="flow-arrow"><div class="line"></div><div class="tri">&#9660;</div></div>
+        <div class="flow-node process" style="min-width:120px; font-size:0.78rem;">
+          Y3,Y4,X3<br>Z1=QualityZ<br><small>MoveCmdPos<br>Vision()</small>
+        </div>
+      </div>
+      <div class="flow-branch-col">
+        <div class="flow-label" style="font-weight:700; color:var(--warning);">Angle</div>
+        <div class="flow-arrow"><div class="line"></div><div class="tri">&#9660;</div></div>
+        <div class="flow-node process" style="min-width:120px; font-size:0.78rem;">
+          Y1,Y2,X2<br>Z2=AngleZ<br><small>MoveCmdPos<br>Angle()</small>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ======== 8. 프로브 접촉 상세 ======== -->
+<div class="section">
+  <h2><span class="num">8</span> 프로브 접촉 메커니즘</h2>
+
+  <h3>접촉 위치 파라미터 (레시피 S_ContactPos)</h3>
+  <table>
+    <thead><tr><th>파라미터</th><th>변수명</th><th>설명</th></tr></thead>
+    <tbody>
+      <tr><td>대기 위치</td><td><code>m_fReadyPos</code></td><td>초기 안전 Z 높이</td></tr>
+      <tr><td>사전접촉 위치</td><td><code>m_fPreContactPos</code></td><td>접근 거리 (SPEED_HIGH로 이동)</td></tr>
+      <tr><td>최종접촉 위치</td><td><code>m_fEndContactPos</code></td><td>최종 접촉 깊이 (SPEED_LOW로 이동)</td></tr>
+      <tr><td>추가 OD</td><td><code>m_fAddOD</code></td><td>확실한 접촉을 위한 오버드라이브 거리</td></tr>
+    </tbody>
+  </table>
+
+  <h3>접촉 시퀀스</h3>
+  <div class="flow">
+    <div class="flow-branch" style="gap:24px; align-items:stretch;">
+      <div class="flow-branch-col" style="flex:1;">
+        <div class="flow-node" style="background:var(--warning-light); color:#92400e; border:2px solid var(--warning); width:100%;">
+          <strong>PRE-CONTACT (사전접촉)</strong>
+        </div>
+        <div class="flow-arrow"><div class="line"></div><div class="tri">&#9660;</div></div>
+        <div class="flow-node gray" style="width:100%; font-size:0.82rem;">
+          ProbeZ5 &rarr; 사전접촉위치<br>
+          <small>속도: HIGH (고속 접근)<br>OD: 0 (오버드라이브 없음)</small>
+        </div>
+        <div class="flow-arrow"><div class="line"></div><div class="tri">&#9660;</div></div>
+        <div class="flow-node success" style="width:100%; font-size:0.82rem;">
+          프로브가 표면 근처<br><small>(안전 접근 완료)</small>
+        </div>
+      </div>
+
+      <div class="flow-branch-col" style="flex:1;">
+        <div class="flow-node" style="background:var(--success-light); color:#065f46; border:2px solid var(--success); width:100%;">
+          <strong>CONTACT (2단계 접촉)</strong>
+        </div>
+        <div class="flow-arrow"><div class="line"></div><div class="tri">&#9660;</div></div>
+        <div class="flow-node gray" style="width:100%; font-size:0.82rem;">
+          1단계: ProbeZ5 &rarr; 사전접촉위치<br>
+          <small>속도: HIGH (고속 접근)</small>
+        </div>
+        <div class="flow-arrow"><div class="line"></div><div class="tri">&#9660;</div></div>
+        <div class="flow-node" style="background:var(--primary-light); color:var(--primary); border:2px solid var(--primary); width:100%; font-size:0.82rem;">
+          2단계: ProbeZ5 &rarr; 최종접촉위치 + OD<br>
+          <small>속도: LOW (정밀 접촉)</small>
+        </div>
+        <div class="flow-arrow"><div class="line"></div><div class="tri">&#9660;</div></div>
+        <div class="flow-node success" style="width:100%; font-size:0.82rem;">
+          프로브 접촉 완료<br><small>SACC 카운트 업데이트</small>
+        </div>
+      </div>
+
+      <div class="flow-branch-col" style="flex:1;">
+        <div class="flow-node" style="background:var(--danger-light); color:#991b1b; border:2px solid var(--danger); width:100%;">
+          <strong>UNCONTACT (접촉해제)</strong>
+        </div>
+        <div class="flow-arrow"><div class="line"></div><div class="tri">&#9660;</div></div>
+        <div class="flow-node gray" style="width:100%; font-size:0.82rem;">
+          ProbeZ5 &rarr; 후퇴<br>
+          <small>속도: HIGH (고속 후퇴)<br>이동량: PreContactPos 거리</small>
+        </div>
+        <div class="flow-arrow"><div class="line"></div><div class="tri">&#9660;</div></div>
+        <div class="flow-node success" style="width:100%; font-size:0.82rem;">
+          프로브 후퇴 완료<br><small>(안전 위치)</small>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="note">
+    <strong>OCP 플랫폼:</strong> 모든 프로브 접촉 동작은 <code>AXIS_PROBE_Z5</code>로만 리다이렉트됩니다 (단일 프로브 갠트리).
+    HMI 플랫폼은 Z1~Z5 5개 프로브를 사용합니다.
+  </div>
+</div>
+
+<!-- ======== 9. 레시피 데이터 흐름 ======== -->
+<div class="section">
+  <h2><span class="num">9</span> 레시피 데이터 흐름</h2>
+
+  <div class="flow">
+    <div class="flow-node start">테스트 모드 열기</div>
+    <div class="flow-arrow"><div class="line"></div><div class="tri">&#9660;</div></div>
+
+    <div class="flow-branch" style="gap:30px;">
+      <div class="flow-branch-col">
+        <div class="flow-label" style="font-weight:700; color:var(--purple);">DLL 경로</div>
+        <div class="flow-arrow"><div class="line"></div><div class="tri">&#9660;</div></div>
+        <div class="flow-node purple" style="font-size:0.82rem; min-width:220px;">
+          <code>g_inRcpInfo</code><br>
+          <small>DLL 내부 레시피 캐시<br>(읽기 전용 뷰)</small>
+        </div>
+        <div class="flow-arrow"><div class="line"></div><div class="tri">&#9660;</div></div>
+        <div class="flow-node purple" style="font-size:0.82rem; min-width:220px;">
+          ShowWindow 시 트리거:<br>
+          <code>g_outRcpInfo.LoadRcpFile()</code><br>
+          <small>App 측 캐시에 레시피 로드</small>
+        </div>
+        <div class="flow-arrow"><div class="line"></div><div class="tri">&#9660;</div></div>
+        <div class="flow-node purple" style="font-size:0.82rem; min-width:220px;">
+          <code>g_inRcpInfo</code>로 그리드 생성<br>
+          <small>GetStickCount(), GetCellCount(),<br>GetCellID(), GetStickItem()</small>
+        </div>
+        <div class="flow-arrow"><div class="line"></div><div class="tri">&#9660;</div></div>
+        <div class="flow-node purple" style="font-size:0.82rem; min-width:220px;">
+          버튼 클릭 &rarr; 공유메모리 패킹<br>
+          <small>VTM_RECIPE &rarr; WM_RECIPE_EVENT</small>
+        </div>
+      </div>
+
+      <div class="flow-branch-col">
+        <div class="flow-label" style="font-weight:700; color:var(--teal);">직접 경로</div>
+        <div class="flow-arrow"><div class="line"></div><div class="tri">&#9660;</div></div>
+        <div class="flow-node teal" style="font-size:0.82rem; min-width:220px;">
+          <code>CRecipeEditMgr</code><br>
+          <small>인프로세스 직접 접근<br>CAuroraMgr 경유</small>
+        </div>
+        <div class="flow-arrow"><div class="line"></div><div class="tri">&#9660;</div></div>
+        <div class="flow-node teal" style="font-size:0.82rem; min-width:220px;">
+          <code>GetRecipeData()</code><br>
+          <small>S_RecipeData: Stick, Cell,<br>위치, Z 높이</small>
+        </div>
+        <div class="flow-arrow"><div class="line"></div><div class="tri">&#9660;</div></div>
+        <div class="flow-node teal" style="font-size:0.82rem; min-width:220px;">
+          <code>m_vecStick[].m_vecCell[]</code>로 그리드 생성<br>
+          <small>구조체 직접 순회</small>
+        </div>
+        <div class="flow-arrow"><div class="line"></div><div class="tri">&#9660;</div></div>
+        <div class="flow-node teal" style="font-size:0.82rem; min-width:220px;">
+          버튼 클릭 &rarr; 매니저 API 직접 호출<br>
+          <small>CMaintControlMgr 직접</small>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <h3 style="margin-top:20px;">사용되는 주요 레시피 필드</h3>
+  <table>
+    <thead><tr><th>필드</th><th>출처</th><th>용도</th></tr></thead>
+    <tbody>
+      <tr><td><code>m_vecStick[i].m_fStageY</code></td><td>S_RecipeData</td><td>스테이지 Y축 이동 위치</td></tr>
+      <tr><td><code>m_vecStick[i].m_fStageR</code></td><td>S_RecipeData</td><td>스테이지 회전 위치</td></tr>
+      <tr><td><code>m_vecCell[j].m_fCellX/Y</code></td><td>S_RecipeData</td><td>Glass 위 Cell X/Y 좌표</td></tr>
+      <tr><td><code>m_sContactPos.m_fPreContactPos</code></td><td>S_RecipeInfo</td><td>사전접촉 Z 거리</td></tr>
+      <tr><td><code>m_sContactPos.m_fEndContactPos</code></td><td>S_RecipeInfo</td><td>최종접촉 Z 깊이</td></tr>
+      <tr><td><code>m_sContactPos.m_fAddOD</code></td><td>S_RecipeInfo</td><td>오버드라이브 거리</td></tr>
+      <tr><td><code>ReviewZ / SpecZ / QualityZ / AngleZ</code></td><td>S_RecipeInfo</td><td>측정 모드별 Z 높이</td></tr>
+      <tr><td><code>m_fBackHeadGap / m_fFrontHeadGap</code></td><td>S_OptionItem</td><td>2-헤드 페어링 간격</td></tr>
+    </tbody>
+  </table>
+</div>
+
+<!-- ======== 10. 클래스 의존 관계 ======== -->
+<div class="section">
+  <h2><span class="num">10</span> 클래스 및 매니저 의존 관계</h2>
+
+  <div class="code-block">
+    <span class="cmt">// Source/ALPHA 버전 - 매니저 직접 접근</span><br><br>
+    <span class="type">CDlgTestMode</span> (CDialogEx)<br>
+    &nbsp;&nbsp;├── <span class="fn">GetMaintCtrl()</span> &rarr; <span class="type">CMaintControlMgr</span><br>
+    &nbsp;&nbsp;│ &nbsp;&nbsp;&nbsp;&nbsp;├── <span class="fn">MoveCmdPosReview()</span> &nbsp;<span class="cmt">// Review 모드 모션</span><br>
+    &nbsp;&nbsp;│ &nbsp;&nbsp;&nbsp;&nbsp;├── <span class="fn">MoveCmdPosWAD()</span> &nbsp;&nbsp;&nbsp;&nbsp;<span class="cmt">// WAD 모드 모션</span><br>
+    &nbsp;&nbsp;│ &nbsp;&nbsp;&nbsp;&nbsp;├── <span class="fn">MoveCmdPosVision()</span> &nbsp;<span class="cmt">// Vision 모드 모션</span><br>
+    &nbsp;&nbsp;│ &nbsp;&nbsp;&nbsp;&nbsp;├── <span class="fn">MoveCmdPosAngle()</span> &nbsp;&nbsp;<span class="cmt">// Angle 모드 모션</span><br>
+    &nbsp;&nbsp;│ &nbsp;&nbsp;&nbsp;&nbsp;├── <span class="fn">MoveCmdPos_ProbeContact()</span> &nbsp;<span class="cmt">// 프로브 접촉</span><br>
+    &nbsp;&nbsp;│ &nbsp;&nbsp;&nbsp;&nbsp;├── <span class="fn">MoveCmdPos_ProbeUnContact()</span> <span class="cmt">// 프로브 접촉해제</span><br>
+    &nbsp;&nbsp;│ &nbsp;&nbsp;&nbsp;&nbsp;└── <span class="fn">MoveCmdPosA()</span> &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="cmt">// 단축 이동</span><br>
+    &nbsp;&nbsp;├── <span class="fn">GetRecipeEdit()</span> &rarr; <span class="type">CRecipeEditMgr</span><br>
+    &nbsp;&nbsp;│ &nbsp;&nbsp;&nbsp;&nbsp;├── <span class="fn">GetRecipeData()</span> &nbsp;&nbsp;<span class="cmt">// S_RecipeData (Stick/Cell 정보)</span><br>
+    &nbsp;&nbsp;│ &nbsp;&nbsp;&nbsp;&nbsp;└── <span class="fn">GetRecipeInfo()</span> &nbsp;&nbsp;<span class="cmt">// S_RecipeInfo (Z높이, 접촉 파라미터)</span><br>
+    &nbsp;&nbsp;└── <span class="fn">GetPosConfig()</span> &rarr; <span class="type">CPositionConfigMgr</span><br>
+    &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;└── <span class="fn">GetSafetyPosition()</span> <span class="cmt">// 안전 Z 한계값</span><br>
+    <br>
+    <span class="cmt">// dfcRecipe DLL 버전 - IPC 통신</span><br><br>
+    <span class="type">CDlgTestMode</span> (C_BaseDialog) &nbsp;<span class="cmt">// dfcRecipe.dll 내부</span><br>
+    &nbsp;&nbsp;├── <span class="type">g_inRcpInfo</span> &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="cmt">// DLL 측 레시피 (읽기)</span><br>
+    &nbsp;&nbsp;├── <span class="type">g_outRcpInfo</span> &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="cmt">// App 측 레시피 (Show 시 쓰기)</span><br>
+    &nbsp;&nbsp;├── <span class="type">VTM_RECIPE</span> &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="cmt">// 공유 메모리</span><br>
+    &nbsp;&nbsp;│ &nbsp;&nbsp;└── <span class="type">S_RecipeRunState</span> &nbsp;<span class="cmt">// 명령 + 위치 데이터</span><br>
+    &nbsp;&nbsp;└── <span class="fn">::PostMessage(WM_RECIPE_EVENT)</span> &rarr; <span class="type">CRecipeEditMgr</span> (App)<br>
+    &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;└── <span class="fn">OnRecipeEvent(M_CMD_TEST_MODE)</span> &rarr; 모션 실행
+  </div>
+</div>
+
+<!-- ======== FOOTER ======== -->
+<div class="footer">
+  ALPHA HMI - 테스트 모드 (IDD_DLG_TEST_MODE) 기능 요약 | LYS 2026-07
+</div>
+
+</div>
+</body>
+</html>

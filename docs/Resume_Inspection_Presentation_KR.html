@@ -1,0 +1,691 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>이어 검사 (Resume Inspection) - 기능 요약</title>
+<style>
+  :root {
+    --primary: #1a56db;
+    --primary-light: #e8effc;
+    --success: #059669;
+    --success-light: #d1fae5;
+    --warning: #d97706;
+    --warning-light: #fef3c7;
+    --danger: #dc2626;
+    --danger-light: #fee2e2;
+    --gray-50: #f9fafb;
+    --gray-100: #f3f4f6;
+    --gray-200: #e5e7eb;
+    --gray-300: #d1d5db;
+    --gray-500: #6b7280;
+    --gray-700: #374151;
+    --gray-900: #111827;
+  }
+
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  body {
+    font-family: 'Segoe UI', 'Malgun Gothic', sans-serif;
+    background: var(--gray-50);
+    color: var(--gray-900);
+    line-height: 1.6;
+  }
+
+  .container { max-width: 1100px; margin: 0 auto; padding: 40px 24px; }
+
+  /* Header */
+  .header {
+    background: linear-gradient(135deg, #1e3a8a, #1a56db);
+    color: white;
+    padding: 48px 40px;
+    border-radius: 16px;
+    margin-bottom: 36px;
+    box-shadow: 0 4px 20px rgba(26,86,219,0.3);
+  }
+  .header h1 { font-size: 2.2rem; font-weight: 700; margin-bottom: 8px; }
+  .header .subtitle { font-size: 1.1rem; opacity: 0.85; }
+  .header .meta { margin-top: 16px; font-size: 0.85rem; opacity: 0.7; display: flex; gap: 24px; }
+
+  /* Section */
+  .section {
+    background: white;
+    border-radius: 12px;
+    padding: 32px;
+    margin-bottom: 24px;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.08);
+    border: 1px solid var(--gray-200);
+  }
+  .section h2 {
+    font-size: 1.35rem;
+    color: var(--primary);
+    margin-bottom: 20px;
+    padding-bottom: 10px;
+    border-bottom: 2px solid var(--primary-light);
+    display: flex;
+    align-items: center;
+    gap: 10px;
+  }
+  .section h2 .num {
+    background: var(--primary);
+    color: white;
+    width: 30px; height: 30px;
+    border-radius: 50%;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 0.85rem;
+    flex-shrink: 0;
+  }
+  .section h3 {
+    font-size: 1.05rem;
+    color: var(--gray-700);
+    margin: 20px 0 10px;
+  }
+
+  /* Flow Chart */
+  .flow { display: flex; flex-direction: column; align-items: center; gap: 0; margin: 24px 0; }
+  .flow-node { padding: 10px 20px; border-radius: 8px; font-size: 0.88rem; font-weight: 600; text-align: center; min-width: 180px; }
+  .flow-node.start { background: var(--primary); color: white; border-radius: 24px; }
+  .flow-node.process { background: var(--primary-light); color: var(--primary); border: 2px solid var(--primary); }
+  .flow-node.decision { background: var(--warning-light); color: #92400e; border: 2px solid var(--warning); border-radius: 4px; min-width: 200px; }
+  .flow-node.success { background: var(--success-light); color: #065f46; border: 2px solid var(--success); }
+  .flow-node.danger { background: var(--danger-light); color: #991b1b; border: 2px solid var(--danger); }
+  .flow-node.gray { background: var(--gray-100); color: var(--gray-700); border: 2px solid var(--gray-300); }
+  .flow-arrow { display: flex; flex-direction: column; align-items: center; color: var(--gray-500); font-size: 0.75rem; padding: 2px 0; }
+  .flow-arrow .line { width: 2px; height: 20px; background: var(--gray-400); }
+  .flow-arrow .tri { font-size: 0.7rem; line-height: 1; }
+  .flow-label { font-size: 0.72rem; color: var(--gray-500); margin: 0 4px; white-space: nowrap; }
+  .flow-branch { display: flex; align-items: flex-start; justify-content: center; gap: 20px; }
+  .flow-branch-col { display: flex; flex-direction: column; align-items: center; gap: 0; }
+
+  /* Sequence */
+  .seq-container { margin: 16px 0; }
+  .seq-step { display: flex; align-items: center; gap: 12px; padding: 10px 16px; border-left: 3px solid var(--primary); margin-left: 16px; position: relative; }
+  .seq-step::before { content: ''; position: absolute; left: -8px; top: 50%; transform: translateY(-50%); width: 12px; height: 12px; background: var(--primary); border-radius: 50%; border: 2px solid white; box-shadow: 0 0 0 2px var(--primary); }
+  .seq-step.highlight { background: var(--warning-light); border-radius: 0 8px 8px 0; }
+  .seq-step.highlight::before { background: var(--warning); box-shadow: 0 0 0 2px var(--warning); }
+  .seq-step.active { background: var(--success-light); border-radius: 0 8px 8px 0; }
+  .seq-step.active::before { background: var(--success); box-shadow: 0 0 0 2px var(--success); }
+  .seq-num { font-weight: 700; font-size: 0.8rem; color: var(--gray-500); min-width: 24px; }
+  .seq-name { font-weight: 600; min-width: 110px; }
+  .seq-desc { font-size: 0.85rem; color: var(--gray-500); }
+  .seq-tag { font-size: 0.7rem; padding: 2px 8px; border-radius: 10px; font-weight: 600; margin-left: auto; white-space: nowrap; }
+  .seq-tag.skip { background: var(--warning-light); color: #92400e; }
+  .seq-tag.resume { background: var(--primary-light); color: var(--primary); }
+
+  /* Table */
+  table { width: 100%; border-collapse: collapse; font-size: 0.88rem; margin: 12px 0; }
+  th { background: var(--gray-100); text-align: left; padding: 10px 14px; font-weight: 600; border-bottom: 2px solid var(--gray-200); color: var(--gray-700); }
+  td { padding: 10px 14px; border-bottom: 1px solid var(--gray-100); }
+  tr:hover td { background: var(--gray-50); }
+
+  /* Card Grid */
+  .card-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; margin: 16px 0; }
+  .card { border: 1px solid var(--gray-200); border-radius: 10px; padding: 18px; background: var(--gray-50); }
+  .card h4 { font-size: 0.95rem; margin-bottom: 8px; color: var(--gray-700); }
+  .card p, .card li { font-size: 0.85rem; color: var(--gray-500); }
+  .card ul { list-style: none; padding: 0; }
+  .card ul li { padding: 3px 0; }
+  .card ul li::before { content: "- "; color: var(--gray-300); }
+
+  /* Badge */
+  .badge { display: inline-block; padding: 2px 10px; border-radius: 12px; font-size: 0.75rem; font-weight: 600; }
+  .badge.done { background: var(--success-light); color: #065f46; }
+  .badge.pending { background: var(--warning-light); color: #92400e; }
+  .badge.risk-low { background: var(--success-light); color: #065f46; }
+
+  /* INI block */
+  .ini-block { background: #1e293b; color: #e2e8f0; border-radius: 10px; padding: 20px 24px; font-family: 'Consolas', 'D2Coding', monospace; font-size: 0.82rem; line-height: 1.8; margin: 12px 0; overflow-x: auto; }
+  .ini-block .section-name { color: #60a5fa; }
+  .ini-block .key { color: #a5f3fc; }
+  .ini-block .val { color: #fde68a; }
+  .ini-block .comment { color: #64748b; }
+
+  /* Atomic Save Diagram */
+  .atomic-diagram { display: flex; align-items: center; justify-content: center; gap: 8px; flex-wrap: wrap; margin: 20px 0; padding: 20px; background: var(--gray-50); border-radius: 10px; border: 1px solid var(--gray-200); }
+  .atomic-step { padding: 10px 16px; border-radius: 8px; font-size: 0.82rem; font-weight: 600; text-align: center; }
+  .atomic-arrow { color: var(--gray-400); font-size: 1.2rem; }
+
+  /* Comparison */
+  .compare-row { display: grid; grid-template-columns: 1fr 20px 1fr; gap: 0; align-items: center; margin: 12px 0; }
+  .compare-box { padding: 16px; border-radius: 10px; font-size: 0.85rem; }
+  .compare-box.before { background: var(--danger-light); border: 1px solid #fca5a5; }
+  .compare-box.after { background: var(--success-light); border: 1px solid #6ee7b7; }
+  .compare-box h4 { margin-bottom: 6px; font-size: 0.9rem; }
+  .compare-vs { text-align: center; font-weight: 700; color: var(--gray-400); font-size: 0.8rem; }
+
+  .footer { text-align: center; padding: 24px; color: var(--gray-500); font-size: 0.8rem; }
+  .note { background: #fffbeb; border-left: 4px solid var(--warning); padding: 14px 18px; border-radius: 0 8px 8px 0; font-size: 0.85rem; color: #92400e; margin: 16px 0; }
+
+  @media print {
+    body { background: white; }
+    .container { padding: 0; }
+    .section { break-inside: avoid; box-shadow: none; border: 1px solid #ddd; }
+    .header { background: #1e3a8a !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+  }
+</style>
+</head>
+<body>
+
+<div class="container">
+
+<!-- ======== HEADER ======== -->
+<div class="header">
+  <h1>이어 검사 (Resume Inspection)</h1>
+  <div class="subtitle">ALPHA HMI - Glass 검사 이어 검사 기능</div>
+  <div class="meta">
+    <span>일자: 2026-07-03</span>
+    <span>상태: Phase 1~5, 7 완료</span>
+    <span>작성자: LYS</span>
+  </div>
+</div>
+
+<!-- ======== 1. 개요 ======== -->
+<div class="section">
+  <h2><span class="num">1</span> 개요</h2>
+  <p style="font-size:0.95rem; margin-bottom:16px;">
+    N-Stick 측정 루프 중 검사가 중단(NG, Cancel, 비정상 종료, 정전)되었을 때,
+    <strong>이어 검사(Resume Inspection)</strong> 기능은 Stick 단위로 진행 상황을 저장하여
+    다음 실행 시 중단 지점부터 검사를 이어서 수행할 수 있도록 합니다.
+  </p>
+
+  <div class="compare-row">
+    <div class="compare-box before">
+      <h4>기존 (AS-IS)</h4>
+      <p>Stick 30개 측정 진행 중<br>
+         Stick 15에서 이상 발생으로 중단<br>
+         <strong>다음 실행: Stick 0부터 처음부터 다시 시작</strong></p>
+    </div>
+    <div class="compare-vs">VS</div>
+    <div class="compare-box after">
+      <h4>변경 (TO-BE)</h4>
+      <p>Stick 30개 측정 진행 중<br>
+         Stick 15에서 이상 발생으로 중단<br>
+         <strong>다음 실행: 이어 검사 팝업 &rarr; Stick 16부터 재개</strong></p>
+    </div>
+  </div>
+</div>
+
+<!-- ======== 2. 자동 시퀀스 ======== -->
+<div class="section">
+  <h2><span class="num">2</span> 자동 시퀀스 (9단계) 및 Resume 포인트</h2>
+  <p style="font-size:0.88rem; color:var(--gray-500); margin-bottom:12px;">
+    Resume 관련 단계가 하이라이트 표시됩니다. 각 단계의 Resume 동작이 태그로 표시됩니다.
+  </p>
+  <div class="seq-container">
+    <div class="seq-step">
+      <span class="seq-num">[0]</span>
+      <span class="seq-name">Adsorption</span>
+      <span class="seq-desc">Glass 진공 흡착</span>
+    </div>
+    <div class="seq-step highlight">
+      <span class="seq-num">[1]</span>
+      <span class="seq-name">Recipe</span>
+      <span class="seq-desc">레시피 로드 + 결과 초기화(ResultClear)</span>
+      <span class="seq-tag skip">Resume: ResultClear 건너뛰기</span>
+    </div>
+    <div class="seq-step">
+      <span class="seq-num">[2]</span>
+      <span class="seq-name">GlassAlign</span>
+      <span class="seq-desc">패턴 서치, Theta/XY 보정</span>
+    </div>
+    <div class="seq-step">
+      <span class="seq-num">[3]</span>
+      <span class="seq-name">ProbeAlign</span>
+      <span class="seq-desc">프로브 패턴 매칭</span>
+    </div>
+    <div class="seq-step">
+      <span class="seq-num">[4]</span>
+      <span class="seq-name">PreMeas</span>
+      <span class="seq-desc">PAD 서치, Contact, OST, R-Test</span>
+    </div>
+    <div class="seq-step">
+      <span class="seq-num">[5]</span>
+      <span class="seq-name">AGING</span>
+      <span class="seq-desc">P1~P4 프로브 AGING</span>
+    </div>
+    <div class="seq-step active">
+      <span class="seq-num">[6]</span>
+      <span class="seq-name">Measure</span>
+      <span class="seq-desc">N-Stick 측정 루프 (핵심)</span>
+      <span class="seq-tag resume">Resume: LastStick+1 부터 시작</span>
+    </div>
+    <div class="seq-step">
+      <span class="seq-num">[7]</span>
+      <span class="seq-name">Result</span>
+      <span class="seq-desc">결과 저장, 판정</span>
+    </div>
+    <div class="seq-step">
+      <span class="seq-num">[8]</span>
+      <span class="seq-name">Unload</span>
+      <span class="seq-desc">안전 이동, CIM 통보</span>
+    </div>
+  </div>
+</div>
+
+<!-- ======== 3. Resume 판단 흐름도 ======== -->
+<div class="section">
+  <h2><span class="num">3</span> Resume 판단 흐름도</h2>
+
+  <div class="flow">
+    <div class="flow-node start">검사 시작 버튼 클릭 (DlgSubOperate)</div>
+    <div class="flow-arrow"><div class="line"></div><div class="tri">&#9660;</div></div>
+
+    <div class="flow-node decision">USE_RESUME_INSPECTION = ON?</div>
+    <div class="flow-arrow"><div class="line"></div><div class="tri">&#9660;</div></div>
+
+    <div class="flow-branch">
+      <div class="flow-branch-col">
+        <div class="flow-label" style="color:var(--danger);">OFF</div>
+        <div class="flow-arrow"><div class="line"></div><div class="tri">&#9660;</div></div>
+        <div class="flow-node gray">정상 시작 (Stick 0부터)</div>
+      </div>
+
+      <div class="flow-branch-col">
+        <div class="flow-label" style="color:var(--success);">ON</div>
+        <div class="flow-arrow"><div class="line"></div><div class="tri">&#9660;</div></div>
+        <div class="flow-node decision">ResumeInfo.ini 존재?<br>Running=true, 유효기간 내?</div>
+        <div class="flow-arrow"><div class="line"></div><div class="tri">&#9660;</div></div>
+
+        <div class="flow-branch">
+          <div class="flow-branch-col">
+            <div class="flow-label" style="color:var(--danger);">아니오</div>
+            <div class="flow-arrow"><div class="line"></div><div class="tri">&#9660;</div></div>
+            <div class="flow-node gray">정상 시작</div>
+          </div>
+
+          <div class="flow-branch-col">
+            <div class="flow-label" style="color:var(--success);">예</div>
+            <div class="flow-arrow"><div class="line"></div><div class="tri">&#9660;</div></div>
+            <div class="flow-node decision">ValidateResume<br>(RecipeID, TotalStick 일치?)</div>
+            <div class="flow-arrow"><div class="line"></div><div class="tri">&#9660;</div></div>
+
+            <div class="flow-branch">
+              <div class="flow-branch-col">
+                <div class="flow-label" style="color:var(--danger);">실패</div>
+                <div class="flow-arrow"><div class="line"></div><div class="tri">&#9660;</div></div>
+                <div class="flow-node danger">초기화 후 정상 시작</div>
+              </div>
+
+              <div class="flow-branch-col">
+                <div class="flow-label" style="color:var(--success);">성공</div>
+                <div class="flow-arrow"><div class="line"></div><div class="tri">&#9660;</div></div>
+                <div class="flow-node process" style="min-width:240px;">Resume 팝업 표시<br>(예 / 아니오 / 취소)</div>
+                <div class="flow-arrow"><div class="line"></div><div class="tri">&#9660;</div></div>
+
+                <div class="flow-branch" style="gap:12px;">
+                  <div class="flow-branch-col">
+                    <div class="flow-label" style="color:var(--success); font-weight:700;">예 (이어 검사)</div>
+                    <div class="flow-arrow"><div class="line"></div><div class="tri">&#9660;</div></div>
+                    <div class="flow-node success">이어 검사 시작<br>Stick (N+1)부터</div>
+                  </div>
+                  <div class="flow-branch-col">
+                    <div class="flow-label" style="color:var(--warning); font-weight:700;">아니오</div>
+                    <div class="flow-arrow"><div class="line"></div><div class="tri">&#9660;</div></div>
+                    <div class="flow-node gray">초기화 후<br>Stick 0부터</div>
+                  </div>
+                  <div class="flow-branch-col">
+                    <div class="flow-label" style="color:var(--danger); font-weight:700;">취소</div>
+                    <div class="flow-arrow"><div class="line"></div><div class="tri">&#9660;</div></div>
+                    <div class="flow-node danger">중단<br>(검사 시작 안 함)</div>
+                  </div>
+                </div>
+
+              </div>
+            </div>
+          </div>
+        </div>
+
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ======== 4. 저장 시점 흐름도 ======== -->
+<div class="section">
+  <h2><span class="num">4</span> Resume 저장 시점 흐름도</h2>
+
+  <div class="flow">
+    <div class="flow-node start">검사 시작</div>
+    <div class="flow-arrow"><div class="line"></div><div class="tri">&#9660;</div></div>
+    <div class="flow-node process">SaveResumeInfo (전체 저장)<br><small>LastStick=-1, Running=true, GlassID, RecipeID, ...</small></div>
+    <div class="flow-arrow"><div class="line"></div><div class="tri">&#9660;</div></div>
+    <div class="flow-node decision">Step[1] Recipe: IsResumeMode?</div>
+    <div class="flow-arrow"><div class="line"></div><div class="tri">&#9660;</div></div>
+
+    <div class="flow-branch" style="gap:40px;">
+      <div class="flow-branch-col">
+        <div class="flow-label" style="color:var(--success);">Resume=true</div>
+        <div class="flow-arrow"><div class="line"></div><div class="tri">&#9660;</div></div>
+        <div class="flow-node success">ResultClear 건너뛰기<br><small>(이전 결과 보존)</small></div>
+      </div>
+      <div class="flow-branch-col">
+        <div class="flow-label" style="color:var(--gray-500);">Resume=false</div>
+        <div class="flow-arrow"><div class="line"></div><div class="tri">&#9660;</div></div>
+        <div class="flow-node gray">ClearData() 정상 실행</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="flow" style="margin-top:24px;">
+    <div class="flow-node process" style="min-width:280px;">Step[6] Measure: N-Stick 루프<br><small>for (i = <strong>nStartStick</strong>; i &lt; total; i++)</small></div>
+    <div class="flow-arrow"><div class="line"></div><div class="tri">&#9660;</div></div>
+    <div class="flow-node success">Stick N 완료<br><small>UpdateStickProgress(N) - 경량 INI 갱신</small></div>
+    <div class="flow-arrow"><div class="line"></div><div class="tri">&#9660;</div></div>
+    <div class="flow-node process">Stick N+1 ...</div>
+    <div class="flow-arrow"><div class="line"></div><div class="tri">&#9660;</div></div>
+
+    <div class="flow-branch" style="gap:40px;">
+      <div class="flow-branch-col">
+        <div class="flow-label" style="color:var(--success); font-weight:700;">정상 완료</div>
+        <div class="flow-arrow"><div class="line"></div><div class="tri">&#9660;</div></div>
+        <div class="flow-node success">ClearResumeInfo()<br><small>INI 파일 삭제</small></div>
+      </div>
+      <div class="flow-branch-col">
+        <div class="flow-label" style="color:var(--danger); font-weight:700;">NG / Cancel / 강제 종료</div>
+        <div class="flow-arrow"><div class="line"></div><div class="tri">&#9660;</div></div>
+        <div class="flow-node danger">INI 파일 유지<br><small>Running=true, LastStick=N</small></div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- ======== 5. ResumeInfo.ini 구조 ======== -->
+<div class="section">
+  <h2><span class="num">5</span> ResumeInfo.ini 구조</h2>
+
+  <div class="ini-block">
+    <span class="section-name">[RESUME]</span><br>
+    <span class="comment">; --- 식별 정보 ---</span><br>
+    <span class="key">GlassID</span>=<span class="val">GLASS001</span><br>
+    <span class="key">RecipeID</span>=<span class="val">RCP_A01</span><br>
+    <span class="key">LotID</span>=<span class="val">LOT001</span><br>
+    <span class="key">InnerID</span>=<span class="val">143025</span><br>
+    <br>
+    <span class="comment">; --- 진행 상태 ---</span><br>
+    <span class="key">LastStick</span>=<span class="val">15</span>
+    <span class="comment">&nbsp;&nbsp;&nbsp;; 마지막 완료 Stick (0-based)</span><br>
+    <span class="key">TotalStick</span>=<span class="val">30</span>
+    <span class="comment">&nbsp;&nbsp;&nbsp;; 전체 Stick 수 (검증용)</span><br>
+    <span class="key">Running</span>=<span class="val">1</span>
+    <span class="comment">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;; 검사 진행 중</span><br>
+    <span class="key">Completed</span>=<span class="val">0</span>
+    <span class="comment">&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;; 검사 완료 여부</span><br>
+    <br>
+    <span class="comment">; --- 시간 / 경로 ---</span><br>
+    <span class="key">SaveTime</span>=<span class="val">20260703-150530</span><br>
+    <span class="key">StartTime</span>=<span class="val">20260703-140000</span><br>
+    <span class="key">InspDate</span>=<span class="val">20260703</span><br>
+    <span class="key">ResultPath</span>=<span class="val">D:\Result\</span><br>
+  </div>
+
+  <table>
+    <thead>
+      <tr><th>필드</th><th>타입</th><th>용도</th></tr>
+    </thead>
+    <tbody>
+      <tr><td><strong>GlassID</strong></td><td>String</td><td>Glass 식별자</td></tr>
+      <tr><td><strong>RecipeID</strong></td><td>String</td><td>Recipe 검증 키</td></tr>
+      <tr><td><strong>LastStick</strong></td><td>int</td><td>마지막 완료 Stick (0-based, -1=미시작)</td></tr>
+      <tr><td><strong>TotalStick</strong></td><td>int</td><td>전체 Stick 수 (교차 검증)</td></tr>
+      <tr><td><strong>Running / Completed</strong></td><td>bool</td><td>Resume 가능 여부 판단 플래그</td></tr>
+      <tr><td><strong>SaveTime</strong></td><td>String</td><td>최종 갱신 시간 (만료 체크용)</td></tr>
+      <tr><td><strong>ResultPath</strong></td><td>String</td><td>결과 폴더 경로 (raw 파일 위치)</td></tr>
+    </tbody>
+  </table>
+</div>
+
+<!-- ======== 6. Atomic Save ======== -->
+<div class="section">
+  <h2><span class="num">6</span> Atomic Save 메커니즘</h2>
+  <p style="font-size:0.88rem; color:var(--gray-500); margin-bottom:12px;">
+    비정상 종료에 안전한 저장 전략: 임시 파일 쓰기 + NTFS 원자적 이름 변경.
+  </p>
+
+  <div class="atomic-diagram">
+    <div class="atomic-step" style="background:var(--primary-light); color:var(--primary); border:2px solid var(--primary);">
+      WriteToFile<br><small>(.ini.tmp)</small>
+    </div>
+    <div class="atomic-arrow">&#10132;</div>
+    <div class="atomic-step" style="background:var(--warning-light); color:#92400e; border:2px solid var(--warning);">
+      PathFileExists<br><small>성공 검증</small>
+    </div>
+    <div class="atomic-arrow">&#10132;</div>
+    <div class="atomic-step" style="background:var(--danger-light); color:#991b1b; border:2px solid var(--danger);">
+      DeleteFile<br><small>(원본 삭제)</small>
+    </div>
+    <div class="atomic-arrow">&#10132;</div>
+    <div class="atomic-step" style="background:var(--success-light); color:#065f46; border:2px solid var(--success);">
+      MoveFile<br><small>(tmp &rarr; 원본)</small>
+    </div>
+  </div>
+
+  <div class="note">
+    <strong>안전성:</strong> WriteToFile 실패 시 원본 파일이 보존됩니다.
+    MoveFile 실패 시 CopyFile + DeleteFile(tmp)로 폴백합니다.
+  </div>
+</div>
+
+<!-- ======== 7. 설정 옵션 ======== -->
+<div class="section">
+  <h2><span class="num">7</span> SystemConfig.ini 설정 옵션</h2>
+
+  <div class="ini-block">
+    <span class="section-name">[OPT_PARA]</span><br>
+    <span class="key">USE_RESUME_INSPECTION</span>=<span class="val">0</span>
+    <span class="comment">&nbsp;&nbsp;&nbsp;; 0=OFF, 1=ON (Resume 기능 ON/OFF)</span><br>
+    <span class="key">RESUME_EXPIRE_HOURS</span>=<span class="val">0</span>
+    <span class="comment">&nbsp;&nbsp;&nbsp;&nbsp;; 0=무제한, 24=24시간 후 자동 폐기</span><br>
+  </div>
+
+  <div class="card-grid">
+    <div class="card">
+      <h4>USE_RESUME_INSPECTION</h4>
+      <ul>
+        <li><strong>0 (OFF)</strong>: 기능 비활성화, 기존 동작</li>
+        <li><strong>1 (ON)</strong>: 검사 시작 시 Resume 체크 활성화</li>
+      </ul>
+    </div>
+    <div class="card">
+      <h4>RESUME_EXPIRE_HOURS</h4>
+      <ul>
+        <li><strong>0</strong>: 만료 없음 (항상 이어 검사 가능)</li>
+        <li><strong>N</strong>: N시간 후 Resume 정보 자동 폐기</li>
+      </ul>
+    </div>
+  </div>
+</div>
+
+<!-- ======== 8. 구현 요약 ======== -->
+<div class="section">
+  <h2><span class="num">8</span> 구현 요약</h2>
+
+  <h3>추가 파일</h3>
+  <table>
+    <thead><tr><th>파일</th><th>역할</th></tr></thead>
+    <tbody>
+      <tr><td><code>Manager/ResumeInfoMgr.h</code></td><td>Resume 정보 관리 클래스 헤더</td></tr>
+      <tr><td><code>Manager/ResumeInfoMgr.cpp</code></td><td>Load / Save / Clear / Validate + Atomic Save + 만료 체크</td></tr>
+    </tbody>
+  </table>
+
+  <h3>수정 파일 (14개)</h3>
+  <table>
+    <thead><tr><th>파일</th><th>변경 내용</th><th>영향도</th></tr></thead>
+    <tbody>
+      <tr>
+        <td><code>AuroraMgrPool.h</code></td>
+        <td>CResumeInfoMgr* 포인터 + forward declare 추가</td>
+        <td><span class="badge risk-low">낮음</span></td>
+      </tr>
+      <tr>
+        <td><code>AuroraMgr.h / .cpp</code></td>
+        <td>ResumeInfoMgr 생성/소멸, getter, SetExpireHours</td>
+        <td><span class="badge risk-low">낮음</span></td>
+      </tr>
+      <tr>
+        <td><code>BaseSequenceBody.h</code></td>
+        <td>GetResumeInfoMgrPtr() getter 추가</td>
+        <td><span class="badge risk-low">낮음</span></td>
+      </tr>
+      <tr>
+        <td><code>SystemConfigMgr.h / .cpp</code></td>
+        <td>INI 키 2개 추가 (USE_RESUME / EXPIRE_HOURS)</td>
+        <td><span class="badge risk-low">낮음</span></td>
+      </tr>
+      <tr>
+        <td><code>SystemParamShare.h / .cpp</code></td>
+        <td>ResumeMode + ResumeStartStick 멤버 추가</td>
+        <td><span class="badge risk-low">낮음</span></td>
+      </tr>
+      <tr>
+        <td><code>DlgSubOperate.cpp</code></td>
+        <td>Resume 체크 팝업 + ValidateResume 호출</td>
+        <td><span class="badge risk-low">낮음</span></td>
+      </tr>
+      <tr>
+        <td><code>DoWorkGlassSequenceEngine.cpp</code></td>
+        <td>검사 시작 시 SaveResumeInfo, 완료 시 ClearResumeInfo</td>
+        <td><span class="badge risk-low">낮음</span></td>
+      </tr>
+      <tr>
+        <td><code>DoWorkGlassMeasure.cpp</code></td>
+        <td>Stick 루프 시작 인덱스 + Stick별 UpdateStickProgress</td>
+        <td><span class="badge risk-low">낮음</span></td>
+      </tr>
+      <tr>
+        <td><code>DoWorkGlassRecipeStep.cpp</code></td>
+        <td>Resume 모드 시 ResultClear 건너뛰기</td>
+        <td><span class="badge risk-low">낮음</span></td>
+      </tr>
+      <tr>
+        <td><code>ALPHA.vcxproj / .filters</code></td>
+        <td>프로젝트 등록</td>
+        <td><span class="badge risk-low">낮음</span></td>
+      </tr>
+    </tbody>
+  </table>
+
+  <h3>CResumeInfoMgr 주요 API</h3>
+  <table>
+    <thead><tr><th>메서드</th><th>용도</th><th>호출 시점</th></tr></thead>
+    <tbody>
+      <tr><td><code>SaveResumeInfo(...)</code></td><td>전체 저장 (9개 파라미터) + Atomic Write</td><td>검사 시작</td></tr>
+      <tr><td><code>UpdateStickProgress(N)</code></td><td>경량 저장 (LastStick + SaveTime만 갱신)</td><td>각 Stick 완료</td></tr>
+      <tr><td><code>ClearResumeInfo()</code></td><td>INI 파일 삭제</td><td>정상 완료</td></tr>
+      <tr><td><code>IsResumeAvailable()</code></td><td>Running=true, 만료 안 됨, ID 존재 체크</td><td>시작 버튼 클릭</td></tr>
+      <tr><td><code>ValidateResume(...)</code></td><td>RecipeID / TotalStick 일치 검증</td><td>팝업 표시 전</td></tr>
+      <tr><td><code>GetResumeStartStick()</code></td><td>LastStick + 1 반환</td><td>Measure 루프 진입</td></tr>
+    </tbody>
+  </table>
+</div>
+
+<!-- ======== 9. 검증 결과 ======== -->
+<div class="section">
+  <h2><span class="num">9</span> 검증 결과 (Phase 7)</h2>
+
+  <h3>코드 리뷰 - 수정된 이슈</h3>
+  <table>
+    <thead><tr><th>심각도</th><th>파일</th><th>이슈</th><th>수정 내용</th></tr></thead>
+    <tbody>
+      <tr>
+        <td><span class="badge" style="background:#fee2e2;color:#991b1b;">Critical</span></td>
+        <td>ResumeInfoMgr.cpp</td>
+        <td>WriteToFile 실패 감지 불가</td>
+        <td>PathFileExists 검증 추가</td>
+      </tr>
+      <tr>
+        <td><span class="badge" style="background:#fee2e2;color:#991b1b;">Critical</span></td>
+        <td>ResumeInfoMgr.cpp</td>
+        <td>Atomic Save 실패 시 원본 삭제됨</td>
+        <td>쓰기 실패 시 원본 보존</td>
+      </tr>
+      <tr>
+        <td><span class="badge" style="background:#fee2e2;color:#991b1b;">Critical</span></td>
+        <td>DlgSubOperate.cpp</td>
+        <td>ValidateResume 미호출</td>
+        <td>Recipe/TotalStick 검증 추가</td>
+      </tr>
+    </tbody>
+  </table>
+
+  <h3>안전성 확인</h3>
+  <div class="card-grid">
+    <div class="card">
+      <h4>스레드 안전성</h4>
+      <p>SetResumeMode()는 EngineStart() 전에 호출됨. 경합 조건 없음.</p>
+    </div>
+    <div class="card">
+      <h4>ResumeMode 플래그 생명주기</h4>
+      <p>팝업에서 설정 &rarr; Step[1] Recipe + Step[6] Measure에서 사용 &rarr; 즉시 리셋. 잔류 없음.</p>
+    </div>
+    <div class="card">
+      <h4>빌드 결과</h4>
+      <p>빌드: <strong>성공 (에러 0건)</strong><br>한글 손상: <strong>0건</strong> (전체 파일 검증 완료)</p>
+    </div>
+    <div class="card">
+      <h4>Nullptr 안전성</h4>
+      <p>모든 pResumeInfoMgr 사용처에서 nullptr 검사 확인.</p>
+    </div>
+  </div>
+</div>
+
+<!-- ======== 10. 진행 현황 ======== -->
+<div class="section">
+  <h2><span class="num">10</span> 진행 현황 및 미진행 항목</h2>
+
+  <table>
+    <thead><tr><th>Phase</th><th>설명</th><th>상태</th></tr></thead>
+    <tbody>
+      <tr><td>Phase 1</td><td>ResumeInfoMgr 클래스 (Save/Load/Clear/Validate)</td><td><span class="badge done">완료</span></td></tr>
+      <tr><td>Phase 2</td><td>SystemConfig 옵션 + SystemParamShare 플래그</td><td><span class="badge done">완료</span></td></tr>
+      <tr><td>Phase 3</td><td>SequenceEngine 연동 (시작/완료 시 Save/Clear)</td><td><span class="badge done">완료</span></td></tr>
+      <tr><td>Phase 4</td><td>Measure 루프 Resume (Stick 시작 인덱스)</td><td><span class="badge done">완료</span></td></tr>
+      <tr><td>Phase 5</td><td>DlgSubOperate Resume 팝업 + ValidateResume</td><td><span class="badge done">완료</span></td></tr>
+      <tr><td>Phase 6</td><td>예외처리 (PLC/Motion/Vision 오류)</td><td><span class="badge pending">미진행</span></td></tr>
+      <tr><td>Phase 7</td><td>코드 리뷰 + 빌드 검증</td><td><span class="badge done">완료</span></td></tr>
+    </tbody>
+  </table>
+
+  <h3 style="margin-top:20px;">Phase 6 미진행 항목</h3>
+  <div class="card-grid">
+    <div class="card">
+      <h4>예외처리</h4>
+      <ul>
+        <li>PLC 연결 끊김 시 Resume 정보 보존</li>
+        <li>Motion Alarm 시 Resume 정보 보존</li>
+        <li>Vision 오류 시 Resume 정보 보존</li>
+      </ul>
+    </div>
+    <div class="card">
+      <h4>추가 시나리오</h4>
+      <ul>
+        <li>2번째 검사 시작 경로 Resume 체크</li>
+        <li>다중 Cycle 모드 (nCycleCount > 1)</li>
+        <li>Glass Unload Resume 처리</li>
+      </ul>
+    </div>
+  </div>
+
+  <h3 style="margin-top:20px;">향후 개선 과제</h3>
+  <div class="card-grid">
+    <div class="card">
+      <h4>Raw 파일 재주입</h4>
+      <p>프로그램 재시작 후 Resume 시 이전 Stick의 raw 파일을 FPSpread에 재주입하여 완전한 최종 Report 생성.</p>
+    </div>
+    <div class="card">
+      <h4>전용 Resume 다이얼로그</h4>
+      <p>AfxMessageBox 대신 CDlgResumePrompt 전용 다이얼로그로 상세 진행 정보 표시.</p>
+    </div>
+  </div>
+</div>
+
+<!-- ======== FOOTER ======== -->
+<div class="footer">
+  ALPHA HMI - 이어 검사 (Resume Inspection) 기능 요약 | LYS 2026-07-03
+</div>
+
+</div>
+</body>
+</html>

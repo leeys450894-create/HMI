@@ -1,0 +1,172 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Project ToolsVersion="4.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <ItemGroup>
+    <Filter Include="Source Files">
+      <UniqueIdentifier>{8aa1fabc-51a9-4750-a771-d261223b4fb8}</UniqueIdentifier>
+      <Extensions>cpp;c;cxx;rc;def;r;odl;idl;hpj;bat</Extensions>
+    </Filter>
+    <Filter Include="Header Files">
+      <UniqueIdentifier>{5eb342c2-a6d0-4de5-827e-085313602c7c}</UniqueIdentifier>
+      <Extensions>h;hpp;hxx;hm;inl</Extensions>
+    </Filter>
+    <Filter Include="Resource Files">
+      <UniqueIdentifier>{96e280b4-1ea7-408a-9662-29e5191d234b}</UniqueIdentifier>
+      <Extensions>ico;cur;bmp;dlg;rc2;rct;bin;rgs;gif;jpg;jpeg;jpe</Extensions>
+    </Filter>
+    <Filter Include="API">
+      <UniqueIdentifier>{e8854a3a-4682-450a-b756-89901abf8fc1}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="AlarmFile">
+      <UniqueIdentifier>{7c12a7e8-2ba6-4768-8335-ed277c410855}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Common">
+      <UniqueIdentifier>{39250b18-5243-4991-9f74-d429b10af9c0}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="FPSpreadDll">
+      <UniqueIdentifier>{0a810a3d-8e97-4e69-a755-6f5bfeaba847}</UniqueIdentifier>
+    </Filter>
+  </ItemGroup>
+  <ItemGroup>
+    <ClCompile Include="Alarm.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="AlarmManager.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="DlgAlarm.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="DlgAlarmModule.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="DlgReportAlarm.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="DlgReportAlarmSearch.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="DlgWarning.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="API_Alarm.cpp">
+      <Filter>API</Filter>
+    </ClCompile>
+    <ClCompile Include="AlarmDefine.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="AlarmFiles\AlarmCSVFile.cpp">
+      <Filter>AlarmFile</Filter>
+    </ClCompile>
+    <ClCompile Include="AlarmFiles\AlarmFileTransfer.cpp">
+      <Filter>AlarmFile</Filter>
+    </ClCompile>
+    <ClCompile Include="AlarmFiles\AlarmXLSFile.cpp">
+      <Filter>AlarmFile</Filter>
+    </ClCompile>
+    <ClCompile Include="Common\XLS\XLAutomation.cpp">
+      <Filter>Common</Filter>
+    </ClCompile>
+    <ClCompile Include="Common\XLS\XLEzAutomation.cpp">
+      <Filter>Common</Filter>
+    </ClCompile>
+    <ClCompile Include="Common\BinaryHelper.cpp">
+      <Filter>Common</Filter>
+    </ClCompile>
+    <ClCompile Include="Common\Label.cpp">
+      <Filter>Common</Filter>
+    </ClCompile>
+    <ClCompile Include="pch.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\common\FarPoint64\Ssdllmfc.cpp">
+      <Filter>FPSpreadDll</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\common\MySpreadDll.cpp">
+      <Filter>FPSpreadDll</Filter>
+    </ClCompile>
+    <ClCompile Include="..\..\common\StaticSpread.cpp">
+      <Filter>FPSpreadDll</Filter>
+    </ClCompile>
+  </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="Alarm.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="AlarmManager.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="DlgAlarm.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="DlgAlarmModule.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="DlgReportAlarm.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="DlgReportAlarmSearch.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="DlgWarning.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="Resource.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="API_Alarm.h">
+      <Filter>API</Filter>
+    </ClInclude>
+    <ClInclude Include="AlarmDefine.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="AlarmFiles\AlarmCSVFile.h">
+      <Filter>AlarmFile</Filter>
+    </ClInclude>
+    <ClInclude Include="AlarmFiles\AlarmFileTransfer.h">
+      <Filter>AlarmFile</Filter>
+    </ClInclude>
+    <ClInclude Include="AlarmFiles\AlarmXLSFile.h">
+      <Filter>AlarmFile</Filter>
+    </ClInclude>
+    <ClInclude Include="Common\XLS\XLAutomation.h">
+      <Filter>Common</Filter>
+    </ClInclude>
+    <ClInclude Include="Common\XLS\XLEzAutomation.h">
+      <Filter>Common</Filter>
+    </ClInclude>
+    <ClInclude Include="Common\BinaryHelper.h">
+      <Filter>Common</Filter>
+    </ClInclude>
+    <ClInclude Include="Common\Label.h">
+      <Filter>Common</Filter>
+    </ClInclude>
+    <ClInclude Include="pch.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\common\MySpreadDll.h">
+      <Filter>FPSpreadDll</Filter>
+    </ClInclude>
+    <ClInclude Include="..\..\common\StaticSpread.h">
+      <Filter>FPSpreadDll</Filter>
+    </ClInclude>
+  </ItemGroup>
+  <ItemGroup>
+    <CustomBuild Include="res\Alarm.rc2">
+      <Filter>Resource Files</Filter>
+    </CustomBuild>
+    <CustomBuild Include="ReadMe.txt" />
+    <CustomBuild Include="Alarm.def">
+      <Filter>API</Filter>
+    </CustomBuild>
+  </ItemGroup>
+  <ItemGroup>
+    <ResourceCompile Include="Alarm.rc">
+      <Filter>Resource Files</Filter>
+    </ResourceCompile>
+  </ItemGroup>
+  <ItemGroup>
+    <Library Include="..\..\common\FarPoint64\Lib\SPR64DU80.lib">
+      <Filter>FPSpreadDll</Filter>
+    </Library>
+  </ItemGroup>
+</Project>

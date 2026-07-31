@@ -1,0 +1,5171 @@
+﻿// DlgNaviManualRFID.cpp : 구현 파일입니다.
+//
+
+#include "pch.h"
+#include "CDlgSACC.h"
+#include "afxdialogex.h"
+
+#include "..\..\CoreFunction\common\CommonFunc.h"
+#include "..\Include\AlarmIDList.h"
+
+#define	dfCONFIG_START_FILE_PATH		"Config\\ProbeChange.ini"
+
+// CDlgSACC 대화 상자입니다.
+
+//IMPLEMENT_DYNAMIC(CDlgSACC, CDialog)
+
+CDlgSACC::CDlgSACC(CWnd* pParent /*=NULL*/)
+	: CDialog(CDlgSACC::IDD, pParent)
+{
+	m_cManager = nullptr;
+	
+	if (m_cManager == NULL)
+	{
+		m_cManager = new CShareManager();
+	}
+
+	m_cManager->InitializeReport(nullptr);
+
+	m_cManager->SetHostMode(0);
+
+
+	m_strRobotProbeRFID = "";
+	m_nSelPos = -1;
+
+	// 	m_dReadyUnitZPos =0.0000;
+	// 	m_dReadyZPos=0.0000;
+	// 	m_nReadyZSpeed = SPEED_LOW;
+
+	for (int i = 0; i < 10; i++)
+	{
+		m_bBFProbeCardStatus[i] = FALSE;
+		m_bBFProbeSlotStatus[i] = FALSE;
+	}
+
+	for (int i = 0; i < 2; i++)
+	{
+		m_bProbeBufferStatus[i] = FALSE;
+		m_bProbeBufferPosUp[i] = FALSE;
+		m_bProbeBufferPosDown[i] = FALSE;
+	}
+
+	ZeroMemory(&m_bSACCStaus, sizeof(m_bSACCStaus));
+	ZeroMemory(&m_bOldSACCStaus, sizeof(m_bOldSACCStaus));
+
+	m_iSelectProbe = -1;
+	m_iSelectLoadCassette = -1;
+	m_iSelectUnLoadCassette = -1;
+
+	gf_Initialize();
+}
+
+CDlgSACC::~CDlgSACC()
+{
+	if (m_cManager != nullptr)
+	{
+		m_cManager->FinalizeReport();
+		delete m_cManager;
+		m_cManager = nullptr;
+	}
+}
+
+void CDlgSACC::DoDataExchange(CDataExchange* pDX)
+{
+	CDialog::DoDataExchange(pDX);
+	//DDX_Control(pDX, IDC_LIST_LOG, m_listLog);
+	DDX_Control(pDX, IDC_EDIT_POS_Z0, m_editPosZ0);
+	DDX_Control(pDX, IDC_EDIT_POS_Z1, m_editPosZ1);
+	DDX_Control(pDX, IDC_EDIT_POS_Z2, m_editPosZ2);
+	DDX_Control(pDX, IDC_EDIT_POS_Z3, m_editPosZ3);
+	DDX_Control(pDX, IDC_EDIT_POS_X0, m_editPosACX0);
+	DDX_Control(pDX, IDC_EDIT_POS_X1, m_editPosACX1);
+	DDX_Control(pDX, IDC_EDIT_POS_X2, m_editPosACX2);
+	DDX_Control(pDX, IDC_EDIT_POS_X3, m_editPosACX3);
+	DDX_Control(pDX, IDC_EDIT_POS_Z4, m_editPosUnitZ0);
+	DDX_Control(pDX, IDC_CTCHECKCTRL_Z0, m_chkZ0);
+	DDX_Control(pDX, IDC_CTCHECKCTRL_Z1, m_chkZ1);
+	DDX_Control(pDX, IDC_CTCHECKCTRL_X0, m_chkACX0);
+	DDX_Control(pDX, IDC_CTCHECKCTRL_X1, m_chkACX1);
+	DDX_Control(pDX, IDC_CTCHECKCTRL_X2, m_chkACX2);
+	DDX_Control(pDX, IDC_CTCHECKCTRL_X3, m_chkACX3);
+	DDX_Control(pDX, IDC_COMBO_X0, m_cbBoxACX0);
+	DDX_Control(pDX, IDC_COMBO_X1, m_cbBoxACX1);
+	DDX_Control(pDX, IDC_COMBO_X2, m_cbBoxACX2);
+	DDX_Control(pDX, IDC_COMBO_X3, m_cbBoxACX3);
+	DDX_Control(pDX, IDC_COMBO_Z0, m_cbBoxZ0);
+	DDX_Control(pDX, IDC_COMBO_Z1, m_cbBoxZ1);
+	DDX_Control(pDX, IDC_COMBO_Z2, m_cbBoxZ2);
+	DDX_Control(pDX, IDC_COMBO_Z3, m_cbBoxZ3);
+	DDX_Control(pDX, IDC_EDIT_POS_PROBE_X, m_editPosProbeX);
+}
+
+
+BEGIN_MESSAGE_MAP(CDlgSACC, CDialog)
+	ON_BN_CLICKED(IDC_BTN_LOADING,					&CDlgSACC::OnBnClickedBtnLoading)
+	ON_BN_CLICKED(IDC_BTN_UNLOADING,				&CDlgSACC::OnBnClickedBtnUnloading)
+	ON_BN_CLICKED(IDC_BTN_UNLOADING2,				&CDlgSACC::OnBnClickedBtnExchange)
+
+	ON_BN_CLICKED(IDC_BTN_SACC_MOVE,				&CDlgSACC::OnBnClickedBtnGetInsideProbe_Move)
+	ON_BN_CLICKED(IDC_BTN_SACC_GATE,				&CDlgSACC::OnBnClickedBtnGetInsideProbe_Close)
+	ON_BN_CLICKED(IDC_BTN_SACC_MOVE2,				&CDlgSACC::OnBnClickedBtnPutInsideProbe_Move)
+	ON_BN_CLICKED(IDC_BTN_SACC_GATE2,				&CDlgSACC::OnBnClickedBtnPutInsideProbe_Close)
+	ON_BN_CLICKED(IDC_BTN_GET_STORE_PROBE,			&CDlgSACC::OnBnClickedBtnGetInsideProbe_Get)
+	ON_BN_CLICKED(IDC_BTN_PUT_STORE_PROBE,			&CDlgSACC::OnBnClickedBtnPutInsideProbe_Put)
+
+	ON_BN_CLICKED(IDC_BTN_GANTR_X1,					&CDlgSACC::OnBnClickedBtnACChangePos)
+	ON_BN_CLICKED(IDC_BTN_GANTR_X5,					&CDlgSACC::OnBnClickedBtnACSafetyPos)
+	ON_BN_CLICKED(IDC_BTN_GANTR_X4,					&CDlgSACC::OnBnClickedBtnACSACCPos)
+
+	ON_BN_CLICKED(IDC_BTN_CHANGE_READY_MOVE,		&CDlgSACC::OnBnClickedBtnChangeReadyMove)
+	ON_BN_CLICKED(IDC_BTN_MEAS_READY_MOVE2,			&CDlgSACC::OnBnClickedBtnChangeMeasMove)
+
+
+	ON_BN_CLICKED(IDC_BTN_GET_INSIDE_PROBE,			&CDlgSACC::OnBnClickedBtnGetInsideProbe)
+	ON_BN_CLICKED(IDC_BTN_PUT_INSIDE_PROBE5,		&CDlgSACC::OnBnClickedBtnPutInsideProbe)
+
+	ON_BN_CLICKED(IDC_CHK_MANUAL_ENABLE,			&CDlgSACC::OnBnClickedChkManualEnable)
+	ON_BN_CLICKED(IDC_BTN_LOAD,						&CDlgSACC::OnBnClickedBtnLoad)
+	ON_BN_CLICKED(IDC_BTN_SAVE,						&CDlgSACC::OnBnClickedBtnSave)
+	ON_BN_CLICKED(IDC_BTN_RESET,					&CDlgSACC::OnBnClickedBtnReset)
+	ON_BN_CLICKED(IDC_BTN_RIFD,						&CDlgSACC::OnBnClickedBtnRifd)
+	ON_BN_CLICKED(IDC_CHK_EDIT,						&CDlgSACC::OnBnClickedChkEdit)
+
+
+	ON_BN_CLICKED(IDC_BTN_ZEROPOSITION, &CDlgSACC::OnBnClickedBtnZeroposition)
+	ON_BN_CLICKED(IDC_BTN_PCB, &CDlgSACC::OnBnClickedBtnPcb)
+
+	ON_BN_CLICKED(IDC_BTN_RELOAD_ID, &CDlgSACC::OnBnClickedBtnReloadId)
+	ON_BN_CLICKED(IDC_BTN_CLAM, &CDlgSACC::OnBnClickedBtnClam)
+	ON_WM_DESTROY()
+	ON_MESSAGE(WM_MSG_READ_RFID, OnMsgCompleteReadRFID)
+	
+	
+	ON_BN_CLICKED(IDC_BTN_SELECT_PROBE1, &CDlgSACC::OnBnClickedBtnSelectProbe1)
+	ON_BN_CLICKED(IDC_BTN_SELECT_PROBE2, &CDlgSACC::OnBnClickedBtnSelectProbe2)
+	ON_BN_CLICKED(IDC_BTN_SELECT_PROBE3, &CDlgSACC::OnBnClickedBtnSelectProbe3)
+	ON_BN_CLICKED(IDC_BTN_SELECT_PROBE4, &CDlgSACC::OnBnClickedBtnSelectProbe4)
+	ON_BN_CLICKED(IDC_BTN_SELECT_PROBE5, &CDlgSACC::OnBnClickedBtnSelectProbe5)
+	ON_BN_CLICKED(IDC_BTN_ACGANTRY_ZUP, &CDlgSACC::OnBnClickedBtnAcgantryZup)
+	ON_BN_CLICKED(IDC_BTN_ACGANTRY_ZDOWN, &CDlgSACC::OnBnClickedBtnAcgantryZdown)
+	
+	ON_MESSAGE(SSM_CLICK,			 &CDlgSACC::OnFPSpreadClick_Cassette)
+	ON_BN_CLICKED(IDC_BTN_ZEROPOSITION2, &CDlgSACC::OnBnClickedBtnZeroposition2)
+	ON_BN_CLICKED(IDC_BTN_CLAM2, &CDlgSACC::OnBnClickedBtnClam2)
+	ON_BN_CLICKED(IDC_BTN_PCB2, &CDlgSACC::OnBnClickedBtnPcb2)
+	ON_WM_TIMER()
+	ON_BN_CLICKED(IDC_BTN_PROBE_ALIGN, &CDlgSACC::OnBnClickedBtnProbeAlign)
+END_MESSAGE_MAP()
+
+
+// CDlgSACC 메시지 처리기입니다.
+
+
+
+BOOL CDlgSACC::OnInitDialog()
+{
+	CDialog::OnInitDialog();
+
+	LV_COLUMN lvcolumn;
+	lvcolumn.mask = LVCF_FMT | LVCF_SUBITEM | LVCF_TEXT | LVCF_WIDTH;
+	lvcolumn.fmt = LVCFMT_LEFT;
+	lvcolumn.pszText = _T("Log");
+	lvcolumn.iSubItem = 0;
+	lvcolumn.cx = 10000;
+
+	//JCY 20211221 Farpoint Spread .OCX -> .DLL로 호출
+	m_sprdSACCIO	  = new CMySpreadDll(IDC_FPSPREAD_PLC_INPUT_MEMORY_MAP4,	FPS_RESOURCE_ID + 16, this, TRUE);
+	m_sprdProbeBF	  = new CMySpreadDll(IDC_FPSPREAD_PLC_INPUT_MEMORY_MAP,		FPS_RESOURCE_ID + 17, this, TRUE);
+	m_sprdProbeID	  = new CMySpreadDll(IDC_FPSPREAD_PLC_INPUT_MEMORY_MAP3,	FPS_RESOURCE_ID + 18, this, TRUE);
+	m_sprdInsideProbe = new CMySpreadDll(IDC_FPSPREAD_PLC_INPUT_MEMORY_MAP5,	FPS_RESOURCE_ID + 19, this, TRUE);
+	
+	if (m_sprdSACCIO->GetSafeHwnd() != NULL)
+	{
+		m_sprdSACCIO->InitDefault();		
+		
+		SS_CELLTYPE cellType;
+		m_sprdSACCIO->SetTypeEdit(&cellType, SSS_ALIGN_VCENTER | SSS_ALIGN_CENTER, 20, NULL, SS_CASE_NOCASE);
+		m_sprdSACCIO->SetCellType(SS_ALLCOLS, SS_ALLROWS, &cellType);
+
+		m_sprdSACCIO->MakeFont(&m_hfont);
+		m_sprdSACCIO->SetFont(SS_ALLCOLS, SS_ALLROWS, m_hfont, TRUE);
+
+		m_sprdSACCIO->SetBool(SSB_AUTOCLIPBOARD, TRUE);
+		m_sprdSACCIO->SetClipboardOptions(SS_CLIP_NOHEADERS);
+
+		m_sprdSACCIO->SetColHeaderRows(1);
+		m_sprdSACCIO->SetOperationMode(SS_OPMODE_READONLY);
+
+		m_sprdSACCIO->InitMySpread_SACCIO();
+	}
+	
+	if (m_sprdProbeBF->GetSafeHwnd() != NULL)
+	{
+		m_sprdProbeBF->InitDefault();
+
+		SS_CELLTYPE cellType;
+		m_sprdProbeBF->SetTypeEdit(&cellType, SSS_ALIGN_VCENTER | SSS_ALIGN_CENTER, 20, NULL, SS_CASE_NOCASE);
+		m_sprdProbeBF->SetCellTypeRange(1, 1, 1, 2, &cellType);
+		m_sprdProbeBF->SetTypeCheckBox(&cellType, SSS_ALIGN_VCENTER | SSS_ALIGN_CENTER, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL);
+		m_sprdProbeBF->SetCellTypeRange(2, 1, 3, 3, &cellType);
+
+		m_sprdProbeBF->MakeFont(&m_hfont);
+		m_sprdProbeBF->SetFont(SS_ALLCOLS, SS_ALLROWS, m_hfont, TRUE);
+
+		m_sprdProbeBF->SetBool(SSB_AUTOCLIPBOARD, TRUE);
+		m_sprdProbeBF->SetClipboardOptions(SS_CLIP_NOHEADERS);
+
+		m_sprdProbeBF->SetColHeaderRows(1);
+
+		m_sprdProbeBF->InitMySpread_SACCBF();
+	}
+
+	if (m_sprdProbeID->GetSafeHwnd() != NULL)
+	{
+		m_sprdProbeID->InitDefault();
+
+		SS_CELLTYPE cellType;
+		m_sprdProbeID->SetTypeEdit(&cellType, SSS_ALIGN_VCENTER | SSS_ALIGN_CENTER, 20, NULL, SS_CASE_NOCASE);
+		m_sprdProbeID->SetCellTypeRange(1, 1, 1, 7, &cellType);
+		m_sprdProbeID->SetTypeCheckBox(&cellType, SSS_ALIGN_VCENTER | SSS_ALIGN_CENTER, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL);
+		m_sprdProbeID->SetCellTypeRange(2, 1, 2, 7, &cellType);
+		m_sprdProbeID->SetCellTypeRange(3, 1, 3, 7, &cellType);
+		m_sprdProbeID->SetCellTypeRange(4, 1, 4, 7, &cellType);
+
+		m_sprdProbeID->MakeFont(&m_hfont);
+		m_sprdProbeID->SetFont(SS_ALLCOLS, SS_ALLROWS, m_hfont, TRUE);
+
+		m_sprdProbeID->SetBool(SSB_AUTOCLIPBOARD, TRUE);
+		m_sprdProbeID->SetClipboardOptions(SS_CLIP_NOHEADERS);
+
+		m_sprdProbeID->SetColHeaderRows(1);
+
+		m_sprdProbeID->InitMySpread_SACCID();
+	}	
+
+	if (m_sprdInsideProbe->GetSafeHwnd() != NULL)
+	{
+		m_sprdInsideProbe->InitDefault();
+
+		SS_CELLTYPE cellType;
+		m_sprdInsideProbe->SetTypeEdit(&cellType, SSS_ALIGN_VCENTER | SSS_ALIGN_CENTER, 20, NULL, SS_CASE_NOCASE);
+		m_sprdInsideProbe->SetCellType(SS_ALLCOLS, SS_ALLROWS, &cellType);
+
+		m_sprdInsideProbe->MakeFont(&m_hfont);
+		m_sprdInsideProbe->SetFont(SS_ALLCOLS, SS_ALLROWS, m_hfont, TRUE);
+
+		m_sprdInsideProbe->SetBool(SSB_AUTOCLIPBOARD, TRUE);
+		m_sprdInsideProbe->SetClipboardOptions(SS_CLIP_NOHEADERS);
+
+		m_sprdInsideProbe->SetColHeaderRows(1);
+
+		m_sprdInsideProbe->SetOperationMode(SS_OPMODE_READONLY);
+
+		m_sprdInsideProbe->InitMySpread_InsideProbe();
+	}
+
+	// 색상 수정
+	//SetBackgroundColor(RGB_MAIN3);
+
+	//
+	double dMin = 0, dMax = 100;
+	//dMin = m_pDlgNaviMaint->m_dlgNaviMaintMotionACS.GetAxisMinLimit(AXIS_Z9);
+	//dMax = m_pDlgNaviMaint->m_dlgNaviMaintMotionACS.GetAxisMaxLimit(AXIS_Z9);
+	//dMin = m_cManager->pMoniter->stDataM[AXIS_Z9].dSWLimitN;
+	//dMax = m_cManager->pMoniter->stDataM[AXIS_Z9].dSWLimitP;
+	m_editPosZ0.SetMinMax(dMin, dMax, 0);
+	m_editPosZ1.SetMinMax(dMin, dMax, 0);
+	m_editPosZ2.SetMinMax(dMin, dMax, 0);
+	m_editPosZ3.SetMinMax(dMin, dMax, 0);
+	
+	//dMin = m_pDlgNaviMaint->m_dlgNaviMaintMotionACS.GetAxisMinLimit(AXIS_X4);
+	//dMax = m_pDlgNaviMaint->m_dlgNaviMaintMotionACS.GetAxisMaxLimit(AXIS_X4);
+	//dMin = m_cManager->pMoniter->stDataM[AXIS_X4].dSWLimitN;
+	//dMin = m_cManager->pMoniter->stDataM[AXIS_X4].dSWLimitP;
+
+	m_editPosProbeX.SetMinMax(-5, 5, 0);
+
+	dMin = 0, dMax = 1600;
+	m_editPosACX0.SetMinMax(dMin, dMax, 0);
+	m_editPosACX1.SetMinMax(dMin, dMax, 0);
+	m_editPosACX2.SetMinMax(dMin, dMax, 0);
+	m_editPosACX3.SetMinMax(dMin, dMax, 0);
+	
+	//dMin = m_pDlgNaviMaint->m_dlgNaviMaintMotionACS.GetAxisMinLimit(AXIS_UNIT_Z);
+	//dMax = m_pDlgNaviMaint->m_dlgNaviMaintMotionACS.GetAxisMaxLimit(AXIS_UNIT_Z);
+	//dMin = m_cManager->pMoniter->stDataM[AXIS_UNIT_Z].dSWLimitN;
+	//dMin = m_cManager->pMoniter->stDataM[AXIS_UNIT_Z].dSWLimitP;
+
+	dMin = -10.1, dMax = 10.1;
+	m_editPosUnitZ0.SetMinMax(dMin, dMax, 0);
+
+	int i = 0;
+	_tcscpy_s(m_szProbeCardBF[0], 32, _T("EMPTY"));
+	_tcscpy_s(m_szProbeCardBF[1], 32, _T("EMPTY"));
+
+	for (i = 0; i < 10; i++)
+	{
+		_tcscpy_s(m_szProbeCardID[i], 32, _T(""));
+		_tcscpy_s(m_szReadProbeCardID[i], 32, _T(""));
+	}
+
+	for (i = 0; i < 4; i++)
+	{
+		m_stMoveACX[i].iAxis = AXIS_X4;
+		m_stMoveACX[i].iSpeed = SPEED_LOW;
+		m_stMoveACX[i].dPos = 0;
+	
+		m_stMoveACZ[i].iAxis = AXIS_Z9;
+		m_stMoveACZ[i].iSpeed = SPEED_LOW;
+		m_stMoveACZ[i].dPos = 0;
+	}
+
+	EnableEdit(FALSE);
+	ManualButtonEnable(FALSE);
+
+	ReadConfigRobotRFID();
+	ReadConfigInsideRFID();
+	ReadTeachPosConfig();
+	UpdateTeachPosition();
+	ReadProbeIDtoFile();
+	
+	CString strCheck;
+	for (i = 0; i < m_sprdProbeBF->GetMaxRows(); i++) //20170203 lhj change
+	{
+		m_sprdProbeBF->IsColHidden(1);
+	
+		// Probe 유무 확인
+		strCheck.Format(_T("%s"), m_szProbeCardBF[i]);
+		m_sprdProbeBF->SetColor(1, i + 1, dfCOLOR_GRAY, RGB_DARK_GRAY);
+		m_sprdProbeBF->SetData(1, i + 1, strCheck);
+	
+		// Up
+		strCheck.Format(_T("%d"), FALSE);
+		m_sprdProbeBF->SetData(2, i + 1, strCheck);
+	
+		// Down
+		strCheck.Format(_T("%d"), FALSE);
+		m_sprdProbeBF->SetData(3, i + 1, strCheck);
+	}
+
+	
+	for (i = 0; i < m_sprdProbeID->GetMaxRows(); i++) //20170203 lhj change
+	{
+		if (i > m_sprdProbeID->GetMaxRows())
+			continue;
+
+		//m_sprdProbeID.SetRow(i + 1);
+
+		// Probe 유무 확인
+		strCheck.Format(_T("%s"), m_szProbeCardID[i]);
+		m_sprdProbeID->SetColor(1, i + 1, dfCOLOR_GRAY, RGB_DARK_GRAY);
+		m_sprdProbeID->SetData(1, i + 1, strCheck);
+		
+		//// SACC 위치 확인
+		//strCheck.Format(_T("%d"), FALSE);
+		//m_sprdProbeID->SetData(4, i + 1, strCheck);
+	}
+	//if (m_pSystem->stEquip.m_nEQType == EQU_TYPE_ICP)
+	//{
+	//	GetDlgItem(IDC_BTN_GANTR_X2_UP2)->ShowWindow(SW_SHOW);
+	//	GetDlgItem(IDC_BTN_GANTR_X2_DOWN3)->ShowWindow(SW_SHOW);
+	//
+	//	GetDlgItem(IDC_BTN_GANTR_X3_UP3)->ShowWindow(SW_SHOW);
+	//	GetDlgItem(IDC_BTN_GANTR_X3_DOWN4)->ShowWindow(SW_SHOW);
+	//
+	//	GetDlgItem(IDC_BTN_CHANGE_READY_MOVE)->ShowWindow(SW_SHOW);
+	//
+	//	GetDlgItem(IDC_BTN_MEAS_READY_MOVE2)->ShowWindow(SW_SHOW);
+	//
+	//	GetDlgItem(IDC_BTN_CLAM)->ShowWindow(SW_HIDE);
+	//
+	//	GetDlgItem(IDC_BTN_GANTR_X2)->ShowWindow(SW_SHOW);
+	//
+	//}
+	//else
+	//{
+	//	GetDlgItem(IDC_BTN_GANTR_X2_UP2)->ShowWindow(SW_HIDE);
+	//	GetDlgItem(IDC_BTN_GANTR_X2_DOWN3)->ShowWindow(SW_HIDE);
+	//
+	//	GetDlgItem(IDC_BTN_GANTR_X3_UP3)->ShowWindow(SW_HIDE);
+	//	GetDlgItem(IDC_BTN_GANTR_X3_DOWN4)->ShowWindow(SW_HIDE);
+	//
+	//	GetDlgItem(IDC_BTN_CHANGE_READY_MOVE)->ShowWindow(SW_HIDE);
+	//
+	//	GetDlgItem(IDC_BTN_MEAS_READY_MOVE2)->ShowWindow(SW_HIDE);
+	//
+	//	GetDlgItem(IDC_BTN_CLAM)->ShowWindow(SW_SHOW);
+	//
+	//	GetDlgItem(IDC_BTN_GANTR_X2)->ShowWindow(SW_HIDE);
+	//}
+
+	SetTimer(1, 500, NULL);
+
+	return TRUE;  
+}
+
+void CDlgSACC::ReadTeachPosConfig()
+{
+	TCHAR szValue[MAX_PATH];
+	ZeroMemory(szValue, sizeof(szValue));
+
+	CString szConfigFile;
+	szConfigFile = gf_GetFilePath(dfCONFIG_START_FILE_PATH);
+
+	BOOL bNew = FALSE;
+	CString strName, strKeyName;
+	strName.Format(_T("NEW"));
+	strKeyName.Format(_T("POS"));
+	GetPrivateProfileString(strName, strKeyName, _T("0"), szValue, 20, szConfigFile);
+	bNew = _ttol(szValue);
+
+	if (bNew)
+	{
+		strName = "ACXPOS";
+
+		int i = 0;
+		for (i = 0; i < 4; i++)
+		{
+			m_stMoveACX[i].iAxis = AXIS_X4;
+			strKeyName.Format(_T("POS%d"), i + 1);
+			GetPrivateProfileString(strName, strKeyName, _T("0.0000"), szValue, 20, szConfigFile);
+			m_stMoveACX[i].dPos = _ttof(szValue);
+			strKeyName.Format(_T("SPEED%d"), i + 1);
+			GetPrivateProfileString(strName, strKeyName, _T("2"), szValue, 20, szConfigFile);
+			m_stMoveACX[i].iSpeed = _ttol(szValue);
+		}
+
+		strName = "ACZPOS";
+		for (i = 0; i < 4; i++)
+		{
+			m_stMoveACZ[i].iAxis = AXIS_Z9;
+			strKeyName.Format(_T("POS%d"), i + 1);
+			GetPrivateProfileString(strName, strKeyName, _T("0.0000"), szValue, 20, szConfigFile);
+			m_stMoveACZ[i].dPos = _ttof(szValue);
+			strKeyName.Format(_T("SPEED%d"), i + 1);
+			GetPrivateProfileString(strName, strKeyName, _T("2"), szValue, 20, szConfigFile);
+			m_stMoveACZ[i].iSpeed = _ttol(szValue);
+		}
+	}
+	else
+	{
+		CString strInsideGet;
+		strInsideGet = "INSIDEGET";
+
+		m_stMoveACZ[0].iAxis = AXIS_Z9;
+		GetPrivateProfileString(strInsideGet, _T("ReadyUpPos"), _T("0.0000"), szValue, 20, szConfigFile);
+		m_stMoveACZ[0].dPos = _ttof(szValue);
+		GetPrivateProfileString(strInsideGet, _T("ReadyUpSpeed"), _T("2"), szValue, 20, szConfigFile);
+		m_stMoveACZ[0].iSpeed = _ttol(szValue);
+
+		m_stMoveACX[0].iAxis = AXIS_X4;
+		GetPrivateProfileString(strInsideGet, _T("ReadyToInsideGetPos"), _T("0.0000"), szValue, 20, szConfigFile);
+		m_stMoveACX[0].dPos = _ttof(szValue);
+		GetPrivateProfileString(strInsideGet, _T("ReadyToInsideGetSpeed"), _T("2"), szValue, 20, szConfigFile);
+		m_stMoveACX[0].iSpeed = _ttol(szValue);
+
+		m_stMoveACZ[1].iAxis = AXIS_Z9;
+		GetPrivateProfileString(strInsideGet, _T("InsideDownPos"), _T("0.0000"), szValue, 20, szConfigFile);
+		m_stMoveACZ[1].dPos = _ttof(szValue);
+		GetPrivateProfileString(strInsideGet, _T("InsideDownSpeed"), _T("2"), szValue, 20, szConfigFile);
+		m_stMoveACZ[1].iSpeed = _ttol(szValue);
+
+		m_stMoveACX[1].iAxis = AXIS_X4;
+		GetPrivateProfileString(strInsideGet, _T("InsideBackGetPos"), _T("0.0000"), szValue, 20, szConfigFile);
+		m_stMoveACX[1].dPos = _ttof(szValue);
+		GetPrivateProfileString(strInsideGet, _T("InsideBackGetSpeed"), _T("2"), szValue, 20, szConfigFile);
+		m_stMoveACX[1].iSpeed = _ttol(szValue);
+
+		CString strStoreGet;
+		strStoreGet = "STOREGET";
+
+		//m_stMoveACZ[3].iAxis = AXIS_Z9;
+		GetPrivateProfileString(strStoreGet, _T("ReadyDownPos"), _T("0.0000"), szValue, 20, szConfigFile);
+		m_stMoveACZ[3].dPos = _ttof(szValue);
+		GetPrivateProfileString(strStoreGet, _T("ReadyDownSpeed"), _T("2"), szValue, 20, szConfigFile);
+		m_stMoveACZ[3].iSpeed = _ttol(szValue);
+
+		//m_stMoveACX[3].iAxis = AXIS_X4;
+		GetPrivateProfileString(strStoreGet, _T("ReadyToStorePos"), _T("0.0000"), szValue, 20, szConfigFile);
+		m_stMoveACX[3].dPos = _ttof(szValue);
+		GetPrivateProfileString(strStoreGet, _T("ReadyToStoreSpeed"), _T("2"), szValue, 20, szConfigFile);
+		m_stMoveACX[3].iSpeed = _ttol(szValue);
+
+		//m_stMoveACZ[2].iAxis = AXIS_Z9;
+		GetPrivateProfileString(strStoreGet, _T("StoreUpPos"), _T("0.0000"), szValue, 20, szConfigFile);
+		m_stMoveACZ[2].dPos = _ttof(szValue);
+		GetPrivateProfileString(strStoreGet, _T("StoreUpSpeed"), _T("2"), szValue, 20, szConfigFile);
+		m_stMoveACZ[2].iSpeed = _ttol(szValue);
+
+		//m_stMoveACX[2].iAxis = AXIS_X4;
+		GetPrivateProfileString(strStoreGet, _T("StoreToReadyOrgPos"), _T("0.0000"), szValue, 20, szConfigFile);
+		m_stMoveACX[2].dPos = _ttof(szValue);
+		GetPrivateProfileString(strStoreGet, _T("StoreToReadyOrgSpeed"), _T("2"), szValue, 20, szConfigFile);
+		m_stMoveACX[2].iSpeed = _ttol(szValue);
+	}
+
+	CString strMeasPos;
+	strMeasPos = "MEASPOS";
+	GetPrivateProfileString(strMeasPos, _T("MeasUnitZPos"), _T("0.0000"), szValue, 20, szConfigFile);
+	m_dMeasUnitZPos = _ttof(szValue);
+
+	GetPrivateProfileString(strMeasPos, _T("MeaszProbePos"), _T("0.0000"), szValue, 20, szConfigFile);
+	m_dMeasProbeXPos = _ttof(szValue);
+
+	//RFID
+	strName = "PROBERFID";
+	GetPrivateProfileString(strName, _T("InsideProbeRFID"), _T("1111111"), szValue, 20, szConfigFile);
+	m_strCurrInsideRFID.Format(_T("%s"), szValue);
+}
+
+void CDlgSACC::ReadConfigRobotRFID()
+{
+	TCHAR szValue[MAX_PATH];
+	ZeroMemory(szValue, MAX_PATH);
+
+	CString szConfigFile;
+	szConfigFile = gf_GetFilePath(dfCONFIG_START_FILE_PATH);
+
+	CString strInsideGet;
+	strInsideGet = _T("PROBERFID");
+
+	GetPrivateProfileString(strInsideGet, _T("RobotProbeRFID"), _T("1111111"), szValue, 20, szConfigFile);
+	m_strRobotProbeRFID.Format(_T("%s"), szValue);
+
+	CString strValue;
+	strInsideGet = _T("PROBESLOT");
+	GetPrivateProfileString(strInsideGet, _T("MAXPROBE "), _T("7"), szValue, 20, szConfigFile);		// LYS 202607-03 Cassette 5->7
+	strValue.Format(_T("%s"), szValue);
+	m_sprdProbeID->SetMaxRows(_ttol(strValue));
+}
+
+void CDlgSACC::ReadConfigInsideRFID()
+{
+	TCHAR szValue[MAX_PATH];
+	ZeroMemory(szValue, MAX_PATH);
+
+	CString szConfigFile;
+	szConfigFile = gf_GetFilePath(dfCONFIG_START_FILE_PATH);
+
+	CString strInsideGet;
+	strInsideGet = _T("PROBERFID");
+
+	GetPrivateProfileString(strInsideGet, _T("InsideProbeRFID"), _T("1111111"), szValue, 20, szConfigFile);
+	m_strCurrInsideRFID = szValue;
+
+	GetPrivateProfileString(strInsideGet, _T("InsideProbeRFID"), _T("InsideProbeRFIDMountTime"), szValue, 30, szConfigFile);
+	m_strMountTime = szValue;
+}
+
+void CDlgSACC::WriteConfigFile(CString strAppName, CString strKeyName, CString strVal)
+{
+	CString szConfigFile;
+	szConfigFile = gf_GetFilePath(dfCONFIG_START_FILE_PATH);
+
+	WritePrivateProfileString(strAppName, strKeyName, strVal, szConfigFile);
+}
+
+void CDlgSACC::WritePosConfigFile()
+{
+	CString strValue;
+	CString strName, strKeyName;
+	double dPos = 0;
+
+	//NEW
+	strName.Format(_T("NEW"));
+	strKeyName.Format(_T("POS"));
+	WriteConfigFile(strName, strKeyName, _T("1"));
+
+	m_stMoveACX[0].dPos = m_editPosACX0.GetValue();
+	m_stMoveACX[1].dPos = m_editPosACX1.GetValue();
+	m_stMoveACX[2].dPos = m_editPosACX2.GetValue();
+	m_stMoveACX[3].dPos = m_editPosACX3.GetValue();
+
+	m_stMoveACX[0].iSpeed = m_cbBoxACX0.GetCurSel();
+	m_stMoveACX[1].iSpeed = m_cbBoxACX1.GetCurSel();
+	m_stMoveACX[2].iSpeed = m_cbBoxACX2.GetCurSel();
+	m_stMoveACX[3].iSpeed = m_cbBoxACX3.GetCurSel();
+
+	m_stMoveACZ[0].dPos = m_editPosZ0.GetValue();
+	m_stMoveACZ[1].dPos = m_editPosZ1.GetValue();
+	m_stMoveACZ[2].dPos = m_editPosZ2.GetValue();
+	m_stMoveACZ[3].dPos = m_editPosZ3.GetValue();
+
+	m_stMoveACZ[0].iSpeed = m_cbBoxZ0.GetCurSel();
+	m_stMoveACZ[0].iSpeed = m_cbBoxZ1.GetCurSel();
+	m_stMoveACZ[0].iSpeed = m_cbBoxZ2.GetCurSel();
+	m_stMoveACZ[0].iSpeed = m_cbBoxZ3.GetCurSel();
+
+	strName = "ACXPOS";
+	for (int i = 0; i < 4; i++)
+	{
+		strKeyName.Format(_T("POS%d"), i + 1);
+		strValue.Format(_T("%.4f"), m_stMoveACX[i].dPos);
+		WriteConfigFile(strName, strKeyName, strValue);
+		strKeyName.Format(_T("SPEED%d"), i + 1);
+		strValue.Format(_T("%d"), m_stMoveACX[i].iSpeed);
+		WriteConfigFile(strName, strKeyName, strValue);
+	}
+
+	strName = "ACZPOS";
+	for (int i = 0; i < 4; i++)
+	{
+		strKeyName.Format(_T("POS%d"), i + 1);
+		strValue.Format(_T("%.4f"), m_stMoveACZ[i].dPos);
+		WriteConfigFile(strName, strKeyName, strValue);
+		strKeyName.Format(_T("SPEED%d"), i + 1);
+		strValue.Format(_T("%d"), m_stMoveACZ[i].iSpeed);
+		WriteConfigFile(strName, strKeyName, strValue);
+	}
+
+	dPos = m_editPosUnitZ0.GetValue();
+	strValue.Format(_T("%.4f"), dPos);
+	WriteConfigFile("MEASPOS", "MeasUnitZPos", strValue);
+
+	dPos = m_editPosUnitZ0.GetValue();
+	strValue.Format(_T("%.4f"), dPos);
+	WriteConfigFile("PROBEZPOS", "CHANGE", strValue);
+
+	dPos = m_editPosProbeX.GetValue();
+	strValue.Format(_T("%.4f"), dPos);
+	WriteConfigFile("MEASPOS", "MeaszProbePos", strValue);
+
+	//RFID
+	CString strRFID;
+	GetDlgItem(IDC_EDIT_INSIDE_PROBE_RFID)->GetWindowText(strRFID);
+	WriteConfigFile("PROBERFID", "InsideProbeRFID", strRFID);
+}
+
+CString CDlgSACC::ChangeSpeedNum(CString str)
+{
+	CString strRtn;
+	if (str == "H" || str == "h") //High
+		strRtn = "0";
+	else if (str == "M" || str == "m") //Middle
+		strRtn = "1";
+	else if (str == "L" || str == "l")
+		strRtn = "2";
+	else
+		strRtn = "2";
+
+	return strRtn;
+}
+
+void CDlgSACC::UpdateTeachPosition()
+{
+	CString strValue;
+	CString strTemp;
+	CString strSpeed;
+
+	int iCol = 0, iMaxCol = 0;
+
+	// ACX
+	double dPos = 0;
+	int iSpeed = SPEED_LOW;
+	dPos = m_stMoveACX[0].dPos;
+	iSpeed = m_stMoveACX[0].iSpeed;
+	m_editPosACX0.SetValue(dPos);
+	m_cbBoxACX0.SetCurSel(iSpeed);
+
+	dPos = m_stMoveACX[1].dPos;
+	iSpeed = m_stMoveACX[1].iSpeed;
+	m_editPosACX1.SetValue(dPos);
+	m_cbBoxACX1.SetCurSel(iSpeed);
+
+	dPos = m_stMoveACX[2].dPos;
+	iSpeed = m_stMoveACX[2].iSpeed;
+	m_editPosACX2.SetValue(dPos);
+	m_cbBoxACX2.SetCurSel(iSpeed);
+
+	dPos = m_stMoveACX[3].dPos;
+	iSpeed = m_stMoveACX[3].iSpeed;
+	m_editPosACX3.SetValue(dPos);
+	m_cbBoxACX3.SetCurSel(iSpeed);
+
+	// ACZ
+	dPos = m_stMoveACZ[0].dPos;
+	iSpeed = m_stMoveACZ[0].iSpeed;
+	m_editPosZ0.SetValue(dPos);
+	m_cbBoxZ0.SetCurSel(iSpeed);
+
+	dPos = m_stMoveACZ[1].dPos;
+	iSpeed = m_stMoveACZ[1].iSpeed;
+	m_editPosZ1.SetValue(dPos);
+	m_cbBoxZ1.SetCurSel(iSpeed);
+
+	dPos = m_stMoveACZ[2].dPos;
+	iSpeed = m_stMoveACZ[2].iSpeed;
+	m_editPosZ2.SetValue(dPos);
+	m_cbBoxZ2.SetCurSel(iSpeed);
+
+	dPos = m_stMoveACZ[3].dPos;
+	iSpeed = m_stMoveACZ[3].iSpeed;
+	m_editPosZ3.SetValue(dPos);
+	m_cbBoxZ3.SetCurSel(iSpeed);
+
+	dPos = m_dMeasUnitZPos;
+	m_editPosUnitZ0.SetValue(dPos);
+
+	dPos = m_dMeasProbeXPos;
+	m_editPosProbeX.SetValue(dPos);
+
+	//RFID
+	GetDlgItem(IDC_EDIT_INSIDE_PROBE_RFID)->SetWindowText(m_strCurrInsideRFID);
+	m_sprdInsideProbe->SetData(1, 1, m_strCurrInsideRFID);
+
+	//lhj 161017 add
+	UpdateUnitMovePosition();
+}
+
+int CDlgSACC::UpdateTestBtn(BOOL bEnable)
+{
+	GetDlgItem(IDC_BTN_LOADING)->EnableWindow(bEnable);
+	GetDlgItem(IDC_BTN_UNLOADING)->EnableWindow(bEnable);
+	GetDlgItem(IDC_BTN_UNLOADING2)->EnableWindow(bEnable);
+
+	if (bEnable == FALSE)
+	{
+		ManualButtonEnable(FALSE);
+	}
+	else
+	{
+		if (((CButton*)GetDlgItem(IDC_CHK_MANUAL_ENABLE))->GetCheck())
+		{
+			ManualButtonEnable(TRUE);
+		}
+		else
+		{
+			ManualButtonEnable(FALSE);
+		}
+	}
+
+	return 0;
+}
+
+void CDlgSACC::UserButtonEnable(BOOL b)
+{
+	GetDlgItem(IDC_CHK_EDIT)->EnableWindow(b);
+	GetDlgItem(IDC_BTN_SAVE)->EnableWindow(b);
+	GetDlgItem(IDC_BTN_LOAD)->EnableWindow(b);
+	GetDlgItem(IDC_BTN_RESET)->EnableWindow(b);
+	GetDlgItem(IDC_BTN_RIFD)->EnableWindow(b);
+}
+
+void CDlgSACC::UserButtonEnable2(BOOL b)
+{
+	GetDlgItem(IDC_CHK_EDIT)->EnableWindow(b);
+	GetDlgItem(IDC_BTN_SAVE)->EnableWindow(b);
+	GetDlgItem(IDC_BTN_LOAD)->EnableWindow(b);
+	GetDlgItem(IDC_BTN_RESET)->EnableWindow(b);
+	GetDlgItem(IDC_BTN_RIFD)->EnableWindow(b);
+}
+
+void CDlgSACC::ManualButtonEnable(BOOL b)
+{
+	GetDlgItem(IDC_BTN_GET_INSIDE_PROBE)->EnableWindow(b);
+	GetDlgItem(IDC_BTN_PUT_INSIDE_PROBE5)->EnableWindow(b);
+	GetDlgItem(IDC_BTN_PROBE_ALIGN)->EnableWindow(b);	// jsyoon 2022.05.09 add
+	
+
+	GetDlgItem(IDC_BTN_GET_STORE_PROBE)->EnableWindow(b);
+	GetDlgItem(IDC_BTN_PUT_STORE_PROBE)->EnableWindow(b);
+	GetDlgItem(IDC_BTN_CHANGE_READY_MOVE)->EnableWindow(b);
+	GetDlgItem(IDC_BTN_MEAS_READY_MOVE2)->EnableWindow(b);
+
+	GetDlgItem(IDC_BTN_GANTR_X1)->EnableWindow(b);
+	GetDlgItem(IDC_BTN_GANTR_X2)->EnableWindow(b);
+	GetDlgItem(IDC_BTN_GANTR_X3)->EnableWindow(b);
+	GetDlgItem(IDC_BTN_GANTR_X4)->EnableWindow(b);
+	GetDlgItem(IDC_BTN_GANTR_X5)->EnableWindow(b);
+
+	GetDlgItem(IDC_BTN_GANTR_X1_UP)->EnableWindow(b);
+	GetDlgItem(IDC_BTN_GANTR_X2_UP2)->EnableWindow(b);
+	GetDlgItem(IDC_BTN_GANTR_X3_UP3)->EnableWindow(b);
+	GetDlgItem(IDC_BTN_GANTR_X1_DOWN2)->EnableWindow(b);
+	GetDlgItem(IDC_BTN_GANTR_X2_DOWN3)->EnableWindow(b);
+	GetDlgItem(IDC_BTN_GANTR_X3_DOWN4)->EnableWindow(b);
+	GetDlgItem(IDC_BTN_ZEROPOSITION)->EnableWindow(b);
+	GetDlgItem(IDC_BTN_ZEROPOSITION2)->EnableWindow(b);
+	GetDlgItem(IDC_BTN_PCB)->EnableWindow(b);
+	GetDlgItem(IDC_BTN_CLAM)->EnableWindow(b);
+	GetDlgItem(IDC_BTN_PCB2)->EnableWindow(b);
+	GetDlgItem(IDC_BTN_CLAM2)->EnableWindow(b);
+	
+	GetDlgItem(IDC_BTN_SACC_MOVE)->EnableWindow(b);
+	GetDlgItem(IDC_BTN_SACC_GATE)->EnableWindow(b);
+
+	GetDlgItem(IDC_BTN_SACC_MOVE2)->EnableWindow(b);
+	GetDlgItem(IDC_BTN_SACC_GATE2)->EnableWindow(b);
+
+	GetDlgItem(IDC_BTN_ACGANTRY_ZUP)->EnableWindow(b);
+	GetDlgItem(IDC_BTN_ACGANTRY_ZDOWN)->EnableWindow(b);
+	GetDlgItem(IDC_BTN_SELECT_PROBE1)->EnableWindow(b);
+	GetDlgItem(IDC_BTN_SELECT_PROBE2)->EnableWindow(b);
+	GetDlgItem(IDC_BTN_SELECT_PROBE3)->EnableWindow(b);
+	GetDlgItem(IDC_BTN_SELECT_PROBE4)->EnableWindow(b);
+	GetDlgItem(IDC_BTN_SELECT_PROBE5)->EnableWindow(b);
+}
+
+CString CDlgSACC::ChangeSpeedString(CString str)
+{
+	CString strRtn;
+	if (str == "0") //High
+		strRtn = "H";
+	else if (str == "1") //Middle
+		strRtn = "M";
+	else if (str == "2")
+		strRtn = "L";
+	else
+		strRtn = "L";
+
+	return strRtn;
+}
+
+LRESULT CDlgSACC::OnMsgCompleteReadRFID(WPARAM wParam, LPARAM lParam)
+{
+	int nRet = 0;
+
+	nRet = (int)lParam;
+
+	if (1)
+		SelectReadRFID();
+	else
+		AfxMessageBox(_T("Read RFID Fail"));
+
+	return 1;
+}
+
+void CDlgSACC::OnBnClickedChkEdit()
+{
+	if (((CButton*)GetDlgItem(IDC_CHK_EDIT))->GetCheck())
+	{
+		EnableEdit(TRUE);
+	}
+	else
+	{
+		EnableEdit(FALSE);
+	}
+}
+
+void CDlgSACC::OnBnClickedChkManualEnable()
+{
+	if (((CButton*)GetDlgItem(IDC_CHK_MANUAL_ENABLE))->GetCheck())
+	{
+		ManualButtonEnable(TRUE);
+	}
+	else
+	{
+		ManualButtonEnable(FALSE);
+	}
+}
+
+void CDlgSACC::OnBnClickedBtnLoading()
+{	
+	CString strMsg;
+	strMsg.Format(_T("동작 하시겠습니까???"));
+
+	if (AfxMessageBox(strMsg, MB_YESNO | MB_ICONQUESTION) == IDNO)
+		return;
+
+	if (m_iSelectProbe == -1 || m_iSelectLoadCassette == -1)
+	{
+		if (AfxMessageBox(_T("Probe or Load Cassette를 선택하지 않았습니다."))) return;
+	}
+
+	if (!m_cManager->pMoniter->stDataP.bMData[PLC_BIT_UNLOAD_SENSOR03]) 
+	{
+		AfxMessageBox(_T("Safety 위치가 아닙니다. \n\n대기위치 이동 및 글라스 흡착상태에서 진행하십시오.")); //sample plate safety check
+		return;
+	}
+	
+	if (AfxMessageBox(_T("PROBE를 장착 하시겠습니까?"), MB_OKCANCEL, NULL) == IDOK)
+	{
+		if (!m_cManager->pMoniter->stDataP.bMData[PLC_PACC_PACC_ALL_SEQ_DONE])
+		{
+			AfxMessageBox(_T("SACC 작업 진행중 입니다.\n SACC 작업 완료 후 진행 하십시오."));
+			return;
+		}
+	
+		RITEMDATA uData;
+		memset(&uData, 0, sizeof(RITEMDATA));
+		uData.nEventCmd = SACC_COMMAND_OPERATION_LODING;
+		uData.nWTSequence = m_iSelectProbe;
+		uData.nMeasMode = m_iSelectLoadCassette;
+		if (m_cManager != nullptr) m_cManager->UploadData(&uData);
+	}
+}
+
+void CDlgSACC::OnBnClickedBtnUnloading()
+{
+	CString strMsg;
+	strMsg.Format(_T("동작 하시겠습니까???"));
+
+	if (AfxMessageBox(strMsg, MB_YESNO | MB_ICONQUESTION) == IDNO)
+		return;
+
+	if (m_iSelectProbe == -1 || m_iSelectUnLoadCassette == -1)
+	{
+		if (AfxMessageBox(_T("Probe or UnLoad Cassette를 선택하지 않았습니다."))) return;
+	}
+
+	if (!m_cManager->pMoniter->stDataP.bMData[PLC_BIT_UNLOAD_SENSOR03])
+	{
+		AfxMessageBox(_T("Safety 위치가 아닙니다. \n\n대기위치 이동 및 글라스 흡착상태에서 진행하십시오.")); //sample plate safety check
+		return;
+	}
+
+	if (AfxMessageBox(_T("PROBE를 탈착 하시겠습니까?"), MB_OKCANCEL, NULL) == IDOK)
+	{
+		if (!m_cManager->pMoniter->stDataP.bMData[PLC_PACC_PACC_ALL_SEQ_DONE])
+		{
+			AfxMessageBox(_T("SACC 작업 진행중 입니다.\n SACC 작업 완료 후 진행 하십시오."));
+			return;
+		}
+
+		RITEMDATA uData;
+		memset(&uData, 0, sizeof(RITEMDATA));
+		uData.nEventCmd = SACC_COMMAND_OPERATION_UNLODING;
+		uData.nWTSequence = m_iSelectProbe;
+		uData.nMeasMode = m_iSelectUnLoadCassette;
+		if (m_cManager != nullptr) m_cManager->UploadData(&uData);
+	}
+}
+
+void CDlgSACC::OnBnClickedBtnExchange()
+{
+	CString strMsg;
+	strMsg.Format(_T("동작 하시겠습니까???"));
+
+	if (AfxMessageBox(strMsg, MB_YESNO | MB_ICONQUESTION) == IDNO)
+		return;
+
+//	if (m_iSelectLoadCassette == -1 || m_iSelectUnLoadCassette == -1)
+	if (m_iSelectLoadCassette == -1 )
+	{
+		if (AfxMessageBox(_T("Cassette를 선택하지 않았습니다."))) return;
+
+	}
+
+	if (!m_cManager->pMoniter->stDataP.bMData[PLC_BIT_UNLOAD_SENSOR03])
+	{
+		AfxMessageBox(_T("Safety 위치가 아닙니다. \n\n대기위치 이동 및 글라스 흡착상태에서 진행하십시오.")); //sample plate safety check
+		return;
+	}
+
+	if (AfxMessageBox(_T("PROBE를 교체 하시겠습니까?"), MB_OKCANCEL, NULL) == IDOK)
+	{
+		if (!m_cManager->pMoniter->stDataP.bMData[PLC_PACC_PACC_ALL_SEQ_DONE])
+		{
+			AfxMessageBox(_T("SACC 작업 진행중 입니다.\n SACC 작업 완료 후 진행 하십시오."));
+			return;
+		}
+
+		RITEMDATA uData;
+		memset(&uData, 0, sizeof(RITEMDATA));
+		uData.nEventCmd = SACC_COMMAND_OPERATION_EXCHANGE;
+		uData.nWTSequence = m_iSelectProbe;
+		uData.nMeasMode = m_iSelectLoadCassette;
+		//uData.nWTSequence = m_iSelectLoadCassette;
+		//uData.nMeasMode = m_iSelectUnLoadCassette;
+
+		m_cManager->UploadData(&uData);
+	}
+}
+
+void CDlgSACC::OnBnClickedBtnGetInsideProbe()
+{
+	CString strMsg;
+	strMsg.Format(_T("동작 하시겠습니까???"));
+
+	if (AfxMessageBox(strMsg, MB_YESNO | MB_ICONQUESTION) == IDNO)
+		return;
+
+	if (m_iSelectProbe == -1)
+	{
+		if (AfxMessageBox(_T("Probe를 선택하지 않았습니다."))) return;
+	}
+
+	RITEMDATA uData;
+	memset(&uData, 0, sizeof(RITEMDATA));
+	uData.nEventCmd = SACC_COMMAND_OPERATION_GET_INSIDE;
+	uData.nWTSequence = m_iSelectProbe;
+
+	m_cManager->UploadData(&uData);
+}
+
+void CDlgSACC::OnBnClickedBtnPutInsideProbe()
+{
+	CString strMsg;
+	strMsg.Format(_T("동작 하시겠습니까???"));
+
+	if (AfxMessageBox(strMsg, MB_YESNO | MB_ICONQUESTION) == IDNO)
+		return;
+
+	if (m_iSelectProbe == -1)
+	{
+		if (AfxMessageBox(_T("Probe를 선택하지 않았습니다."))) return;
+
+	}
+
+	RITEMDATA uData;
+	memset(&uData, 0, sizeof(RITEMDATA));
+	uData.nEventCmd = SACC_COMMAND_OPERATION_PUT_INSIDE;
+	uData.nWTSequence = m_iSelectProbe;
+
+	m_cManager->UploadData(&uData);
+}
+
+void CDlgSACC::OnBnClickedBtnGetInsideProbe_Move()
+{
+	CString strMsg;
+	strMsg.Format(_T("동작 하시겠습니까???"));
+
+	if (AfxMessageBox(strMsg, MB_YESNO | MB_ICONQUESTION) == IDNO)
+		return;
+
+	if (m_iSelectLoadCassette == -1)
+	{
+		if (AfxMessageBox(_T("Load Cassette를 선택하지 않았습니다."))) return;
+	}
+
+	RITEMDATA uData;
+	memset(&uData, 0, sizeof(RITEMDATA));
+	uData.nEventCmd = SACC_COMMAND_OPERATION_CHANGE_SLOT_GET;
+	uData.nWTSequence = m_iSelectLoadCassette;
+
+	m_cManager->UploadData(&uData);
+}
+
+void CDlgSACC::OnBnClickedBtnGetInsideProbe_Get()
+{
+	CString strMsg;
+	strMsg.Format(_T("동작 하시겠습니까???"));
+
+	if (AfxMessageBox(strMsg, MB_YESNO | MB_ICONQUESTION) == IDNO)
+		return;
+
+	RITEMDATA uData;
+	memset(&uData, 0, sizeof(RITEMDATA));
+	uData.nEventCmd = SACC_COMMAND_OPERATION_CHANGE_SACC_GET;
+	uData.nWTSequence = m_iSelectLoadCassette;
+
+	m_cManager->UploadData(&uData);
+}
+
+void CDlgSACC::OnBnClickedBtnGetInsideProbe_Close()
+{
+	CString strMsg;
+	strMsg.Format(_T("동작 하시겠습니까???"));
+
+	if (AfxMessageBox(strMsg, MB_YESNO | MB_ICONQUESTION) == IDNO)
+		return;
+
+	RITEMDATA uData;
+	memset(&uData, 0, sizeof(RITEMDATA));
+	uData.nEventCmd = SACC_COMMAND_OPERATION_CHANGE_SACC_CLOSE;
+
+	m_cManager->UploadData(&uData);
+}
+
+void CDlgSACC::OnBnClickedBtnPutInsideProbe_Move()
+{
+	CString strMsg;
+	strMsg.Format(_T("동작 하시겠습니까???"));
+
+	if (AfxMessageBox(strMsg, MB_YESNO | MB_ICONQUESTION) == IDNO)
+		return;
+
+	if (m_iSelectUnLoadCassette == -1 )
+	{
+		if (AfxMessageBox(_T("UnLoad Cassette를 선택하지 않았습니다."))) return;
+	}
+
+	if (m_iSelectProbe == -1)
+	{
+		if (AfxMessageBox(_T("Probe를 선택하지 않았습니다."))) return;
+	}
+
+	RITEMDATA uData;
+	memset(&uData, 0, sizeof(RITEMDATA));
+	uData.nEventCmd = SACC_COMMAND_OPERATION_CHANGE_SLOT_PUT;
+	uData.nWTSequence = m_iSelectProbe;
+	uData.nMeasMode = m_iSelectUnLoadCassette;
+
+	m_cManager->UploadData(&uData);
+}
+
+void CDlgSACC::OnBnClickedBtnPutInsideProbe_Put()
+{
+	CString strMsg;
+	strMsg.Format(_T("동작 하시겠습니까???"));
+
+	if (AfxMessageBox(strMsg, MB_YESNO | MB_ICONQUESTION) == IDNO)
+		return;
+
+	RITEMDATA uData;
+	memset(&uData, 0, sizeof(RITEMDATA));
+	uData.nEventCmd = SACC_COMMAND_OPERATION_CHANGE_SACC_PUT;
+	uData.nWTSequence = m_iSelectUnLoadCassette;
+
+	m_cManager->UploadData(&uData);
+}
+
+void CDlgSACC::OnBnClickedBtnPutInsideProbe_Close()
+{
+	CString strMsg;
+	strMsg.Format(_T("동작 하시겠습니까???"));
+
+	if (AfxMessageBox(strMsg, MB_YESNO | MB_ICONQUESTION) == IDNO)
+		return;
+
+	RITEMDATA uData;
+	memset(&uData, 0, sizeof(RITEMDATA));
+	uData.nEventCmd = SACC_COMMAND_OPERATION_CHANGE_SACC_CLOSE;
+
+	m_cManager->UploadData(&uData);
+}
+
+void CDlgSACC::OnBnClickedBtnACChangePos()
+{
+	CString strMsg;
+	strMsg.Format(_T("동작 하시겠습니까???"));
+
+	if (AfxMessageBox(strMsg, MB_YESNO | MB_ICONQUESTION) == IDNO)
+		return;
+
+	if (!m_cManager->pMoniter->stDataP.bMData[PLC_BIT_UNLOAD_SENSOR03])  //sample plate safety check
+	{
+		if (AfxMessageBox(_T("Safety(장비 대기) 위치가 아닙니다.\n 계속 하시겠습니까?"), MB_YESNO | MB_ICONQUESTION) != IDYES) return;
+	}
+	if (m_iSelectProbe == -1)
+	{
+		if (AfxMessageBox(_T("Probe를 선택하지 않았습니다."))) return;
+	}
+
+	RITEMDATA uData;
+	memset(&uData, 0, sizeof(RITEMDATA));
+	uData.nEventCmd = SACC_COMMAND_OPERATION_TEACH_AC_CHANGE;
+	uData.nWTSequence = m_iSelectProbe;
+
+	m_cManager->UploadData(&uData);
+}
+
+void CDlgSACC::OnBnClickedBtnACSafetyPos()
+{	
+	CString strMsg;
+	strMsg.Format(_T("동작 하시겠습니까???"));
+
+	if (AfxMessageBox(strMsg, MB_YESNO | MB_ICONQUESTION) == IDNO)
+		return;
+
+	if (!m_cManager->pMoniter->stDataP.bMData[PLC_BIT_UNLOAD_SENSOR03])  //sample plate safety check
+	{
+		if (AfxMessageBox(_T("Safety(장비 대기) 위치가 아닙니다.\n 계속 하시겠습니까?"), MB_YESNO | MB_ICONQUESTION) != IDYES) return;
+	}
+
+	RITEMDATA uData;
+	memset(&uData, 0, sizeof(RITEMDATA));
+	uData.nEventCmd = SACC_COMMAND_OPERATION_TEACH_AC_SAFETY;
+
+	m_cManager->UploadData(&uData);
+}
+
+void CDlgSACC::OnBnClickedBtnACSACCPos()
+{
+	CString strMsg;
+	strMsg.Format(_T("동작 하시겠습니까???"));
+
+	if (AfxMessageBox(strMsg, MB_YESNO | MB_ICONQUESTION) == IDNO)
+		return;
+
+	if (!m_cManager->pMoniter->stDataP.bMData[PLC_BIT_UNLOAD_SENSOR03])  //sample plate safety check
+	{
+		if (AfxMessageBox(_T("Safety(장비 대기) 위치가 아닙니다.\n 계속 하시겠습니까?"), MB_YESNO | MB_ICONQUESTION) != IDYES) return;
+	}
+
+	RITEMDATA uData;
+	memset(&uData, 0, sizeof(RITEMDATA));
+	uData.nEventCmd = SACC_COMMAND_OPERATION_TEACH_AC_SACC;
+
+	m_cManager->UploadData(&uData);
+}
+
+void CDlgSACC::OnBnClickedBtnChangeReadyMove()
+{
+	CString strMsg;
+	strMsg.Format(_T("동작 하시겠습니까???"));
+
+	if (AfxMessageBox(strMsg, MB_YESNO | MB_ICONQUESTION) == IDNO)
+		return;
+
+	RITEMDATA uData;
+	memset(&uData, 0, sizeof(RITEMDATA));
+	uData.nEventCmd = SACC_COMMAND_OPERATION_READY;
+
+	m_cManager->UploadData(&uData);
+}
+
+void CDlgSACC::OnBnClickedBtnChangeMeasMove()
+{
+	CString strMsg;
+	strMsg.Format(_T("동작 하시겠습니까???"));
+
+	if (AfxMessageBox(strMsg, MB_YESNO | MB_ICONQUESTION) == IDNO)
+		return;
+
+	RITEMDATA uData;
+	memset(&uData, 0, sizeof(RITEMDATA));
+	uData.nEventCmd = SACC_COMMAND_OPERATION_MEAS;
+
+	m_cManager->UploadData(&uData);
+}
+
+void CDlgSACC::OnBnClickedBtnSelectProbe1()
+{
+	m_iSelectProbe = 1;
+	GetDlgItem(IDC_BTN_SELECT_PROBE1)->SetWindowText(_T("[ V ] Aging Probe 1"));
+	GetDlgItem(IDC_BTN_SELECT_PROBE2)->SetWindowText(_T("Select Aging Probe 2"));
+	GetDlgItem(IDC_BTN_SELECT_PROBE3)->SetWindowText(_T("Select Aging Probe 3"));
+	GetDlgItem(IDC_BTN_SELECT_PROBE4)->SetWindowText(_T("Select Aging Probe 4"));
+	GetDlgItem(IDC_BTN_SELECT_PROBE5)->SetWindowText(_T("Select Meas Probe"));
+}
+
+void CDlgSACC::OnBnClickedBtnSelectProbe2()
+{
+	m_iSelectProbe = 2;
+	GetDlgItem(IDC_BTN_SELECT_PROBE1)->SetWindowText(_T("Select Aging Probe 1"));
+	GetDlgItem(IDC_BTN_SELECT_PROBE2)->SetWindowText(_T("[ V ] Aging Probe 2"));
+	GetDlgItem(IDC_BTN_SELECT_PROBE3)->SetWindowText(_T("Select Aging Probe 3"));
+	GetDlgItem(IDC_BTN_SELECT_PROBE4)->SetWindowText(_T("Select Aging Probe 4"));
+	GetDlgItem(IDC_BTN_SELECT_PROBE5)->SetWindowText(_T("Select Meas Probe"));
+}
+
+void CDlgSACC::OnBnClickedBtnSelectProbe3()
+{
+	m_iSelectProbe = 3;
+	GetDlgItem(IDC_BTN_SELECT_PROBE1)->SetWindowText(_T("Select Aging Probe 1"));
+	GetDlgItem(IDC_BTN_SELECT_PROBE2)->SetWindowText(_T("Select Aging Probe 2"));
+	GetDlgItem(IDC_BTN_SELECT_PROBE3)->SetWindowText(_T("[ V ] Aging Probe 3"));
+	GetDlgItem(IDC_BTN_SELECT_PROBE4)->SetWindowText(_T("Select Aging Probe 4"));
+	GetDlgItem(IDC_BTN_SELECT_PROBE5)->SetWindowText(_T("Select Meas Probe"));
+}
+
+void CDlgSACC::OnBnClickedBtnSelectProbe4()
+{
+	m_iSelectProbe = 4;
+	GetDlgItem(IDC_BTN_SELECT_PROBE1)->SetWindowText(_T("Select Aging Probe 1"));
+	GetDlgItem(IDC_BTN_SELECT_PROBE2)->SetWindowText(_T("Select Aging Probe 2"));
+	GetDlgItem(IDC_BTN_SELECT_PROBE3)->SetWindowText(_T("Select Aging Probe 3"));
+	GetDlgItem(IDC_BTN_SELECT_PROBE4)->SetWindowText(_T("[ V ] Aging Probe 4"));
+	GetDlgItem(IDC_BTN_SELECT_PROBE5)->SetWindowText(_T("Select Meas Probe"));
+}
+
+void CDlgSACC::OnBnClickedBtnSelectProbe5()
+{
+	m_iSelectProbe = 5;
+	GetDlgItem(IDC_BTN_SELECT_PROBE1)->SetWindowText(_T("Select Aging Probe 1"));
+	GetDlgItem(IDC_BTN_SELECT_PROBE2)->SetWindowText(_T("Select Aging Probe 2"));
+	GetDlgItem(IDC_BTN_SELECT_PROBE3)->SetWindowText(_T("Select Aging Probe 3"));
+	GetDlgItem(IDC_BTN_SELECT_PROBE4)->SetWindowText(_T("Select Aging Probe 4"));
+	GetDlgItem(IDC_BTN_SELECT_PROBE5)->SetWindowText(_T("[ V ] Meas Probe"));
+}
+
+void CDlgSACC::OnBnClickedBtnAcgantryZup()
+{
+	CString strMsg;
+	strMsg.Format(_T("동작 하시겠습니까???"));
+
+	if (AfxMessageBox(strMsg, MB_YESNO | MB_ICONQUESTION) == IDNO)
+		return;
+
+	RITEMDATA uData;
+	memset(&uData, 0, sizeof(RITEMDATA));
+	uData.nEventCmd = SACC_COMMAND_OPERATION_AC_UP;
+
+	m_cManager->UploadData(&uData);
+}
+
+void CDlgSACC::OnBnClickedBtnAcgantryZdown()
+{
+	CString strMsg;
+	strMsg.Format(_T("동작 하시겠습니까???"));
+
+	if (AfxMessageBox(strMsg, MB_YESNO | MB_ICONQUESTION) == IDNO)
+		return;
+
+	RITEMDATA uData;
+	memset(&uData, 0, sizeof(RITEMDATA));
+	uData.nEventCmd = SACC_COMMAND_OPERATION_AC_DOWN;
+
+	m_cManager->UploadData(&uData);
+}
+
+LRESULT CDlgSACC::OnFPSpreadClick_Cassette(WPARAM wParam, LPARAM lParam)
+{
+	LPSS_CELLCOORD lpcc = (LPSS_CELLCOORD)lParam;
+	int col = lpcc->Col;
+	int row = lpcc->Row;
+	
+	if(col == 2 || col == 3)
+		for (int iProbe = 5; iProbe <= 5; iProbe++)
+			m_sprdProbeID->SetDataString(col, iProbe, _T("0"));
+
+	if (col == 2)
+	{
+		m_iSelectLoadCassette = row; // Load Cassette 선택 
+	}
+	if (col == 3)
+	{
+		m_iSelectUnLoadCassette = row; // UnLoad Cassette 선택 
+	}
+
+	return LRESULT();
+}
+
+void CDlgSACC::OnBnClickedBtnReset()
+{
+	CString strMsg;
+	strMsg.Format(_T("동작 하시겠습니까???"));
+
+	if (AfxMessageBox(strMsg, MB_YESNO | MB_ICONQUESTION) == IDNO)
+		return;
+
+	CString strLog;
+	strLog.Format(_T("OnBnClickedBtnReset()"));
+	EventLog(strLog);
+
+	RITEMDATA uData;
+	memset(&uData, 0, sizeof(RITEMDATA));
+	uData.nEventCmd = SACC_COMMAND_OPERATION_PLC_ALPHA_AUTO_MODE;
+
+	m_cManager->UploadData(&uData);
+}
+
+void CDlgSACC::OnBnClickedBtnRifd()
+{
+	CString strMsg;
+	strMsg.Format(_T("동작 하시겠습니까???"));
+
+	if (AfxMessageBox(strMsg, MB_YESNO | MB_ICONQUESTION) == IDNO)
+		return;
+
+	//m_pDlgNaviMaint->m_dlgNaviMaintPLC.DoReadRFIDStart2();
+}
+
+void CDlgSACC::OnBnClickedBtnReloadId()
+{
+	CString strMsg;
+	strMsg.Format(_T("동작 하시겠습니까???"));
+
+	if (AfxMessageBox(strMsg, MB_YESNO | MB_ICONQUESTION) == IDNO)
+		return;
+
+	ReadProbeIDtoFile();
+}
+
+void CDlgSACC::OnBnClickedBtnZeroposition()
+{
+	CString strMsg;
+	strMsg.Format(_T("동작 하시겠습니까???"));
+
+	if (AfxMessageBox(strMsg, MB_YESNO | MB_ICONQUESTION) == IDNO)
+		return;
+
+	//if (fabs(m_cManager->pMoniter->stDataM[AXIS_UNIT_Z].dPos) - (m_cManager->pMoniter->stDataM[AXIS_UNIT_Z].dSWLimitP - 1) > 0.1 ||
+	if (m_cManager->pMoniter->stDataP.bMData[PLC_AUTO_CHANGE_X0_POSITION_02] != true || m_cManager->pMoniter->stDataP.bMData[PLC_AUTOCHANGE_UP_01] != true || m_cManager->pMoniter->stDataP.bMData[PLC_AUTOCHANGE_UP_02] != true)
+	{
+		if (AfxMessageBox(_T("프로브 탈/부착 가능 위치가 아닙니다.\n 계속 하시겠습니까?"), MB_YESNO | MB_ICONQUESTION) != IDYES) return;
+	}
+
+	CString strLog, strText;
+	GetDlgItemText(IDC_BTN_ZEROPOSITION, strText);
+	strLog.Format(strText);
+	EventLog(strLog);
+
+	RITEMDATA uData;
+	memset(&uData, 0, sizeof(RITEMDATA));
+
+	uData.nEventCmd = SACC_COMMAND_OPERATION_PLC_BIT_PROBE_CARD_LOCK_ON;
+	uData.nWTSequence = m_iSelectProbe;
+	m_cManager->UploadData(&uData);
+}
+
+void CDlgSACC::OnBnClickedBtnClam()
+{
+	CString strMsg;
+	strMsg.Format(_T("동작 하시겠습니까???"));
+
+	if (AfxMessageBox(strMsg, MB_YESNO | MB_ICONQUESTION) == IDNO)
+		return;
+
+	if (m_cManager->pMoniter->stDataP.bMData[PLC_AUTO_CHANGE_X0_POSITION_02] != true || m_cManager->pMoniter->stDataP.bMData[PLC_AUTOCHANGE_UP_01] != true || m_cManager->pMoniter->stDataP.bMData[PLC_AUTOCHANGE_UP_02] != true)
+	{
+		if (AfxMessageBox(_T("프로브 탈/부착 가능 위치가 아닙니다.\n 계속 하시겠습니까?"), MB_YESNO | MB_ICONQUESTION) != IDYES) return;
+	}
+
+	//if (fabs(m_cManager->pMoniter->stDataM[AXIS_UNIT_Z].dPos) - (m_cManager->pMoniter->stDataM[AXIS_UNIT_Z].dSWLimitP + 1) > 0.1 ||
+	//	/*!m_pSystem->stInterLock.m_bAutoChangeArmPos[1])*/!m_cManager->pMoniter->stDataP.bMData[PLC_AUTOCHANGE_PROBE_CHECK1]) //20220228 JCY 임시 수정
+	//{
+	//	if (AfxMessageBox(_T("프로브 탈/부착 가능 위치가 아닙니다.\n 계속 하시겠습니까?"), MB_YESNO | MB_ICONQUESTION) != IDYES) return;
+	//}
+
+	CString strLog, strText;
+	GetDlgItemText(IDC_BTN_ZEROPOSITION, strText);
+	strLog.Format(strText);
+	EventLog(strLog);
+
+	RITEMDATA uData;
+	memset(&uData, 0, sizeof(RITEMDATA));
+
+	uData.nEventCmd = SACC_COMMAND_OPERATION_PLC_BIT_PROBE_UNIT_CLAMP_ON;
+	uData.nWTSequence = m_iSelectProbe;
+	m_cManager->UploadData(&uData);
+}
+
+void CDlgSACC::OnBnClickedBtnPcb()
+{
+	CString strMsg;
+	strMsg.Format(_T("동작 하시겠습니까???"));
+
+	if (AfxMessageBox(strMsg, MB_YESNO | MB_ICONQUESTION) == IDNO)
+		return;
+
+	//if (fabs(m_cManager->pMoniter->stDataM[AXIS_UNIT_Z].dPos) - (m_cManager->pMoniter->stDataM[AXIS_UNIT_Z].dSWLimitP + 1) > 0.1 ||
+	//	/*!m_pSystem->stInterLock.m_bAutoChangeArmPos[1])*/!m_cManager->pMoniter->stDataP.bMData[PLC_AUTOCHANGE_PROBE_CHECK1]) //20220228 JCY 임시 수정
+	//{
+	//	if (AfxMessageBox(_T("프로브 탈/부착 가능 위치가 아닙니다.\n 계속 하시겠습니까?"), MB_YESNO | MB_ICONQUESTION) != IDYES) return;
+	//}
+
+	if (m_cManager->pMoniter->stDataP.bMData[PLC_AUTO_CHANGE_X0_POSITION_02] != true || m_cManager->pMoniter->stDataP.bMData[PLC_AUTOCHANGE_UP_01] != true || m_cManager->pMoniter->stDataP.bMData[PLC_AUTOCHANGE_UP_02] != true)
+	{
+		if (AfxMessageBox(_T("프로브 탈/부착 가능 위치가 아닙니다.\n 계속 하시겠습니까?"), MB_YESNO | MB_ICONQUESTION) != IDYES) return;
+	}
+
+	int nRet = ((CButton*)GetDlgItem(IDC_CHK_INSIDE_CLAMP_LOCK))->GetCheck();
+	if (nRet != 1)
+	{
+		AfxMessageBox(_T("Clamp Lock 상태가 아닙니다.!!"));	return;
+	}
+
+	CString strLog, strText;
+	GetDlgItemText(IDC_BTN_ZEROPOSITION, strText);
+	strLog.Format(strText);
+	EventLog(strLog);
+
+	RITEMDATA uData;
+	memset(&uData, 0, sizeof(RITEMDATA));
+
+	uData.nEventCmd = SACC_COMMAND_OPERATION_PLC_BIT_PROBE_PCB_LOCK_ON;
+	uData.nWTSequence = m_iSelectProbe;
+	m_cManager->UploadData(&uData);
+}
+
+
+int CDlgSACC::DoSearchSlot(CString strID)
+{
+	int iSlot = 0, nRet = -1;
+	CString strProbeID;
+	for (iSlot = 0; iSlot < m_sprdProbeID->GetMaxRows(); iSlot++)
+	{
+		strProbeID.Format(_T("%s"), m_szProbeCardID[iSlot]);
+
+		if (strProbeID.CompareNoCase(strID) == 0)
+		{
+			nRet = iSlot;
+			break;
+		}
+	}
+
+	return nRet;
+}
+
+int CDlgSACC::ReadProbeIDtoFile(void)
+{
+	// Read ProbeID File
+	int i = 0;
+	TCHAR szValue[MAX_PATH];
+	ZeroMemory(szValue, MAX_PATH);
+	CString strName, strProbeIDPath;
+	//strProbeIDPath.Format(_T("%sCIM\\%s"), m_pSystem->m_strRootPath, dfDEFAULT_PROBEID_FILE); //20220303 JCY 임시 수정 
+	strProbeIDPath = gf_GetFilePath(dfDEFAULT_PROBEID_FILE);
+
+	for (i = 0; i < 10; i++)
+	{
+		strName.Format(_T("PROBEID%d"), i + 1);
+		GetPrivateProfileString(_T("LIST"), strName, _T("EMPTY"), szValue, MAX_PATH, strProbeIDPath);
+		_tcscpy_s(m_szProbeCardID[i], 32, szValue);
+	}
+
+	CString strCheck;
+	for (i = 0; i < m_sprdProbeID->GetMaxRows(); i++) //20170203 lhj change
+	{
+		if (i > m_sprdProbeID->GetMaxRows())
+			continue;
+
+		// Probe 유무 확인
+		strCheck.Format(_T("%s"), m_szProbeCardID[i]);
+		m_sprdProbeID->SetData(1, i + 1, strCheck);
+	}
+
+	return 0;
+}
+
+int CDlgSACC::TeachingX1()
+{
+	int nRtn = VTM_RV_SUCCESSED;
+
+	stTeached stTeaching;
+	ZeroMemory(&stTeaching, sizeof(stTeaching));
+	stTeaching = m_stMoveACX[0];
+
+	//nRtn = m_pDlgNaviMaint->m_dlgNaviMaintMotionACS.DoWork_ProbeTeaching(stTeaching.iAxis, stTeaching.dPos, stTeaching.iSpeed);
+	MOTION_Do_Work_ProbeTeaching(stTeaching.iAxis, stTeaching.dPos, stTeaching.iSpeed); //20220302 JCY 임시 수정
+	return nRtn;
+}
+
+int CDlgSACC::TeachingX2()
+{
+	int nRtn = VTM_RV_SUCCESSED;
+
+	stTeached stTeaching;
+	ZeroMemory(&stTeaching, sizeof(stTeaching));
+	stTeaching = m_stMoveACX[1];
+
+	//nRtn = m_pDlgNaviMaint->m_dlgNaviMaintMotionACS.DoWork_ProbeTeaching(stTeaching.iAxis, stTeaching.dPos, stTeaching.iSpeed);
+	MOTION_Do_Work_ProbeTeaching(stTeaching.iAxis, stTeaching.dPos, stTeaching.iSpeed); //20220302 JCY 임시 수정
+	return nRtn;
+}
+
+int CDlgSACC::TeachingX3()
+{
+	int nRtn = VTM_RV_SUCCESSED;
+
+	stTeached stTeaching;
+	ZeroMemory(&stTeaching, sizeof(stTeaching));
+	stTeaching = m_stMoveACX[2];
+
+	//nRtn = m_pDlgNaviMaint->m_dlgNaviMaintMotionACS.DoWork_ProbeTeaching(stTeaching.iAxis, stTeaching.dPos, stTeaching.iSpeed);
+	MOTION_Do_Work_ProbeTeaching(stTeaching.iAxis, stTeaching.dPos, stTeaching.iSpeed); //20220302 JCY 임시 수정
+	return nRtn;
+}
+
+int CDlgSACC::TeachingX4()
+{
+	int nRtn = VTM_RV_SUCCESSED;
+
+	stTeached stTeaching;
+	ZeroMemory(&stTeaching, sizeof(stTeaching));
+	stTeaching = m_stMoveACX[3];
+
+	//nRtn = m_pDlgNaviMaint->m_dlgNaviMaintMotionACS.DoWork_ProbeTeaching(stTeaching.iAxis, stTeaching.dPos, stTeaching.iSpeed);
+	MOTION_Do_Work_ProbeTeaching(stTeaching.iAxis, stTeaching.dPos, stTeaching.iSpeed); //20220302 JCY 임시 수정
+	return nRtn;
+}
+
+int CDlgSACC::ManualGetOutsideProbe(int iProbe)
+{
+	CString strLog;
+	int nRtn = VTM_RV_SUCCESSED;
+
+	// GATE CLOSE 	
+	if (/*!m_pSystem->stInterLock.m_bGateValveClose*/m_cManager->pMoniter->stDataP.bMData[PLC_PACC_GATE_VALVE_CLOSE_01]) //20220228 JCY 임시 수정 
+	{
+		strLog.Format(_T("ManualGetInsideProbe Fail"));
+		EventLog(strLog);
+		return  PLC_GATE_VALVE_CLOSE_ALARM; //20161208 lhj temp
+	}
+	else
+	{
+		strLog.Format(_T("ManualGetInsideProbe Start"));
+		EventLog(strLog);
+	}
+
+	//Probe 유무 체크 - Probe가 로봇에 없는지 체크 	
+	if (/*m_pSystem->stInterLock.bACArmExistProbe*/m_cManager->pMoniter->stDataP.bMData[PLC_AUTOCHANGE_PROBE_CHECK1] != TRUE || m_cManager->pMoniter->stDataP.bMData[PLC_AUTOCHANGE_PROBE_CHECK2] != TRUE)	// No Exist //20220228 JCY 임시 수정 
+	{
+		strLog.Format(_T("Robot Probe Unit No Exist"));
+		EventLog(strLog);
+
+		if (/*m_pSystem->stInterLock.m_bProbeExist*/_tcslen(m_cManager->pMoniter->stDataP.szData[PLC_PACC_EQ_UNLOAD_ARRAY + iProbe]) != 0)	// EQ Exist //20220228 JCY 임시 수정 
+		{
+			strLog.Format(_T("Inside Probe Unit Exist"));
+			EventLog(strLog);
+
+			nRtn = DoWorkCheckReady();			// Auto Change 움직이기 전 모션위치 확인
+			if (nRtn != VTM_RV_SUCCESSED)
+			{
+				return nRtn;
+			}
+
+			nRtn = DoWork_GetInsideProbe();
+			if (nRtn == VTM_RV_SUCCESSED)
+			{
+				strLog.Format(_T("Robot GetInsideProbe OK"));
+				EventLog(strLog);
+			}
+			else
+			{
+				strLog.Format(_T("Robot GetInside Move NG"));
+				EventLog(strLog);
+				return SACC_GET_INSIDE_MOVE_ALARM;
+			}
+		}
+		else
+		{
+			strLog.Format(_T("Get Inside Start Inside Probe Unit No Exist"));
+			EventLog(strLog);
+			return SACC_START_GET_INSIDE_PROBE_NO_EXIST_ALARM;
+		}
+	}
+	else
+	{
+		if (/*m_pSystem->stInterLock.m_bProbeExist*/_tcslen(m_cManager->pMoniter->stDataP.szData[PLC_PACC_EQ_UNLOAD_ARRAY + iProbe]) != 0) //20220228 JCY 임시 수정 
+		{
+			return SACC_START_GET_INSIDE_ROBOT_PROBE_EXIST_ALARM;
+		}
+		else
+		{
+			strLog.Format(_T("Robot Probe Unit Exist"));
+			EventLog(strLog);
+			return VTM_RV_SUCCESSED;
+		}
+	}
+
+	return nRtn;
+}
+
+int CDlgSACC::ManualPutInsideProbe(int iProbe)
+{
+	CString strLog;
+	int nRtn = VTM_RV_SUCCESSED;
+
+	//GATE CLOSE
+	if (/*!m_pSystem->stInterLock.m_bGateValveClose*/m_cManager->pMoniter->stDataP.bMData[PLC_PACC_GATE_VALVE_CLOSE_01]) //20220228 JCY 임시 수정 
+	{
+		strLog.Format(_T("ManualPutInsideProbe Fail"));
+		EventLog(strLog);
+		return  PLC_GATE_VALVE_CLOSE_ALARM; //20161208 lhj temp
+	}
+	else
+	{
+		strLog.Format(_T("ManualPutInsideProbe Start"));
+		EventLog(strLog);
+	}
+	
+	//Probe 유무 체크 - Probe가 로봇에 있는지 체크 	
+	if (/*m_pSystem->stInterLock.bACArmExistProbe*/m_cManager->pMoniter->stDataP.bMData[PLC_AUTOCHANGE_PROBE_CHECK1] == TRUE || m_cManager->pMoniter->stDataP.bMData[PLC_AUTOCHANGE_PROBE_CHECK2] == TRUE)	// Exist //20220228 JCY 임시 수정 
+	{
+		strLog.Format(_T("Robot Probe Unit Exist"));
+		EventLog(strLog);
+
+		if (/*m_pSystem->stInterLock.m_bProbeExist*/_tcslen(m_cManager->pMoniter->stDataP.szData[PLC_PACC_EQ_UNLOAD_ARRAY + iProbe]) == 0)	// EQ No Exist //20220228 JCY 임시 수정 
+		{
+			nRtn = DoWorkCheckReady();					// Auto Change 움직이기 전 모션위치 확인
+			if (nRtn != VTM_RV_SUCCESSED)
+			{
+				return nRtn;
+			}
+
+			nRtn = DoWork_PutInsideProbe(iProbe);
+			if (nRtn != VTM_RV_SUCCESSED)
+			{
+				strLog.Format(_T("Robot PutInsideProbe Move NG"));
+				EventLog(strLog);
+				return nRtn;
+			}
+			else
+			{
+				strLog.Format(_T("Robot PutInsideProbe Move OK"));
+				EventLog(strLog);
+			}
+		}
+		else
+		{
+			strLog.Format(_T("Inside Probe Unit Exist"));
+			EventLog(strLog);
+			return SACC_START_PUT_INSIDE_PROBE_EXIST_ALARM;
+		}
+	}
+	else
+	{
+		if (/*m_pSystem->stInterLock.m_bProbeExist*/_tcslen(m_cManager->pMoniter->stDataP.szData[PLC_PACC_EQ_UNLOAD_ARRAY + iProbe]) != 0) //20220228 JCY 임시 수정 
+		{
+			strLog.Format(_T("Robot Probe Unit Exist"));
+			EventLog(strLog);
+		}
+		else
+		{
+			strLog.Format(_T("Robot Probe Unit No Exist"));
+			EventLog(strLog);
+			return SACC_START_PUT_INSIDE_ROBOT_PROBE_NO_EXIST_ALARM;
+		}
+	}
+
+	return nRtn;
+}
+
+int CDlgSACC::ManualGetSACCProbe(int iProbe)
+{
+	CString strLog;
+	int nRtn = VTM_RV_SUCCESSED;
+	strLog.Format(_T("ManualGetSACCProbe Start"));
+	EventLog(strLog);
+
+	nRtn = DoWorkCheckReady();
+	if (nRtn != VTM_RV_SUCCESSED)
+		return nRtn;
+
+	//Probe 유무 체크 - Probe가 로봇에 없는지 체크 	
+	if (/*m_pSystem->stInterLock.bACArmExistProbe*/m_cManager->pMoniter->stDataP.bMData[PLC_AUTOCHANGE_PROBE_CHECK1] != TRUE || m_cManager->pMoniter->stDataP.bMData[PLC_AUTOCHANGE_PROBE_CHECK2] != TRUE)	// No Exist //20220228 JCY 임시 수정 
+	{
+		strLog.Format(_T("Robot Probe Unit No Exist"));
+		EventLog(strLog);
+
+		if (m_bGateValvePull && m_bGateValveOpen && m_bGateValveUnlock)
+		{
+			strLog.Format(_T("SACC Gate Open"));
+			EventLog(strLog);
+
+			//SLOT에 PROBE 유무 확인						
+			if (/*m_pSystem->stInterLock.m_bProbeBufferExist[0] == TRUE*/_tcslen(m_cManager->pMoniter->stDataP.szData[PLC_PACC_BUFFER_SLOT_LOAD_ARRAY]) != 0 ) // jsyoon 20170809 change // loading Probe Buffer#1 있는지 확인 //20220228 JCY 임시 수정 
+			{
+				strLog.Format(_T("Probe Buffer %d, PROBE Unit Exist"), 1);
+				EventLog(strLog);
+
+				//저장소에서 Probe 가져오기
+				nRtn = DoWork_GetStoreProbe();
+				if (nRtn != VTM_RV_SUCCESSED)
+				{
+					strLog.Format(_T("Auto Change Return NG"));
+					EventLog(strLog);
+					return nRtn;
+				}
+				else
+				{
+					strLog.Format(_T("Auto Change Return OK"));
+					EventLog(strLog);
+				}
+			}
+			else
+			{
+				strLog.Format(_T("Probe Buffer %d, PROBE Unit No Exist"), 1);
+				EventLog(strLog);
+				return SACC_START_GET_SACC_PROBE_NO_EXIST_ALARM;
+			}
+		}
+		else
+		{
+			strLog.Format(_T("SACC Gate Close"));
+			EventLog(strLog);
+			return SACC_GET_SACC_GATE_CLOSE_ALARM;
+		}
+	}
+	else
+	{
+		strLog.Format(_T("Auto Change Probe Unit Exist"));
+		EventLog(strLog);
+		return SACC_START_GET_SACC_ROBOT_PROBE_EXIST_ALARM;
+	}
+
+	return VTM_RV_SUCCESSED;
+}
+
+int CDlgSACC::ManualPutSACCProbe(int iProbe)
+{
+	CString strLog;
+	int nRtn = VTM_RV_SUCCESSED;
+	strLog.Format(_T("ManualPutSACCProbe Start"));
+	EventLog(strLog);
+
+	nRtn = DoWorkCheckReady();
+	if (nRtn != VTM_RV_SUCCESSED)
+		return nRtn;
+
+	//Probe 유무 체크 - Probe가 로봇에 있는지 체크 	
+	if (/*m_pSystem->stInterLock.bACArmExistProbe*/m_cManager->pMoniter->stDataP.bMData[PLC_AUTOCHANGE_PROBE_CHECK1] == TRUE || m_cManager->pMoniter->stDataP.bMData[PLC_AUTOCHANGE_PROBE_CHECK2] == TRUE)	// Exist //20220228 JCY 임시 수정 
+	{
+		strLog.Format(_T("Robot Probe Unit Exist"));
+		EventLog(strLog);
+		if (m_bGateValvePull && m_bGateValveOpen && m_bGateValveUnlock)
+		{
+			strLog.Format(_T("SACC Gate Open"));
+			EventLog(strLog);
+	
+			// Buffer에 PROBE 유무 확인			
+			if (/*m_pSystem->stInterLock.m_bProbeBufferExist[1] == FALSE*/_tcslen(m_cManager->pMoniter->stDataP.szData[PLC_PACC_BUFFER_SLOT_UNLOAD_ARRAY]) == 0)	// jsyoon 20170809 change // Unloading Probe Buffer#2 비어 있는지 확인 //20220228 JCY 임시 수정 
+			{
+				strLog.Format(_T("Probe Buffer %d, PROBE Unit No Exist"), 2);
+				EventLog(strLog);
+	
+				//저장소에서 Probe 놓기
+				nRtn = DoWork_PutStoreProbe();
+				if (nRtn != VTM_RV_SUCCESSED)
+				{
+					strLog.Format(_T("Auto Change Return NG"));
+					EventLog(strLog);
+					return nRtn;
+				}
+				else
+				{
+					strLog.Format(_T("Auto Change Return OK"));
+					EventLog(strLog);
+				}
+			}
+			else
+			{
+				strLog.Format(_T("Probe Buffer %d, PROBE Unit Exist"), 2);
+				EventLog(strLog);
+				return SACC_START_PUT_SACC_PROBE_EXIST_ALARM;
+			}
+		}
+		else
+		{
+			strLog.Format(_T("SACC Gate Close"));
+			EventLog(strLog);
+			return SACC_PUT_SACC_GATE_CLOSE_ALARM;
+		}
+	}
+	else
+	{
+		strLog.Format(_T("Auto Change Probe Unit No Exist"));
+		EventLog(strLog);
+		return SACC_START_PUT_SACC_ROBOT_PROBE_NO_EXIST_ALARM;
+	}
+
+	return VTM_RV_SUCCESSED;
+}
+
+int CDlgSACC::PLC_Do_PROBE_CLAMP_Lock()
+{
+	CString strLog;
+	strLog.Format(_T("PLC_PROBE_CLAMP_Lock Set"));
+	EventLog(strLog);
+
+	RITEMDATA uData;
+	memset(&uData, 0, sizeof(RITEMDATA));
+	uData.nEventCmd = PLC_COMMAND_OPERATION_CLAMP_LOCK;
+
+	int nRet = VTM_RV_SUCCESSED;
+	if (m_cManager != nullptr) nRet = m_cManager->UploadData(&uData);
+	return nRet;
+}
+
+int CDlgSACC::PLC_Do_PROBE_CLAMP_Unlock()
+{
+	CString strLog;
+	strLog.Format(_T("PLC_PROBE_CLAMP_UnLock Set"));
+	EventLog(strLog);
+
+	RITEMDATA uData;
+	memset(&uData, 0, sizeof(RITEMDATA));
+	uData.nEventCmd = PLC_COMMAND_OPERATION_CLAMP_UNLOCK;
+
+	int nRet = VTM_RV_SUCCESSED;
+	if (m_cManager != nullptr) nRet = m_cManager->UploadData(&uData);
+	return nRet;
+}
+
+int CDlgSACC::PLC_Do_Zero_Position_Lock()
+{
+	CString strLog;
+	strLog.Format(_T("PLC_Zero_Position_Lock Set"));
+	EventLog(strLog);
+
+	RITEMDATA uData;
+	memset(&uData, 0, sizeof(RITEMDATA));
+	uData.nEventCmd = PLC_COMMAND_OPERATION_ZEROPOSITION_LOCK;
+
+	int nRet = VTM_RV_SUCCESSED;
+	if (m_cManager != nullptr) nRet = m_cManager->UploadData(&uData);
+	return nRet;
+}
+
+int CDlgSACC::PLC_Do_Zero_Position_UnLock()
+{
+	CString strLog;
+	strLog.Format(_T("PLC_Zero_Position_UnLock Set"));
+	EventLog(strLog);
+
+	RITEMDATA uData;
+	memset(&uData, 0, sizeof(RITEMDATA));
+	uData.nEventCmd = PLC_COMMAND_OPERATION_ZEROPOSITION_UNLOCK;
+
+	int nRet = VTM_RV_SUCCESSED;
+	if (m_cManager != nullptr) nRet = m_cManager->UploadData(&uData);
+	return nRet;
+}
+
+int CDlgSACC::PLC_Do_PCBUNIT_Lock()
+{
+	CString strLog;
+	strLog.Format(_T("PLC_PCBUNIT_Lock Set"));
+	EventLog(strLog);
+
+	RITEMDATA uData;
+	memset(&uData, 0, sizeof(RITEMDATA));
+	uData.nEventCmd = PLC_COMMAND_OPERATION_PCBUNIT_LOCK;
+
+	int nRet = VTM_RV_SUCCESSED;
+	if (m_cManager != nullptr) nRet = m_cManager->UploadData(&uData);
+	return nRet;
+}
+
+int CDlgSACC::PLC_Do_PCBUNIT_UnLock()
+{
+	CString strLog;
+	strLog.Format(_T("PLC_PCBUNIT_UnLock Set"));
+	EventLog(strLog);
+
+	RITEMDATA uData;
+	memset(&uData, 0, sizeof(RITEMDATA));
+	uData.nEventCmd = PLC_COMMAND_OPERATION_PCBUNIT_UNLOCK;
+
+	int nRet = VTM_RV_SUCCESSED;
+	if (m_cManager != nullptr) nRet = m_cManager->UploadData(&uData);
+	return nRet;
+}
+
+int CDlgSACC::PLC_Do_WaitForSACCSafePosComplete(UINT nTimeOut)
+{
+	CString strLog;
+	strLog.Format(_T("PLC_WaitForSACCSafePosComplete Set"));
+	EventLog(strLog);
+
+	RITEMDATA uData;
+	memset(&uData, 0, sizeof(RITEMDATA));
+	uData.nEventCmd = PLC_COMMAND_OPERATION_PCBUNIT_WAIT_SACCSAFECOMPLETE;
+
+	int nRet = VTM_RV_SUCCESSED;
+	if (m_cManager != nullptr) nRet = m_cManager->UploadData(&uData);
+	return nRet;
+}
+
+int CDlgSACC::PLC_Do_Loding(int iProbe)
+{
+	CString strLog;
+	strLog.Format(_T("PLC_Loding Set"));
+	EventLog(strLog);
+
+	RITEMDATA uData;
+	memset(&uData, 0, sizeof(RITEMDATA));
+	uData.nEventCmd = PLC_COMMAND_OPERATION_LODING;
+
+	int nRet = VTM_RV_SUCCESSED;
+	if (m_cManager != nullptr) nRet = m_cManager->UploadData(&uData);
+	return nRet;
+}
+
+int CDlgSACC::PLC_Do_Loding_Done(int iProbe)
+{
+	CString strLog;
+	strLog.Format(_T("PLC_LodingDone Set"));
+	EventLog(strLog);
+
+	RITEMDATA uData;
+	memset(&uData, 0, sizeof(RITEMDATA));
+	uData.nEventCmd = PLC_COMMAND_OPERATION_LODINGDONE;
+
+	int nRet = VTM_RV_SUCCESSED;
+	if (m_cManager != nullptr) nRet = m_cManager->UploadData(&uData);
+	return nRet;
+}
+
+int CDlgSACC::PLC_Do_UnLoding(int iProbe)
+{	
+	CString strLog;
+	strLog.Format(_T("PLC_LodingDone Set"));
+	EventLog(strLog);
+
+	RITEMDATA uData;
+	memset(&uData, 0, sizeof(RITEMDATA));
+	uData.nEventCmd = PLC_COMMAND_OPERATION_UNLODING;
+
+	int nRet = VTM_RV_SUCCESSED;
+	if (m_cManager != nullptr) nRet = m_cManager->UploadData(&uData);
+	return nRet;
+}
+
+int CDlgSACC::PLC_Do_Arm_Busy()
+{
+	CString strLog;
+	strLog.Format(_T("PLC_STATUS_BUSY 1 Set"));
+	EventLog(strLog);
+
+	RITEMDATA uData;
+	memset(&uData, 0, sizeof(RITEMDATA));
+	uData.nEventCmd = PLC_EQ_STATUS_BUSY;
+
+	int nRet = VTM_RV_SUCCESSED;
+	if (m_cManager != nullptr) nRet = m_cManager->UploadData(&uData);
+	return nRet;
+}
+
+int CDlgSACC::PLC_Do_Arm_Done()
+{
+	CString strLog;
+	strLog.Format(_T("PLC_STATUS_BUSY 0 Set"));
+	EventLog(strLog);
+
+	RITEMDATA uData;
+	memset(&uData, 0, sizeof(RITEMDATA));
+	uData.nEventCmd = PLC_EQ_STATUS_BUSY;
+
+	int nRet = VTM_RV_SUCCESSED;
+	if(m_cManager != nullptr) nRet = m_cManager->UploadData(&uData);
+	return nRet;
+}
+
+int CDlgSACC::PLC_Do_SACC_HandFoldComplete()
+{
+	CString strLog;
+	strLog.Format(_T("PLC_HandFoldComplete_ACK Set"));
+	EventLog(strLog);
+
+	RITEMDATA uData;
+	memset(&uData, 0, sizeof(RITEMDATA));
+	uData.nEventCmd = PLC_PACC_HANDFOLD_COMPLETE_ACK;
+
+	int nRet = VTM_RV_SUCCESSED;
+	if (m_cManager != nullptr) nRet = m_cManager->UploadData(&uData);
+	return nRet;
+}
+
+int CDlgSACC::PLC_Do_Command_Reset()
+{
+	CString strLog;
+	strLog.Format(_T("PLC Command Value Reset EQ -> SACC"));
+	EventLog(strLog);
+
+	RITEMDATA uData;
+	memset(&uData, 0, sizeof(RITEMDATA));
+	uData.nEventCmd = PLC_EQ_AUTO_MODE;
+
+	int nRet = VTM_RV_SUCCESSED;
+	if (m_cManager != nullptr) nRet = m_cManager->UploadData(&uData);
+	return nRet;
+}
+
+int CDlgSACC::MOTION_Do_Work_ProbeTeaching(int iAxis, double dPos, int iSpeed)
+{
+	CString strLog;
+	strLog.Format(_T("MOTION Command ProbeTeaching"));
+	EventLog(strLog);
+
+	RITEMDATA uData;
+	memset(&uData, 0, sizeof(RITEMDATA));
+	uData.nEventCmd = MOTION_COMMAND_OPERATION_PROBETEACHING;
+
+	uData.nWTSequence = iAxis;
+	uData.stDataM[iAxis].dPos = dPos;	
+	uData.stDataM[iAxis].iSpeed = iSpeed;
+
+	int nRet = VTM_RV_SUCCESSED;
+	if (m_cManager != nullptr) nRet = m_cManager->UploadData(&uData);
+	return nRet;
+}
+
+int CDlgSACC::MOTION_Do_Work_Move(int iAxis, double dPos, int iSpeed)
+{
+	CString strLog;
+	strLog.Format(_T("MOTION Command Moving"));
+	EventLog(strLog);
+
+	RITEMDATA uData;
+	memset(&uData, 0, sizeof(RITEMDATA));
+	uData.nEventCmd = MOTION_COMMAND_OPERATION_MOVE;
+
+	uData.nWTSequence = iAxis;
+	uData.stDataM[iAxis].dPos = dPos;	
+	uData.stDataM[iAxis].iSpeed = iSpeed;
+
+	int nRet = VTM_RV_SUCCESSED;
+	if (m_cManager != nullptr) nRet = m_cManager->UploadData(&uData);
+	return nRet;
+}
+
+int CDlgSACC::MOTION_DO_GetAxisMinLimit()
+{
+	return 0;
+}
+
+int CDlgSACC::MOTION_Do_MoveSafeProbe()
+{
+	CString strLog;
+	strLog.Format(_T("PLC_MoveSafeProbe Set"));
+	EventLog(strLog);
+
+	RITEMDATA uData;
+	memset(&uData, 0, sizeof(RITEMDATA));
+	uData.nEventCmd = MOTION_COMMAND_OPERATION_PROBE_MOVE_SAFETY;
+
+	int nRet = VTM_RV_SUCCESSED;
+	if (m_cManager != nullptr) nRet = m_cManager->UploadData(&uData);
+	return nRet;
+}
+
+int CDlgSACC::PLC_Do_WorkReadySACC()
+{
+	int nRtn = VTM_RV_SUCCESSED;
+	CString strLog;
+
+	//SACC AUTO 체크 		
+	if (/*!m_pSystem->m_bPLCData[PLC_SACC_AUTO_MODE] && m_pSystem->m_bPLCData[PLC_SACC_MANUAL_MODE]*/
+		!m_cManager->pMoniter->stDataP.bMData[PLC_PACC_AUTO_MODE] && m_cManager->pMoniter->stDataP.bMData[PLC_PACC_MANUAL_MODE]) //20220302 JCY 임시 수정 
+	{
+		strLog.Format(_T("Input PLC_SACC_MANUAL_MODE %d"), PLC_PACC_MANUAL_MODE);
+		EventLog(strLog);
+		return SACC_START_PLC_SACC_MANUAL_MODE_ALARM;
+	}
+	else
+	{
+		strLog.Format(_T("Input PLC_SACC_AUTO_MODE %d"), PLC_PACC_AUTO_MODE);
+		EventLog(strLog);
+	}
+
+	//SACC 알람 체크 
+	if (/*m_pSystem->m_bPLCData[PLC_SACC_ALARM]*/
+		m_cManager->pMoniter->stDataP.bMData[PLC_PACC_ALARM]) //20220302 JCY 임시 수정 
+	{
+		strLog.Format(_T("Input PLC_SACC_ALARM %d"), PLC_PACC_ALARM);
+		EventLog(strLog);
+		return SACC_START_PLC_SACC_ALARM_ALARM;
+	}
+	else
+	{
+		strLog.Format(_T("Input PLC_SACC_No ALARM %d"), PLC_PACC_ALARM);
+		EventLog(strLog);
+	}
+
+	//SACC 준비 체크 
+	RITEMDATA uData;
+	memset(&uData, 0, sizeof(RITEMDATA));
+	uData.nEventCmd = PLC_PACC_STATUS_READY;
+
+	//nRtn = WaitforBitSet_M4000(PLC_SACC_STATUS_READY, TRUE, 120000, 1);
+	if (m_cManager != nullptr) nRtn = m_cManager->UploadData(&uData); //20220302 JCY 임시 수정 
+
+	if (nRtn != VTM_RV_SUCCESSED)
+	{
+		strLog.Format(_T("PLC_SACC_STATUS_READY Fail"));
+		EventLog(strLog);
+		return SACC_START_PLC_SACC_STATUS_READY_ALARM;
+	}
+	else
+	{
+		strLog.Format(_T("PLC_SACC_STATUS_READY OK"));
+		EventLog(strLog);
+	}
+
+	return VTM_RV_SUCCESSED;
+}
+
+int CDlgSACC::ProcessUnloading()
+{
+	CString strLog;
+	int nRtn = VTM_RV_SUCCESSED;
+	strLog.Format(_T("Process Probe Unloading Start"));
+	EventLog(strLog);
+
+	nRtn = DoWork_Unloading();
+	return nRtn;
+}
+
+// SACC에 PROBE 반출하기
+int CDlgSACC::DoWork_PutStoreProbe(void)
+{
+	CString strLog;
+	int nRet = VTM_RV_SUCCESSED;
+	int iAxis = AXIS_Z9, iSpeed = SPEED_HIGH;
+	double dPos = 0.0;
+
+	//nRet = m_pDlgNaviMaint->m_dlgNaviMaintPLC.Do_Arm_Busy();
+	nRet = PLC_Do_Arm_Busy(); //20220322 JCY 임시 수정
+	if (nRet != VTM_RV_SUCCESSED)
+	{
+		strLog.Format(_T("DoWork Put Probe to SACC, Busy Set Fail"));
+		EventLog(strLog);
+		return SACC_GET_SACC_MOVE_ALARM;
+	}
+
+	// 20171116 kks Unit Z축 위치 확인 후 UP동작 필요
+	nRet = TeachingX1_UP();
+
+	if (nRet != VTM_RV_SUCCESSED)
+	{
+		strLog.Format(_T("DoWork Unit Z Up Position Move Fail"));
+		EventLog(strLog);
+		return SACC_UNIT_ROBOT_Z_AXIS_READY_MOVE_ALARM;
+	}
+	else
+	{
+		strLog.Format(_T("DoWork Unit Z Up Position Move Success"));
+		EventLog(strLog);
+	}
+
+	// Store Ready Put Probe Gantry  
+	iAxis = AXIS_X4;
+	iSpeed = m_stMoveACX[3].iSpeed;
+	dPos = m_stMoveACX[3].dPos;
+
+	//nRet = m_pDlgNaviMaint->m_dlgNaviMaintMotionACS.DoWork_ProbeTeaching(iAxis, dPos, iSpeed); 
+	MOTION_Do_Work_ProbeTeaching(iAxis, dPos, iSpeed); //20220302 JCY 임시 수정
+	if (nRet != VTM_RV_SUCCESSED)
+	{
+		strLog.Format(_T("DoWork Put Probe to SACC, AXIS_AUTO_CHANGE_GANTRY Put Pos NG, POS, %.4f, SPEED, %d"), dPos, iSpeed);
+		EventLog(strLog);
+		return SACC_PUT_SACC_MOVE_ALARM;
+	}
+	else
+	{
+		strLog.Format(_T("DoWork Put Probe to SACC, AXIS_AUTO_CHANGE_GANTRY Put Pos OK, POS, %.4f, SPEED, %d"), dPos, iSpeed);
+		EventLog(strLog);
+	}
+
+	// OCP Move SACC Wait For Hand Fold Request
+	//if (m_pSystem->stEquip.m_nEQType == EQU_TYPE_OCP)
+	//{
+		//nRet = m_pDlgNaviMaint->m_dlgNaviMaintPLC.Do_Arm_Done();
+		nRet = PLC_Do_Arm_Done(); //20220322 JCY 임시 수정 
+		if (nRet != VTM_RV_SUCCESSED)
+		{
+			strLog.Format(_T("DoWork Put Probe to SACC, Done Set Fail"));
+			EventLog(strLog);
+			return nRet;
+		}
+
+		//nRet = m_pDlgNaviMaint->m_dlgNaviMaintPLC.Do_SACC_HandFoldComplete();
+		nRet = PLC_Do_SACC_HandFoldComplete(); //20220322 JCY 임시 수정
+		if (nRet != VTM_RV_SUCCESSED)
+		{
+			strLog.Format(_T("DoWork Put Probe to SACC, HandFold Time Out"));
+			EventLog(strLog);
+			return nRet;
+		}
+
+		//nRet = m_pDlgNaviMaint->m_dlgNaviMaintPLC.Do_Arm_Busy();
+		nRet = PLC_Do_Arm_Busy(); //20220322 JCY 임시 수정
+		if (nRet != VTM_RV_SUCCESSED)
+		{
+			strLog.Format(_T("DoWork Put Probe to SACC, Busy Set Fail"));
+			EventLog(strLog);
+			return nRet;
+		}
+	//}
+
+	// Buffer Exist	
+	if (/*m_pSystem->stInterLock.m_bProbeBufferExist[1] != TRUE*/_tcslen(m_cManager->pMoniter->stDataP.szData[PLC_PACC_BUFFER_SLOT_UNLOAD_ARRAY]) == 0) //20220228 JCY 임시 수정 
+	{
+		strLog.Format(_T("Buffer #2 Probe Unit No Exist"));
+		EventLog(strLog);
+		return SACC_END_PUT_SACC_ROBOT_PROBE_EXIST_ALARM;
+	}
+
+	//Probe 유무 체크 - Probe가 로봇에 있는지 체크 	
+	if (/*m_pSystem->stInterLock.bACArmExistProbe*/m_cManager->pMoniter->stDataP.bMData[PLC_AUTOCHANGE_PROBE_CHECK1] == TRUE || m_cManager->pMoniter->stDataP.bMData[PLC_AUTOCHANGE_PROBE_CHECK2] == TRUE) //20220228 JCY 임시 수정 
+	{
+		strLog.Format(_T("Robot Probe Unit Exist"));
+		EventLog(strLog);
+		return SACC_END_PUT_SACC_ROBOT_PROBE_EXIST_ALARM;
+	}
+	else		// No Exist
+	{
+		strLog.Format(_T("Robot Probe Unit No Exist"));
+		EventLog(strLog);
+
+	}
+
+	// Ready Gantry 
+	iAxis = AXIS_X4;
+	iSpeed = m_stMoveACX[2].iSpeed;
+	dPos = m_stMoveACX[2].dPos;
+
+	//nRet = m_pDlgNaviMaint->m_dlgNaviMaintMotionACS.DoWork_ProbeTeaching(iAxis, dPos, iSpeed);
+	MOTION_Do_Work_ProbeTeaching(iAxis, dPos, iSpeed); //20220302 JCY 임시 수정
+	if (nRet != VTM_RV_SUCCESSED)
+	{
+		strLog.Format(_T("DoWork Put Probe to SACC, AXIS_AUTO_CHANGE_GANTRY Ready Pos NG, POS, %.4f, SPEED, %d"), dPos, iSpeed);
+		EventLog(strLog);
+		return SACC_PUT_SACC_MOVE_ALARM;
+	}
+	else
+	{
+		strLog.Format(_T("DoWork Put Probe to SACC, AXIS_AUTO_CHANGE_GANTRY Ready Pos OK, POS, %.4f, SPEED, %d"), dPos, iSpeed);
+		EventLog(strLog);
+	}
+
+	// 센서 감지 기다려 보자
+	//nRet = m_pDlgNaviMaint->m_dlgNaviMaintPLC.WaitForSACCSafePosComplete(5000); 
+	nRet = PLC_Do_WaitForSACCSafePosComplete(5000);	//20220302 JCY 임시 수정
+	if (nRet != VTM_RV_SUCCESSED)
+	{
+		strLog.Format(_T("DoWork_Move AXIS_AUTO_CHANGE_GANTRY_M(InsidePut_InsideToReadyOrgPos) NG, SAFETY, %d"), nRet);
+		EventLog(strLog);
+		return nRet;
+	}
+
+	//nRet = m_pDlgNaviMaint->m_dlgNaviMaintPLC.Do_Arm_Done();
+	nRet = PLC_Do_Arm_Done(); //20220322 JCY 임시 수정 
+	if (nRet != VTM_RV_SUCCESSED)
+	{
+		strLog.Format(_T("DoWork_PetStoreProbe Done Set Fail"));
+		EventLog(strLog);
+		return nRet;
+	}
+
+	// Buffer Exist	
+	if (/*m_pSystem->stInterLock.m_bProbeBufferExist[1] != TRUE */_tcslen(m_cManager->pMoniter->stDataP.szData[PLC_PACC_BUFFER_SLOT_UNLOAD_ARRAY]) == 0) //20220228 JCY 임시 수정 
+	{
+		strLog.Format(_T("Buffer #2 Probe Unit No Exist"));
+		EventLog(strLog);
+		return SACC_END_PUT_SACC_ROBOT_PROBE_EXIST_ALARM;
+	}
+
+	//Probe 유무 체크 - Probe가 로봇에 있는지 체크
+	if (/*m_pSystem->stInterLock.bACArmExistProbe*/m_cManager->pMoniter->stDataP.bMData[PLC_AUTOCHANGE_PROBE_CHECK1] == TRUE || m_cManager->pMoniter->stDataP.bMData[PLC_AUTOCHANGE_PROBE_CHECK2] == TRUE) //20220228 JCY 임시 수정
+	{
+		strLog.Format(_T("Robot Probe Unit Exist"));
+		EventLog(strLog);
+		return SACC_END_PUT_SACC_ROBOT_PROBE_EXIST_ALARM;
+	}
+	else		// No Exist
+	{
+		strLog.Format(_T("Robot Probe Unit No Exist"));
+		EventLog(strLog);
+	}
+
+	return VTM_RV_SUCCESSED;
+}
+
+int CDlgSACC::ProcessLoading(int iProbe)
+{
+	CString strLog;
+	strLog.Format(_T("Probe Unit Loading Processing Start"));
+	EventLog(strLog);
+	int nRtn = VTM_RV_SUCCESSED;
+
+	// SACC에서 가져올 PROBE 선택 확인
+	// m_nSelPos 가져올 Probe 슬롯번호
+	//if (m_nSelPos < 0)
+	if (iProbe < 0)//20220302 JCY 임시 수정
+	{
+		return SACC_SELECT_SLOT_ERROR;
+	}
+
+	// PROBE 교체를 위한 접점 확인 
+	//Probe 유무 체크 - Probe가 Store(SACC)에 있어야 한다.		
+	if (/*m_pSystem->stInterLock.m_bProbeCardExist[m_nSelPos] != TRUE*/_tcslen(m_cManager->pMoniter->stDataP.szData[PLC_PACC_CST_LOAD_ARRAY + iProbe]) != 0) //20220302 JCY 임시 수정 
+	{
+		if (/*m_pSystem->stInterLock.m_bProbeBufferExist[1] != TRUE */_tcslen(m_cManager->pMoniter->stDataP.szData[PLC_PACC_BUFFER_SLOT_UNLOAD_ARRAY]) != 0) //20220302 JCY 임시 수정 
+		{
+			strLog.Format(_T("Store Probe %d Empty"), m_nSelPos + 1);
+			EventLog(strLog);
+			return SACC_START_GET_SACC_PROBE_NO_EXIST_ALARM;
+		}
+		else
+		{
+			strLog.Format(_T("Buffer Probe %d Exist"), 1);
+			EventLog(strLog);
+		}
+	}
+	else
+	{
+		strLog.Format(_T("Store Probe Unit %d Exist"), m_nSelPos + 1);
+		EventLog(strLog);
+	}
+
+	//Probe 유무 체크 - Probe가 Auto Change에 있는지 체크 	
+	//if (m_pSystem->stInterLock.bACArmExistProbe != TRUE)	// No Exist
+	if (/*m_pSystem->stInterLock.bACArmExistProbe*/m_cManager->pMoniter->stDataP.bMData[PLC_AUTOCHANGE_PROBE_CHECK1] != TRUE || m_cManager->pMoniter->stDataP.bMData[PLC_AUTOCHANGE_PROBE_CHECK2] != TRUE) //20220228 JCY 임시 수정
+	{
+		strLog.Format(_T("Robot Probe Unit No Exist"));
+		EventLog(strLog);
+	}
+	else
+	{
+		strLog.Format(_T("Robot Probe Unit Exist"));
+		EventLog(strLog);
+
+		// Probe 배출 진행
+		nRtn = DoWork_Unloading();
+		if (nRtn != VTM_RV_SUCCESSED)
+			return nRtn;
+	}
+
+	//Probe 유무 체크 - Probe가 Inside(ICP)에 없어야 한다.
+	if (/*m_pSystem->stInterLock.m_bProbeExist*/_tcslen(m_cManager->pMoniter->stDataP.szData[PLC_PACC_EQ_UNLOAD_ARRAY + iProbe]) != 0)
+	{
+		strLog.Format(_T("Inside Probe Unit Exist"));
+		EventLog(strLog);
+
+		// Probe 배출 진행
+		nRtn = DoWork_Unloading();
+		if (nRtn != VTM_RV_SUCCESSED)
+			return nRtn;
+	}
+	else
+	{
+		strLog.Format(_T("Inside Probe Unit No Exist"));
+		EventLog(strLog);
+	}
+
+	nRtn = DoWork_Loading();
+	return nRtn;
+}
+
+int CDlgSACC::DoWork_Loading(int iProbe)
+{
+	CString strLog;
+	int nRtn = VTM_RV_SUCCESSED;
+
+	nRtn = PLC_Do_WorkReadySACC();  //SACC loading 전 준비 상태 확인
+	if (nRtn != VTM_RV_SUCCESSED)
+	{
+		strLog.Format(_T("WorkReadySACC NG"));
+		EventLog(strLog);
+		return nRtn;
+	}
+	else
+	{
+		strLog.Format(_T("WorkReadySACC OK"));
+		EventLog(strLog);
+	}
+
+	nRtn = DoWorkCheckReady();
+	if (nRtn != VTM_RV_SUCCESSED)
+	{
+		return nRtn;
+	}
+
+	//Probe 유무 체크 - Probe가 Inside(EQ)에 없어야 한다. 이전에 배출 동작을 완료하였음
+	if (/*m_pSystem->stInterLock.m_bProbeExist*/_tcslen(m_cManager->pMoniter->stDataP.szData[PLC_PACC_EQ_UNLOAD_ARRAY + iProbe]) != 0) //20220302 JCY 임시 수정 
+	{
+		strLog.Format(_T("Inside Probe Unit Exist"));
+		EventLog(strLog);
+		return SACC_START_PUT_INSIDE_PROBE_EXIST_ALARM;
+	}
+	else
+	{
+		strLog.Format(_T("Inside Probe Unit No Exist"));
+		EventLog(strLog);
+	}
+	
+	//Probe 유무 체크 - Probe가 Auto Change에 있는지 체크 
+	//if (m_pSystem->stInterLock.bACArmExistProbe != TRUE)	// No Exist
+	if (m_cManager->pMoniter->stDataP.bMData[PLC_AUTOCHANGE_PROBE_CHECK1] != TRUE || m_cManager->pMoniter->stDataP.bMData[PLC_AUTOCHANGE_PROBE_CHECK2] != TRUE) //20220302 JCY 임시 수정
+	{
+		// PROBE 슬롯에서 가져오기	
+		// SACC 준비 동작
+		nRtn = DoWork_OpenSACC(TRUE);
+		if (nRtn != VTM_RV_SUCCESSED)
+		{
+			//m_pDlgNaviMaint->m_dlgNaviMaintPLC.Do_Command_Reset();
+			PLC_Do_Command_Reset(); //20220302 JCY 임시 수정
+			strLog.Format(_T("Do_WorkOpenSACC NG"));
+			EventLog(strLog);
+			return nRtn;
+		}
+		else
+		{
+			strLog.Format(_T("Do_WorkOpenSACC OK"));
+			EventLog(strLog);
+		}
+
+		//저장소에서 Probe 가져오기
+		nRtn = DoWork_GetStoreProbe();
+		if (nRtn != VTM_RV_SUCCESSED)
+		{
+			//m_pDlgNaviMaint->m_dlgNaviMaintPLC.Do_Command_Reset();
+			PLC_Do_Command_Reset(); //20220302 JCY 임시 수정
+			strLog.Format(_T("DoWork_GetStoreProbe Move NG"));
+			EventLog(strLog);
+			return nRtn;
+		}
+		else
+		{
+			strLog.Format(_T("DoWork_GetStoreProbe Move OK"));
+			EventLog(strLog);
+		}
+	
+		// SACC 완료 보내기
+		nRtn = DoWork_CloseSACC();
+		if (nRtn != VTM_RV_SUCCESSED)
+		{
+			strLog.Format(_T("PLC_SACC_STATUS_COMPLETE_ACK Fail"));
+			EventLog(strLog);
+			return SACC_END_PLC_SACC_STATUS_COMPLETE_ACK_ALARM;
+		}
+		else
+		{
+			strLog.Format(_T("PLC_SACC_STATUS_COMPLETE_ACK OK"));
+			EventLog(strLog);
+		}	
+
+		// PROBE 장착 하기	
+		// CST PROBE ID 가져오기
+		//m_sprdProbeID.SetRow(m_nSelPos + 1);
+		//m_sprdProbeID.SetCol(2);		
+		//m_strSelRFID = m_sprdProbeID.GetValue();
+		m_strSelRFID = m_sprdProbeID->GetDataString(1, iProbe + 1);
+	
+		//저장소 -> 로봇 RFID 
+		m_strRobotProbeRFID = m_strSelRFID;
+		WriteConfigFile("PROBERFID", "RobotProbeRFID", m_strRobotProbeRFID);
+		strLog.Format(_T("RobotProbeRFID File Save %s"), m_strRobotProbeRFID);
+		EventLog(strLog);
+	
+		CString strPorbeID, strMountTime;
+
+		//Probe RFID Mount 시간 
+		m_strMountTime = gf_MakeCurTimeString();
+		strMountTime = m_strMountTime;
+
+		//로봇 -> Inside RFID
+		m_strCurrInsideRFID = m_strRobotProbeRFID;
+		GetDlgItem(IDC_EDIT_INSIDE_PROBE_RFID)->SetWindowText(m_strCurrInsideRFID);
+		WriteConfigFile("PROBERFID", "InsideProbeRFID", m_strCurrInsideRFID);
+		WriteConfigFile("PROBERFID", "InsideProbeRFIDMountTime", m_strMountTime);
+		m_strRobotProbeRFID = "";
+		WriteConfigFile("PROBERFID", "RobotProbeRFID", m_strRobotProbeRFID);
+		strLog.Format(_T("InsideProbeRFID File Save %s"), m_strCurrInsideRFID);
+		EventLog(strLog);
+	
+		strPorbeID = m_strCurrInsideRFID;
+
+		//20220322 JCY 임시 수정 못함 
+		////////////////////////////////////////////////////////////////////////// 
+		//_tcscpy_s(m_pSystem->stProbeInfo.m_szProbeCardID, _countof(m_pSystem->stProbeInfo.m_szProbeCardID), strPorbeID);
+		//_tcscpy_s(m_pSystem->stProbeInfo.m_szProbeCardIDTime, _countof(m_pSystem->stProbeInfo.m_szProbeCardIDTime), strMountTime);
+		//m_pSystem->stProbeInfo.m_nUseCnt = 0;
+		//m_pDlgNaviReport->InsertProbe(strMountTime);
+		//m_pDlgNaviData->SetProbeLog();
+		//////////////////////////////////////////////////////////////////////////
+	
+		//Robot Unit Z Ready  Unit Z Ready 
+		nRtn = DoWorkCheckReady();
+		if (nRtn != VTM_RV_SUCCESSED)
+		{
+			return nRtn;
+		}
+	
+		double dPos = 0.0; 
+		
+		//dPos = m_pDlgNaviMaint->m_dlgNaviMaintMotionACS.GetAxisMinLimit(AXIS_UNIT_Z) + 1; 
+		//m_pDlgNaviMaint->m_dlgNaviMaintMotionACS.DoWork_ProbeTeaching(AXIS_UNIT_Z, dPos, SPEED_HIGH); 
+		dPos = m_cManager->pMoniter->stDataM[AXIS_UNIT_Z].dSWLimitN + 1; //20220322 JCY 임시 수정
+		MOTION_Do_Work_ProbeTeaching(AXIS_UNIT_Z, dPos, SPEED_HIGH);	 //20220322 JCY 임시 수정 
+	
+		//Inside Probe 놓기
+		nRtn = DoWork_PutInsideProbe(iProbe);
+		if (nRtn != VTM_RV_SUCCESSED)
+		{
+			strLog.Format(_T("DoWork_PutInsideProbe Move NG"));
+			EventLog(strLog);
+			return nRtn;
+		}
+		else
+		{
+			strLog.Format(_T("DoWork_PutInsideProbe Move OK"));
+			EventLog(strLog);
+		}
+	
+		//Probe 유무 체크 - Probe가 Inside(ICP)에 있어야 한다.
+		if (m_bUnInsideProbe)
+		{
+			strLog.Format(_T("Inside Probe No Exist"));
+			EventLog(strLog);
+			return SACC_END_PUT_INSIDE_PROBE_NO_EXIST_ALARM;
+		}
+		else
+		{
+			strLog.Format(_T("Inside Probe Exist"));
+			EventLog(strLog);
+		}
+	}
+	else
+	{
+		return SACC_START_GET_SACC_ROBOT_PROBE_EXIST_ALARM; // lhj add 161013
+	}
+	
+	strLog.Format(_T("Probe Change Complete"));
+	EventLog(strLog);
+
+	return VTM_RV_SUCCESSED;
+}
+
+int CDlgSACC::DoWork_Unloading(int iProbe)
+{
+	CString strLog;
+	int nRtn = VTM_RV_SUCCESSED;
+
+	//SACC loading, unloading 준비 상태 확인
+	//nRtn = m_pDlgNaviMaint->m_dlgNaviMaintPLC.WorkReadySACC(); // SACC Unloading 전 준비 상태 확인
+	nRtn = PLC_Do_WorkReadySACC(); //20220322 JCY 임시 수정 
+	if (nRtn != VTM_RV_SUCCESSED)
+	{
+		strLog.Format(_T("WorkReadySACC NG"));
+		EventLog(strLog);
+		return nRtn;
+	}
+	else
+	{
+		strLog.Format(_T("WorkReadySACC OK"));
+		EventLog(strLog);
+	}
+	//
+
+	if (m_nSelPos < 0)
+	{
+		strLog.Format(_T("Selected SACC Slot NG"));
+		EventLog(strLog);
+		return SACC_SELECT_SLOT_ERROR;
+	}
+
+	//현재 선택된 RFID 가져오기 
+	CString str;
+
+	// Probe RFID 읽기
+	nRtn = DoWorkCheckReady();
+	if (nRtn != VTM_RV_SUCCESSED)
+	{
+		return nRtn;
+	}
+
+	//Probe 유무 체크 - Probe가 Inside(ICP)에 있어야 한다.
+	if (m_bUnInsideProbe)
+	{
+		strLog.Format(_T("Inside Probe Unit No Exist"));
+		EventLog(strLog);
+		return PROBE_GET_INSIDE_BUT_UNIT_PROBE_NO_EXIST;
+	}
+	else
+	{
+		strLog.Format(_T("Inside Probe Unit Exist"));
+		EventLog(strLog);
+	}
+
+	//Probe 유무 체크 - Probe가 Store 없어야 한다.
+	if (/*m_pSystem->stInterLock.m_bProbeCardExist[m_nSelPos] == TRUE*/_tcslen(m_cManager->pMoniter->stDataP.szData[PLC_PACC_CST_LOAD_ARRAY + iProbe]) != 0) //20220302 JCY 임시 수정 
+	{
+		strLog.Format(_T("Store Probe %d Exist"), m_nSelPos + 1);
+		EventLog(strLog);
+		return SACC_START_PUT_SACC_PROBE_EXIST_ALARM;
+	}
+	else
+	{
+		strLog.Format(_T("Store Probe %d No Exist"), m_nSelPos + 1);
+		EventLog(strLog);
+	}
+	
+	//Probe 유무 체크 - Probe가 로봇에 있는지 체크 
+	//if (m_pSystem->stInterLock.bACArmExistProbe != TRUE &&	// Arm No Exist
+	//	m_pSystem->stInterLock.m_bProbeExist)				// Exist Probe		// jsyoon 20161216 change
+	if ((m_cManager->pMoniter->stDataP.bMData[PLC_AUTOCHANGE_PROBE_CHECK1] != TRUE || m_cManager->pMoniter->stDataP.bMData[PLC_AUTOCHANGE_PROBE_CHECK2] != TRUE) && //20220302 JCY 임시 수정
+		_tcslen(m_cManager->pMoniter->stDataP.szData[PLC_PACC_EQ_UNLOAD_ARRAY + iProbe]) != 0) //20220302 JCY 임시 수정
+	{
+		strLog.Format(_T("Robot Probe Unit No Exist"));
+		EventLog(strLog);
+	
+		//Robot Unit Z Ready  Unit Z Ready 
+		nRtn = DoWorkCheckReady();
+		if (nRtn != VTM_RV_SUCCESSED)
+		{
+			return nRtn;
+		}
+	
+		//Get Inside Robot
+		nRtn = DoWork_GetInsideProbe();
+		if (nRtn != VTM_RV_SUCCESSED)
+		{
+			strLog.Format(_T("DoWork_GetInsideProbe Move NG"));
+			EventLog(strLog);
+			return nRtn;
+		}
+		else
+		{
+			strLog.Format(_T("DoWork_GetInsideProbe Move OK"));
+			EventLog(strLog);
+		}
+	
+		//Probe 유무 체크 - Probe가 로봇에 있는지 체크 
+		//if (m_pSystem->stInterLock.bACArmExistProbe != TRUE)	// No Exist
+		if (m_cManager->pMoniter->stDataP.bMData[PLC_AUTOCHANGE_PROBE_CHECK1] != TRUE || m_cManager->pMoniter->stDataP.bMData[PLC_AUTOCHANGE_PROBE_CHECK2] != TRUE) //20220302 JCY 임시 수정
+		{
+			strLog.Format(_T("PLC_PROBE_ROBOT_CHECK Probe No Exist"));
+			EventLog(strLog);
+			return SACC_END_GET_INSIDE_ROBOT_PROBE_NO_EXIST_ALARM;
+		}
+		else
+		{
+			strLog.Format(_T("PLC_PROBE_ROBOT_CHECK Probe Exist"));
+			EventLog(strLog);
+		}
+	
+		//Inside -> Robot RFID
+		m_strRobotProbeRFID = m_strSelRFID;
+		WriteConfigFile("PROBERFID", "RobotProbeRFID", m_strRobotProbeRFID);
+		m_strCurrInsideRFID = "";
+		WriteConfigFile("PROBERFID", "InsideProbeRFID", m_strCurrInsideRFID);
+		GetDlgItem(IDC_EDIT_INSIDE_PROBE_RFID)->SetWindowText(m_strCurrInsideRFID);
+		strLog.Format(_T("RobotProbeRFID File Save %s"), m_strRobotProbeRFID);
+		EventLog(strLog);
+	}
+	//else if (m_pSystem->stInterLock.bACArmExistProbe &&		// Arm Exist Probe
+	//	!m_pSystem->stInterLock.m_bProbeExist)					// Not Exist Probe	
+	else if((m_cManager->pMoniter->stDataP.bMData[PLC_AUTOCHANGE_PROBE_CHECK1] == TRUE || m_cManager->pMoniter->stDataP.bMData[PLC_AUTOCHANGE_PROBE_CHECK2] == TRUE) && //20220302 JCY 임시 수정
+		_tcslen(m_cManager->pMoniter->stDataP.szData[PLC_PACC_EQ_UNLOAD_ARRAY + iProbe]) == 0) //20220302 JCY 임시 수정
+	{
+		//Probe 가 암에 있을 경우 계속 진행 뜨는 동작 무시하고 진행 필요	
+		//Store Probe 놓기
+		//nRtn = m_pDlgNaviMaint->m_dlgNaviMaintMotionACS.DoWork_MoveSafeProbe();
+		nRtn = MOTION_Do_MoveSafeProbe();  //20220322 JCY 임시 수정
+		if (nRtn != VTM_RV_SUCCESSED)
+		{
+			strLog.Format(_T("DoWork_MoveSafeProbe NG"));
+			EventLog(strLog);
+			return nRtn;
+		}
+		else
+		{
+			strLog.Format(_T("DoWork_PutStoreProbe OK"));
+			EventLog(strLog);
+		}
+	}
+	else	// 둘 다 있거나 둘 다 없는 경우 알람
+	{
+		strLog.Format(_T("Robot Probe Unit Exist"));
+		EventLog(strLog);
+		return SACC_START_GET_INSIDE_ROBOT_PROBE_EXIST_ALARM; 
+	}
+	
+	// SLOT 변경
+	nRtn = DoWork_OpenSACC(FALSE);
+	if (nRtn != VTM_RV_SUCCESSED)
+	{
+		return nRtn;
+	}	
+
+	double dPos = 0.0;
+	//dPos = m_pDlgNaviMaint->m_dlgNaviMaintMotionACS.GetAxisMinLimit(AXIS_UNIT_Z) + 1;			  
+	//m_pDlgNaviMaint->m_dlgNaviMaintMotionACS.DoWork_ProbeTeaching(AXIS_UNIT_Z, dPos, SPEED_HIGH); 
+	dPos = m_cManager->pMoniter->stDataM[AXIS_UNIT_Z].dPos + 1;  //20220302 JCY 임시 수정
+	MOTION_Do_Work_ProbeTeaching(AXIS_UNIT_Z, dPos, SPEED_HIGH); //20220302 JCY 임시 수정
+
+	//Store Probe 놓기
+	nRtn = DoWork_PutStoreProbe();
+	if (nRtn != VTM_RV_SUCCESSED)
+	{
+		strLog.Format(_T("DoWork_PutStoreProbe NG"));
+		EventLog(strLog);
+		return nRtn;
+	}
+	else
+	{
+		strLog.Format(_T("DoWork_PutStoreProbe OK"));
+		EventLog(strLog);
+	}
+	
+	//Robot 동작 완료 
+	nRtn = DoWork_CloseSACC();
+	if (nRtn != VTM_RV_SUCCESSED)
+	{
+		strLog.Format(_T("PLC_SACC_STATUS_COMPLETE_ACK Fail"));
+		EventLog(strLog);
+		return SACC_END_PLC_SACC_STATUS_COMPLETE_ACK_ALARM;
+	}
+	else
+	{
+		strLog.Format(_T("PLC_SACC_STATUS_COMPLETE_ACK OK"));
+		EventLog(strLog);
+	}
+	
+	//Unmount 시간 
+	m_strUnmountTime = gf_MakeCurTimeString();
+	
+	//DB 저장 
+	//::ProbeHistory_Update_UnmountTime(m_pDlgMotionCom->m_strRobotProbeRFID,m_strMountTime, m_strUnmountTime);
+	
+	//Robot RFID 삭제 
+	//m_pDlgNaviReport->UpdateContact(); //20220302 JCY 임시 수정 못함 
+	
+	m_strRobotProbeRFID = "";
+	WriteConfigFile("PROBERFID", "RobotProbeRFID", m_strRobotProbeRFID);
+	//m_pDlgNaviReport->UnMountProbe(); //20220302 JCY 임시 수정 못함 
+	
+	strLog.Format(_T("PROBE Unmount (Unloading OK)"));
+	EventLog(strLog);
+
+	return VTM_RV_SUCCESSED;
+}
+
+int CDlgSACC::DoWork_GetInsideProbe(void)
+{
+	CString strLog;
+	int nRet = VTM_RV_SUCCESSED;
+	int iAxis = AXIS_Z9, iSpeed = SPEED_LOW;
+	double dPos = 0.0;
+
+	//Probe Rotate 0도 Test 필요
+	iAxis = AXIS_R1;
+	iSpeed = SPEED_MID;
+	dPos = 0.0;
+	//nRet = m_pDlgNaviMaint->m_dlgNaviMaintMotionACS.DoWork_Move(iAxis, dPos, iSpeed);
+	nRet = MOTION_Do_Work_Move(iAxis, dPos, iSpeed); //20220303 JCY 임시 수정 
+
+	if (nRet != VTM_RV_SUCCESSED)
+	{
+		strLog.Format(_T("DoWork Probe Rotate Move Fail, POS, %.4f, SPEED, %d"), dPos, iSpeed);
+		EventLog(strLog);
+		return SACC_GET_INSIDE_MOVE_ALARM;
+	}
+	else
+	{
+		strLog.Format(_T("DoWork Probe Rotate Move OK, POS, %.4f, SPEED, %d"), dPos, iSpeed);
+		EventLog(strLog);
+	}
+	//
+
+	//UNIT Z축 UP
+	iAxis = AXIS_UNIT_Z;
+	iSpeed = SPEED_HIGH;
+	//dPos = m_pDlgNaviMaint->m_dlgNaviMaintMotionACS.GetAxisMinLimit(AXIS_UNIT_Z) + 1;
+	//nRet = m_pDlgNaviMaint->m_dlgNaviMaintMotionACS.DoWork_ProbeTeaching(iAxis, dPos, iSpeed);
+	dPos = m_cManager->pMoniter->stDataM[AXIS_UNIT_Z].dPos + 1;	//20220303 JCY 임시 수정 
+	nRet = MOTION_Do_Work_ProbeTeaching(iAxis, dPos, iSpeed);	//20220303 JCY 임시 수정 
+
+	if (nRet != VTM_RV_SUCCESSED)
+	{
+		strLog.Format(_T("DoWork_GetInsideProbe NG, POS, %.4f, SPEED, %d"), dPos, iSpeed);
+		EventLog(strLog);
+		return SACC_GET_INSIDE_MOVE_ALARM;
+	}
+	else
+	{
+		strLog.Format(_T("DoWork_GetInsideProbe OK, POS, %.4f, SPEED, %d"), dPos, iSpeed);
+		EventLog(strLog);
+	}
+
+	iAxis = AXIS_X4;
+	iSpeed = m_stMoveACX[0].iSpeed;
+	dPos = m_stMoveACX[0].dPos;
+	//nRet = m_pDlgNaviMaint->m_dlgNaviMaintMotionACS.DoWork_ProbeTeaching(iAxis, dPos, iSpeed);
+	nRet = MOTION_Do_Work_ProbeTeaching(iAxis, dPos, iSpeed);	//20220303 JCY 임시 수정 
+	if (nRet != VTM_RV_SUCCESSED)
+	{
+		strLog.Format(_T("AXIS_AUTO_CHANGE_GANTRY_M(InsideGet_ReadyToInsideGetPos) NG, POS, %.4f, SPEED, %d"), dPos, iSpeed);
+		EventLog(strLog);
+		return SACC_GET_INSIDE_MOVE_ALARM;
+	}
+	else
+	{
+		strLog.Format(_T("AXIS_AUTO_CHANGE_GANTRY_M(InsideGet_ReadyToInsideGetPos) OK, POS, %.4f, SPEED, %d"), dPos, iSpeed);
+		EventLog(strLog);
+	}
+
+	//UNIT Z축 DOWN
+	iAxis = AXIS_UNIT_Z;
+	iSpeed = SPEED_LOW;
+	//dPos = m_pDlgNaviMaint->m_dlgNaviMaintMotionACS.GetAxisMaxLimit(AXIS_UNIT_Z) - 1;
+	//nRet = m_pDlgNaviMaint->m_dlgNaviMaintMotionACS.DoWork_ProbeTeaching(iAxis, dPos, iSpeed);
+	dPos = m_cManager->pMoniter->stDataM[AXIS_UNIT_Z].dPos - 1;	//20220303 JCY 임시 수정 
+	nRet = MOTION_Do_Work_ProbeTeaching(iAxis, dPos, iSpeed);	//20220303 JCY 임시 수정 
+
+	if (nRet != VTM_RV_SUCCESSED)
+	{
+		strLog.Format(_T("DoWork_GetInsideProbe NG, POS, %.4f, SPEED, %d"), dPos, iSpeed);
+		EventLog(strLog);
+		return SACC_GET_INSIDE_MOVE_ALARM;
+	}
+	else
+	{
+		strLog.Format(_T("DoWork_GetInsideProbe OK, POS, %.4f, SPEED, %d"), dPos, iSpeed);
+		EventLog(strLog);
+	}
+
+	//프로브 장,탈착 전 센서 확인	
+	if (/*!m_pSystem->stInterLock.m_bAutoChangeArmPos[1]*/!m_cManager->pMoniter->stDataP.bMData[PLC_AUTOCHANGE_PROBE_CHECK1]) //20220228 JCY 임시 수정
+	{
+		EventLog(_T("Probe 탈착 위치 이동 센서 감지 실패"));
+		return SACC_GET_INSIDE_MOVE_ALARM;
+	}
+
+	//Probe PCB Unlock //CHANGE_GET_PROBE_PCB_UNLOCK
+	//m_pJobProc->SetMccEvt(0, MCC_A_PROBE_PCB_UNLOCK, TRUE); //20220303 JCY 임시 수정 못함 
+	//nRet = m_pDlgNaviMaint->m_dlgNaviMaintPLC.Do_PCB_UNIT_Unlock();
+	nRet = PLC_Do_PCBUNIT_UnLock(); //20220303 JCY 임시 수정 
+	if (nRet != VTM_RV_SUCCESSED)
+	{
+		strLog.Format(_T("Do_PCB_UNIT_Unlock() Fail"));
+	}
+	else
+	{
+		strLog.Format(_T("Do_PCB_UNIT_Unlock() OK"));
+	}
+
+	EventLog(strLog);
+	//CHANGE_GET_PROBE_PCB_UNLOCK
+	//m_pJobProc->SetMccEvt(0, MCC_A_PROBE_PCB_UNLOCK, FALSE); //20220303 JCY 임시 수정 못함 
+
+	if (nRet != VTM_RV_SUCCESSED)
+		return nRet;
+
+	// Probe Clam Lock
+	//m_pJobProc->SetMccEvt(0, MCC_A_PROBE_CLAM_UNLOCK, TRUE); //20220303 JCY 임시 수정 못함 
+	//nRet = m_pDlgNaviMaint->m_dlgNaviMaintPLC.Do_PROBE_CLAM_Unlock(); 
+	nRet = PLC_Do_PROBE_CLAMP_Unlock(); //20220303 JCY 임시 수정 
+	if (nRet != VTM_RV_SUCCESSED)
+	{
+		strLog.Format(_T("Do_PROBE_CLAM_Unlock() Fail"));
+	}
+	else
+	{
+		strLog.Format(_T("Do_PROBE_CLAM_Unlock() OK"));
+	}
+
+	EventLog(strLog);
+	//m_pJobProc->SetMccEvt(0, MCC_A_PROBE_CLAM_UNLOCK, FALSE); //20220303 JCY 임시 수정 못함 
+
+	if (nRet != VTM_RV_SUCCESSED)
+		return nRet;
+
+	//Probe Zero Position Unlock
+	//m_pJobProc->SetMccEvt(0, MCC_A_PROBE_ZERO_UNLOCK, TRUE); //20220303 JCY 임시 수정 못함 
+	//nRet = m_pDlgNaviMaint->m_dlgNaviMaintPLC.Do_Zero_Position_UnLock();		// Probe 탈착 시 Zero UnLock
+	nRet = PLC_Do_Zero_Position_UnLock(); //20220303 JCY 임시 수정 
+	if (nRet != VTM_RV_SUCCESSED)
+	{
+		//		m_pDlgNaviMaint->m_dlgNaviMaintPLC.Do_Command_Reset();
+		strLog.Format(_T("Do_Zero_Position_UnLock() Fail"));
+	}
+	else
+	{
+		strLog.Format(_T("Do_Zero_Position_UnLock() OK"));
+	}
+
+	EventLog(strLog);
+	//m_pJobProc->SetMccEvt(0, MCC_A_PROBE_ZERO_UNLOCK, FALSE); //20220303 JCY 임시 수정 못함 
+
+	if (nRet != VTM_RV_SUCCESSED)
+		return nRet;
+
+	//UNIT Z축 UP
+	iAxis = AXIS_UNIT_Z;
+	iSpeed = SPEED_LOW;
+	//dPos = m_pDlgNaviMaint->m_dlgNaviMaintMotionACS.GetAxisMinLimit(AXIS_UNIT_Z) + 1;
+	//nRet = m_pDlgNaviMaint->m_dlgNaviMaintMotionACS.DoWork_ProbeTeaching(iAxis, dPos, iSpeed);
+	dPos = m_cManager->pMoniter->stDataM[AXIS_UNIT_Z].dPos + 1;	//20220303 JCY 임시 수정 
+	nRet = MOTION_Do_Work_ProbeTeaching(iAxis, dPos, iSpeed);	//20220303 JCY 임시 수정 
+
+	if (nRet != VTM_RV_SUCCESSED)
+	{
+		strLog.Format(_T("DoWork_GetInsideProbe NG, POS, %.4f, SPEED, %d"), dPos, iSpeed);
+		EventLog(strLog);
+		return SACC_GET_INSIDE_MOVE_ALARM;
+	}
+	else
+	{
+		strLog.Format(_T("DoWork_GetInsideProbe OK, POS, %.4f, SPEED, %d"), dPos, iSpeed);
+		EventLog(strLog);
+	}
+
+	//Probe Zero PositionLock
+	//m_pJobProc->SetMccEvt(0, MCC_A_PROBE_ZERO_LOCK, TRUE); //20220303 JCY 임시 수정 못함 
+	//nRet = m_pDlgNaviMaint->m_dlgNaviMaintPLC.Do_Zero_Position_Lock();		// Probe 탈착 후 Zero Lock
+	nRet = PLC_Do_Zero_Position_Lock();  //20220303 JCY 임시 수정
+
+	if (nRet != VTM_RV_SUCCESSED)
+	{
+		strLog.Format(_T("Do_Zero_Position_Lock Fail"));
+	}
+	else
+	{
+		strLog.Format(_T("Do_Zero_Position_Lock OK"));
+	}
+
+	EventLog(strLog);
+	//m_pJobProc->SetMccEvt(0, MCC_A_PROBE_ZERO_LOCK, FALSE);  //20220303 JCY 임시 수정 못함 
+
+	if (nRet != VTM_RV_SUCCESSED)
+		return nRet;
+
+	iAxis = AXIS_X4;
+	iSpeed = m_stMoveACX[2].iSpeed;
+	dPos = m_stMoveACX[2].dPos;
+	//nRet = m_pDlgNaviMaint->m_dlgNaviMaintMotionACS.DoWork_ProbeTeaching(iAxis, dPos, iSpeed);
+	nRet = MOTION_Do_Work_ProbeTeaching(iAxis, dPos, iSpeed);  //20220303 JCY 임시 수정
+	if (nRet != VTM_RV_SUCCESSED)
+	{
+		strLog.Format(_T("AXIS_AUTO_CHANGE_GANTRY_M(InsideGet_ReadyToInsideGetPos) NG, POS, %.4f, SPEED, %d"), dPos, iSpeed);
+		EventLog(strLog);
+		return SACC_GET_INSIDE_MOVE_ALARM;
+	}
+	else
+	{
+		strLog.Format(_T("AXIS_AUTO_CHANGE_GANTRY_M(InsideGet_ReadyToInsideGetPos) OK, POS, %.4f, SPEED, %d"), dPos, iSpeed);
+		EventLog(strLog);
+	}
+
+	//UNIT Z축 DOWN
+	iAxis = AXIS_UNIT_Z;
+	iSpeed = SPEED_HIGH;
+	dPos = 0;
+	// nRet = m_pDlgNaviMaint->m_dlgNaviMaintMotionACS.DoWork_ProbeTeaching(iAxis, dPos, iSpeed);
+	nRet = MOTION_Do_Work_ProbeTeaching(iAxis, dPos, iSpeed);  //20220303 JCY 임시 수정
+	if (nRet != VTM_RV_SUCCESSED)
+	{
+		strLog.Format(_T("DoWork_GetInsideProbe NG, POS, %.4f, SPEED, %d"), dPos, iSpeed);
+		EventLog(strLog);
+		return SACC_GET_INSIDE_MOVE_ALARM;
+	}
+	else
+	{
+		strLog.Format(_T("DoWork_GetInsideProbe OK, POS, %.4f, SPEED, %d"), dPos, iSpeed);
+		EventLog(strLog);
+	}
+
+	// 센서 감지 기다려 보자
+	//nRet = m_pDlgNaviMaint->m_dlgNaviMaintPLC.WaitForSACCSafePosComplete(5000);
+	nRet = PLC_Do_WaitForSACCSafePosComplete(5000);  //20220303 JCY 임시 수정
+	if (nRet != VTM_RV_SUCCESSED)
+	{
+		strLog.Format(_T("DoWork_Move AXIS_AUTO_CHANGE_GANTRY_M(InsidePut_InsideToReadyOrgPos) NG, SAFETY, %d"), nRet);
+		EventLog(strLog);
+		return nRet;
+	}
+
+	if (/*m_pSystem->stInterLock.bACArmExistProbe*/m_cManager->pMoniter->stDataP.bMData[PLC_AUTOCHANGE_PROBE_CHECK1] == TRUE || m_cManager->pMoniter->stDataP.bMData[PLC_AUTOCHANGE_PROBE_CHECK2] == TRUE)	// Exist //20220228 JCY 임시 수정 
+	{
+		strLog.Format(_T("Get Inside Probe Unit OK"));
+		EventLog(strLog);
+	}
+	else
+	{
+		strLog.Format(_T("Get Inside End Probe Unit NG(Robot Probe Unit No Exist)"));
+		EventLog(strLog);
+		return SACC_END_GET_INSIDE_ROBOT_PROBE_NO_EXIST_ALARM;
+	}
+
+	return VTM_RV_SUCCESSED;
+}
+
+int CDlgSACC::DoWork_PutInsideProbe(int iProbe)
+{
+	CString strLog;
+	int nRet = VTM_RV_SUCCESSED;
+	int iAxis = AXIS_Z9, iSpeed = SPEED_LOW;
+	double dPos = 0.0;
+
+	//PROBE ROTATE 0 -> UNIT Z UP -> AC X MOVE
+	if (/*m_pSystem->stEquip.m_nEQType == EQU_TYPE_OCP*/TRUE)
+	{
+		//Probe Rotate 0도 Test 필요
+		iAxis = AXIS_R1;
+		iSpeed = SPEED_MID;
+		dPos = 0.0;
+		//nRet = m_pDlgNaviMaint->m_dlgNaviMaintMotionACS.DoWork_Move(iAxis, dPos, iSpeed);
+		nRet = MOTION_Do_Work_Move(iAxis, dPos, iSpeed); //20220303 JCY 임시 수정 
+
+		if (nRet != VTM_RV_SUCCESSED)
+		{
+			strLog.Format(_T("DoWork Probe Rotate Move Fail, POS, %.4f, SPEED, %d"), dPos, iSpeed);
+			EventLog(strLog);
+			return SACC_GET_INSIDE_MOVE_ALARM;
+		}
+		else
+		{
+			strLog.Format(_T("DoWork Probe Rotate Move OK, POS, %.4f, SPEED, %d"), dPos, iSpeed);
+			EventLog(strLog);
+		}
+
+		//UNIT Z축 UP
+		iAxis = AXIS_UNIT_Z;
+		iSpeed = SPEED_HIGH;
+		//dPos = m_pDlgNaviMaint->m_dlgNaviMaintMotionACS.GetAxisMinLimit(AXIS_UNIT_Z) + 1;
+		//nRet = m_pDlgNaviMaint->m_dlgNaviMaintMotionACS.DoWork_ProbeTeaching(iAxis, dPos, iSpeed);
+		dPos = m_cManager->pMoniter->stDataM[AXIS_UNIT_Z].dPos + 1;	//20220303 JCY 임시 수정 
+		nRet = MOTION_Do_Work_ProbeTeaching(iAxis, dPos, iSpeed);	//20220303 JCY 임시 수정 
+
+		if (nRet != VTM_RV_SUCCESSED)
+		{
+			strLog.Format(_T("DoWork_GetInsideProbe NG, POS, %.4f, SPEED, %d"), dPos, iSpeed);
+			EventLog(strLog);
+			return SACC_GET_INSIDE_MOVE_ALARM;
+		}
+		else
+		{
+			strLog.Format(_T("DoWork_GetInsideProbe OK, POS, %.4f, SPEED, %d"), dPos, iSpeed);
+			EventLog(strLog);
+		}
+
+		iAxis = AXIS_X4;
+		iSpeed = m_stMoveACX[0].iSpeed;
+		dPos = m_stMoveACX[0].dPos;
+		//nRet = m_pDlgNaviMaint->m_dlgNaviMaintMotionACS.DoWork_ProbeTeaching(iAxis, dPos, iSpeed);
+		nRet = MOTION_Do_Work_ProbeTeaching(iAxis, dPos, iSpeed);	//20220303 JCY 임시 수정 
+		if (nRet != VTM_RV_SUCCESSED)
+		{
+			strLog.Format(_T("AXIS_AUTO_CHANGE_GANTRY_M(InsideGet_ReadyToInsideGetPos) NG, POS, %.4f, SPEED, %d"), dPos, iSpeed);
+			EventLog(strLog);
+			return SACC_GET_INSIDE_MOVE_ALARM;
+		}
+		else
+		{
+			strLog.Format(_T("AXIS_AUTO_CHANGE_GANTRY_M(InsideGet_ReadyToInsideGetPos) OK, POS, %.4f, SPEED, %d"), dPos, iSpeed);
+			EventLog(strLog);
+		}
+	}
+
+	// Probe PCB Unlock
+	//CHANGE_GET_PROBE_PCB_UNLOCK
+	//m_pJobProc->SetMccEvt(0, MCC_A_PROBE_PCB_UNLOCK, TRUE);			//20220303 JCY 임시 수정 못함
+	//nRet = m_pDlgNaviMaint->m_dlgNaviMaintPLC.Do_PCB_UNIT_Unlock();	
+	nRet = PLC_Do_PCBUNIT_UnLock();										//20220303 JCY 임시 수정 
+	if (nRet != VTM_RV_SUCCESSED)
+	{
+		strLog.Format(_T("Do_PCB_UNIT_Unlock() Fail"));
+	}
+	else
+	{
+		strLog.Format(_T("Do_PCB_UNIT_Unlock() OK"));
+	}
+
+	EventLog(strLog);
+	//CHANGE_GET_PROBE_PCB_UNLOCK
+	//m_pJobProc->SetMccEvt(0, MCC_A_PROBE_PCB_UNLOCK, FALSE);	//20220303 JCY 임시 수정 못함
+
+	if (nRet != VTM_RV_SUCCESSED)
+		return nRet;
+
+	// Probe Clam Lock	
+	//m_pJobProc->SetMccEvt(0, MCC_A_PROBE_CLAM_UNLOCK, TRUE); //20220303 JCY 임시 수정 못함
+	//nRet = m_pDlgNaviMaint->m_dlgNaviMaintPLC.Do_PROBE_CLAM_Unlock();
+	nRet = PLC_Do_PROBE_CLAMP_Unlock(); //20220303 JCY 임시 수정
+	if (nRet != VTM_RV_SUCCESSED)
+	{
+		strLog.Format(_T("Do_PROBE_CLAM_Unlock() Fail"));
+	}
+	else
+	{
+		strLog.Format(_T("Do_PROBE_CLAM_Unlock() OK"));
+	}
+
+	EventLog(strLog);
+	//m_pJobProc->SetMccEvt(0, MCC_A_PROBE_CLAM_UNLOCK, FALSE); //20220303 JCY 임시 수정 못함
+
+	if (nRet != VTM_RV_SUCCESSED)
+		return nRet;
+
+
+	// Probe Zero Position Unlock
+	//m_pJobProc->SetMccEvt(0, MCC_A_PROBE_ZERO_UNLOCK, TRUE); //20220303 JCY 임시 수정 못함
+	//nRet = m_pDlgNaviMaint->m_dlgNaviMaintPLC.Do_Zero_Position_UnLock();	// Probe 부착 전 Zero UnLock
+	nRet = PLC_Do_Zero_Position_UnLock(); //20220303 JCY 임시 수정 
+	if (nRet != VTM_RV_SUCCESSED)
+	{
+		strLog.Format(_T("Do_Zero_Position_UnLock() Fail"));
+	}
+	else
+	{
+		strLog.Format(_T("Do_Zero_Position_UnLock() OK"));
+	}
+
+	EventLog(strLog);
+	//m_pJobProc->SetMccEvt(0, MCC_A_PROBE_ZERO_UNLOCK, FALSE); //20220303 JCY 임시 수정 못함
+
+	if (nRet != VTM_RV_SUCCESSED)
+		return nRet;
+
+	//UNIT Z축 DOWN
+	iAxis = AXIS_UNIT_Z;
+	iSpeed = SPEED_LOW;
+	//dPos = m_pDlgNaviMaint->m_dlgNaviMaintMotionACS.GetAxisMaxLimit(AXIS_UNIT_Z) - 1;
+	//nRet = m_pDlgNaviMaint->m_dlgNaviMaintMotionACS.DoWork_ProbeTeaching(iAxis, dPos, iSpeed);
+	dPos = m_cManager->pMoniter->stDataM[AXIS_UNIT_Z].dPos - 1;	//20220303 JCY 임시 수정 
+	nRet = MOTION_Do_Work_ProbeTeaching(iAxis, dPos, iSpeed);	//20220303 JCY 임시 수정 
+
+	if (nRet != VTM_RV_SUCCESSED)
+	{
+		strLog.Format(_T("DoWork_GetInsideProbe NG, POS, %.4f, SPEED, %d"), dPos, iSpeed);
+		EventLog(strLog);
+		return SACC_GET_INSIDE_MOVE_ALARM;
+	}
+	else
+	{
+		strLog.Format(_T("DoWork_GetInsideProbe OK, POS, %.4f, SPEED, %d"), dPos, iSpeed);
+		EventLog(strLog);
+	}
+
+	//20180719 add by Hee (Z축 내리고 바로 센서 확인하면 감지 안되는 경우가 있음)
+	Sleep(2000);
+
+	// Probe Check
+	// Unit Z 위에 Probe Card가 없으면
+	if (/*m_pSystem->stInterLock.m_bProbeExist != TRUE*/_tcslen(m_cManager->pMoniter->stDataP.szData[PLC_PACC_EQ_UNLOAD_ARRAY + iProbe]) == 0)  //20220303 JCY 임시 수정 
+	{
+		strLog.Format(_T("Put Inside Probe Unit No Exist"));
+		EventLog(strLog);
+		return SACC_END_PUT_INSIDE_PROBE_NO_EXIST_ALARM;
+	}
+	else
+	{
+		strLog.Format(_T("Put Inside Probe Unit OK"));
+		EventLog(strLog);
+	}
+
+	//프로브 장,탈착 전 센서 확인	
+	if (/*!m_pSystem->stInterLock.m_bAutoChangeArmPos[1]*/!m_cManager->pMoniter->stDataP.bMData[PLC_AUTOCHANGE_PROBE_CHECK1])
+	{
+		EventLog(_T("Probe 장착 위치 이동 센서 감지 실패"));
+		return SACC_PUT_INSIDE_MOVE_ALARM;
+	}
+
+	// Probe Zero Position Lock
+	//m_pJobProc->SetMccEvt(0, MCC_A_PROBE_ZERO_LOCK, TRUE);	//20220303 JCY 임시 수정 못함
+	//nRet = m_pDlgNaviMaint->m_dlgNaviMaintPLC.Do_Zero_Position_Lock();		// Probe 부착 시 Zero Lock
+	nRet = PLC_Do_Zero_Position_Lock(); //20220303 JCY 임시 수정
+
+	if (nRet != VTM_RV_SUCCESSED)
+	{
+		strLog.Format(_T("Do_Zero_Position_Lock() Fail"));
+	}
+	else
+	{
+		strLog.Format(_T("Do_Zero_Position_Lock() OK"));
+	}
+
+	EventLog(strLog);
+	//m_pJobProc->SetMccEvt(0, MCC_A_PROBE_ZERO_LOCK, FALSE); //20220303 JCY 임시 수정 못함
+
+	if (nRet != VTM_RV_SUCCESSED)
+		return nRet;
+
+	// Unit Z 위에 Probe Card가 없으면
+	if (/*m_pSystem->stInterLock.m_bProbeExist != TRUE*/ _tcslen(m_cManager->pMoniter->stDataP.szData[PLC_PACC_EQ_UNLOAD_ARRAY + iProbe]) == 0) //20220303 JCY 임시 수정 
+	{
+		strLog.Format(_T("Put Inside Probe Unit No Exist"));
+		EventLog(strLog);
+		return SACC_END_PUT_INSIDE_PROBE_NO_EXIST_ALARM;
+	}
+	else
+	{
+		strLog.Format(_T("Put Inside Probe Unit OK"));
+		EventLog(strLog);
+	}
+
+	// Probe Clam Lock	
+	//m_pJobProc->SetMccEvt(0, MCC_A_PROBE_CLAM_LOCK, TRUE); //20220303 JCY 임시 수정 못함
+	//nRet = m_pDlgNaviMaint->m_dlgNaviMaintPLC.Do_PROBE_CLAM_Lock(); 
+	nRet = PLC_Do_PROBE_CLAMP_Lock(); //20220303 JCY 임시 수정
+	if (nRet != VTM_RV_SUCCESSED)
+	{
+		strLog.Format(_T("Do_PROBE_CLAM_Lock() Fail"));
+	}
+	else
+	{
+		strLog.Format(_T("Do_PROBE_CLAM_Lock() OK"));
+	}
+
+	EventLog(strLog);
+	//m_pJobProc->SetMccEvt(0, MCC_A_PROBE_CLAM_LOCK, FALSE); //20220303 JCY 임시 수정 못함
+
+	if (nRet != VTM_RV_SUCCESSED)
+		return nRet;
+
+	// Probe PCB Lock
+	//m_pJobProc->SetMccEvt(0, MCC_A_PROBE_PCB_LOCK, TRUE); //20220303 JCY 임시 수정 못함
+	//nRet = m_pDlgNaviMaint->m_dlgNaviMaintPLC.Do_PCB_UNIT_Lock();
+	nRet = PLC_Do_PCBUNIT_Lock(); //20220303 JCY 임시 수정
+	if (nRet != VTM_RV_SUCCESSED)
+	{
+		strLog.Format(_T("Do_PCB_UNIT_Lock() Fail"));
+	}
+	else
+	{
+		strLog.Format(_T("Do_PCB_UNIT_Unlock() OK"));
+	}
+
+	EventLog(strLog);
+	//m_pJobProc->SetMccEvt(0, MCC_A_PROBE_PCB_LOCK, FALSE); //20220303 JCY 임시 수정 못함
+
+	if (nRet != VTM_RV_SUCCESSED)
+		return nRet;
+
+	//UNIT Z축 UP
+	iAxis = AXIS_UNIT_Z;
+	iSpeed = SPEED_HIGH;
+	//dPos = m_pDlgNaviMaint->m_dlgNaviMaintMotionACS.GetAxisMinLimit(AXIS_UNIT_Z) + 1;
+	//nRet = m_pDlgNaviMaint->m_dlgNaviMaintMotionACS.DoWork_ProbeTeaching(iAxis, dPos, iSpeed);
+	dPos = m_cManager->pMoniter->stDataM[AXIS_UNIT_Z].dPos + 1;	//20220303 JCY 임시 수정 
+	nRet = MOTION_Do_Work_ProbeTeaching(iAxis, dPos, iSpeed);	//20220303 JCY 임시 수정 
+
+	if (nRet != VTM_RV_SUCCESSED)
+	{
+		strLog.Format(_T("DoWork_GetInsideProbe NG, POS, %.4f, SPEED, %d"), dPos, iSpeed);
+		EventLog(strLog);
+		return SACC_GET_INSIDE_MOVE_ALARM;
+	}
+	else
+	{
+		strLog.Format(_T("DoWork_GetInsideProbe OK, POS, %.4f, SPEED, %d"), dPos, iSpeed);
+		EventLog(strLog);
+	}
+
+	iAxis = AXIS_X4;
+	iSpeed = m_stMoveACX[2].iSpeed;
+	dPos = m_stMoveACX[2].dPos;
+	//nRet = m_pDlgNaviMaint->m_dlgNaviMaintMotionACS.DoWork_ProbeTeaching(iAxis, dPos, iSpeed);
+	nRet = MOTION_Do_Work_ProbeTeaching(iAxis, dPos, iSpeed);	//20220303 JCY 임시 수정 
+	if (nRet != VTM_RV_SUCCESSED)
+	{
+		strLog.Format(_T("DoWork_Move AXIS_AUTO_CHANGE_GANTRY_M(InsidePut_InsideFrontPutPos) NG, POS, %.4f, SPEED, %d"), dPos, iSpeed);
+		EventLog(strLog);
+		return SACC_PUT_INSIDE_MOVE_ALARM;
+	}
+	else
+	{
+		strLog.Format(_T("DoWork_Move AXIS_AUTO_CHANGE_GANTRY_M(InsidePut_InsideFrontPutPos) OK, POS, %.4f, SPEED, %d"), dPos, iSpeed);
+		EventLog(strLog);
+	}
+
+	//UNIT Z축 ZERO
+	iAxis = AXIS_UNIT_Z;
+	iSpeed = SPEED_LOW;
+	dPos = 0;
+	//nRet = m_pDlgNaviMaint->m_dlgNaviMaintMotionACS.DoWork_ProbeTeaching(iAxis, dPos, iSpeed);
+	nRet = MOTION_Do_Work_ProbeTeaching(iAxis, dPos, iSpeed); //20220303 JCY 임시 수정 
+	if (nRet != VTM_RV_SUCCESSED)
+	{
+		strLog.Format(_T("DoWork_PutInsideProbe NG, POS, %.4f, SPEED, %d"), dPos, iSpeed);
+		EventLog(strLog);
+		return nRet;
+	}
+	else
+	{
+		strLog.Format(_T("DoWork_PutInsideProbe OK, POS, %.4f, SPEED, %d"), dPos, iSpeed);
+		EventLog(strLog);
+	}
+
+	// 센서 감지 기다려 보자
+	//nRet = m_pDlgNaviMaint->m_dlgNaviMaintPLC.WaitForSACCSafePosComplete(5000);
+	nRet = PLC_Do_WaitForSACCSafePosComplete(5000);	//20220303 JCY 임시 수정 
+	if (nRet != VTM_RV_SUCCESSED)
+	{
+		strLog.Format(_T("DoWork_Move AXIS_AUTO_CHANGE_GANTRY_M(InsidePut_InsideToReadyOrgPos) NG, SAFETY, %d"), nRet);
+		EventLog(strLog);
+		return nRet;
+	}
+
+	//Z축 준비 포지션 이동(Z축 Down)
+	iAxis = AXIS_Z9;
+	iSpeed = SPEED_HIGH;
+	//dPos = m_pSystem->stSystem[VTM_MOTION].m_dSafety[AXIS_Z9];
+	//nRet = m_pDlgNaviMaint->m_dlgNaviMaintMotionACS.DoWork_ProbeTeaching(iAxis, dPos, iSpeed);
+	dPos = m_cManager->pMoniter->stDataM[AXIS_Z9].dPos + 1;		//20220303 JCY 임시 수정 
+	nRet = MOTION_Do_Work_ProbeTeaching(iAxis, dPos, iSpeed);	//20220303 JCY 임시 수정 
+
+	if (nRet != VTM_RV_SUCCESSED)
+	{
+		strLog.Format(_T("DoWork_Move AXIS_AUTO_CHANGE_Z_M_LEFT(InsidePut_ReadyDownOrgPos) NG, POS, %.4f, SPEED, %d"), dPos, iSpeed);
+		EventLog(strLog);
+		return SACC_PUT_INSIDE_MOVE_ALARM;
+	}
+	else
+	{
+		strLog.Format(_T("DoWork_Move AXIS_AUTO_CHANGE_Z_M_LEFT(InsidePut_ReadyDownOrgPos) OK, POS, %.4f, SPEED, %d"), dPos, iSpeed);
+		EventLog(strLog);
+	}
+
+	// 여기까지 왔는데 Card 감지가 안되면 심각하지는데
+	// Unit Z 위에 Probe Card가 없으면
+	if (/*m_pSystem->stInterLock.m_bProbeExist != TRUE*/_tcslen(m_cManager->pMoniter->stDataP.szData[PLC_PACC_EQ_UNLOAD_ARRAY + iProbe]) == 0)
+	{
+		strLog.Format(_T("Put Inside Probe Unit No Exist"));
+		EventLog(strLog);
+		return SACC_END_PUT_INSIDE_PROBE_NO_EXIST_ALARM;
+	}
+	else
+	{
+		strLog.Format(_T("Put Inside Probe Unit OK"));
+		EventLog(strLog);
+	}
+
+	return VTM_RV_SUCCESSED;
+}
+
+int CDlgSACC::DoWork_OpenSACC(BOOL bLoad, BOOL bDone)
+{
+	int nRtn = VTM_RV_SUCCESSED;
+	CString strLog;
+
+	//SACC loading, unloading 준비 상태 확인
+	//m_pDlgNaviMaint->m_dlgNaviMaintPLC.Do_Command_Reset(); 
+	PLC_Do_Command_Reset(); //20220302 JCY 임시수정 
+	Sleep(500);
+
+	//nRtn = m_pDlgNaviMaint->m_dlgNaviMaintPLC.WorkReadySACC();	//SACC Open 전 준비 상태 확인(Loading)
+	nRtn = PLC_Do_WorkReadySACC(); //20220302 JCY 임시수정 
+
+	if (nRtn != VTM_RV_SUCCESSED)
+	{
+		strLog.Format(_T("WorkReadySACC NG"));
+		EventLog(strLog);
+		return nRtn;
+	}
+	else
+	{
+		strLog.Format(_T("WorkReadySACC OK"));
+		EventLog(strLog);
+	}
+
+	if (bLoad)		// Loading
+	{
+		//Gate까지 열기 
+		//nRtn = m_pDlgNaviMaint->m_dlgNaviMaintPLC.Do_Loading(m_nSelPos + 1); 
+		nRtn = PLC_Do_Loding(m_nSelPos + 1); //2022030302 JCY 임시 수정 
+		if (nRtn != VTM_RV_SUCCESSED)
+		{
+			strLog.Format(_T("Do_Loading NG"));
+			EventLog(strLog);
+			return nRtn;
+		}
+		else
+		{
+			strLog.Format(_T("Do_Loading OK"));
+			EventLog(strLog);
+		}
+
+		if (bDone)
+		{
+			//nRtn = m_pDlgNaviMaint->m_dlgNaviMaintPLC.Do_LoadingDone(m_nSelPos + 1); 
+			nRtn = PLC_Do_Loding_Done(m_nSelPos + 1); //2022030302 JCY 임시 수정 
+			if (nRtn != VTM_RV_SUCCESSED)
+			{
+				strLog.Format(_T("Do_LoadingDone NG"));
+				EventLog(strLog);
+				return nRtn;
+			}
+			else
+			{
+				strLog.Format(_T("Do_LoadingDone OK"));
+				EventLog(strLog);
+			}
+		}
+	}
+	else	// Unloading
+	{
+		//Gate까지 열기
+		//nRtn = m_pDlgNaviMaint->m_dlgNaviMaintPLC.Do_Unloading(m_nSelPos + 1); 
+		nRtn = PLC_Do_UnLoding(m_nSelPos + 1); //2022030302 JCY 임시 수정 
+		if (nRtn != VTM_RV_SUCCESSED)
+		{
+			strLog.Format(_T("Do_Unloading Fail"));
+			EventLog(strLog);
+		}
+		else
+		{
+			strLog.Format(_T("Do_Unloading OK"));
+			EventLog(strLog);
+		}
+	}
+
+	return nRtn;
+}
+
+void CDlgSACC::SelectReadRFID()
+{
+	CStringArray strRFID;
+	CString strTempRFID;
+	strRFID.RemoveAll();
+
+	//Probe #5
+	for (int i = 1; i <= 5; i++)
+	{
+		strTempRFID.Format(_T("%s"), m_szReadProbeCardID[i]);
+
+		//if (m_pSystem->stInterLock.m_bProbeCardExist[m_nSelPos] != TRUE) 
+		if (_tcslen(m_cManager->pMoniter->stDataP.szData[PLC_PACC_CST_LOAD_ARRAY + i]) == 0) //20220302 JCY 임시 수정 
+		{
+			if (strTempRFID == "000000000")
+				strTempRFID = "Exist(No RFID)";
+		}
+		else
+		{
+			if (strTempRFID.IsEmpty())
+			{
+				strTempRFID.Format(_T("EmptyProbeID"));
+			}
+			else if (strTempRFID == "000000000")
+			{
+				strTempRFID.Format(_T("Empty"));
+			}
+			else
+			{
+				CString strEmpty;
+				strEmpty.Format(_T("Empty (%s)"), strTempRFID);
+				strTempRFID = strEmpty;
+			}
+		}
+
+		strRFID.Add(strTempRFID);
+	}
+
+	// jsyoon 20161216 add
+	// File 저장
+	int i = 0;
+	CString strName, strValue, strProbeIDPath;
+	//strProbeIDPath.Format(_T("%sCIM\\%s"), m_pSystem->m_strRootPath, dfDEFAULT_PROBEID_FILE); //20220303 JCY 임시 수정 못함 
+	for (i = 0; i < strRFID.GetSize(); i++)
+	{
+		strName.Format(_T("PROBEID%d"), i + 1);
+		strValue.Format(_T("%s"), strRFID.GetAt(i));
+
+		//20170203 lhj add
+		if (strValue == "Empty" || strValue == "Exist(No RFID)")
+			continue;
+		//
+
+		_tcscpy_s(m_szProbeCardID[i], 32, strValue);
+
+		gf_WriteValue(_T("LIST"), strName, strValue, strProbeIDPath);
+	}
+	//////////////////////////////////////////////////////////////////////////	
+
+	// jsyoon 20170209 add
+	CString strCheck;
+	for (i = 0; i < m_sprdProbeID->GetMaxRows(); i++) //20170203 lhj change
+	{
+		if (i > m_sprdProbeID->GetMaxRows())
+			continue;
+
+		// Probe 유무 확인
+		strCheck.Format(_T("%s"), m_szProbeCardID[i]);
+		m_sprdProbeID->SetData(1, i + 1, strCheck);
+	}
+	//////////////////////////////////////////////////////////////////////////
+}
+
+void CDlgSACC::EnableEdit(BOOL bBool)
+{
+	//m_sprdTeachingPosition.EnableWindow(bBool);
+
+	m_editPosACX0.EnableWindow(bBool);
+	m_editPosACX1.EnableWindow(bBool);
+	m_editPosACX2.EnableWindow(bBool);
+	m_editPosACX3.EnableWindow(bBool);
+
+	m_cbBoxACX0.EnableWindow(bBool);
+	m_cbBoxACX1.EnableWindow(bBool);
+	m_cbBoxACX2.EnableWindow(bBool);
+	m_cbBoxACX3.EnableWindow(bBool);
+
+	//if (m_pSystem->stEquip.m_nEQType == EQU_TYPE_ICP)
+	//{
+	//	m_editPosZ0.EnableWindow(bBool);
+	//	m_editPosZ1.EnableWindow(bBool);
+	//	m_editPosZ2.EnableWindow(bBool);
+	//	m_editPosZ3.EnableWindow(bBool);
+	//
+	//	m_cbBoxZ0.EnableWindow(bBool);
+	//	m_cbBoxZ1.EnableWindow(bBool);
+	//	m_cbBoxZ2.EnableWindow(bBool);
+	//	m_cbBoxZ3.EnableWindow(bBool);
+	//
+	//	m_editPosUnitZ0.EnableWindow(bBool);
+	//}
+	//else
+	//{
+	m_editPosZ0.EnableWindow(FALSE);
+	m_editPosZ1.EnableWindow(FALSE);
+	m_editPosZ2.EnableWindow(FALSE);
+	m_editPosZ3.EnableWindow(FALSE);
+
+	m_cbBoxZ0.EnableWindow(FALSE);
+	m_cbBoxZ1.EnableWindow(FALSE);
+	m_cbBoxZ2.EnableWindow(FALSE);
+	m_cbBoxZ3.EnableWindow(FALSE);
+
+	m_editPosUnitZ0.EnableWindow(bBool/*FALSE*/);		// jsyoon 20180115 change
+
+	m_editPosProbeX.EnableWindow(bBool);
+//}
+
+
+
+	((CButton*)GetDlgItem(IDC_BTN_LOAD))->EnableWindow(bBool);
+	((CButton*)GetDlgItem(IDC_BTN_SAVE))->EnableWindow(bBool);
+
+	((CButton*)GetDlgItem(IDC_EDIT_INSIDE_PROBE_RFID))->EnableWindow(bBool);
+}
+
+void CDlgSACC::ClickFpspreadPlcInputMemoryMap(long Col, long Row)
+{
+	if (Row > 0)
+	{
+		CString strCheck;
+		for (int i = 0; i < m_sprdProbeID->GetMaxRows(); i++)
+		{
+			strCheck.Format(_T("%d"), 0);
+			m_sprdProbeID->SetDataString(2, i + 1, strCheck);
+		}
+
+		strCheck.Format(_T("%d"), 1);
+		m_sprdProbeID->SetDataString(2, Row, strCheck);
+
+		m_nSelPos = Row - 1;
+	}
+}
+
+int CDlgSACC::TeachingX1_UP()
+{
+	int nRtn = VTM_RV_SUCCESSED;
+	double dPos = 0.;
+
+
+	//if (m_pSystem->stEquip.m_nEQType == EQU_TYPE_OCP)
+	//{
+	//	dPos = m_pDlgNaviMaint->m_dlgNaviMaintMotionACS.GetAxisMinLimit(AXIS_UNIT_Z) + 1;
+	//	nRtn = m_pDlgNaviMaint->m_dlgNaviMaintMotionACS.DoWork_ProbeTeaching(AXIS_UNIT_Z, dPos, SPEED_HIGH);
+	//
+	//	// jsyoon 20171215 add // UNIT UP 후 ROTATE 0으로 이동
+	//	if (nRtn == VTM_RV_SUCCESSED)
+	//		nRtn = m_pDlgNaviMaint->m_dlgNaviMaintMotionACS.DoWork_ProbeTeaching(AXIS_R1, 0, SPEED_HIGH);
+	//
+	//}
+	//else if (m_pSystem->stEquip.m_nEQType == EQU_TYPE_ICP)
+	//{
+	//	// jsyoon 20171215 add // ROTATE 0으로 이동 후 UNIT UP
+	//	nRtn = m_pDlgNaviMaint->m_dlgNaviMaintMotionACS.DoWork_ProbeTeaching(AXIS_R1, 0, SPEED_HIGH);
+	//
+	//	if (nRtn == VTM_RV_SUCCESSED)
+	//	{
+	//		stTeached stTeaching;
+	//		ZeroMemory(&stTeaching, sizeof(stTeaching));
+	//		stTeaching = m_stMoveACZ[0];
+	//
+	//		nRtn = m_pDlgNaviMaint->m_dlgNaviMaintMotionACS.DoWork_ProbeTeaching(stTeaching.iAxis, stTeaching.dPos, stTeaching.iSpeed);
+	//	}
+	//
+	//}
+
+	return nRtn;
+}
+int CDlgSACC::TeachingX2_UP()
+{
+	int nRtn = VTM_RV_SUCCESSED;
+	double dPos = 0.;
+
+	stTeached stTeaching;
+	ZeroMemory(&stTeaching, sizeof(stTeaching));
+	stTeaching = m_stMoveACZ[0];
+
+	//nRtn = m_pDlgNaviMaint->m_dlgNaviMaintMotionACS.DoWork_ProbeTeaching(stTeaching.iAxis, stTeaching.dPos, stTeaching.iSpeed);
+
+	return nRtn;
+}
+int CDlgSACC::TeachingX3_UP()
+{
+	int nRtn = VTM_RV_SUCCESSED;
+
+	stTeached stTeaching;
+	ZeroMemory(&stTeaching, sizeof(stTeaching));
+	stTeaching = m_stMoveACZ[2];
+
+	//nRtn = m_pDlgNaviMaint->m_dlgNaviMaintMotionACS.DoWork_ProbeTeaching(stTeaching.iAxis, stTeaching.dPos, stTeaching.iSpeed);
+
+	//	nRtn = m_pDlgNaviMaint->m_dlgNaviMaintMotionACS.DoWork_ProbeTeaching(AXIS_Z9, m_dStoreGet_StoreUpPos, TRUE, m_nStoreGet_StoreUpSpeed);
+	return nRtn;
+}
+int CDlgSACC::TeachingX1_Down()
+{
+	int nRtn = VTM_RV_SUCCESSED;
+	double dPos = 0.;
+
+//	nRtn = m_pDlgNaviMaint->m_dlgNaviMaintMotionACS.DoWork_ProbeTeaching(AXIS_Z9, m_dInsideGet_InsideDownPos, TRUE, m_nInsideGet_InsideBackGetSpeed);
+
+	//if (m_pSystem->stEquip.m_nEQType == EQU_TYPE_OCP)
+	//{
+	//	//		dPos = m_pDlgNaviMaint->m_dlgNaviMaintMotionACS.GetAxisMaxLimit(AXIS_UNIT_Z) - 1;
+	//	dPos = m_dMeasUnitZPos;	// jsyoon 20180115 change
+	//	nRtn = m_pDlgNaviMaint->m_dlgNaviMaintMotionACS.DoWork_ProbeTeaching(AXIS_UNIT_Z, dPos, SPEED_LOW);
+	//}
+	//else if (m_pSystem->stEquip.m_nEQType == EQU_TYPE_ICP)
+	//{
+	//	stTeached stTeaching;
+	//	ZeroMemory(&stTeaching, sizeof(stTeaching));
+	//	stTeaching = m_stMoveACZ[1];
+	//
+	//	nRtn = m_pDlgNaviMaint->m_dlgNaviMaintMotionACS.DoWork_ProbeTeaching(stTeaching.iAxis, stTeaching.dPos, stTeaching.iSpeed);
+	//}
+
+	return nRtn;
+}
+int CDlgSACC::TeachingX2_Down()
+{
+	int nRtn = VTM_RV_SUCCESSED;
+
+	stTeached stTeaching;
+	ZeroMemory(&stTeaching, sizeof(stTeaching));
+	stTeaching = m_stMoveACZ[1];
+
+	//nRtn = m_pDlgNaviMaint->m_dlgNaviMaintMotionACS.DoWork_ProbeTeaching(stTeaching.iAxis, stTeaching.dPos, stTeaching.iSpeed);
+
+	return nRtn;
+}
+int CDlgSACC::TeachingX3_Down()
+{
+	int nRtn = VTM_RV_SUCCESSED;
+	stTeached stTeaching;
+	ZeroMemory(&stTeaching, sizeof(stTeaching));
+	stTeaching = m_stMoveACZ[3];
+
+	//nRtn = m_pDlgNaviMaint->m_dlgNaviMaintMotionACS.DoWork_ProbeTeaching(stTeaching.iAxis, stTeaching.dPos, stTeaching.iSpeed);
+
+	return nRtn;
+}
+
+void CDlgSACC::UpdateUnitMovePosition()
+{
+	CString str;
+	str.Format(_T("AC Gantry(%.4f)"), m_stMoveACX[0].dPos);
+	GetDlgItem(IDC_BTN_GANTR_X1)->SetWindowText(str);
+
+	//if (m_pSystem->stEquip.m_nEQType == EQU_TYPE_OCP)
+	//{
+	//	str.Format("UNIT Z UP(%.4f)", m_pDlgNaviMaint->m_dlgNaviMaintMotionACS.GetAxisMinLimit(AXIS_UNIT_Z) + 1);
+	//	GetDlgItem(IDC_BTN_GANTR_X1_UP)->SetWindowText(str);
+	//	//		str.Format("UNIT Z DOWN(%.4f)",m_pDlgNaviMaint->m_dlgNaviMaintMotionACS.GetAxisMaxLimit(AXIS_UNIT_Z)-1);
+	//	str.Format("UNIT Z DOWN(%.4f)", m_dMeasUnitZPos);	// jsyoon 20180115 change
+	//	GetDlgItem(IDC_BTN_GANTR_X1_DOWN2)->SetWindowText(str);
+	//}
+	//else
+	//{
+	//	str.Format("AC Z UP(%.4f)", m_stMoveACZ[0].dPos);
+	//	GetDlgItem(IDC_BTN_GANTR_X1_UP)->SetWindowText(str);
+	//	str.Format("AC Z DOWN(%.4f)", m_stMoveACZ[1].dPos);
+	//	GetDlgItem(IDC_BTN_GANTR_X1_DOWN2)->SetWindowText(str);
+	//}
+	//
+	//str.Format("AC Gantry(%.4f)", m_stMoveACX[1].dPos);
+	//GetDlgItem(IDC_BTN_GANTR_X2)->SetWindowText(str);
+	//
+	//if (m_pSystem->stEquip.m_nEQType == EQU_TYPE_ICP)
+	//{
+	//	str.Format("AC Z UP(%.4f)", m_stMoveACZ[0].dPos);
+	//	GetDlgItem(IDC_BTN_GANTR_X2_UP2)->SetWindowText(str);
+	//	str.Format("AC Z DOWN(%.4f)", m_stMoveACZ[1].dPos);
+	//	GetDlgItem(IDC_BTN_GANTR_X2_DOWN3)->SetWindowText(str);
+	//}
+	//
+	//str.Format("AC Gantry(%.4f)", m_stMoveACX[2].dPos);
+	//GetDlgItem(IDC_BTN_GANTR_X3)->SetWindowText(str);
+	//
+	//str.Format("AC Gantry(%.4f)", m_stMoveACX[3].dPos);
+	//GetDlgItem(IDC_BTN_GANTR_X4)->SetWindowText(str);
+	//
+	//if (m_pSystem->stEquip.m_nEQType == EQU_TYPE_ICP)
+	//{
+	//	str.Format("AC Z UP(%.4f)", m_stMoveACZ[2].dPos);
+	//	GetDlgItem(IDC_BTN_GANTR_X3_UP3)->SetWindowText(str);
+	//	str.Format("AC Z DOWN(%.4f)", m_stMoveACZ[3].dPos);
+	//	GetDlgItem(IDC_BTN_GANTR_X3_DOWN4)->SetWindowText(str);
+	//}
+}
+
+int CDlgSACC::DoWork_ChangeSACC(void)
+{
+	int nRtn = VTM_RV_SUCCESSED;
+	CString strLog;
+
+	// 교체할 PROBE 선택 확인
+	if (m_nSelPos < 0)
+	{
+		strLog.Format(_T("Selected SACC Slot NG"));
+		EventLog(strLog);
+		return SACC_SELECT_SLOT_ERROR;
+	}
+
+	//SACC loading, unloading 준비 상태 확인
+	//nRtn = m_pDlgNaviMaint->m_dlgNaviMaintPLC.WorkReadySACC();		//SACC Open 전 준비 상태 확인(unLoading)
+	nRtn = PLC_Do_WorkReadySACC(); //20220302 JCY 임시 수정 
+	if (nRtn != VTM_RV_SUCCESSED)
+	{
+		strLog.Format(_T("WorkReadySACC NG"));
+		EventLog(strLog);
+		return nRtn;
+	}
+	else
+	{
+		strLog.Format(_T("WorkReadySACC OK"));
+		EventLog(strLog);
+	}
+
+	//m_pDlgNaviMaint->m_dlgNaviMaintPLC.Do_Command_Reset();
+	Sleep(500);
+
+	// Probe 교체 슬롯 선택
+	// sih 20181122 change 
+//	nRtn = m_pDlgNaviMaint->m_dlgNaviMaintPLC.Do_ExChanging(m_nSelPos+1, m_nSelPos+1);
+
+	//if (m_pSystem->stEquip.m_nEQType == EQU_TYPE_ICP)
+	//	nRtn = m_pDlgNaviMaint->m_dlgNaviMaintPLC.Do_ExChanging(m_nSelPos + 1, m_nSelPos + 1);
+	//else
+	//	nRtn = m_pDlgNaviMaint->m_dlgNaviMaintPLC.Do_ExChanging(m_nSelPos, m_nSelPos);
+	////
+	//
+	//if (nRtn != VTM_RV_SUCCESSED)
+	//{
+	//	strLog.Format(_T("Do_ExChanging Fail"));
+	//	EventLog(strLog);
+	//}
+	//else
+	//{
+	//	strLog.Format(_T("Do_ExChanging OK"));
+	//	EventLog(strLog);
+	//}
+
+	return nRtn;
+}
+
+
+int CDlgSACC::DoWork_CloseSACC(void)
+{
+	int nRtn = VTM_RV_SUCCESSED;
+	CString strLog;
+
+	//Robot 동작 완료 
+	//nRtn = m_pDlgNaviMaint->m_dlgNaviMaintPLC.Do_Arm_Complete();
+	if (nRtn != VTM_RV_SUCCESSED)
+	{
+		strLog.Format(_T("Do_Arm_Complete Fail"));
+		EventLog(strLog);
+	}
+	else
+	{
+		strLog.Format(_T("Do_Arm_Complete OK"));
+		EventLog(strLog);
+
+		//PLC Command Value Reset EQ->SACC
+		//m_pDlgNaviMaint->m_dlgNaviMaintPLC.Do_Command_Reset();
+		PLC_Do_Command_Reset(); //20220302 JCY 임시 수정
+	}
+
+	return nRtn;
+}
+
+int CDlgSACC::DoWorkCheckReady(void)
+{
+	int nRtn = VTM_RV_SUCCESSED;
+	CString strLog;
+
+	// Reset
+	// ICP 장비 PLC_UNLOADING_SENSOR_X 체크
+	//nRtn = m_pDlgNaviMaint->m_dlgNaviMaintPLC.WorkReadyInside();
+	if (nRtn != VTM_RV_SUCCESSED)
+	{
+		strLog.Format(_T("No Top Gantry Ready Position"));
+		EventLog(strLog);
+		return nRtn;
+	}
+	else
+	{
+		strLog.Format(_T("Top Gantry Ready Position"));
+		EventLog(strLog);
+	}
+
+	// ICP 장비 PLC_UNLOADING_SENSOR_X4,X5 (Robot Ready pos) 체크
+	//nRtn = m_pDlgNaviMaint->m_dlgNaviMaintPLC.WorkReadyRobot();
+	if (nRtn != VTM_RV_SUCCESSED)
+	{
+		strLog.Format(_T("No Robot Gantry Ready Position"));
+		EventLog(strLog);
+		return nRtn;
+	}
+	else
+	{
+		strLog.Format(_T("Robot Ready Gantry Ready Position"));
+		EventLog(strLog);
+	}
+
+	return nRtn;
+}
+
+// SACC에서 PROBE 가져오기
+int CDlgSACC::DoWork_GetStoreProbe(void)
+{
+	CString strLog;
+	int nRet = VTM_RV_SUCCESSED;
+	int iAxis = AXIS_Z9, iSpeed = SPEED_HIGH;
+	double dPos = 0.0;
+	
+	//nRet = m_pDlgNaviMaint->m_dlgNaviMaintPLC.Do_Arm_Busy();
+	nRet = PLC_Do_Arm_Busy(); //20220303 JCY 임시 수정 
+	if (nRet != VTM_RV_SUCCESSED)
+	{
+		strLog.Format(_T("DoWork Gut Probe to SACC, Busy Set Fail"));
+		EventLog(strLog);
+		return nRet;
+	}	
+	
+	// 준비 포지션에서 Stroe에서 Probe를  Get 하기 위해   Z 포지션 이동(아래로)
+	iAxis = AXIS_Z9;
+	iSpeed = m_stMoveACZ[3].iSpeed;
+	dPos = m_stMoveACZ[3].dPos;
+	//nRet = m_pDlgNaviMaint->m_dlgNaviMaintMotionACS.DoWork_ProbeTeaching(iAxis, dPos, iSpeed);
+	nRet = MOTION_Do_Work_ProbeTeaching(iAxis, dPos, iSpeed); //20200303 JCY 임시 수정 
+
+	if (nRet != VTM_RV_SUCCESSED)
+	{
+		strLog.Format(_T("DoWork Gut Probe to SACC, AXIS_AUTO_CHANGE_Z Move DownPos NG, POS, %.4f, SPEED, %d"), dPos, iSpeed);
+		EventLog(strLog);
+		return SACC_GET_SACC_MOVE_ALARM;
+	}
+	else
+	{
+		strLog.Format(_T("DoWork Gut Probe to SACC, AXIS_AUTO_CHANGE_Z Move DownPos OK, POS, %.4f, SPEED, %d"), dPos, iSpeed);
+		EventLog(strLog);
+	}
+	
+	
+	//Store에서 Probe Get하기 위해 갠트리 Get 위치 이동  
+	iAxis = AXIS_X4;
+	iSpeed = m_stMoveACX[3].iSpeed;
+	dPos = m_stMoveACX[3].dPos;
+	//nRet = m_pDlgNaviMaint->m_dlgNaviMaintMotionACS.DoWork_ProbeTeaching(iAxis, dPos, iSpeed);
+	nRet = MOTION_Do_Work_ProbeTeaching(iAxis, dPos, iSpeed); //20200303 JCY 임시 수정 
+
+	if (nRet != VTM_RV_SUCCESSED)
+	{
+		strLog.Format(_T("DoWork Gut Probe to SACC, AXIS_AUTO_CHANGE_GANTRY Move GetPos NG, POS, %.4f, SPEED, %d"), dPos, iSpeed);
+		EventLog(strLog);
+		return SACC_GET_SACC_MOVE_ALARM;
+	}
+	else
+	{
+		strLog.Format(_T("DoWork Gut Probe to SACC, AXIS_AUTO_CHANGE_GANTRY Move GetPos OK, POS, %.4f, SPEED, %d"), dPos, iSpeed);
+		EventLog(strLog);
+	}
+	
+	
+	// OCP Move SACC Wait For Hand Fold Request	
+	//nRet = m_pDlgNaviMaint->m_dlgNaviMaintPLC.Do_Arm_Done();
+	nRet = PLC_Do_Arm_Done(); //20220303 JCY 임시 수정 
+	if (nRet != VTM_RV_SUCCESSED)
+	{
+		strLog.Format(_T("DoWork Gut Probe to SACC, Done Set Fail"));
+		EventLog(strLog);
+		return nRet;
+	}
+	
+	//nRet = m_pDlgNaviMaint->m_dlgNaviMaintPLC.Do_SACC_HandFoldComplete();
+	nRet = PLC_Do_SACC_HandFoldComplete(); //20220303 JCY 임시 수정 
+	if (nRet != VTM_RV_SUCCESSED)
+	{
+		strLog.Format(_T("DoWork Gut Probe to SACC, HandFold Time Out"));
+		EventLog(strLog);
+		return nRet;
+	}
+	
+	//nRet = m_pDlgNaviMaint->m_dlgNaviMaintPLC.Do_Arm_Busy();
+	nRet = PLC_Do_Arm_Busy(); //20220303 JCY 임시 수정 
+	if (nRet != VTM_RV_SUCCESSED)
+	{
+		strLog.Format(_T("DoWork Gut Probe to SACC, Busy Set Fail"));
+		EventLog(strLog);
+		return nRet;
+	}
+	
+	
+	// Buffer Exist		
+ 	//if( m_pSystem->stInterLock.m_bProbeBufferExist[1] == TRUE )	
+	if (_tcslen(m_cManager->pMoniter->stDataP.szData[PLC_PACC_BUFFER_SLOT_UNLOAD_ARRAY]) != 0) //20220303 JCY 임시 수정 
+ 	{
+ 		strLog.Format(_T("Buffer #2 Probe Unit Exist"));
+ 		EventLog(strLog);
+		return SACC_END_GET_SACC_ROBOT_PROBE_EXIST_ALARM;
+ 	}
+	
+	
+	//if (m_pSystem->stInterLock.m_bProbeBufferExist[0] == TRUE)
+	if (_tcslen(m_cManager->pMoniter->stDataP.szData[PLC_PACC_BUFFER_SLOT_LOAD_ARRAY]) != 0) //20220303 JCY 임시 수정 
+	{
+		strLog.Format(_T("Buffer #1 Probe Unit Exist"));
+		EventLog(strLog);
+		return SACC_END_GET_SACC_ROBOT_PROBE_EXIST_ALARM;
+	}
+	
+	
+	//Probe 유무 체크 - Probe가 로봇에 있는지 체크 
+	//if (m_pSystem->stInterLock.bACArmExistProbe == TRUE)
+	if (m_cManager->pMoniter->stDataP.bMData[PLC_AUTOCHANGE_PROBE_CHECK1] == TRUE || m_cManager->pMoniter->stDataP.bMData[PLC_AUTOCHANGE_PROBE_CHECK2] == TRUE) //20220302 JCY 임시 수정
+	{
+		strLog.Format(_T("Robot Probe Unit Exist"));
+		EventLog(strLog);
+	}
+	else		// No Exist
+	{
+		strLog.Format(_T("Robot Probe Unit No Exist"));
+		EventLog(strLog);
+		return SACC_END_GET_SACC_ROBOT_PROBE_NO_EXIST_ALARM;
+	}
+	//////////////////////////////////////////////////////////////////////////
+	
+	// 갠트리 준비 포지션으로 이동
+	iAxis = AXIS_X4;
+	iSpeed = m_stMoveACX[2].iSpeed;
+	dPos = m_stMoveACX[2].dPos;
+	//nRet = m_pDlgNaviMaint->m_dlgNaviMaintMotionACS.DoWork_ProbeTeaching(iAxis, dPos, iSpeed);
+	nRet = MOTION_Do_Work_ProbeTeaching(iAxis, dPos, iSpeed); //20220303 JCY 임시 수정 
+
+	if (nRet != VTM_RV_SUCCESSED)
+	{
+		strLog.Format(_T("DoWork Gut Probe to SACC, AXIS_AUTO_CHANGE_GANTRY Move ReadyPos NG, POS, %.4f, SPEED, %d"), dPos, iSpeed);
+		EventLog(strLog);
+		//AfxMessageBox(strLog);
+		return SACC_GET_SACC_MOVE_ALARM;
+	}
+	else
+	{
+		strLog.Format(_T("DoWork Gut Probe to SACC, AXIS_AUTO_CHANGE_GANTRY Move ReadyPos OK, POS, %.4f, SPEED, %d"), dPos, iSpeed);
+		EventLog(strLog);
+	}
+	
+	// 센서 감지 기다려 보자
+	//nRet = m_pDlgNaviMaint->m_dlgNaviMaintPLC.WaitForSACCSafePosComplete(5000);
+	nRet = PLC_Do_WaitForSACCSafePosComplete(5000); //20220303 JCY 임시 수정 
+	if (nRet != VTM_RV_SUCCESSED)
+	{
+		strLog.Format(_T("DoWork_Move AXIS_AUTO_CHANGE_GANTRY_M(InsidePut_InsideToReadyOrgPos) NG, SAFETY, %d"), nRet);
+		EventLog(strLog);
+		return nRet;
+	}
+	
+	//nRet = m_pDlgNaviMaint->m_dlgNaviMaintPLC.Do_Arm_Done(); 
+	nRet = PLC_Do_Arm_Done(); //20220303 JCY 임시 수정 
+	if (nRet != VTM_RV_SUCCESSED)
+	{
+		strLog.Format(_T("DoWork_GetStoreProbe Done Set Fail"));
+		EventLog(strLog);
+		return SACC_GET_SACC_MOVE_ALARM;
+	}
+	
+	// Buffer Exist
+	//if (m_pSystem->stInterLock.m_bProbeBufferExist[0] == TRUE)
+	if (_tcslen(m_cManager->pMoniter->stDataP.szData[PLC_PACC_BUFFER_SLOT_LOAD_ARRAY]) != 0) //20220303 JCY 임시 수정 
+	{
+		strLog.Format(_T("Buffer #2 Probe Unit Exist"));
+		EventLog(strLog);
+		return SACC_END_GET_SACC_ROBOT_PROBE_EXIST_ALARM;
+	}
+
+	//Probe 유무 체크 - Probe가 로봇에 있는지 체크 
+	//if (m_pSystem->stInterLock.bACArmExistProbe == TRUE)
+	if (m_cManager->pMoniter->stDataP.bMData[PLC_AUTOCHANGE_PROBE_CHECK1] == TRUE || m_cManager->pMoniter->stDataP.bMData[PLC_AUTOCHANGE_PROBE_CHECK2] == TRUE) //20220302 JCY 임시 수정
+	{
+		strLog.Format(_T("Robot Probe Unit Exist"));
+		EventLog(strLog);
+	}
+	else		// No Exist
+	{
+		strLog.Format(_T("Robot Probe Unit No Exist"));
+		EventLog(strLog);
+		return SACC_END_GET_SACC_ROBOT_PROBE_NO_EXIST_ALARM;
+	}
+
+	return VTM_RV_SUCCESSED;
+}
+
+int CDlgSACC::UpdateSpreadProbe(void)
+{
+	int i = 0, j = 0;
+	BOOL bOn = FALSE;
+	CString strCheck;
+
+	// Buffer
+	for (i = 0; i < m_sprdProbeBF->GetMaxRows(); i++) //20170203 lhj change
+	{
+		strCheck.Format(_T("%s"), m_cManager->pMoniter->stDataP.szData[i]);
+		m_sprdProbeBF->SetData(1, i +  1, strCheck);
+
+		bOn = m_cManager->pMoniter->stDataP.bMData[PLC_R_PACC_BUFFER_PROBE_CARD_CHK_01_1 + (2*i)] || m_cManager->pMoniter->stDataP.bMData[PLC_R_PACC_BUFFER_PROBE_CARD_CHK_01_2 + (2 * i)] ;      //m_pSystem->stInterLock.m_bProbeBufferExist[i];
+		if (bOn != m_bProbeBufferStatus[i])
+		{
+			if (bOn)
+			{
+				m_sprdProbeBF->SetColor(1, i + 1, dfCOLOR_YELLOW, RGB_DARK_GRAY);
+			}
+			else
+			{
+				m_sprdProbeBF->SetColor(1, i + 1, dfCOLOR_GRAY, RGB_DARK_GRAY); 
+			}
+	
+			m_bProbeBufferStatus[i] = bOn;
+		}
+	
+		// 위치확인Up/Down
+		//bOn = m_pSystem->stInterLock.m_bProbeBufferUp[i];
+		bOn = m_cManager->pMoniter->stDataP.bMData[PLC_R_PACC_BUFFER_01_UP_01 + (2 * i)] || m_cManager->pMoniter->stDataP.bMData[PLC_R_PACC_BUFFER_01_UP_02 + (2 * i)];
+		if (bOn != m_bProbeBufferPosUp[i])
+		{
+			//m_sprdProbeBF.SetCol(3);
+			strCheck.Format(_T("%d"), bOn);
+			//m_sprdProbeBF.SetValue(strCheck);
+			m_sprdProbeBF->SetData(2, i + 1, strCheck);
+	
+			m_bProbeBufferPosUp[i] = bOn;
+		}
+	
+		//bOn = m_pSystem->stInterLock.m_bProbeBufferDown[i];
+		bOn = m_cManager->pMoniter->stDataP.bMData[PLC_R_PACC_BUFFER_01_DOWN_01 + (2 * i)] || m_cManager->pMoniter->stDataP.bMData[PLC_R_PACC_BUFFER_01_DOWN_02 + (2 * i)];
+		if (bOn != m_bProbeBufferPosDown[i])
+		{
+			//m_sprdProbeBF.SetCol(4);
+			strCheck.Format(_T("%d"), bOn);
+			//m_sprdProbeBF.SetValue(strCheck);
+			m_sprdProbeBF->SetData(3, i + 1, strCheck);
+	
+			m_bProbeBufferPosDown[i] = bOn;
+		}
+	}
+	
+	// Cassette
+	for (i = 0; i < m_sprdProbeID->GetMaxRows(); i++) //20170203 lhj change
+	{
+		if (i > m_sprdProbeID->GetMaxRows())
+			continue;
+	
+		// Probe 유무 확인
+		strCheck.Format(_T("%s"), m_cManager->pMoniter->stDataP.szData[3 + i]);
+		//m_sprdProbeID.SetValue(strCheck);
+		m_sprdProbeID->SetData(1, i + 1, strCheck);
+
+		bOn = m_cManager->pMoniter->stDataP.bMData[PLC_CASSETTE_PROBE_CHK_01_1 + (2 * i)] || m_cManager->pMoniter->stDataP.bMData[PLC_CASSETTE_PROBE_CHK_01_2 + (2 * i)];
+		if (bOn != m_bBFProbeSlotStatus[i])
+		{
+			//m_sprdProbeID.SetCol(2);
+	
+		//	strCheck.Format(_T("%s"), m_szProbeCardID[i]);
+			if (bOn)
+			{
+				m_sprdProbeID->SetColor(1, i + 1, dfCOLOR_YELLOW, RGB_DARK_GRAY);
+			}
+			else
+			{
+				m_sprdProbeID->SetColor(1, i + 1, dfCOLOR_GRAY, RGB_DARK_GRAY);
+			}
+	
+			m_bBFProbeSlotStatus[i] = bOn;
+		} 
+	
+		//// SACC 위치 확인
+		////bOn = m_pSystem->m_bPLCData[PLC_SACC_PROBE_CARD_POS_01 + i];
+		//bOn = m_cManager->pMoniter->stDataP.bMData[PLC_CASSETTE_PROBE_CHK_01_1 + (2 * i)] || m_cManager->pMoniter->stDataP.bMData[PLC_CASSETTE_PROBE_CHK_01_2 + (2 * i)];
+		//if (bOn != m_bBFProbeSlotStatus[i])
+		//{
+		//	//m_sprdProbeID.SetCol(3);
+	
+		//	strCheck.Format(_T("%d"), bOn);
+		//	//m_sprdProbeID.SetValue(strCheck);
+		//	m_sprdProbeID->SetData(3, i + 1, strCheck);
+	
+		//	m_bBFProbeSlotStatus[i] = bOn;
+		//}
+	}
+
+	// EQ Inside
+	{
+		for (i = 0; i < m_sprdInsideProbe->GetMaxRows(); i++) //20170203 lhj change
+		{
+			if (i > m_sprdInsideProbe->GetMaxRows())
+				continue;
+
+			strCheck.Format(_T("%s"), m_cManager->pMoniter->stDataP.szData[13 + i]);
+			m_sprdInsideProbe->SetData(1, i + 1, strCheck);
+
+			// Probe 유무 확인
+			bOn = m_cManager->pMoniter->stDataP.bMData[PLC_R_PROBE_UNIT01_CARD_CHK_01 + (4 * i)] || 
+				  m_cManager->pMoniter->stDataP.bMData[PLC_R_PROBE_UNIT01_CARD_CHK_02 + (4 * i)] ||
+				  m_cManager->pMoniter->stDataP.bMData[PLC_R_PROBE_UNIT01_CARD_CHK_03 + (4 * i)] ||
+				  m_cManager->pMoniter->stDataP.bMData[PLC_R_PROBE_UNIT01_CARD_CHK_04 + (4 * i)];
+			if (bOn != m_bBFProbeCardStatus[i])
+			{
+				if (bOn)
+				{
+					m_sprdInsideProbe->SetColor(1, i + 1, dfCOLOR_YELLOW, RGB_DARK_GRAY);
+				}
+				else
+				{
+					m_sprdInsideProbe->SetColor(1, i + 1, dfCOLOR_GRAY, RGB_DARK_GRAY);
+				}
+
+				m_bBFProbeCardStatus[i] = bOn;
+			}
+		}
+	}
+	
+	for (i = 0; i < 10; i++)
+	{
+		m_bSACCStaus[0][i] = m_cManager->pMoniter->stDataP.bMData[PLC_PACC_AUTO_MODE + i];
+		
+		m_bSACCStaus[1][i] = m_cManager->pMoniter->stDataP.bMData[PLC_PACC_COMMAND_CHECK_ACK + i];
+		
+		m_bSACCStaus[2][i] = m_cManager->pMoniter->stDataP.bMData[PLC_EQ_AUTO_MODE + i];
+		
+		m_bSACCStaus[3][i] = m_cManager->pMoniter->stDataP.bMData[PLC_EQ_COMMAND_LOADING + i];
+	}
+	
+	for (i = 0; i < m_sprdSACCIO->GetMaxCols(); i++)
+	{
+		for (j = 0; j < m_sprdSACCIO->GetMaxRows(); j++)
+		{
+			bOn = m_bSACCStaus[i][j];
+			if (bOn != m_bOldSACCStaus[i][j])
+			{
+				if (bOn)
+				{
+					m_sprdSACCIO->SetColor(i + 1, j + 1, dfCOLOR_YELLOW, RGB_DARK_GRAY);
+				}
+				else
+				{
+					m_sprdSACCIO->SetColor(i + 1, j + 1, dfCOLOR_GRAY, RGB_DARK_GRAY);
+				}
+	
+				m_bOldSACCStaus[i][j] = m_bSACCStaus[i][j];
+			}
+		}
+	}
+
+	return 0;
+}
+
+
+void CDlgSACC::OnDestroy()
+{
+	CDialog::OnDestroy();
+
+	// TODO: 여기에 메시지 처리기 코드를 추가합니다.
+}
+
+
+int CDlgSACC::UpdateBtn(void)
+{
+	//// probe Clam LOCK
+	//if (/*m_pDlgNaviMaint->m_dlgNaviMaintPLC.Is_PROBE_CLAM_Lock()*/PLC_Do_PROBE_CLAMP_Lock() == VTM_RV_SUCCESSED) //20220303 JCY 임시 수정 
+	//{
+	//	SetDlgItemText(IDC_BTN_CLAM, _T("PROBE CLAM UNLOCK"));
+	//}
+	//else
+	//{
+	//	SetDlgItemText(IDC_BTN_CLAM, _T("PROBE CLAM LOCK"));
+	//}
+	//
+	//// probe PCB LOCK
+	//if (/*m_pSystem->stInterLock.m_bProbePCBLock*/TRUE) //20220303 JCY 임시 수정 못함 
+	//{
+	//	SetDlgItemText(IDC_BTN_PCB, _T("PROBE PCB UNLOCK"));
+	//}
+	//else
+	//{
+	//	SetDlgItemText(IDC_BTN_PCB, _T("PROBE PCB LOCK"));
+	//}
+	//
+	//// probe Zero
+	//if (/*m_pSystem->stInterLock.m_bProbeZero*/TRUE) //20220303 JCY 임시 수정 못함 
+	//{
+	//	SetDlgItemText(IDC_BTN_ZEROPOSITION, _T("PROBE ZERO UNLOCK"));
+	//}
+	//else
+	//{
+	//	SetDlgItemText(IDC_BTN_ZEROPOSITION, _T("PROBE ZERO LOCK"));
+	//}
+	//
+	//CString strTemp;
+	//m_dCurAutoChangeX = /*m_pSystem->stMotionStatus[AXIS_X4].dAxisPos*/m_cManager->pMoniter->stDataM[AXIS_X4].dPos;					//20220303 JCY 임시 수정
+	//strTemp.Format(_T("%.4f"), /*m_pSystem->stMotionStatus[AXIS_X4].dAxisPos*/m_cManager->pMoniter->stDataM[AXIS_X4].dPos);			//20220303 JCY 임시 수정
+	//GetDlgItem(IDC_EDIT_ROBOT_CURR_X_POS)->SetWindowText(strTemp);
+	//
+	//m_dCurAutoChangeZ = /*m_pSystem->stMotionStatus[AXIS_Z9].dAxisPos*/m_cManager->pMoniter->stDataM[AXIS_Z9].dPos;					//20220303 JCY 임시 수정
+	//strTemp.Format(_T("%.4f"), /*m_pSystem->stMotionStatus[AXIS_Z9].dAxisPos*/m_cManager->pMoniter->stDataM[AXIS_Z9].dPos);			//20220303 JCY 임시 수정
+	//GetDlgItem(IDC_EDIT_ROBOT_CURR_Z_POS)->SetWindowText(strTemp);
+	//
+	//m_dCurUnitZ = /*m_pSystem->stMotionStatus[AXIS_UNIT_Z].dAxisPos*/m_cManager->pMoniter->stDataM[AXIS_UNIT_Z].dPos;				//20220303 JCY 임시 수정
+	//strTemp.Format(_T("%.4f"), /*m_pSystem->stMotionStatus[AXIS_UNIT_Z].dAxisPos*/m_cManager->pMoniter->stDataM[AXIS_UNIT_Z].dPos); //20220303 JCY 임시 수정
+	//GetDlgItem(IDC_EDIT_UNIT_CURR_Z_POS)->SetWindowText(strTemp);
+	//
+	//if (m_pSystem->stInterLock.m_bSafetyPos_X)		
+	//	((CButton*)GetDlgItem(IDC_CHK_TOP_GANTRY_READDY))->SetCheck(TRUE);
+	//else
+	//	((CButton*)GetDlgItem(IDC_CHK_TOP_GANTRY_READDY))->SetCheck(FALSE);
+	//
+	//// AC X
+	//m_chkACX0.SetChecked(m_pSystem->stInterLock.m_bAutoChangeArmPos[0]);
+	//m_chkACX1.SetChecked(m_pSystem->stInterLock.m_bAutoChangeArmPos[1]);
+	//m_chkACX2.SetChecked(m_pSystem->stInterLock.m_bAutoChangeArmPos[2]);
+	//m_chkACX3.SetChecked(m_pSystem->stInterLock.m_bAutoChangeArmPos[3]);
+	//
+	//// AC Z
+	//m_chkZ0.SetChecked(m_pSystem->stInterLock.m_bAutoChangeZPos[0]);
+	//m_chkZ1.SetChecked(m_pSystem->stInterLock.m_bAutoChangeZPos[1]);
+	//
+	//if (m_pSystem->stInterLock.m_bProbeExist)	
+	//{
+	//	m_bUnInsideProbe = FALSE;
+	//	((CButton*)GetDlgItem(IDC_CHK_INSIDE_PROBE_EXIST))->SetCheck(TRUE);
+	//}
+	//else
+	//{
+	//	m_bUnInsideProbe = TRUE;
+	//	((CButton*)GetDlgItem(IDC_CHK_INSIDE_PROBE_EXIST))->SetCheck(FALSE);	
+	//}
+	//
+	//if (m_pSystem->stInterLock.m_bProbePCBLock)		
+	//{
+	//	m_bUnLockPCB = FALSE;
+	//	((CButton*)GetDlgItem(IDC_CHK_INSIDE_PCB_LOCK))->SetCheck(TRUE);
+	//}
+	//else
+	//{
+	//	m_bUnLockPCB = TRUE;
+	//	((CButton*)GetDlgItem(IDC_CHK_INSIDE_PCB_LOCK))->SetCheck(FALSE);
+	//}
+	//
+	//if (m_pSystem->stInterLock.m_bProbeZero)			
+	//{
+	//	m_bUnZeroPistion = FALSE;
+	//	((CButton*)GetDlgItem(IDC_CHK_INSIDE_ZEOR_LOCK))->SetCheck(TRUE);
+	//}
+	//else
+	//{
+	//	m_bUnZeroPistion = TRUE;
+	//	((CButton*)GetDlgItem(IDC_CHK_INSIDE_ZEOR_LOCK))->SetCheck(FALSE);
+	//}
+	//
+	//if (m_pSystem->stInterLock.bACArmExistProbe == TRUE)	// Exist		
+	//{
+	//	m_bRobotProbe = TRUE;
+	//	((CButton*)GetDlgItem(IDC_CHK_ROBOT_PROBE_EXIST))->SetCheck(TRUE);
+	//}
+	//else
+	//{
+	//	m_bRobotProbe = FALSE;
+	//	((CButton*)GetDlgItem(IDC_CHK_ROBOT_PROBE_EXIST))->SetCheck(FALSE);
+	//}
+	//
+	//if (m_pSystem->m_bPLCData[PLC_GATE_VALVE_PULL_01])
+	//{
+	//	((CButton*)GetDlgItem(IDC_CHK_ICP_GATE_VALVE_PULL))->SetCheck(TRUE);
+	//	m_bGateValvePull = TRUE;
+	//}
+	//else
+	//{
+	//	((CButton*)GetDlgItem(IDC_CHK_ICP_GATE_VALVE_PULL))->SetCheck(FALSE);
+	//	m_bGateValvePull = FALSE;
+	//}
+	//
+	//if (m_pSystem->stInterLock.m_bGateValveClose != TRUE)		
+	//{
+	//	((CButton*)GetDlgItem(IDC_CHK_ICP_GATE_VALVE_OPEN))->SetCheck(TRUE);
+	//	m_bGateValveOpen = TRUE;
+	//}
+	//else
+	//{
+	//	((CButton*)GetDlgItem(IDC_CHK_ICP_GATE_VALVE_OPEN))->SetCheck(FALSE);
+	//	m_bGateValveOpen = FALSE;
+	//}
+	//
+	//if (m_pSystem->stInterLock.m_bGateValveLock == TRUE)		
+	//{
+	//	((CButton*)GetDlgItem(IDC_CHK_ICP_GATE_VALVE_UNLOCK))->SetCheck(TRUE);
+	//	m_bGateValveUnlock = TRUE;
+	//}
+	//else
+	//{
+	//	((CButton*)GetDlgItem(IDC_CHK_ICP_GATE_VALVE_UNLOCK))->SetCheck(FALSE);
+	//	m_bGateValveUnlock = FALSE;
+	//}
+
+	return 0;
+}
+
+int CDlgSACC::ProcessExChanging(void)
+{
+	CString strLog;
+	int nRtn = VTM_RV_SUCCESSED;
+	strLog.Format(_T("Process Probe ExChange Start"));
+	EventLog(strLog);
+
+	nRtn = DoWork_ExChanging(1); //20220303 JCY 임시 수정 
+	return nRtn;
+}
+
+// 설비내 Probe 가 있고 교체할 Probe가 밖에 있을경우 동시진행하자
+// 우선 SACC에 있는 PROBE를 버퍼에 넣자
+// 설비내부에 있는 PROBE 뺴고, 버퍼에 있는거 
+int CDlgSACC::DoWork_ExChanging(int iProbe)
+{
+	//CString strLog;
+	//CString str;
+	//int nRtn = VTM_RV_SUCCESSED;
+	//
+	//// 설비내 둘다 감지되면 문제 됨 우선 Arm에 있는거 buffer에 넣어야 함
+	//if (m_pSystem->stInterLock.bACArmExistProbe == TRUE &&	// Exist
+	//	m_pSystem->stInterLock.m_bProbeExist == TRUE)   // Exist Probe
+	//	return SACC_START_GET_INSIDE_ROBOT_PROBE_EXIST_ALARM;
+	//
+	//// SACC 에서 BUFFER로 Probe 넣기 동작 전달 >> SACC 구동중
+	//nRtn = DoWork_ChangeSACC();
+	//if (nRtn != VTM_RV_SUCCESSED)
+	//{
+	//	return nRtn;
+	//}
+	//
+	////Probe 유무 체크 - Probe가 로봇에 있는지 체크 
+	//// Arm No Exist Probe
+	//if (m_pSystem->stInterLock.bACArmExistProbe != TRUE &&	// No Exist
+	//	m_pSystem->stInterLock.m_bProbeExist)				// Exist Probe		// jsyoon 20161216 change
+	//{
+	//	strLog.Format("Robot Probe Unit No Exist");
+	//	EventLog(strLog);
+	//	nRtn = DoWorkCheckReady();
+	//	if (nRtn != VTM_RV_SUCCESSED)
+	//	{
+	//		return nRtn;
+	//	}
+	//
+	//	//Get Inside Robot
+	//	nRtn = DoWork_GetInsideProbe();
+	//	if (nRtn != VTM_RV_SUCCESSED)
+	//	{
+	//		strLog.Format(_T("DoWork_GetInsideProbe Move NG"));
+	//		EventLog(strLog);
+	//		return nRtn;
+	//	}
+	//	else
+	//	{
+	//		strLog.Format(_T("DoWork_GetInsideProbe Move OK"));
+	//		EventLog(strLog);
+	//	}
+	//
+	//	//Probe 유무 체크 - Probe가 로봇에 있는지 체크 
+	//	//		if(!m_pSystem->m_bPLCData[PLC_PROBE_ROBOT_CHECK1-PLC_READ_ALL_ADRESS] && !m_pSystem->m_bPLCData[PLC_PROBE_ROBOT_CHECK2-PLC_READ_ALL_ADRESS])	// No Exist
+	//	if (m_pSystem->stInterLock.bACArmExistProbe != TRUE)	// No Exist
+	//	{
+	//		strLog.Format("PLC_PROBE_ROBOT_CHECK Probe No Exist");
+	//		EventLog(strLog);
+	//		return SACC_END_GET_INSIDE_ROBOT_PROBE_NO_EXIST_ALARM;
+	//	}
+	//	else
+	//	{
+	//		strLog.Format("PLC_PROBE_ROBOT_CHECK Probe Exist");
+	//		EventLog(strLog);
+	//	}
+	//
+	//	//Inside -> Robot RFID
+	//	m_strRobotProbeRFID = m_strSelRFID;
+	//	WriteConfigFile("PROBERFID", "RobotProbeRFID", m_strRobotProbeRFID);
+	//	m_strCurrInsideRFID = "";
+	//	WriteConfigFile("PROBERFID", "InsideProbeRFID", m_strCurrInsideRFID);
+	//	GetDlgItem(IDC_EDIT_INSIDE_PROBE_RFID)->SetWindowText(m_strCurrInsideRFID);
+	//	strLog.Format("RobotProbeRFID File Save %s", m_strRobotProbeRFID);
+	//	EventLog(strLog);
+	//}
+	//else if (m_pSystem->stInterLock.bACArmExistProbe &&		// Arm Exist Probe
+	//	!m_pSystem->stInterLock.m_bProbeExist)			// Not Exist Probe		// jsyoon 20161216 change
+	//{
+	//	// 20161216 Probe 가 암에 있을 경우 계속 진행 뜨는 동작 무시하고 진행 필요
+	//
+	//	//Store Probe 놓기
+	//	nRtn = m_pDlgNaviMaint->m_dlgNaviMaintMotionACS.DoWork_MoveSafeProbe();
+	//	if (nRtn != VTM_RV_SUCCESSED)
+	//	{
+	//		strLog.Format("DoWork_MoveSafeProbe NG");
+	//		EventLog(strLog);
+	//		return nRtn;
+	//	}
+	//	else
+	//	{
+	//		strLog.Format(_T("DoWork_PutStoreProbe OK"));
+	//		EventLog(strLog);
+	//	}
+	//}
+	//else	// 둘 다 없는 경우 버퍼에서 가져오자
+	//{
+	//	strLog.Format("Robot Probe Unit Exist");
+	//	EventLog(strLog);
+	//	return SACC_START_GET_INSIDE_ROBOT_PROBE_EXIST_ALARM; //lhj add 161013
+	//}
+	//
+	//// Arm에 Probe가 없으면 알람
+	//if (m_pSystem->stInterLock.bACArmExistProbe != TRUE)
+	//	return SACC_END_GET_INSIDE_ROBOT_PROBE_NO_EXIST_ALARM;
+	//
+	//// UNLOADING 진행
+	//// 진입 완료 대기
+	//nRtn = m_pDlgNaviMaint->m_dlgNaviMaintPLC.WaitforBitSet_M4000(PLC_SACC_ENTRY_REQUEST, TRUE, 5000, 1);
+	//if (nRtn != VTM_RV_SUCCESSED)
+	//{
+	//	return nRtn;
+	//}
+	//
+	//// Store Probe 놓기
+	//nRtn = DoWork_PutStoreProbe();
+	//if (nRtn != VTM_RV_SUCCESSED)
+	//{
+	//	strLog.Format(_T("DoWork_PutStoreProbe NG"));
+	//	EventLog(strLog);
+	//	return nRtn;
+	//}
+	//else
+	//{
+	//	strLog.Format(_T("DoWork_PutStoreProbe OK"));
+	//	EventLog(strLog);
+	//}
+	//
+	////Unmount 시간 
+	//m_strUnmountTime = gf_MakeCurTimeString();
+	//
+	////Robot RFID 삭제 
+	//m_pDlgNaviReport->UpdateContact();	// jsyoon 20170131 add DB Save
+	//
+	//m_strRobotProbeRFID = "";
+	//WriteConfigFile("PROBERFID", "RobotProbeRFID", m_strRobotProbeRFID);
+	//m_pDlgNaviReport->UnMountProbe();
+	//
+	//strLog.Format(_T("PROBE Unmount (Unloading OK)"));
+	//EventLog(strLog);
+	//
+	//// LOADING 진행
+	//// 진입 완료 대기
+	//nRtn = m_pDlgNaviMaint->m_dlgNaviMaintPLC.WaitforBitSet_M4000(PLC_SACC_ENTRY_REQUEST, TRUE, 5000, 1);
+	//if (nRtn != VTM_RV_SUCCESSED)
+	//{
+	//	return nRtn;
+	//}
+	//
+	////Store Probe 가져오기
+	//nRtn = DoWork_GetStoreProbe();
+	//if (nRtn != VTM_RV_SUCCESSED)
+	//{
+	//	strLog.Format(_T("DoWork_GetStoreProbe NG"));
+	//	EventLog(strLog);
+	//	return nRtn;
+	//}
+	//else
+	//{
+	//	strLog.Format(_T("DoWork_GetStoreProbe OK"));
+	//	EventLog(strLog);
+	//}
+	//
+	////Robot 동작 완료 
+	//nRtn = DoWork_CloseSACC();
+	//if (nRtn != VTM_RV_SUCCESSED)
+	//{
+	//	strLog.Format(_T("PLC_SACC_STATUS_COMPLETE_ACK Fail"));
+	//	EventLog(strLog);
+	//	return SACC_END_PLC_SACC_STATUS_COMPLETE_ACK_ALARM;
+	//}
+	//else
+	//{
+	//	strLog.Format(_T("PLC_SACC_STATUS_COMPLETE_ACK OK"));
+	//	EventLog(strLog);
+	//}
+	//
+	////////////////////////////////////////////////////////////////////////////
+	//// PROBE ID 가져오기
+	//m_sprdProbeID.SetRow(m_nSelPos + 1);
+	//m_sprdProbeID.SetCol(2);
+	//m_strSelRFID = m_sprdProbeID.GetValue();
+	////////////////////////////////////////////////////////////////////////////
+	//
+	////저장소 -> 로봇 RFID 
+	//m_strRobotProbeRFID = m_strSelRFID;
+	//WriteConfigFile("PROBERFID", "RobotProbeRFID", m_strRobotProbeRFID);
+	//strLog.Format("RobotProbeRFID File Save %s", m_strRobotProbeRFID);
+	//EventLog(strLog);
+	//
+	//CString strPorbeID, strMountTime;
+	////Probe RFID Mount 시간 
+	//m_strMountTime = gf_MakeCurTimeString();
+	//strMountTime = m_strMountTime;
+	////로봇 -> Inside RFID
+	//m_strCurrInsideRFID = m_strRobotProbeRFID;
+	//GetDlgItem(IDC_EDIT_INSIDE_PROBE_RFID)->SetWindowText(m_strCurrInsideRFID);
+	//WriteConfigFile("PROBERFID", "InsideProbeRFID", m_strCurrInsideRFID);
+	//WriteConfigFile("PROBERFID", "InsideProbeRFIDMountTime", m_strMountTime);
+	//m_strRobotProbeRFID = "";
+	//WriteConfigFile("PROBERFID", "RobotProbeRFID", m_strRobotProbeRFID);
+	//strLog.Format("InsideProbeRFID File Save %s", m_strCurrInsideRFID);
+	//EventLog(strLog);
+	//
+	//strPorbeID = m_strCurrInsideRFID;
+	//_tcscpy_s(m_pSystem->stProbeInfo.m_szProbeCardID, _countof(m_pSystem->stProbeInfo.m_szProbeCardID), strPorbeID);
+	//_tcscpy_s(m_pSystem->stProbeInfo.m_szProbeCardIDTime, _countof(m_pSystem->stProbeInfo.m_szProbeCardIDTime), strMountTime);
+	//m_pSystem->stProbeInfo.m_nUseCnt = 0;
+	//m_pDlgNaviReport->InsertProbe(strMountTime);
+	//m_pDlgNaviData->SetProbeLog();
+
+
+	return VTM_RV_SUCCESSED;
+}
+
+void CDlgSACC::OnBnClickedBtnLoad()
+{
+	CString strMsg;
+	strMsg.Format(_T("불러오기 하시겠습니까???"));
+
+	if (AfxMessageBox(strMsg, MB_YESNO | MB_ICONQUESTION) == IDNO)
+		return;
+
+	ReadTeachPosConfig();
+	UpdateTeachPosition();
+
+	//m_pDlgNaviData->GetProbeLog();
+}
+
+void CDlgSACC::OnBnClickedBtnSave()
+{
+	CString strMsg;
+	strMsg.Format(_T("저장 하시겠습니까???"));
+
+	if (AfxMessageBox(strMsg, MB_YESNO | MB_ICONQUESTION) == IDNO)
+		return;
+
+	WritePosConfigFile();
+	ReadTeachPosConfig();
+	UpdateTeachPosition();
+
+	ExeExchangeProbe();
+	//m_pDlgNaviData->GetProbeLog();
+}
+
+int CDlgSACC::SetUpdateID(void)
+{
+	CString str;
+	//str.Format(_T("%s"), m_pSystem->stProbeInfo.m_szProbeCardID);
+	GetDlgItem(IDC_EDIT_INSIDE_PROBE_RFID)->SetWindowText(str);		// jsyoon 20170531 change
+
+	return 0;
+}
+
+int CDlgSACC::ExeExchangeProbe(void)
+{
+	//m_pDlgNaviReport->UnMountProbe();
+	//
+	//CString strPorbeID, strMountTime;
+	//GetDlgItem(IDC_EDIT_INSIDE_PROBE_RFID)->GetWindowText(strPorbeID); //GetDlgItem(IDC_EDIT_PROBE_ID)->GetWindowText(strPorbeID); //20161227 lhj change
+	//_tcscpy_s(m_pSystem->stProbeInfo.m_szProbeCardID, _countof(m_pSystem->stProbeInfo.m_szProbeCardID), strPorbeID);
+	//strMountTime = gf_MakeCurTimeString();
+	//_tcscpy_s(m_pSystem->stProbeInfo.m_szProbeCardIDTime, _countof(m_pSystem->stProbeInfo.m_szProbeCardIDTime), strMountTime);
+	//m_pSystem->stProbeInfo.m_nUseCnt = 0;
+	//m_pDlgNaviReport->InsertProbe(strMountTime);
+	//
+	//m_pDlgNaviData->SetProbeLog();
+	return 0;
+}
+
+CString CDlgSACC::GetLogFileName()
+{
+	SYSTEMTIME st;
+	::GetLocalTime(&st);
+	CTime ct(st);
+	CString strLogFileName = _T("");
+	//strLogFileName.Format(_T("%s%s%02d\\ProbeChange.log"), /*m_pSystem->m_strLogPath*/m_cManager, dfDEFAULT_CLOG_FILE_PATH, st.wDay);
+	return strLogFileName;
+}
+
+void CDlgSACC::EventLog(CString s)
+{
+	if (m_listLog.m_hWnd == NULL) return;
+
+	SYSTEMTIME st;
+	::GetLocalTime(&st);
+	CTime ct(st);
+	CString sLogPath = _T(""), strLog = _T("");
+
+	sLogPath = GetLogFileName();
+	m_sCommLogFileName = sLogPath;
+	//strLog.Format(_T("%s,   %s"), gf_MakeCurTimeString(), s);
+	//	int nR = WriteFile(&m_fileCommLog,sLogPath,strLog);
+	//int nR = m_pDlgNaviManual->WriteFile2(sLogPath, strLog);		// jsyoon 20170911 change
+	//if (nR > 0)
+	//{
+	//	int i = m_listLog.GetItemCount();
+	//	m_listLog.InsertItem(i, "");
+	//	m_listLog.SetItemText(i, 0, strLog);
+	//
+	//	if (m_listLog.GetScrollLimit(SB_VERT) == m_listLog.GetScrollPos(SB_VERT) + 1)
+	//	{
+	//		if (i > 0)
+	//			m_listLog.EnsureVisible(i, FALSE);
+	//	}
+	//
+	//	if (i > 500)
+	//		m_listLog.DeleteItem(0);
+	//}
+}
+
+
+int CDlgSACC::ProcessReady_Z_Axis()
+{
+	CString strLog;
+	int nRtn = VTM_RV_SUCCESSED;
+	strLog.Format(_T("ProcessReady_Z_Axis Start"));
+	EventLog(strLog);
+
+	// ICP 장비 PLC_UNLOADING_SENSOR_X 체크
+	//nRtn = m_pDlgNaviMaint->m_dlgNaviMaintPLC.WorkReadyInside();
+	if (nRtn == VTM_RV_SUCCESSED)
+	{
+		strLog.Format(_T("Top Gantry Ready Position"));
+		EventLog(strLog);
+	}
+	else
+	{
+		strLog.Format(_T("No Top Gantry Ready Position"));
+		EventLog(strLog);
+		//AfxMessageBox(strLog);
+		return nRtn;
+	}
+
+	// ICP 장비 PLC_UNLOADING_SENSOR_X4,X5 (Robot Ready pos) 체크
+	//nRtn = m_pDlgNaviMaint->m_dlgNaviMaintPLC.WorkReadyRobot();
+	if (nRtn == VTM_RV_SUCCESSED)
+	{
+		strLog.Format(_T("Robot Ready Gantry Ready Position"));
+		EventLog(strLog);
+
+	}
+	else
+	{
+		strLog.Format(_T("No Robot Gantry Ready Position"));
+		EventLog(strLog);
+		//AfxMessageBox(strLog);
+		return nRtn;
+	}
+
+	//  Move Robot Ready Z pos  Move Unit Ready Z pos
+	//nRtn = m_pDlgNaviMaint->m_dlgNaviMaintMotionACS.DoWork_Ready_Z_Move();
+	if (nRtn == VTM_RV_SUCCESSED)
+	{
+		strLog.Format(_T("Robot Z or Unit Z Ready OK"));
+		EventLog(strLog);
+		//AfxMessageBox("Manual Robot Z or Unit Z Ready OK")
+	}
+	else
+	{
+		strLog.Format(_T("Robot Z or Unit Z Ready Fail"));
+		EventLog(strLog);
+		//AfxMessageBox(strLog);
+		return nRtn;
+	}
+
+	return nRtn;
+}
+
+
+
+int CDlgSACC::ProcessMeas_Z_Axis()
+{
+	CString strLog;
+	int nRtn = VTM_RV_SUCCESSED;
+	strLog.Format(_T("ProcessMeas_Z_Axis Start"));
+	EventLog(strLog);
+
+	// ICP 장비 PLC_UNLOADING_SENSOR_X 체크
+	//nRtn = m_pDlgNaviMaint->m_dlgNaviMaintPLC.WorkReadyInside();
+	if (nRtn == VTM_RV_SUCCESSED)
+	{
+		strLog.Format(_T("Top Gantry Ready Position"));
+		EventLog(strLog);
+	}
+	else
+	{
+		strLog.Format(_T("No Top Gantry Ready Position"));
+		EventLog(strLog);
+		return nRtn;
+	}
+
+	if (nRtn == VTM_RV_SUCCESSED)
+	{
+		// ICP 장비 PLC_UNLOADING_SENSOR_X4,X5 (Robot Ready pos) 체크
+		//nRtn = m_pDlgNaviMaint->m_dlgNaviMaintPLC.WorkMeasRobot();	//jh.kang 20180517 change
+		if (nRtn == VTM_RV_SUCCESSED)
+		{
+			strLog.Format(_T("Robot Ready Gantry Meas Position"));	//jh.kang 20180517 change
+		}
+		else
+		{
+			strLog.Format(_T("No Robot Gantry Meas Position"));	//jh.kang 20180517 change
+		}
+
+		EventLog(strLog);
+	}
+
+	//  Move Robot Meas Z pos  Move Unit Meas Z pos
+	if (nRtn == VTM_RV_SUCCESSED)
+	{
+		//nRtn = m_pDlgNaviMaint->m_dlgNaviMaintMotionACS.DoWork_Meas_Z_Move(); //lhj change 161202 
+		if (nRtn == VTM_RV_SUCCESSED)
+		{
+			strLog.Format(_T("Robot Z or Unit Z Meas OK"));
+		}
+		else
+		{
+			strLog.Format(_T("Robot Z or Unit Z Meas Fail"));
+		}
+
+		EventLog(strLog);
+	}
+
+	return nRtn;
+}
+
+
+
+void CDlgSACC::OnBnClickedBtnZeroposition2()
+{
+	CString strMsg;
+	strMsg.Format(_T("동작 하시겠습니까???"));
+
+	if (AfxMessageBox(strMsg, MB_YESNO | MB_ICONQUESTION) == IDNO)
+		return;
+
+	// TODO: 여기에 컨트롤 알림 처리기 코드를 추가합니다.
+	//if (fabs(m_cManager->pMoniter->stDataM[AXIS_UNIT_Z].dPos) - (m_cManager->pMoniter->stDataM[AXIS_UNIT_Z].dSWLimitP - 1) > 0.1 ||
+	//	/*!m_pSystem->stInterLock.m_bAutoChangeArmPos[1])*/!m_cManager->pMoniter->stDataP.bMData[PLC_AUTOCHANGE_PROBE_CHECK1]) //20220228 JCY 임시 수정
+
+	if (m_cManager->pMoniter->stDataP.bMData[PLC_AUTO_CHANGE_X0_POSITION_02] != true || m_cManager->pMoniter->stDataP.bMData[PLC_AUTOCHANGE_UP_01] != true || m_cManager->pMoniter->stDataP.bMData[PLC_AUTOCHANGE_UP_02] != true)
+	{
+		if (AfxMessageBox(_T("프로브 탈/부착 가능 위치가 아닙니다.\n 계속 하시겠습니까?"), MB_YESNO | MB_ICONQUESTION) != IDYES) return;
+	}
+
+
+	CString strLog, strText;
+	GetDlgItemText(IDC_BTN_ZEROPOSITION, strText);
+	strLog.Format(strText);
+	EventLog(strLog);
+
+	RITEMDATA uData;
+	memset(&uData, 0, sizeof(RITEMDATA));
+
+	uData.nEventCmd = SACC_COMMAND_OPERATION_PLC_BIT_PROBE_CARD_LOCK_OFF;
+	uData.nWTSequence = m_iSelectProbe;
+	m_cManager->UploadData(&uData);
+
+	////20220321 JCY 
+	////if (m_pSystem->stInterLock.m_bProbeZero)	// Zero on
+	//{
+	//	uData.nEventCmd = SACC_COMMAND_OPERATION_PLC_BIT_PROBE_PCB_LOCK_OFF;
+	//	uData.nWTSequence = m_iSelectProbe;
+	//	m_cManager->UploadData(&uData);
+	//}
+	////else
+	//{
+	//	uData.nEventCmd = SACC_COMMAND_OPERATION_PLC_BIT_PROBE_PCB_LOCK_ON;
+	//	uData.nWTSequence = m_iSelectProbe;
+	//	m_cManager->UploadData(&uData);
+	//}
+}
+
+
+void CDlgSACC::OnBnClickedBtnClam2()
+{
+	CString strMsg;
+	strMsg.Format(_T("동작 하시겠습니까???"));
+
+	if (AfxMessageBox(strMsg, MB_YESNO | MB_ICONQUESTION) == IDNO)
+		return;
+
+	// TODO: 여기에 컨트롤 알림 처리기 코드를 추가합니다.
+	//if (fabs(m_cManager->pMoniter->stDataM[AXIS_UNIT_Z].dPos) - (m_cManager->pMoniter->stDataM[AXIS_UNIT_Z].dSWLimitP + 1) > 0.1 ||
+	//	/*!m_pSystem->stInterLock.m_bAutoChangeArmPos[1])*/!m_cManager->pMoniter->stDataP.bMData[PLC_AUTOCHANGE_PROBE_CHECK1]) //20220228 JCY 임시 수정
+	//{
+	//	if (AfxMessageBox(_T("프로브 탈/부착 가능 위치가 아닙니다.\n 계속 하시겠습니까?"), MB_YESNO | MB_ICONQUESTION) != IDYES) return;
+	//}
+
+	if (m_cManager->pMoniter->stDataP.bMData[PLC_AUTO_CHANGE_X0_POSITION_02] != true || m_cManager->pMoniter->stDataP.bMData[PLC_AUTOCHANGE_UP_01] != true || m_cManager->pMoniter->stDataP.bMData[PLC_AUTOCHANGE_UP_02] != true)
+	{
+		if (AfxMessageBox(_T("프로브 탈/부착 가능 위치가 아닙니다.\n 계속 하시겠습니까?"), MB_YESNO | MB_ICONQUESTION) != IDYES) return;
+	}
+
+	CString strLog, strText;
+	GetDlgItemText(IDC_BTN_ZEROPOSITION, strText);
+	strLog.Format(strText);
+	EventLog(strLog);
+
+	RITEMDATA uData;
+	memset(&uData, 0, sizeof(RITEMDATA));
+
+	uData.nEventCmd = SACC_COMMAND_OPERATION_PLC_BIT_PROBE_UNIT_CLAMP_OFF;
+	uData.nWTSequence = m_iSelectProbe;
+	m_cManager->UploadData(&uData);
+}
+
+
+void CDlgSACC::OnBnClickedBtnPcb2()
+{
+	CString strMsg;
+	strMsg.Format(_T("동작 하시겠습니까???"));
+
+	if (AfxMessageBox(strMsg, MB_YESNO | MB_ICONQUESTION) == IDNO)
+		return;
+
+	//// TODO: 여기에 컨트롤 알림 처리기 코드를 추가합니다.
+	//if (fabs(m_cManager->pMoniter->stDataM[AXIS_UNIT_Z].dPos) - (m_cManager->pMoniter->stDataM[AXIS_UNIT_Z].dSWLimitP + 1) > 0.1 ||
+	//	/*!m_pSystem->stInterLock.m_bAutoChangeArmPos[1])*/!m_cManager->pMoniter->stDataP.bMData[PLC_AUTOCHANGE_PROBE_CHECK1]) //20220228 JCY 임시 수정
+	//{
+	//	if (AfxMessageBox(_T("프로브 탈/부착 가능 위치가 아닙니다.\n 계속 하시겠습니까?"), MB_YESNO | MB_ICONQUESTION) != IDYES) return;
+	//}
+
+	if (m_cManager->pMoniter->stDataP.bMData[PLC_AUTO_CHANGE_X0_POSITION_02] != true || m_cManager->pMoniter->stDataP.bMData[PLC_AUTOCHANGE_UP_01] != true || m_cManager->pMoniter->stDataP.bMData[PLC_AUTOCHANGE_UP_02] != true)
+	{
+		if (AfxMessageBox(_T("프로브 탈/부착 가능 위치가 아닙니다.\n 계속 하시겠습니까?"), MB_YESNO | MB_ICONQUESTION) != IDYES) return;
+	}
+
+	int nRet = ((CButton*)GetDlgItem(IDC_CHK_INSIDE_CLAMP_LOCK))->GetCheck();
+	if (nRet != 1)
+	{
+		AfxMessageBox(_T("Clamp Lock 상태가 아닙니다.!!"));	return;
+	}
+
+	CString strLog, strText;
+	GetDlgItemText(IDC_BTN_ZEROPOSITION, strText);
+	strLog.Format(strText);
+	EventLog(strLog);
+
+	RITEMDATA uData;
+	memset(&uData, 0, sizeof(RITEMDATA));
+
+	uData.nEventCmd = SACC_COMMAND_OPERATION_PLC_BIT_PROBE_PCB_LOCK_OFF;
+	uData.nWTSequence = m_iSelectProbe;
+	m_cManager->UploadData(&uData);
+}
+
+
+void CDlgSACC::OnTimer(UINT_PTR nIDEvent)
+{
+	// Status Check
+	if (nIDEvent == 1)
+	{
+		UpdateState();
+	}
+
+	CDialog::OnTimer(nIDEvent);
+}
+
+
+void CDlgSACC::UpdateState()
+{
+	CString strTemp;
+
+	//Status Check
+	switch (m_iSelectProbe)
+	{
+		case 1:
+		{
+			// Probe Unit Z Pos
+			strTemp.Format(_T("%.4f"), m_cManager->pMoniter->stDataM[AXIS_PROBE_Z1].dPos);
+			GetDlgItem(IDC_EDIT_UNIT_CURR_Z_POS)->SetWindowText(strTemp);
+
+			// Zero Lock 
+			((CButton*)GetDlgItem(IDC_CHK_INSIDE_ZEOR_LOCK))->SetCheck(!m_cManager->pMoniter->stDataP.bMData[PLC_R_PROBE_UNIT01_CARD_ZERO_01]);
+
+			// Clamp Lock
+			((CButton*)GetDlgItem(IDC_CHK_INSIDE_CLAMP_LOCK))->SetCheck(m_cManager->pMoniter->stDataP.bMData[PLC_R_PROBE_UNIT01_CLAM_LOCK_01]);
+
+			// PCB Lock
+			((CButton*)GetDlgItem(IDC_CHK_INSIDE_PCB_LOCK))->SetCheck(m_cManager->pMoniter->stDataP.bMData[PLC_R_PROBE_UNIT01_PCB_LOCK_01] && m_cManager->pMoniter->stDataP.bMData[PLC_R_PROBE_UNIT01_PCB_LOCK_02]);
+		}
+		break;
+		case 2:
+		{
+			// Probe Unit Z Pos
+			strTemp.Format(_T("%.4f"), m_cManager->pMoniter->stDataM[AXIS_PROBE_Z2].dPos);
+			GetDlgItem(IDC_EDIT_UNIT_CURR_Z_POS)->SetWindowText(strTemp);
+
+			// Zero Lock 
+			((CButton*)GetDlgItem(IDC_CHK_INSIDE_ZEOR_LOCK))->SetCheck(!m_cManager->pMoniter->stDataP.bMData[PLC_R_PROBE_UNIT02_CARD_ZERO_01]);
+
+			// Clamp Lock
+			((CButton*)GetDlgItem(IDC_CHK_INSIDE_CLAMP_LOCK))->SetCheck(m_cManager->pMoniter->stDataP.bMData[PLC_R_PROBE_UNIT02_CLAM_LOCK_01]);
+
+			// PCB Lock
+			((CButton*)GetDlgItem(IDC_CHK_INSIDE_PCB_LOCK))->SetCheck(m_cManager->pMoniter->stDataP.bMData[PLC_R_PROBE_UNIT02_PCB_LOCK_01] && m_cManager->pMoniter->stDataP.bMData[PLC_R_PROBE_UNIT02_PCB_LOCK_02]);
+		}
+		break;
+		case 3:
+		{
+			// Probe Unit Z Pos
+			strTemp.Format(_T("%.4f"), m_cManager->pMoniter->stDataM[AXIS_PROBE_Z3].dPos);
+			GetDlgItem(IDC_EDIT_UNIT_CURR_Z_POS)->SetWindowText(strTemp);
+
+			// Zero Lock 
+			((CButton*)GetDlgItem(IDC_CHK_INSIDE_ZEOR_LOCK))->SetCheck(!m_cManager->pMoniter->stDataP.bMData[PLC_R_PROBE_UNIT03_CARD_ZERO_01]);
+
+			// Clamp Lock
+			((CButton*)GetDlgItem(IDC_CHK_INSIDE_CLAMP_LOCK))->SetCheck(m_cManager->pMoniter->stDataP.bMData[PLC_R_PROBE_UNIT03_CLAM_LOCK_01]);
+
+			// PCB Lock
+			((CButton*)GetDlgItem(IDC_CHK_INSIDE_PCB_LOCK))->SetCheck(m_cManager->pMoniter->stDataP.bMData[PLC_R_PROBE_UNIT03_PCB_LOCK_01] && m_cManager->pMoniter->stDataP.bMData[PLC_R_PROBE_UNIT03_PCB_LOCK_02]);
+		}
+		break;
+		case 4:
+		{
+			// Probe Unit Z Pos
+			strTemp.Format(_T("%.4f"), m_cManager->pMoniter->stDataM[AXIS_PROBE_Z4].dPos);
+			GetDlgItem(IDC_EDIT_UNIT_CURR_Z_POS)->SetWindowText(strTemp);
+
+			// Zero Lock 
+			((CButton*)GetDlgItem(IDC_CHK_INSIDE_ZEOR_LOCK))->SetCheck(!m_cManager->pMoniter->stDataP.bMData[PLC_R_PROBE_UNIT04_CARD_ZERO_01]);
+
+			// Clamp Lock
+			((CButton*)GetDlgItem(IDC_CHK_INSIDE_CLAMP_LOCK))->SetCheck(m_cManager->pMoniter->stDataP.bMData[PLC_R_PROBE_UNIT04_CLAM_LOCK_01]);
+
+			// PCB Lock
+			((CButton*)GetDlgItem(IDC_CHK_INSIDE_PCB_LOCK))->SetCheck(m_cManager->pMoniter->stDataP.bMData[PLC_R_PROBE_UNIT04_PCB_LOCK_01] && m_cManager->pMoniter->stDataP.bMData[PLC_R_PROBE_UNIT04_PCB_LOCK_02]);
+		}
+		break;
+		case 5: case -1:
+		{
+			// Probe Unit Z Pos
+			strTemp.Format(_T("%.4f"), m_cManager->pMoniter->stDataM[AXIS_PROBE_Z5].dPos);
+			GetDlgItem(IDC_EDIT_UNIT_CURR_Z_POS)->SetWindowText(strTemp);
+
+			// Zero Lock 
+			((CButton*)GetDlgItem(IDC_CHK_INSIDE_ZEOR_LOCK))->SetCheck(!m_cManager->pMoniter->stDataP.bMData[PLC_R_PROBE_UNIT05_CARD_ZERO_01]);
+
+			// Clamp Lock
+			((CButton*)GetDlgItem(IDC_CHK_INSIDE_CLAMP_LOCK))->SetCheck(m_cManager->pMoniter->stDataP.bMData[PLC_R_PROBE_UNIT05_CLAM_LOCK_01]);
+
+			// PCB Lock
+			((CButton*)GetDlgItem(IDC_CHK_INSIDE_PCB_LOCK))->SetCheck(m_cManager->pMoniter->stDataP.bMData[PLC_R_PROBE_UNIT05_PCB_LOCK_01] && m_cManager->pMoniter->stDataP.bMData[PLC_R_PROBE_UNIT05_PCB_LOCK_02]);
+		}
+		break;
+	}
+
+
+	// AC Gantry Pos		
+	strTemp.Format(_T("%.4f"), m_cManager->pMoniter->stDataM[AXIS_X4].dPos);
+	GetDlgItem(IDC_EDIT_ROBOT_CURR_X_POS)->SetWindowText(strTemp);
+
+	// AC Z Pos
+	strTemp.Format(_T("%.4f"), m_cManager->pMoniter->stDataM[AXIS_Z9].dPos);
+	GetDlgItem(IDC_EDIT_ROBOT_CURR_Z_POS)->SetWindowText(strTemp);
+
+	// Probe Exist 
+	((CButton*)GetDlgItem(IDC_CHK_INSIDE_PROBE_EXIST))->SetCheck(m_cManager->pMoniter->stDataP.bMData[PLC_R_PROBE_UNIT01_CARD_CHK_01]);
+	((CButton*)GetDlgItem(IDC_CHK_INSIDE_PROBE_EXIST2))->SetCheck(m_cManager->pMoniter->stDataP.bMData[PLC_R_PROBE_UNIT02_CARD_CHK_01]);
+	((CButton*)GetDlgItem(IDC_CHK_INSIDE_PROBE_EXIST3))->SetCheck(m_cManager->pMoniter->stDataP.bMData[PLC_R_PROBE_UNIT03_CARD_CHK_01]);
+	((CButton*)GetDlgItem(IDC_CHK_INSIDE_PROBE_EXIST4))->SetCheck(m_cManager->pMoniter->stDataP.bMData[PLC_R_PROBE_UNIT04_CARD_CHK_01]);
+	((CButton*)GetDlgItem(IDC_CHK_INSIDE_PROBE_EXIST5))->SetCheck(m_cManager->pMoniter->stDataP.bMData[PLC_R_PROBE_UNIT05_CARD_CHK_01]);
+
+	// Shutter Check 
+	((CButton*)GetDlgItem(IDC_CHK_ICP_GATE_VALVE_OPEN))->SetCheck(m_cManager->pMoniter->stDataP.bMData[PLC_R_PACC_SHUTTER_OPEN_01]);
+
+	// AC Probe Exist
+	((CButton*)GetDlgItem(IDC_CHK_ROBOT_PROBE_EXIST))->SetCheck(m_cManager->pMoniter->stDataP.bMData[PLC_AUTOCHANGE_PROBE_CHECK1]);
+
+	// AC Up
+	((CButton*)GetDlgItem(IDC_CTCHECKCTRL_Z0))->SetCheck(m_cManager->pMoniter->stDataP.bMData[PLC_AUTOCHANGE_UP_01]);
+
+	// AC Down
+	((CButton*)GetDlgItem(IDC_CTCHECKCTRL_Z1))->SetCheck(m_cManager->pMoniter->stDataP.bMData[PLC_AUTOCHANGE_DOWN_01]);
+
+	// Stage Safety
+	((CButton*)GetDlgItem(IDC_CHK_TOP_GANTRY_READDY))->SetCheck(m_cManager->pMoniter->stDataP.bMData[PLC_BIT_UNLOAD_SENSOR03]);
+
+	// AC
+	((CButton*)GetDlgItem(IDC_CTCHECKCTRL_X1))->SetCheck(m_cManager->pMoniter->stDataP.bMData[PLC_AUTO_CHANGE_X0_POSITION_02]);
+	((CButton*)GetDlgItem(IDC_CTCHECKCTRL_X2))->SetCheck(m_cManager->pMoniter->stDataP.bMData[PLC_AUTO_CHANGE_X0_POSITION_03]);
+	((CButton*)GetDlgItem(IDC_CTCHECKCTRL_X3))->SetCheck(m_cManager->pMoniter->stDataP.bMData[PLC_AUTO_CHANGE_X0_POSITION_04]);
+
+
+	////SACC & EQ 상태 체크
+	//int iRow = 1, iCol = 1;
+	//for (int iIndex = PLC_PACC_AUTO_MODE; iIndex < PLC_EQ_RESSERVED04; iIndex++)
+	//{
+	//	if (m_cManager->pMoniter->stDataP.bMData[iIndex] == true)
+	//	{
+	//		m_sprdSACCIO->SetColor(iCol, iRow, dfCOLOR_GRAY, RGB_DARK_GRAY); // 데이터부분 배경, 글씨
+	//	}
+	//	else
+	//	{
+	//		m_sprdSACCIO->SetColor(iCol, iRow, RGB_LIGHT_BEIGE, RGB_DARK_GRAY); // 데이터부분 배경, 글씨
+	//	}		
+
+	//	if (iRow == 10)
+	//	{
+	//		iRow = 1;
+	//		iCol++;
+	//	}
+	//	iRow++;		
+	//}	
+
+	UpdateSpreadProbe();
+}
+
+// jsyoon 2022.05.09 add Probe Align
+void CDlgSACC::OnBnClickedBtnProbeAlign()
+{
+	// TODO: 여기에 컨트롤 알림 처리기 코드를 추가합니다.
+	CString strMsg;
+	strMsg.Format(_T("동작 하시겠습니까???"));
+
+	if (AfxMessageBox(strMsg, MB_YESNO | MB_ICONQUESTION) == IDNO)
+		return;
+
+	if (m_iSelectProbe == -1)
+	{
+		if (AfxMessageBox(_T("Probe를 선택하지 않았습니다."))) return;
+
+	}
+
+	RITEMDATA uData;
+	memset(&uData, 0, sizeof(RITEMDATA));
+	uData.nEventCmd = SACC_COMMAND_OPERATION_PROBE_ALIGN;
+	uData.nWTSequence = m_iSelectProbe;
+
+	m_cManager->UploadData(&uData);
+}
+
+
+void CDlgSACC::GetProbeInfo(int iProbe, CString* pstrRFID, CString* pstrMountTime, int* pnContactCount)
+{
+	TCHAR szValue[MAX_PATH];
+	ZeroMemory(szValue, MAX_PATH);
+
+	CString szConfigFile;
+	szConfigFile = gf_GetFilePath(dfCONFIG_START_FILE_PATH);
+
+	CString strInsideGet;
+	strInsideGet.Format(_T("PROBERFID%d"), iProbe+1);
+
+	GetPrivateProfileString(strInsideGet, _T("InsideProbeRFID"), _T("1111111"), szValue, 20, szConfigFile);
+	pstrRFID->Format(_T("%s"), szValue);
+
+	GetPrivateProfileString(strInsideGet, _T("InsideProbeRFIDMountTime"), _T(""), szValue, 30, szConfigFile);
+	pstrMountTime->Format(_T("%s"), szValue);
+
+	GetPrivateProfileString(strInsideGet, _T("InsideProbeContactCount"), _T(""), szValue, 30, szConfigFile);
+	*pnContactCount = _ttoi(szValue);
+}
+
+void CDlgSACC::SetProbeInfo(int iProbe, CString strRFID, CString strMountTime, int nContactCount)
+{
+	TCHAR szValue[MAX_PATH];
+	ZeroMemory(szValue, MAX_PATH);
+
+	CString szConfigFile;
+	szConfigFile = gf_GetFilePath(dfCONFIG_START_FILE_PATH);
+
+	CString strInsideGet;
+	strInsideGet.Format(_T("PROBERFID%d"), iProbe + 1);
+
+	CString strValue;
+	strValue.Format(_T("%s"), strRFID);
+	
+	WritePrivateProfileString(strInsideGet, _T("InsideProbeRFID"), strValue, szConfigFile);
+	
+	strValue.Format(_T("%s"), strMountTime);
+	WritePrivateProfileString(strInsideGet, _T("InsideProbeRFIDMountTime"), strValue, szConfigFile);
+
+	strValue.Format(_T("%d"), nContactCount);
+	WritePrivateProfileString(strInsideGet, _T("InsideProbeContactCount"), strValue, szConfigFile);
+}

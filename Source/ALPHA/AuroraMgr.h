@@ -1,0 +1,64 @@
+#pragma once
+
+#include "AuroraMgrPool.h"
+
+class CAuroraSubMgr;
+class CAuroraMgr
+{
+    std::vector<CAuroraSubMgr *>	m_subMgr;
+    std::map<UINT, CWnd *>			m_subDlg;
+    stSystemInfo					m_systemInfo;
+    stLoginInfo						m_loginInfo;
+    stMainFrameInfo					m_mainFrameInfo;
+	stAuroraMgrPool					m_AuroraMgrPool;
+
+public:
+    stSystemInfo					&GetSystemInfo()						{ return m_systemInfo;							}	// To return system information
+    stLoginInfo						&GetLoginInfo()							{ return m_loginInfo;							}	// To return Login information ( Default name =  Admin / admin )
+    stMainFrameInfo					&GetMainFrameInfo()						{ return m_mainFrameInfo;						}	// To return main frame information
+	CLogInControlMgr				*GetLogInControlMgrPtr() const			{ return m_AuroraMgrPool.pLogInControlMgr;		}
+    CSystemConfigMgr				*GetSystemConfigMgrPtr() const			{ return m_AuroraMgrPool.pSystemConfigMgr;		}
+    CNetworkConfigMgr				*GetNetworkConfigMgrPtr() const			{ return m_AuroraMgrPool.pNetworkConfigMgr;		}
+	CPositionConfigMgr				*GetPositionConfigMgrPtr() const		{ return m_AuroraMgrPool.pPositionConfigMgr;	}
+    CLockControlMgr					*GetLockControlMgrPtr() const			{ return m_AuroraMgrPool.pLockCtrlMgr;			}
+    CRecipeEditMgr					*GetRecipeEditMgrPtr() const			{ return m_AuroraMgrPool.pRecipeEditMgr;		}
+	CResultCollectMgr				*GetResultCollectMgrPtr() const			{ return m_AuroraMgrPool.pResultCollectMgr;		}
+	CIOMapControlMgr				*GetIOMapControlMgrPtr() const			{ return m_AuroraMgrPool.pIOMapControlMgr;		}
+//	CMotorControlMgr				*GetMotorControlMgrPtr() const			{ return m_AuroraMgrPool.pMotorControlMgr;		}
+	CLightControlMgr				*GetLightControlMgrPtr() const			{ return m_AuroraMgrPool.pLightControlMgr;		}
+	CVCRControlMgr					*GetVCRControlMgrPtr() const			{ return m_AuroraMgrPool.pVCRControlMgr;		}
+	CShareMemoryMgr					*GetShareMemoryMgrPtr() const			{ return m_AuroraMgrPool.pShareMemoryMgr;		}
+	CMeasureItemMgr					*GetMeasureItemMgrPtr() const			{ return m_AuroraMgrPool.pMeasureItemMgr;		}
+    CCommTcpIpFactoryMgr			*GetCommTcpIpFactoryMgrPtr() const		{ return m_AuroraMgrPool.pCommTcpIpFactoryMgr;	}
+    CCommTcpIPMgr					*GetCommTcpIPMgrPtr() const				{ return m_AuroraMgrPool.pCommTcpIPMgr;			}
+	CSensorMonitorMgr				*GetSensorMonitorMgrPtr() const			{ return m_AuroraMgrPool.pSensorMonitorMgr;		}
+	CAlarmMonitorMgr				*GetAlarmMonitorMgrPtr() const			{ return m_AuroraMgrPool.pAlarmMonitorMgr;		}
+	CSeqTactTimeMgr					*GetSeqTactTimeMgrPtr() const			{ return m_AuroraMgrPool.pSeqTactTimeMgr;		}	
+	CVisionConfigMgr				*GetVisionConfigPtr() const				{ return m_AuroraMgrPool.pVisionConfigMgr;		}
+	CReviewCameraHead1Mgr			*GetReviewCameraHead1Mgr()				{ return m_AuroraMgrPool.pReviewCameraHead1Mgr; }
+	CReviewCameraHead2Mgr			*GetReviewCameraHead2Mgr()				{ return m_AuroraMgrPool.pReviewCameraHead2Mgr; }
+	CAlignCameraMgr					*GetAlignCameraMgr(int iIndex)			{ return m_AuroraMgrPool.pAlignCameraMgr[iIndex]; }
+	CTriggerControlMgr				*GetTriggerControlMgr() const			{ return m_AuroraMgrPool.pTriggerControlMgr; }
+	CSEMControlMgr					*GetSEMControlMgr() const				{ return m_AuroraMgrPool.pSEMControlMgr; }
+    CMaintControlMgr                *GetMaintControlMgr() const             { return m_AuroraMgrPool.pMaintControlMgr; }
+	CResumeInfoMgr					*GetResumeInfoMgrPtr() const			{ return m_AuroraMgrPool.pResumeInfoMgr; }
+	CWadMultiMeasMgr				*GetWadMultiMeasMgrPtr() const			{ return m_AuroraMgrPool.pWadMultiMeasMgr; }	// LYS 2026-07-23
+
+public:
+    void							Notify(UINT, UINT, WPARAM, LPARAM);
+    void							Notify_Direct(UINT, UINT, WPARAM, LPARAM);
+    void							PushSubDlg(int nID, CWnd *pWnd);
+    int								GetSubMgrCount() const;
+    CAuroraSubMgr					*GetSubMgrPtr(int Index);
+	int								GetSubDlgCount() const;
+    CWnd							*GetSubDlgPtr(int index);
+    void							ChangeDlgView(int nID);
+
+public:
+    CAuroraMgr(CString strName, CString strAppPath, CString strConfigPath, CString strRecipePath, CString strLogPath);
+    ~CAuroraMgr(void);
+
+	CString GetVersionInfo(CString strAppName);
+	CString GetCompiledDate(int nType = 0);
+    void Finalize();
+};

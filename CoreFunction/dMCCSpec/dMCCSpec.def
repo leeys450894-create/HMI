@@ -1,0 +1,19 @@
+; dMCCSpec.def : Declares the module parameters for the DLL.
+
+LIBRARY      "dMCCSpec"
+DESCRIPTION  'dMCCSpec Windows Dynamic Link Library'
+
+EXPORTS
+    ; Explicit exports can go here
+
+
+	API_MCC_Initialize
+	API_MCC_KillThred
+	API_MCC_FinalizeReport
+	API_MCC_SetLogPath
+	API_MCC_SetConfigPath
+	API_MCC_SetFilePath
+	API_MCC_GetReportmWnd
+	API_MCC_AddQueue
+	API_MCCR_GetSharedMemory
+	API_MCC_SetEQName

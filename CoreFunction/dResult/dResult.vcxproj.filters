@@ -1,0 +1,108 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Project ToolsVersion="4.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <ItemGroup>
+    <Filter Include="소스 파일">
+      <UniqueIdentifier>{4FC737F1-C7A5-4376-A066-2A32D752A2FF}</UniqueIdentifier>
+      <Extensions>cpp;c;cc;cxx;c++;cppm;ixx;def;odl;idl;hpj;bat;asm;asmx</Extensions>
+    </Filter>
+    <Filter Include="헤더 파일">
+      <UniqueIdentifier>{93995380-89BD-4b04-88EB-625FBE52EBFB}</UniqueIdentifier>
+      <Extensions>h;hh;hpp;hxx;h++;hm;inl;inc;ipp;xsd</Extensions>
+    </Filter>
+    <Filter Include="리소스 파일">
+      <UniqueIdentifier>{67DA6AB6-F800-4c08-8B7A-83BB121AAD01}</UniqueIdentifier>
+      <Extensions>rc;ico;cur;bmp;dlg;rc2;rct;bin;rgs;gif;jpg;jpeg;jpe;resx;tiff;tif;png;wav;mfcribbon-ms</Extensions>
+    </Filter>
+    <Filter Include="FPSpreadDll">
+      <UniqueIdentifier>{184e2280-2851-47ec-8a4a-fe6137251088}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="API">
+      <UniqueIdentifier>{ae689910-0eb2-4b42-9cbb-74532948d910}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="FreeSrc">
+      <UniqueIdentifier>{2f3a7941-cdd0-40d2-9534-147cc834515e}</UniqueIdentifier>
+    </Filter>
+  </ItemGroup>
+  <ItemGroup>
+    <ClCompile Include="dResult.cpp">
+      <Filter>소스 파일</Filter>
+    </ClCompile>
+    <ClCompile Include="pch.cpp">
+      <Filter>소스 파일</Filter>
+    </ClCompile>
+    <ClCompile Include="..\common\MySpreadDll.cpp">
+      <Filter>FPSpreadDll</Filter>
+    </ClCompile>
+    <ClCompile Include="..\common\FarPoint64\Ssdllmfc.cpp">
+      <Filter>FPSpreadDll</Filter>
+    </ClCompile>
+    <ClCompile Include="..\common\StaticSpread.cpp">
+      <Filter>FPSpreadDll</Filter>
+    </ClCompile>
+    <ClCompile Include="CDlgResult.cpp">
+      <Filter>소스 파일</Filter>
+    </ClCompile>
+    <ClCompile Include="API_Result.cpp">
+      <Filter>API</Filter>
+    </ClCompile>
+    <ClCompile Include="ResultManager.cpp">
+      <Filter>소스 파일</Filter>
+    </ClCompile>
+    <ClCompile Include="..\common\CommonFunc.cpp">
+      <Filter>FreeSrc</Filter>
+    </ClCompile>
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="res\dResult.rc2">
+      <Filter>리소스 파일</Filter>
+    </None>
+    <None Include="dResult.def">
+      <Filter>API</Filter>
+    </None>
+  </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="framework.h">
+      <Filter>헤더 파일</Filter>
+    </ClInclude>
+    <ClInclude Include="targetver.h">
+      <Filter>헤더 파일</Filter>
+    </ClInclude>
+    <ClInclude Include="Resource.h">
+      <Filter>헤더 파일</Filter>
+    </ClInclude>
+    <ClInclude Include="dResult.h">
+      <Filter>헤더 파일</Filter>
+    </ClInclude>
+    <ClInclude Include="pch.h">
+      <Filter>헤더 파일</Filter>
+    </ClInclude>
+    <ClInclude Include="..\common\MySpreadDll.h">
+      <Filter>FPSpreadDll</Filter>
+    </ClInclude>
+    <ClInclude Include="..\common\StaticSpread.h">
+      <Filter>FPSpreadDll</Filter>
+    </ClInclude>
+    <ClInclude Include="CDlgResult.h">
+      <Filter>헤더 파일</Filter>
+    </ClInclude>
+    <ClInclude Include="API_Result.h">
+      <Filter>API</Filter>
+    </ClInclude>
+    <ClInclude Include="ResultManager.h">
+      <Filter>헤더 파일</Filter>
+    </ClInclude>
+    <ClInclude Include="..\common\CommonFunc.h">
+      <Filter>FreeSrc</Filter>
+    </ClInclude>
+  </ItemGroup>
+  <ItemGroup>
+    <ResourceCompile Include="dResult.rc">
+      <Filter>리소스 파일</Filter>
+    </ResourceCompile>
+  </ItemGroup>
+  <ItemGroup>
+    <Library Include="..\common\FarPoint64\Lib\SPR64DU80.lib">
+      <Filter>FPSpreadDll</Filter>
+    </Library>
+  </ItemGroup>
+</Project>

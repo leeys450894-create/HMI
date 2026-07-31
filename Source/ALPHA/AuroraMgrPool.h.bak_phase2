@@ -1,0 +1,176 @@
+#pragma once
+
+#include <map>
+#include <vector>
+
+
+//Colors
+#define		CLR_WHITE					RGB(0xFF, 0xFF, 0xFF)
+#define		CLR_MAGENTA					RGB(0xFB, 0x0C, 0xD1)
+#define		CLR_BLACK					RGB(0x00, 0x00, 0x00)
+#define		CLR_GRAY					RGB(0x80, 0x80, 0x80)
+#define		CLR_LIGHT_GRAY				RGB(0xC0, 0xC0, 0xC0)
+#define		CLR_RED						RGB(0xFF, 0x00, 0x00)
+#define		CLR_LIGHT_RED				RGB(0xFF, 0x40, 0x40)
+#define		CLR_GREEN					RGB(0x00, 0xFF, 0x00)
+#define		CLR_BLUE					RGB(0x00, 0x00, 0xFF)
+#define		CLR_LIGHT_BLUE				RGB(0x80, 0x80, 0xFF)
+#define		CLR_YELLOW					RGB(0xFF, 0xFF, 0x00)
+#define		CLR_LIGHT_YELLOW			RGB(0xFF, 0xFF, 0xB0)
+#define		RGB_DARK_BLUE				RGB(24, 44, 123)	// text
+#define		RGB_TEST_1					RGB(242, 150, 97)
+#define		RGB_TEST_2					RGB(188, 229, 92)
+#define		RGB_TEST_3					RGB(92, 209, 229)
+#define		RGB_TEST_4					RGB(255, 178, 245)
+
+
+// System information of the program
+struct stSystemInfo
+{
+    CString name;
+    CString version;
+};
+
+struct stLoginInfo
+{
+	CString user;
+	CString level;
+};
+
+// Main frame information
+struct stMainFrameInfo
+{
+    int width;
+    int height;
+    int topHeight;
+    int naviHeight;
+    int logHeight;
+    int commandWidth;
+    int imgWidth;
+    int imgHeight;
+    long bMenu;
+    long bTitle;
+    long bSizebar;
+    long bLogin;
+
+    stMainFrameInfo()
+        : width(1440)
+        , height(900)
+        , topHeight(80)
+        , naviHeight(80)
+        , logHeight(20)
+        , commandWidth(80)
+        , imgWidth(640)
+        , imgHeight(480)
+        , bMenu(TRUE)
+        , bTitle(TRUE)
+        , bSizebar(TRUE)
+        , bLogin(FALSE) {}
+};
+
+
+class CLogInControlMgr;
+class CSystemConfigMgr;
+class CNetworkConfigMgr;
+class CPositionConfigMgr;
+class CLockControlMgr;
+class CRecipeEditMgr;
+class CResultCollectMgr;
+class CIOMapControlMgr;
+class CMotorControlMgr;
+class CPatternMatchMgr;
+class CLightControlMgr;
+class CVCRControlMgr;
+class CCIMControlMgr;
+class CAlignMatrixMgr;
+class CAlignCameraMgr;
+class CReviewCameraHead1Mgr;
+class CReviewCameraHead2Mgr;
+class CShareMemoryMgr;
+class CMeasureItemMgr;
+class CCommTcpIpFactoryMgr;
+class CCommTcpIPMgr;
+class CSensorMonitorMgr;
+class CAlarmMonitorMgr;
+class CSeqTactTimeMgr;
+class CVisionConfigMgr;
+class CTriggerControlMgr;
+class CSEMControlMgr;
+class CMaintControlMgr;
+class CSACCMgr;
+class CResumeInfoMgr;
+struct stAuroraMgrPool
+{
+	CString strAppPath;
+	CString strConfigPath;
+	CString strRecipePath;
+	CString strLogPath;
+
+	CLogInControlMgr		*pLogInControlMgr;
+	CSystemConfigMgr		*pSystemConfigMgr;   
+	CNetworkConfigMgr		*pNetworkConfigMgr;
+	CPositionConfigMgr		*pPositionConfigMgr;
+	CLockControlMgr			*pLockCtrlMgr;
+    CRecipeEditMgr			*pRecipeEditMgr;
+	CResultCollectMgr		*pResultCollectMgr;
+	CIOMapControlMgr		*pIOMapControlMgr;
+	CMotorControlMgr		*pMotorControlMgr;
+	CPatternMatchMgr		*pPatternMatchMgr;
+	CLightControlMgr		*pLightControlMgr;
+	CVCRControlMgr			*pVCRControlMgr;
+	CCIMControlMgr			*pCIMControlMgr;
+	CAlignMatrixMgr			*pAlignMatrixMgr;
+	CAlignCameraMgr			*pAlignCameraMgr[MAIN_CCD_MAX_NUM];
+	CReviewCameraHead1Mgr	*pReviewCameraHead1Mgr;
+	CReviewCameraHead2Mgr	*pReviewCameraHead2Mgr;
+	CShareMemoryMgr			*pShareMemoryMgr;
+	CMeasureItemMgr			*pMeasureItemMgr;
+    CCommTcpIpFactoryMgr	*pCommTcpIpFactoryMgr;
+    CCommTcpIPMgr			*pCommTcpIPMgr;
+	CSensorMonitorMgr		*pSensorMonitorMgr;	
+	CAlarmMonitorMgr		*pAlarmMonitorMgr;
+	CSeqTactTimeMgr			*pSeqTactTimeMgr;
+	CVisionConfigMgr		*pVisionConfigMgr;
+	CTriggerControlMgr      *pTriggerControlMgr;
+	CSEMControlMgr			*pSEMControlMgr;
+	CMaintControlMgr		*pMaintControlMgr;
+	CResumeInfoMgr			*pResumeInfoMgr;		// LYS 2026-07-03 Resume inspection
+
+	stAuroraMgrPool()
+	{
+		pLogInControlMgr = nullptr;
+		pSystemConfigMgr = nullptr;
+		pNetworkConfigMgr = nullptr;
+		pPositionConfigMgr = nullptr;
+		pLockCtrlMgr = nullptr;
+		pRecipeEditMgr = nullptr;
+		pResultCollectMgr = nullptr;
+		pIOMapControlMgr = nullptr;
+		pMotorControlMgr = nullptr;
+		pPatternMatchMgr = nullptr;
+		pLightControlMgr = nullptr;
+		pVCRControlMgr = nullptr;
+		pCIMControlMgr = nullptr;
+		pAlignMatrixMgr = nullptr;
+		
+		for (int i = 0; i < MAIN_CCD_MAX_NUM; i++)
+		{
+			pAlignCameraMgr[i] = nullptr;
+		}
+	
+		pReviewCameraHead1Mgr = nullptr;
+		pReviewCameraHead2Mgr = nullptr;
+		pShareMemoryMgr = nullptr;
+		pMeasureItemMgr = nullptr;
+		pCommTcpIpFactoryMgr = nullptr;
+		pCommTcpIPMgr = nullptr;
+		pSensorMonitorMgr = nullptr;
+		pAlarmMonitorMgr = nullptr;
+		pSeqTactTimeMgr = nullptr;
+		pVisionConfigMgr = nullptr;
+		pTriggerControlMgr = nullptr;
+		pSEMControlMgr = nullptr;
+		pMaintControlMgr = nullptr;
+		pResumeInfoMgr = nullptr;
+	}
+};

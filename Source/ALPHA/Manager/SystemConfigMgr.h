@@ -1,0 +1,120 @@
+#pragma once
+
+#include "..\AuroraSubMgr.h"
+
+#define EXCEPT_STR_MAX  5
+
+class CIniHelper;
+class CSystemConfigMgr : public CAuroraSubMgr
+{
+    CIniHelper	*m_pIniHelper;
+	CIniHelper	*m_pIniGlassExist;
+    CString		m_strConfigPath;
+
+    // Application 파라미터
+    CString		m_strPgmLicense;					// Program License
+    bool		m_bDuplicateExecution;				// 중복 실행 설정 여부
+	bool		m_bAutoChangeInlineMode;			// 프로그램 시작과 동시에 INLINE MODE 로 변경
+	int			m_iLanguageType;					// 언어 선택하기
+
+	bool		m_bUseAlarmMonitor;					// 알람 모니터 사용 여부	
+	bool		m_bUseHardwareSensor;				// H/W 센서 사용 여부
+	bool		m_bUseHardwareMotor;				// 로보트 사용 여부
+	bool		m_bUseTeachKeyMonitor;					// 알람 모니터 사용 여부
+
+    // 결과 관련 파라미터
+    bool		m_bUseUploadResultDataAndImageSave;				// 스펙트럼 결과 이미지를 전송 설정 여부
+    CString		m_strUploadResultDataAndImageSaveFolderPath;	// 스펙트럼 결과 이미지 전송 경로
+    bool		m_bUseBackupResultDataAndImageSave;				// 스펙트럼 결과 이미지 로컬 저장 설정 여부
+    CString		m_strBackupResultDataAndImageSaveFolderPath;	// 스펙트럼 결과 이미지 로컬 저장 경로
+	CString		m_strUploadCIMFolderPath;						// CIM Data
+
+	bool		m_bCommunicationTypeString;			//String 형 패킷 변수
+
+	bool		m_bUseVisionColorInsp;							// 화질 면계측 동시 측정 여부
+
+	CString		m_strRecipePath;
+	CString 	m_strLogPath;
+	CString 	m_strResultPath;
+	CString		m_strStopGlassID;
+
+
+
+	bool		m_bModelChangeAlarm;
+	bool		m_bCurGlsOneAlarm;
+	bool		m_bCIMAlarmNotReport;
+
+	// LYS 2026-06-26 Equipment type option (HMI/OCP)
+	CString		m_strMachineType;					// "HMI" or "OCP"
+	bool		m_bIsOCP;							// true if OCP mode
+	bool		m_bUseResumeInspection;				// LYS 2026-07-03 Resume inspection ON/OFF
+
+	int			m_nResumeExpireHours;				// LYS 2026-07-03 Resume expiry (hours, 0=no expiry)
+	CString		m_strWadMultiRcpPath;				// LYS 2026-07-23 WAD Multi recipe folder
+	TCHAR		m_chrExcept[EXCEPT_STR_MAX];
+
+public:
+    CString		GetConfigFolderPath()	const		{ return m_strConfigPath;				}
+    CString		GetPgmLicense() const				{ return m_strPgmLicense;				}	
+	CString		GetRecipePath()	const				{ return m_strRecipePath; }
+	CString		GetLogFilePath() const				{ return m_strLogPath; }
+	CString		GetResultFilePath() const			{ return m_strResultPath; }
+
+	bool		GetDuplicateExecution() const		{ return m_bDuplicateExecution;			}
+	bool		IsAutoChangeInlineMode() const		{ return m_bAutoChangeInlineMode;		}
+	int			GetLanguageIndex() const			{ return m_iLanguageType;				}
+	
+	void		SetUseTeachKey(bool value)			{ m_bUseTeachKeyMonitor = value; }
+    void		SetUseAlarmMonitor(bool value)		{ m_bUseAlarmMonitor = value;			}
+	void		SetUseHardwareSensor(bool value)	{ m_bUseHardwareSensor = value;			}
+    void		SetUseHardwareMotor(bool value)		{ m_bUseHardwareMotor = value;			}
+
+	bool		IsUseTeachKey() const				{ return m_bUseTeachKeyMonitor;			}
+    bool		IsUseAlarmMonitor() const			{ return m_bUseAlarmMonitor;			}
+    bool		IsUseHardwareSensor() const			{ return m_bUseHardwareSensor;			}
+	bool		IsUseHardwareMotor() const			{ return m_bUseHardwareMotor;			}
+
+    // 결과 관련 파라미터
+    bool		IsUseUploadResultDataAndImageSave() const			{ return m_bUseUploadResultDataAndImageSave;				}
+    CString		GetUploadResultDataAndImageSaveFolderPath() const	{ return m_strUploadResultDataAndImageSaveFolderPath;		}
+    bool		IsUseBackupResultDataAndImageSave() const			{ return m_bUseBackupResultDataAndImageSave;				}
+    CString		GetBackupResultDataAndImageSaveFolderPath() const	{ return m_strBackupResultDataAndImageSaveFolderPath;		}
+	CString		GetUploadCIMFolderPath() const { return m_strUploadCIMFolderPath; }
+
+	bool		IsCommunicationTypeString() const	{ return m_bCommunicationTypeString;	}
+
+	bool		IsUseModelChangeAlarm() const { return m_bModelChangeAlarm; }
+	bool		IsUseCurGlsOneAlarm() const { return m_bCurGlsOneAlarm; }
+	bool		IsUseCIMAlarmNotReport() const { return m_bCIMAlarmNotReport; }
+	void		SetUseCIMAlarmNotReport(bool value) { m_bCIMAlarmNotReport = value; }
+
+	// LYS 2026-06-26 Equipment type option
+	CString		GetMachineType() const				{ return m_strMachineType;				}
+	bool		IsOCP() const						{ return m_bIsOCP;						}
+	bool		IsUseResumeInspection() const		{ return m_bUseResumeInspection;			}
+
+	int			GetResumeExpireHours() const			{ return m_nResumeExpireHours;			}
+	CString		GetWadMultiRcpPath() const			{ return m_strWadMultiRcpPath;			}	// LYS 2026-07-23
+
+	TCHAR		GetChrExcept(int i) { return m_chrExcept[i];  }
+	
+	bool		GlassExistFile(bool bSave = false);
+
+	CString		GetStopGlassID() const { return m_strStopGlassID; }
+
+	bool		IsUseInspVisionColor() const { return m_bUseVisionColorInsp; }
+
+//------------------------------------------------------------------
+// 공통 인터페이스 함수
+//------------------------------------------------------------------
+public:
+	virtual bool LinkIniFile(bool bSave) override;
+private:
+	virtual void Finalize() override;
+public:
+    CSystemConfigMgr(CString strConfigPath);
+    virtual ~CSystemConfigMgr();
+	bool ReadGalssExistFile();
+	bool m_bGlassExist;
+	void WriteGalssExistFile(bool bExist);
+};

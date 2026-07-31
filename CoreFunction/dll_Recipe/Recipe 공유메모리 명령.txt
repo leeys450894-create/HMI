@@ -1,0 +1,184 @@
+////공유메모리 요청 상태
+m_pRecipeMem->m_sRunState.m_nRunStatus = M_RUN_NONE / M_RUN_REQ / M_RUN_PROC / M_RUN_END / M_RUN_NG
+
+////Align 참조 이미지 만들기 창 팝업 요청
+//Data1
+m_pRecipeMem->m_sRunState.m_dwData1 = M_CMD_SHOW_REF_SET;
+//Data2
+m_pRecipeMem->m_sRunState.m_dwData2 = M_HEAD_FRONT_LEFT / M_HEAD_FRONT_RIGHT / M_HEAD_BACK_LEFT / M_HEAD_BACK_RIGHT;
+
+
+////Align 패턴 서치 요청
+//Data1
+m_pRecipeMem->m_sRunState.m_dwData1 = M_CMD_PATTERN_SEARCH;
+//Data2
+m_pRecipeMem->m_sRunState.m_dwData2 = M_HEAD_FRONT_LEFT / M_HEAD_FRONT_RIGHT / M_HEAD_BACK_LEFT / M_HEAD_BACK_RIGHT;
+// Pattrn 이름
+// score
+
+
+////Align CCD Set 요청
+//Data1
+m_pRecipeMem->m_sRunState.m_dwData1 = M_CMD_CCD_SET;
+//Data2
+m_pRecipeMem->m_sRunState.m_dwData2 = M_HEAD_FRONT_LEFT / M_HEAD_FRONT_RIGHT / M_HEAD_BACK_LEFT / M_HEAD_BACK_RIGHT;
+//int Data
+m_nData[0] = Exp. Time
+m_nData[1] = Gain
+m_nData[2] = Led
+m_nData[3] = Mat. Score
+
+
+/////Glass Align 현재값 요청 (데이터 쓰고 완료 신호 주기)
+//Data1
+m_pRecipeMem->m_sRunState.m_dwData1 = M_CMD_GLASS_GET_POS;
+//double data
+m_fData[0] <- STAGE Y
+m_fData[1] <- STAGE ROTATE
+m_fData[2] <- FRONT Y
+m_fData[3] <- FRONT LEFT
+m_fData[4] <- FRONT RIGHT
+m_fData[5] <- FRONT Z
+
+
+/////Glass Align 위치 이동 요청
+//Data1
+m_pRecipeMem->m_sRunState.m_dwData1 = M_CMD_GLASS_MOVE;
+//double data
+m_fData[0] = STAGE Y
+m_fData[1] = STAGE ROTATE
+m_fData[2] = FRONT Y
+m_fData[3] = FRONT LEFT
+m_fData[4] = FRONT RIGHT
+m_fData[5] = FRONT Z
+
+
+/////Probe Align 현재값 요청 (데이터 쓰고 완료 신호 주기)
+//Data1
+m_pRecipeMem->m_sRunState.m_dwData1 = M_CMD_PROBE_GET_POS;
+//double data
+m_fData[0] <- PROBE Y
+m_fData[1] <- PROBE X
+m_fData[2] <- BACK Y
+m_fData[3] <- BACK LEFT
+m_fData[4] <- BACK RIGHT
+m_fData[5] <- BACK Z
+m_fData[6] <- STAGE Y
+
+
+/////Probe Align 위치 이동 요청
+//Data1
+m_pRecipeMem->m_sRunState.m_dwData1 = M_CMD_PROBE_MOVE;
+//int Data
+m_nData[0] = (0 = PROBE1 / 1 = PROBE2 / 2 = PROBE3.....)
+//double data
+m_fData[0] = PROBE Y
+m_fData[1] = PROBE X
+m_fData[2] = BACK Y
+m_fData[3] = BACK LEFT
+m_fData[4] = BACK RIGHT
+m_fData[5] = BACK Z
+m_fData[6] = STAGE Y
+
+
+/////Glass Align 시퀀스 진행 (데이터 쓰고 완료 신호 주기)
+//Data1
+m_pRecipeMem->m_sRunState.m_dwData1 = M_CMD_GLASS_PROC;
+//Align Data
+공유메모리 m_sAlign.m_sGlsAlign 사용
+//시퀀스 완료 후 데이터 써주기
+m_fData[0] <- LFET X
+m_fData[1] <- LEFT Y
+m_fData[2] <- RIGHT X
+m_fData[3] <- RIGHT Y
+
+
+/////Probe Align 시퀀스 진행 (데이터 쓰고 완료 신호 주기)
+//Data1
+m_pRecipeMem->m_sRunState.m_dwData1 = M_CMD_PROBE_PROC;
+//int Data
+m_nData[0] = (0 = PROBE1 / 1 = PROBE2 / 2 = PROBE3.....)
+//Align Data
+공유메모리 m_sAlign.m_sProbeAlign 사용
+//시퀀스 완료 후 데이터 써주기
+m_fData[0] <- LFET X
+m_fData[1] <- LEFT Y
+m_fData[2] <- RIGHT X
+m_fData[3] <- RIGHT Y
+
+
+/////Align Reset
+//Data1
+m_pRecipeMem->m_sRunState.m_dwData1 = M_CMD_RESET;
+
+
+/////Lamp Set
+//Data1
+m_pRecipeMem->m_sRunState.m_dwData1 = M_CMD_RESET;
+//Data2
+m_pRecipeMem->m_sRunState.m_dwData2 = M_HEAD_FRONT_LEFT / M_HEAD_FRONT_RIGHT / M_HEAD_BACK_LEFT / M_HEAD_BACK_RIGHT;
+//int Data
+m_nData[0] = Front Left 값
+m_nData[1] = Front Right 값
+m_nData[2] = Back Left 값
+m_nData[3] = Back Right 값
+
+
+/////Prboe Contact
+//Data1
+m_pRecipeMem->m_sRunState.m_dwData1 = M_CMD_CONTACT_SET;
+//Data2
+m_pRecipeMem->m_sRunState.m_dwData2 = M_PROBE_MOVE_POS / M_PROBE_MOVE_OD
+//double Data
+m_fData[0] = Ready / Pre-Contact / Contact / OD / Contact + OD
+
+
+/////Stage Current Pos 가져오기 (데이터 쓰고 완료 신호 주기)
+//Data1
+m_pRecipeMem->m_sRunState.m_dwData1 = M_CMD_STAGE_GET_POS;
+//데이터 써주기
+m_fData[0] <- Stage Y
+m_fData[1] <- Stage Rotate
+
+
+/////Stage 이동 요청
+//Data1
+m_pRecipeMem->m_sRunState.m_dwData1 = M_CMD_STAGE_MOVE;
+//double data
+m_fData[0] = Stage Y
+m_fData[1] = Stage Rotate
+
+
+/////Probe 이동 요청
+//Data1
+m_pRecipeMem->m_sRunState.m_dwData1 = M_CMD_STAGE_PROBE_MOVE;
+//double data
+m_fData[0] = Stage Y
+m_fData[1] = Stage Rotate
+
+
+/////Head Current Pos 가져오기 (데이터 쓰고 완료 신호 주기)
+//Data1
+m_pRecipeMem->m_sRunState.m_dwData1 = M_RCP_HEAD_GET_POS;
+//Data2
+m_pRecipeMem->m_sRunState.m_dwData2 = M_HEAD_LEFT / M_HEAD_RIGHT
+//Data3
+m_pRecipeMem->m_sRunState.m_dwData3 = M_TYPE_REVIEW / M_TYPE_SPEC / M_TYPE_QUALITY / M_TYPE_COLOR / M_TYPE_ANGLE
+//데이터 써주기
+m_fData[0] <- Head Y
+m_fData[1] <- Head X
+m_fData[2] <- Head Z //dwData3 에 대한 Z축
+
+
+/////Head 위치 이동 요청
+//Data1
+m_pRecipeMem->m_sRunState.m_dwData1 = M_RCP_HEAD_GET_POS;
+//Data2
+m_pRecipeMem->m_sRunState.m_dwData2 = M_HEAD_LEFT / M_HEAD_RIGHT
+//Data3
+m_pRecipeMem->m_sRunState.m_dwData3 = M_TYPE_REVIEW / M_TYPE_SPEC / M_TYPE_QUALITY / M_TYPE_COLOR / M_TYPE_ANGLE
+//double data
+m_fData[0] = Head Y
+m_fData[1] = Head X
+m_fData[2] = Head Z //dwData3 에 대한 Z축
+

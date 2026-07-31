@@ -1,0 +1,58 @@
+ADDRESS,
+D11500,CDA Pressure 01 [kPa]
+D11502,CDA Pressure 02 [kPa]
+D11504,CDA Pressure 03 [kPa]
+D11506,FIXTURE  Pressure 01 [kPa]
+D11508,FIXTURE  Pressure 02 [kPa]
+D11510,Isolator Pressure 01[kPa]
+D11512,Isolator Pressure 02[kPa]
+D11514,SHUTTER Pressure 01 [kPa]
+D11520,PROBE MODULE_1
+D11522,PROBE MODULE_2
+D11524,PROBE MODULE_3
+D11526,PROBE MODULE_4
+D11528,PROBE MODULE_5
+D11530,ZERO POSITION_1
+D11532,ZERO POSITION_2
+D11534,ZERO POSITION_3
+D11536,ZERO POSITION_4
+D11538,ZERO POSITION_5
+D11540,Vacuum  Pressure01 [kPa]
+D11542,Vacuum  Pressure02 [kPa]
+D11560,PLATE BLOW_VACUUM 01
+D11600,Front Fixture 01 FWD Time
+D11602,Front Fixture 01 REV Time
+D11604,Front Fixture 02 FWD Time
+D11606,Front Fixture 02 REV Time
+D11608,Right Fixture 01 FWD Time
+D11610,Right Fixture 01 REV Time
+D11612,Right Fixture 02 FWD Time
+D11614,Right Fixture 02 REV Time
+D11616,Back Fixture 01 FWD Time
+D11618,Back Fixture 01 REV Time
+D11620,Back Fixture 02 FWD Time
+D11622,Back Fixture 02 REV Time
+D11624,Left Fixture 01 FWD Time
+D11626,Left Fixture 01 REV Time
+D11628,Left Fixture 02 FWD Time
+D11630,Left Fixture 02 REV Time
+D11650,Front Fixture 01 Up Time
+D11652,Front Fixture 01 Down Time
+D11654,Front Fixture 02 Up Time
+D11656,Front Fixture 02 Down Time
+D11658,Right Fixture 01 Up Time
+D11660,Right Fixture 01 Down Time
+D11662,Right Fixture 02 Up Time
+D11664,Right Fixture 02 Down Time
+D11666,Back Fixture 01 Up Time
+D11668,Back Fixture 01 Down Time
+D11670,Back Fixture 02 Up Time
+D11672,Back Fixture 02 Down Time
+D11674,Left Fixture 01 Up Time
+D11676,Left Fixture 01 Down Time
+D11678,Left Fixture 02 Up Time
+D11680,Left Fixture 02 Down Time
+D11900,SACC X0 Axis Torque [%]
+D11902,SACC X1 Axis Torque [%]
+D11904,SACC Z0 Axis Torque [%]
+D11906,SACC Z1 Axis Torque [%]

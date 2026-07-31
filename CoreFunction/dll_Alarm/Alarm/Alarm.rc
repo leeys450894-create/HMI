@@ -1,0 +1,263 @@
+// Microsoft Visual C++ generated resource script.
+//
+#include "resource.h"
+
+#define APSTUDIO_READONLY_SYMBOLS
+/////////////////////////////////////////////////////////////////////////////
+//
+// Generated from the TEXTINCLUDE 2 resource.
+//
+#include "afxres.h"
+
+/////////////////////////////////////////////////////////////////////////////
+#undef APSTUDIO_READONLY_SYMBOLS
+
+/////////////////////////////////////////////////////////////////////////////
+// 한국어(대한민국) resources
+
+#if !defined(AFX_RESOURCE_DLL) || defined(AFX_TARG_KOR)
+LANGUAGE LANG_KOREAN, SUBLANG_DEFAULT
+#pragma code_page(949)
+
+#ifdef APSTUDIO_INVOKED
+/////////////////////////////////////////////////////////////////////////////
+//
+// TEXTINCLUDE
+//
+
+1 TEXTINCLUDE 
+BEGIN
+    "resource.h\0"
+END
+
+2 TEXTINCLUDE 
+BEGIN
+    "#include ""afxres.h""\r\n"
+    "\0"
+END
+
+3 TEXTINCLUDE 
+BEGIN
+    "#define _AFX_NO_SPLITTER_RESOURCES\r\n"
+    "#define _AFX_NO_OLE_RESOURCES\r\n"
+    "#define _AFX_NO_TRACKER_RESOURCES\r\n"
+    "#define _AFX_NO_PROPERTY_RESOURCES\r\n"
+    "\r\n"
+    "#if !defined(AFX_RESOURCE_DLL) || defined(AFX_TARG_KOR)\r\n"
+    "#ifdef _WIN32\r\n"
+    "LANGUAGE 18, 1\r\n"
+    "#pragma code_page(949)\r\n"
+    "#endif //_WIN32\r\n"
+    "#include ""res\\Alarm.rc2""  // non-Microsoft Visual C++ edited resources\r\n"
+    "#include ""l.kor\\afxres.rc""          // Standard components\r\n"
+    "#endif\r\n"
+    "\0"
+END
+
+#endif    // APSTUDIO_INVOKED
+
+
+/////////////////////////////////////////////////////////////////////////////
+//
+// Version
+//
+
+VS_VERSION_INFO VERSIONINFO
+ FILEVERSION 1,0,1,2
+ PRODUCTVERSION 1,0,1,2
+ FILEFLAGSMASK 0x3fL
+#ifdef _DEBUG
+ FILEFLAGS 0x1L
+#else
+ FILEFLAGS 0x0L
+#endif
+ FILEOS 0x4L
+ FILETYPE 0x2L
+ FILESUBTYPE 0x0L
+BEGIN
+    BLOCK "StringFileInfo"
+    BEGIN
+        BLOCK "041204b0"
+        BEGIN
+            VALUE "FileDescription", "Alarm DLL"
+            VALUE "FileVersion", "1.0.1.2"
+            VALUE "InternalName", "Alarm"
+            VALUE "LegalCopyright", "Copyright (C) 2012"
+            VALUE "OriginalFilename", "Alarm.DLL"
+            VALUE "ProductName", "Alarm 동적 연결 라이브러리"
+            VALUE "ProductVersion", "1.0.1.2"
+        END
+    END
+    BLOCK "VarFileInfo"
+    BEGIN
+        VALUE "Translation", 0x412, 1200
+    END
+END
+
+
+/////////////////////////////////////////////////////////////////////////////
+//
+// Dialog
+//
+
+IDD_DLG_ALARM DIALOGEX 0, 0, 650, 550
+STYLE DS_SETFONT | WS_CHILD | WS_BORDER
+FONT 9, "굴림", 400, 0, 0x81
+BEGIN
+    CTEXT           "ALARM",IDC_STATIC_ALARM_TITLE,0,7,650,18,SS_CENTERIMAGE | WS_BORDER
+    CONTROL         "",IDC_LIST_ALARM,"SysListView32",LVS_REPORT | LVS_ALIGNLEFT | WS_BORDER | WS_TABSTOP,0,378,650,165
+    CONTROL         "",IDC_STATIC_ALARM_MODULE,"Static",SS_BLACKFRAME,40,26,570,350
+    CTEXT           "IDC_FPSPREAD_RESULT_DATA",IDC_FPSPREAD_RESULT_DATA,0,26,11,15,SS_CENTERIMAGE | NOT WS_VISIBLE
+END
+
+IDD_DLG_ALARM_MODULE DIALOGEX 0, 0, 570, 350
+STYLE DS_SETFONT | WS_CHILD | WS_BORDER
+FONT 9, "굴림", 400, 0, 0x81
+BEGIN
+    CTEXT           "-----",IDC_STATIC_ALARM_ID,79,22,202,28,SS_CENTERIMAGE | WS_BORDER
+    CTEXT           "-----",IDC_STATIC_ALARM_TYPE,79,54,410,28,SS_CENTERIMAGE | WS_BORDER
+    CTEXT           "-----",IDC_STATIC_ALARM_MODULE,287,22,202,28,SS_CENTERIMAGE | WS_BORDER
+    CTEXT           "-----",IDC_STATIC_ALARM_COMMAND,79,86,410,28,SS_CENTERIMAGE | WS_BORDER
+    CTEXT           "-----",IDC_STATIC_ALARM_TEXT,79,118,410,121,SS_CENTERIMAGE | WS_BORDER
+    LTEXT           "IGNORE : Work Successed and Continue ( !!!  Be careful of handling)\r\n\r\n STOP :  Work Stop and change the maintenance mode",IDC_STATIC_ALARM_DESC,79,299,410,28,SS_CENTERIMAGE
+    PUSHBUTTON      "IGNORE",IDC_BUTTON_ALARM_MODULE_IGNORE,291,248,82,38
+    PUSHBUTTON      "STOP",IDC_BUTTON_ALARM_MODULE_STOP,391,248,82,38
+    PUSHBUTTON      "INIT + RETRY",IDC_BUTTON_ALARM_MODULE_INIT_RETRY,191,248,82,38
+    PUSHBUTTON      "RETRY",IDC_BUTTON_ALARM_MODULE_RETRY,91,248,82,38
+END
+
+IDD_DLG_ALARM_WARNING DIALOGEX 0, 0, 401, 200
+STYLE DS_SETFONT | DS_MODALFRAME | WS_POPUP | WS_CAPTION
+CAPTION "Warning Message"
+FONT 10, "Tahoma", 0, 0, 0x1
+BEGIN
+    PUSHBUTTON      "Cancel",IDCANCEL,345,179,50,14,NOT WS_VISIBLE
+    PUSHBUTTON      "Alarm Clear",IDC_BUTTON_ALARM_CLEAR,7,179,50,14
+    EDITTEXT        IDC_EDIT_WARNING_MSG,7,7,388,26,ES_MULTILINE | ES_READONLY | NOT WS_BORDER,WS_EX_DLGMODALFRAME
+    CONTROL         "List1",IDC_LIST_WARNING,"SysListView32",LVS_REPORT | LVS_SINGLESEL | LVS_NOCOLUMNHEADER | WS_BORDER | WS_TABSTOP,7,36,388,135,WS_EX_DLGMODALFRAME
+END
+
+IDD_DLG_REPORT_ALARM DIALOGEX 0, 0, 650, 550
+STYLE DS_SETFONT | WS_CHILD | WS_BORDER
+FONT 9, "굴림", 400, 0, 0x81
+BEGIN
+    CONTROL         "",IDC_LIST_REPORT_ALARM,"SysListView32",LVS_REPORT | LVS_ALIGNLEFT | WS_BORDER | WS_TABSTOP,0,7,650,508
+    PUSHBUTTON      "Clear",IDC_BUTTON_ALARM_REPORT_CLEAR,505,518,71,25
+    PUSHBUTTON      "Search",IDC_BUTTON_ALARM_REPORT_SEARCH,578,518,71,25
+END
+
+IDD_DLG_REPORT_ALARM_SEARCH DIALOGEX 0, 0, 781, 378
+STYLE DS_SETFONT | DS_MODALFRAME | WS_POPUP | WS_CAPTION | WS_SYSMENU
+CAPTION "Alarm Search"
+FONT 10, "Tahoma", 0, 0, 0x0
+BEGIN
+    LTEXT           "From",IDC_STATIC,7,7,26,10,WS_BORDER
+    LTEXT           "To",IDC_STATIC,7,92,26,10,WS_BORDER
+    EDITTEXT        IDC_EDIT_ALARM_SEARCH_ID,53,194,74,17,ES_AUTOHSCROLL
+    CONTROL         "List1",IDC_LIST_REPORT_ALARM_SERCH,"SysListView32",LVS_REPORT | WS_BORDER | WS_TABSTOP,140,7,634,364
+    PUSHBUTTON      "Search",IDC_BUTTON_SEARCH_ALARM,7,216,120,22
+    PUSHBUTTON      "Save As Csv File",IDC_BTN_ALARM_SEARCH_SAVEAS_CSV,7,350,120,22
+    CONTROL         "",IDC_MONTHCALENDAR_FROM,"SysMonthCal32",MCS_NOTODAY | MCS_NOTODAYCIRCLE | WS_TABSTOP,7,18,125,72
+    CONTROL         "",IDC_MONTHCALENDAR_TO,"SysMonthCal32",MCS_NOTODAY | MCS_NOTODAYCIRCLE | WS_TABSTOP,7,103,125,72
+    CTEXT           "Alarm CODE",IDC_STATIC,7,194,44,17,SS_CENTERIMAGE | WS_BORDER
+    EDITTEXT        IDC_EDIT_DATE_FROM,37,7,94,10,ES_AUTOHSCROLL | ES_READONLY
+    EDITTEXT        IDC_EDIT_DATE_TO,35,92,94,10,ES_AUTOHSCROLL | ES_READONLY
+END
+
+
+/////////////////////////////////////////////////////////////////////////////
+//
+// DESIGNINFO
+//
+
+#ifdef APSTUDIO_INVOKED
+GUIDELINES DESIGNINFO
+BEGIN
+    IDD_DLG_ALARM, DIALOG
+    BEGIN
+        BOTTOMMARGIN, 403
+    END
+
+    IDD_DLG_ALARM_MODULE, DIALOG
+    BEGIN
+        LEFTMARGIN, 7
+        TOPMARGIN, 7
+        BOTTOMMARGIN, 248
+    END
+
+    IDD_DLG_ALARM_WARNING, DIALOG
+    BEGIN
+        LEFTMARGIN, 7
+        RIGHTMARGIN, 395
+        TOPMARGIN, 7
+        BOTTOMMARGIN, 193
+    END
+
+    IDD_DLG_REPORT_ALARM, DIALOG
+    BEGIN
+        BOTTOMMARGIN, 403
+    END
+
+    IDD_DLG_REPORT_ALARM_SEARCH, DIALOG
+    BEGIN
+        LEFTMARGIN, 7
+        RIGHTMARGIN, 774
+        TOPMARGIN, 7
+        BOTTOMMARGIN, 371
+    END
+END
+#endif    // APSTUDIO_INVOKED
+
+
+/////////////////////////////////////////////////////////////////////////////
+//
+// AFX_DIALOG_LAYOUT
+//
+
+IDD_DLG_REPORT_ALARM_SEARCH AFX_DIALOG_LAYOUT
+BEGIN
+    0
+END
+
+IDD_DLG_ALARM AFX_DIALOG_LAYOUT
+BEGIN
+    0
+END
+
+IDD_DLG_ALARM_MODULE AFX_DIALOG_LAYOUT
+BEGIN
+    0
+END
+
+IDD_DLG_REPORT_ALARM AFX_DIALOG_LAYOUT
+BEGIN
+    0
+END
+
+#endif    // 한국어(대한민국) resources
+/////////////////////////////////////////////////////////////////////////////
+
+
+
+#ifndef APSTUDIO_INVOKED
+/////////////////////////////////////////////////////////////////////////////
+//
+// Generated from the TEXTINCLUDE 3 resource.
+//
+#define _AFX_NO_SPLITTER_RESOURCES
+#define _AFX_NO_OLE_RESOURCES
+#define _AFX_NO_TRACKER_RESOURCES
+#define _AFX_NO_PROPERTY_RESOURCES
+
+#if !defined(AFX_RESOURCE_DLL) || defined(AFX_TARG_KOR)
+#ifdef _WIN32
+LANGUAGE 18, 1
+#pragma code_page(949)
+#endif //_WIN32
+#include "res\Alarm.rc2"  // non-Microsoft Visual C++ edited resources
+#include "l.kor\afxres.rc"          // Standard components
+#endif
+
+/////////////////////////////////////////////////////////////////////////////
+#endif    // not APSTUDIO_INVOKED
+

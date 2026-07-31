@@ -1,0 +1,1318 @@
+#include "pch.h"
+#include "CommTcpIpObjectWAD.h"
+
+#include "Manager\NetworkConfigMgr.h"
+#include "Manager\SystemConfigMgr.h"
+#include "Manager\ShareMemoryMgr.h"
+#include "Recipe\RecipeEditMgr.h"
+#include "SystemParamShare.h"
+#include "Alarm\AlarmController.h"
+#include "AuroraFuncDefine.h"
+#include "Manager\SequenceManager.h"
+#include "CommEthFunction\EthernetManagerTCP.h"
+#include "common\CommonFunc.h"
+#include "Manager/CommTcpIpFactoryMgr.h"
+#include "Manager\ResultMgr.h"
+#include "Manager/PositionConfigMgr.h"
+
+#ifdef _DEBUG
+#define new DEBUG_NEW
+#endif
+
+CCommTcpIpObjectWAD::CCommTcpIpObjectWAD(int iSeqItemIndex, stAuroraMgrPool& MgrPool)
+	: m_pSystemConfigMgr(MgrPool.pSystemConfigMgr)
+	, m_pRecipeEditMgr(MgrPool.pRecipeEditMgr)
+	, m_pResultCollectMgr(MgrPool.pResultCollectMgr)
+	, m_pShareMemory(MgrPool.pShareMemoryMgr)
+	, m_pPositionConfigMgr(MgrPool.pPositionConfigMgr)
+	, m_pCommTcpIpFactoryMgr(MgrPool.pCommTcpIpFactoryMgr)
+	, m_pLogFileAccessor(new CLogFileAccessor)
+	, m_bOutOfService(false)
+	, m_iAlarmIndex(0)
+{
+	m_strQueueMessage.Empty();
+	m_pRecipeDataClone = nullptr;
+
+	m_strNetDrive.Empty();
+
+	m_dMeasPosX = 0.0;
+	m_dMeasPosY[0] = 0.0;
+	m_dMeasPosY[1] = 0.0;
+	int iDeviceIndex = MgrPool.pNetworkConfigMgr->GetParam_DeviceIndex(iSeqItemIndex);
+
+	m_iAlarmIndex = enumTCPIpFactorytID_WAD;
+
+	CString strObjectName;
+	strObjectName.Format(_T("%s"), _T("WAD"));
+
+	SetName(strObjectName); // _T("UTG"));
+	const bool& bRunMode = MgrPool.pNetworkConfigMgr->GetParam_Mode(iSeqItemIndex);
+	const CString& strIP = MgrPool.pNetworkConfigMgr->GetParam_IPNumber(iSeqItemIndex);
+	const long& nPort = MgrPool.pNetworkConfigMgr->GetParam_PortNumger(iSeqItemIndex);
+	SetNetInfo(bRunMode, strIP, nPort);
+
+	m_bOutOfService = MgrPool.pNetworkConfigMgr->GetParam_OutOfService(iSeqItemIndex);
+
+	// 로그 생성하기
+	const CString strLogFilePath = MgrPool.strLogPath;
+	const CString strFolderPath = strLogFilePath + _T("Control\\") + strObjectName + _T("\\");
+	const CString strLogFile = strFolderPath + strObjectName + _T(".log");
+	MakeDir(strFolderPath);
+	m_pLogFileAccessor->Initialize(strLogFile);
+	//////
+
+	//Initialize();
+
+	//m_pRecipeDataClone = new CRecipeData;
+	//m_pRecipeDataClone->Clone(m_pRecipeEditMgr->GetRecipeDataPtr());
+
+	// 데이터 수신 확인용 event
+	for (int i = 0; i < enumRecvEventIDCount; ++i)
+	{
+		m_hRecvDEvent[i] = CreateEvent(NULL, FALSE, FALSE, NULL);	// auto reset, initial reset
+	}
+
+	m_strNetDrive = MgrPool.pNetworkConfigMgr->GetParam_NetDrive(iSeqItemIndex);
+}
+
+
+CCommTcpIpObjectWAD::~CCommTcpIpObjectWAD()
+{
+	Finalize();
+
+	if (m_pRecipeDataClone)
+	{
+		delete m_pRecipeDataClone;
+		m_pRecipeDataClone = nullptr;
+	}
+
+	for (int i = 0; i < enumRecvEventIDCount; ++i)
+	{
+		if (m_hRecvDEvent[i])
+		{
+			CloseHandle(m_hRecvDEvent[i]);
+		}
+	}
+
+	//----------------------------------------------------------------------
+	// Data 삭제
+	//----------------------------------------------------------------------
+	if (m_pLogFileAccessor)
+	{
+		delete m_pLogFileAccessor;
+		m_pLogFileAccessor = nullptr;
+	}
+}
+
+void CCommTcpIpObjectWAD::UpdateRecipeInformation()
+{
+	m_pRecipeDataClone->Clone(m_pRecipeEditMgr->GetRecipeDataPtr());
+}
+
+bool CCommTcpIpObjectWAD::SetTime_Sync()
+{
+	if (IsConnected() == false)
+		return true;
+
+	ResetEvent(m_hRecvDEvent[enumRecvEventID_TIME_SYNC_OK]);
+	ResetEvent(m_hRecvDEvent[enumRecvEventID_TIME_SYNC_NG]);
+
+	SYSTEMTIME st;
+	::GetLocalTime(&st);
+	CString sTime;
+	sTime.Format(_T("%04d%02d%02d%02d%02d%02d"), st.wYear, st.wMonth, st.wDay, st.wHour, st.wMinute, st.wSecond);
+
+	CString m_strRecipeName;
+	CString strReturnCommand = GetStringCMDID(COMM_USER_DEFINE_REQ) + _T("^TIME_SYNC^") + sTime;
+
+	m_pLogFileAccessor->KMLOG(SEND, strReturnCommand);
+
+	if (SendPacket(strReturnCommand) == true)
+	{
+		HANDLE hRecvEvent[2] = { m_hRecvDEvent[enumRecvEventID_TIME_SYNC_OK], m_hRecvDEvent[enumRecvEventID_TIME_SYNC_NG] };
+
+		DWORD dw = WaitForMultipleObjects(2, hRecvEvent, FALSE, DEFINE_PARAMETERS_WAIT_TIME);
+		if (dw == WAIT_TIMEOUT) // Start Event 가 set될 때까지 기다린다.
+		{
+			//CAlarmController::GetInstance()->SetAlarm(SDC_DEF_MODULE_SOCKET_TIME_OUT);
+		}
+
+		return true;
+	}
+
+	return false;
+}
+
+bool CCommTcpIpObjectWAD::RecipeChange()
+{
+	int nRet = VTM_RV_SUCCESSED;
+	nRet = _ExeMeasWAD(enumTCPIpFactoryt_Event_WAD_1);
+	if (nRet != VTM_RV_SUCCESSED)
+		return false;
+
+	return true;
+}
+
+bool CCommTcpIpObjectWAD::SetParameter()
+{
+	CString strCellID, strInnerID;
+	strCellID = CSystemParamShare::GetInstance()->GetCellID();
+	strInnerID = CSystemParamShare::GetInstance()->GetInnerID();
+
+	CString strReturnCommand;
+	strReturnCommand.Format(_T("%s^%s^%s^%s"), GetStringCMDID(COMM_USER_DEFINE_REQ), _T("INSP_PARAM"), strCellID, strInnerID);
+
+	CString strLog;
+	strLog.Format(_T("[%s] : %s"), GetName(), strReturnCommand);
+	m_pLogFileAccessor->KMLOG(SEND, strLog);
+
+	ResetEvent(m_hRecvDEvent[enumRecvEventID_SET_PARAMETER_OK]);
+	ResetEvent(m_hRecvDEvent[enumRecvEventID_SET_PARAMETER_NG]);
+
+	if (IsOutOfService() == true)
+		return true;
+
+	if (SendPacket(strReturnCommand) == true)
+	{
+		HANDLE hRecvEvent[2] = { m_hRecvDEvent[enumRecvEventID_SET_PARAMETER_OK], m_hRecvDEvent[enumRecvEventID_SET_PARAMETER_NG] };
+
+		DWORD dw = WaitForMultipleObjects(2, hRecvEvent, FALSE, DEFINE_RESPONSE_WAIT_TIME);
+		if (dw == WAIT_TIMEOUT) // Start Event 가 set될 때까지 기다린다.
+		{
+			strLog.Format(_T("[%s] : SetParameter, %s"), GetName(), _T("HEAD_ACK_TIMEOUT"));
+			m_pLogFileAccessor->KMLOG(WARN, strLog);
+			CAlarmController::GetInstance()->SetAlarm(HEAD_ACK_TIMEOUT + m_iAlarmIndex);
+			return false;
+		}
+		// jsyoon 2022.08.30 add
+		else if (dw == (WAIT_OBJECT_0 + 1)) // NG
+		{
+			strLog.Format(_T("[%s] : SetParameter, %s"), GetName(), _T("HEAD_ACK_FAIL"));
+			m_pLogFileAccessor->KMLOG(WARN, strLog);
+			CAlarmController::GetInstance()->SetAlarm(HEAD_ACK_FAIL + m_iAlarmIndex);
+			return false;
+		}
+
+		return true;
+	}
+
+	strLog.Format(_T("[%s] : %s"), GetName(), _T("HEAD_NOT_CONNECTED"));
+	m_pLogFileAccessor->KMLOG(WARN, strLog);
+	CAlarmController::GetInstance()->SetAlarm(HEAD_NOT_CONNECTED + m_iAlarmIndex);
+
+	return false;
+}
+
+bool CCommTcpIpObjectWAD::InspectStart(int iMeasType, bool bWait, int iStepNum, bool bWadRHeadUse)
+{
+	int nRet = VTM_RV_SUCCESSED;
+
+	if (iMeasType == 1)		// Left
+	{
+		//nRet = _ExeMeasWAD(enumTCPIpFactoryt_Event_WAD_TEST_LEFT, bWait);
+		nRet = _ExeMeasWAD(enumTCPIpFactoryt_Event_WAD_TEST_LEFT, bWait, bWadRHeadUse);
+	}
+	else if (iMeasType == 2) // Right
+	{
+		//nRet = _ExeMeasWAD(enumTCPIpFactoryt_Event_WAD_TEST_RIGHT, bWait);
+		nRet = _ExeMeasWAD(enumTCPIpFactoryt_Event_WAD_TEST_RIGHT, bWait, bWadRHeadUse);
+	}
+	else // All
+	{
+		nRet = _ExeMeasWAD(enumTCPIpFactoryt_Event_WAD_TEST_LEFT, false);
+		if (nRet == VTM_RV_SUCCESSED)
+		{
+			nRet = _ExeMeasWAD(enumTCPIpFactoryt_Event_WAD_TEST_RIGHT, false);
+		}
+
+		if (bWait == true)
+		{
+			nRet = InspectStartWait();
+		}
+	}
+
+	if (nRet == VTM_RV_SUCCESSED)
+		return true;
+	else
+		return false;
+}
+
+bool CCommTcpIpObjectWAD::InspectStartWait()
+{
+	if (IsOutOfService() == true)
+	{
+		Sleep(1000);
+		return true;
+	}
+
+	int nRet = VTM_RV_SUCCESSED;
+	CString strLog;
+	HANDLE hRecvEvent1[2] = { m_hRecvDEvent[enumRecvEventID_INSP_START_OK], m_hRecvDEvent[enumRecvEventID_INSP_START_NG] };
+	DWORD dw1 = WaitForMultipleObjects(2, hRecvEvent1, FALSE, DEFINE_INSPECITON_WAIT_TIME);
+	if (dw1 == WAIT_TIMEOUT) // Start Event 가 set될 때까지 기다린다.
+	{
+		strLog.Format(_T("[%s] : InspectStartWait, %s"), GetName(), _T("HEAD_ACK_TIMEOUT"));
+		m_pLogFileAccessor->KMLOG(WARN, strLog);
+		CAlarmController::GetInstance()->SetAlarm(HEAD_ACK_TIMEOUT + m_iAlarmIndex);
+		nRet = HEAD_ACK_TIMEOUT;
+	}
+	else if (dw1 == (WAIT_OBJECT_0 + 1)) // NG
+	{
+		strLog.Format(_T("[%s] : InspectStartWait, %s"), GetName(), _T("HEAD_ACK_FAIL"));
+		m_pLogFileAccessor->KMLOG(WARN, strLog);
+		CAlarmController::GetInstance()->SetAlarm(HEAD_ACK_FAIL + m_iAlarmIndex);
+		nRet = HEAD_ACK_FAIL;
+	}
+	else
+	{
+		nRet = VTM_RV_SUCCESSED;
+	}
+
+	if (nRet == VTM_RV_SUCCESSED)
+	{
+		HANDLE hRecvEvent2[2] = { m_hRecvDEvent[enumRecvEventID_INSP2_START_OK], m_hRecvDEvent[enumRecvEventID_INSP2_START_NG] };
+		DWORD dw2 = WaitForMultipleObjects(2, hRecvEvent2, FALSE, DEFINE_INSPECITON_WAIT_TIME);
+		if (dw2 == WAIT_TIMEOUT) // Start Event 가 set될 때까지 기다린다.
+		{
+			strLog.Format(_T("[%s] : InspectStartWait, %s"), GetName(), _T("HEAD_ACK_TIMEOUT"));
+			m_pLogFileAccessor->KMLOG(WARN, strLog);
+			CAlarmController::GetInstance()->SetAlarm(HEAD_ACK_TIMEOUT + m_iAlarmIndex);
+			nRet = HEAD_ACK_FAIL;
+		}
+		else if (dw2 == (WAIT_OBJECT_0 + 1)) // NG
+		{
+			strLog.Format(_T("[%s] : InspectStartWait, %s"), GetName(), _T("HEAD_ACK_FAIL"));
+			m_pLogFileAccessor->KMLOG(WARN, strLog);
+			CAlarmController::GetInstance()->SetAlarm(HEAD_ACK_FAIL + m_iAlarmIndex);
+			nRet = HEAD_ACK_FAIL;
+		}
+		else
+		{
+			nRet = VTM_RV_SUCCESSED;
+		}
+	}
+
+	if (nRet == VTM_RV_SUCCESSED)
+		return true;
+	else
+		return false;
+}
+
+bool CCommTcpIpObjectWAD::InspectEnd(DWORD dwTimeOut)
+{
+	return true;
+
+	//if (IsOutOfService() == true)
+	//	return true;
+
+	//int nRet = VTM_RV_SUCCESSED;
+	//CString strLog;
+	//HANDLE hRecvEvent1[2] = { m_hRecvDEvent[enumRecvEventID_INSP_END_OK], m_hRecvDEvent[enumRecvEventID_INSP_END_NG] };
+	//DWORD dw1 = WaitForMultipleObjects(2, hRecvEvent1, FALSE, dwTimeOut);
+	//if (dw1 == WAIT_TIMEOUT) // Start Event 가 set될 때까지 기다린다.
+	//{
+	//	strLog.Format(_T("[%s] : %s"), GetName(), _T("HEAD_ACK_TIMEOUT"));
+	//	m_pLogFileAccessor->KMLOG(WARN, strLog);
+	//	CAlarmController::GetInstance()->SetAlarm(HEAD_ACK_TIMEOUT + m_iAlarmIndex);
+	//	nRet = HEAD_ACK_TIMEOUT;
+	//}
+	//else if (dw1 == (WAIT_OBJECT_0 + 1)) // NG
+	//{
+	//	strLog.Format(_T("[%s] : %s"), GetName(), _T("HEAD_ACK_FAIL"));
+	//	m_pLogFileAccessor->KMLOG(WARN, strLog);
+	//	CAlarmController::GetInstance()->SetAlarm(HEAD_ACK_FAIL + m_iAlarmIndex);
+	//	nRet = HEAD_ACK_FAIL;
+	//}
+	//else
+	//{
+	//	nRet = VTM_RV_SUCCESSED;
+	//}
+
+	//if (nRet == VTM_RV_SUCCESSED)
+	//{
+	//	HANDLE hRecvEvent2[2] = { m_hRecvDEvent[enumRecvEventID_INSP2_END_OK], m_hRecvDEvent[enumRecvEventID_INSP2_END_NG] };
+	//	DWORD dw2 = WaitForMultipleObjects(2, hRecvEvent2, FALSE, dwTimeOut);
+	//	if (dw2 == WAIT_TIMEOUT) // Start Event 가 set될 때까지 기다린다.
+	//	{
+	//		strLog.Format(_T("[%s] : %s"), GetName(), _T("HEAD_ACK_TIMEOUT"));
+	//		m_pLogFileAccessor->KMLOG(WARN, strLog);
+	//		CAlarmController::GetInstance()->SetAlarm(HEAD_ACK_TIMEOUT + m_iAlarmIndex);
+	//		nRet = HEAD_ACK_FAIL;
+	//	}
+	//	else if (dw2 == (WAIT_OBJECT_0 + 1)) // NG
+	//	{
+	//		strLog.Format(_T("[%s] : %s"), GetName(), _T("HEAD_ACK_FAIL"));
+	//		m_pLogFileAccessor->KMLOG(WARN, strLog);
+	//		CAlarmController::GetInstance()->SetAlarm(HEAD_ACK_FAIL + m_iAlarmIndex);
+	//		nRet = HEAD_ACK_FAIL;
+	//	}
+	//	else
+	//	{
+	//		nRet = VTM_RV_SUCCESSED;
+	//	}
+	//}
+
+	//if (nRet == VTM_RV_SUCCESSED)
+	//	return true;
+	//else
+	//	return false;
+}
+
+bool CCommTcpIpObjectWAD::WaitInspectionEnd(DWORD dwTimeOut, int nRetry)
+{
+	if (IsOutOfService() == true)
+		return true;
+
+	int nRet = VTM_RV_SUCCESSED;
+	CString strLog;
+	if (nRet == VTM_RV_SUCCESSED)
+		{
+			HANDLE hRecvEvent4[2] = { m_hRecvDEvent[enumRecvEventID_INSP2_COMPLETE_OK], m_hRecvDEvent[enumRecvEventID_INSP2_COMPLETE_NG] };
+			DWORD dw4 = WaitForMultipleObjects(2, hRecvEvent4, FALSE, dwTimeOut * 1000);
+			if (dw4 == WAIT_TIMEOUT) // Start Event 가 set될 때까지 기다린다.
+			{
+				strLog.Format(_T("[%s] : WaitInspectionComplete2, %s"), GetName(), _T("HEAD_ACK_TIMEOUT"));
+				m_pLogFileAccessor->KMLOG(WARN, strLog);
+				CAlarmController::GetInstance()->SetAlarm(HEAD_ACK_TIMEOUT + m_iAlarmIndex);
+				nRet = HEAD_ACK_FAIL;
+			}
+			else if (dw4 == (WAIT_OBJECT_0 + 1)) // NG
+			{
+				strLog.Format(_T("[%s] : WaitInspectionComplete2, %s"), GetName(), _T("HEAD_ACK_FAIL"));
+				m_pLogFileAccessor->KMLOG(WARN, strLog);
+				CAlarmController::GetInstance()->SetAlarm(HEAD_ACK_FAIL + m_iAlarmIndex);
+				nRet = HEAD_ACK_FAIL;
+			}
+			else
+			{
+				TossResultFile(m_pShareMemory->GetSharedMemory()->stLotInfo.m_szInnerID[1], m_pCommTcpIpFactoryMgr->m_nAreaNum[1], 1, nRetry);
+				nRet = VTM_RV_SUCCESSED;
+			}
+		}
+
+	if (nRet == VTM_RV_SUCCESSED)
+		return true;
+	else
+		return false;
+
+	//if (IsOutOfService() == true)
+	//	return true;
+
+	//int nRet = VTM_RV_SUCCESSED;
+	//CString strLog;
+	//if (nRet == VTM_RV_SUCCESSED)
+	//{
+	//	HANDLE hRecvEvent3[2] = { m_hRecvDEvent[enumRecvEventID_INSP_END_OK], m_hRecvDEvent[enumRecvEventID_INSP_END_NG] };
+	//	DWORD dw3 = WaitForMultipleObjects(2, hRecvEvent3, FALSE, dwTimeOut);
+	//	if (dw3 == WAIT_TIMEOUT) // Start Event 가 set될 때까지 기다린다.
+	//	{
+	//		strLog.Format(_T("[%s] : %s"), GetName(), _T("HEAD_ACK_TIMEOUT"));
+	//		m_pLogFileAccessor->KMLOG(WARN, strLog);
+	//		CAlarmController::GetInstance()->SetAlarm(HEAD_ACK_TIMEOUT + m_iAlarmIndex);
+	//		nRet = HEAD_ACK_FAIL;
+	//	}
+	//	else if (dw3 == (WAIT_OBJECT_0 + 1)) // NG
+	//	{
+	//		strLog.Format(_T("[%s] : %s"), GetName(), _T("HEAD_ACK_FAIL"));
+	//		m_pLogFileAccessor->KMLOG(WARN, strLog);
+	//		CAlarmController::GetInstance()->SetAlarm(HEAD_ACK_FAIL + m_iAlarmIndex);
+	//		nRet = HEAD_ACK_FAIL;
+	//	}
+	//	else
+	//	{
+	//		nRet = VTM_RV_SUCCESSED;
+	//	}
+	//}
+
+	//if (nRet == VTM_RV_SUCCESSED)
+	//{
+	//	HANDLE hRecvEvent4[2] = { m_hRecvDEvent[enumRecvEventID_INSP2_END_OK], m_hRecvDEvent[enumRecvEventID_INSP2_END_NG] };
+	//	DWORD dw4 = WaitForMultipleObjects(2, hRecvEvent4, FALSE, dwTimeOut);
+	//	if (dw4 == WAIT_TIMEOUT) // Start Event 가 set될 때까지 기다린다.
+	//	{
+	//		strLog.Format(_T("[%s] : %s"), GetName(), _T("HEAD_ACK_TIMEOUT"));
+	//		m_pLogFileAccessor->KMLOG(WARN, strLog);
+	//		CAlarmController::GetInstance()->SetAlarm(HEAD_ACK_TIMEOUT + m_iAlarmIndex);
+	//		nRet = HEAD_ACK_FAIL;
+	//	}
+	//	else if (dw4 == (WAIT_OBJECT_0 + 1)) // NG
+	//	{
+	//		strLog.Format(_T("[%s] : %s"), GetName(), _T("HEAD_ACK_FAIL"));
+	//		m_pLogFileAccessor->KMLOG(WARN, strLog);
+	//		CAlarmController::GetInstance()->SetAlarm(HEAD_ACK_FAIL + m_iAlarmIndex);
+	//		nRet = HEAD_ACK_FAIL;
+	//	}
+	//	else
+	//	{
+	//		nRet = VTM_RV_SUCCESSED;
+	//	}
+	//}
+
+	//if (nRet == VTM_RV_SUCCESSED)
+	//	return true;
+	//else
+	//	return false;
+}
+
+bool CCommTcpIpObjectWAD::WaitInspectionComplete(DWORD dwTimeOut, int nRetry)
+{
+	if (IsOutOfService() == true)
+		return true;
+
+	int nRet = VTM_RV_SUCCESSED;
+	CString strLog;
+	if (nRet == VTM_RV_SUCCESSED)
+	{
+		HANDLE hRecvEvent3[2] = { m_hRecvDEvent[enumRecvEventID_INSP_COMPLETE_OK], m_hRecvDEvent[enumRecvEventID_INSP_COMPLETE_NG] };
+		DWORD dw3 = WaitForMultipleObjects(2, hRecvEvent3, FALSE, dwTimeOut * 1000);
+		if (dw3 == WAIT_TIMEOUT) // Start Event 가 set될 때까지 기다린다.
+		{
+			strLog.Format(_T("[%s] : WaitInspectionComplete, %s"), GetName(), _T("HEAD_ACK_TIMEOUT"));
+			m_pLogFileAccessor->KMLOG(WARN, strLog);
+			CAlarmController::GetInstance()->SetAlarm(HEAD_ACK_TIMEOUT + m_iAlarmIndex);
+			nRet = HEAD_ACK_FAIL;
+		}
+		else if (dw3 == (WAIT_OBJECT_0 + 1)) // NG
+		{
+			strLog.Format(_T("[%s] : WaitInspectionComplete, %s"), GetName(), _T("HEAD_ACK_FAIL"));
+			m_pLogFileAccessor->KMLOG(WARN, strLog);
+			CAlarmController::GetInstance()->SetAlarm(HEAD_ACK_FAIL + m_iAlarmIndex);
+			nRet = HEAD_ACK_FAIL;
+		}
+		else
+		{
+			TossResultFile(m_pShareMemory->GetSharedMemory()->stLotInfo.m_szInnerID[0], m_pCommTcpIpFactoryMgr->m_nAreaNum[0], 0, nRetry);
+			nRet = VTM_RV_SUCCESSED;
+		}
+	}
+
+	//if (nRet == VTM_RV_SUCCESSED)
+	//{
+	//	HANDLE hRecvEvent4[2] = { m_hRecvDEvent[enumRecvEventID_INSP2_COMPLETE_OK], m_hRecvDEvent[enumRecvEventID_INSP2_COMPLETE_NG] };
+	//	DWORD dw4 = WaitForMultipleObjects(2, hRecvEvent4, FALSE, dwTimeOut * 1000);
+	//	if (dw4 == WAIT_TIMEOUT) // Start Event 가 set될 때까지 기다린다.
+	//	{
+	//		strLog.Format(_T("[%s] : WaitInspectionComplete2, %s"), GetName(), _T("HEAD_ACK_TIMEOUT"));
+	//		m_pLogFileAccessor->KMLOG(WARN, strLog);
+	//		CAlarmController::GetInstance()->SetAlarm(HEAD_ACK_TIMEOUT + m_iAlarmIndex);
+	//		nRet = HEAD_ACK_FAIL;
+	//	}
+	//	else if (dw4 == (WAIT_OBJECT_0 + 1)) // NG
+	//	{
+	//		strLog.Format(_T("[%s] : WaitInspectionComplete2, %s"), GetName(), _T("HEAD_ACK_FAIL"));
+	//		m_pLogFileAccessor->KMLOG(WARN, strLog);
+	//		CAlarmController::GetInstance()->SetAlarm(HEAD_ACK_FAIL + m_iAlarmIndex);
+	//		nRet = HEAD_ACK_FAIL;
+	//	}
+	//	else
+	//	{
+	//		TossResultFile(m_pShareMemory->GetSharedMemory()->stLotInfo.m_szInnerID[1], m_pCommTcpIpFactoryMgr->m_nAreaNum[1], 1);
+	//		nRet = VTM_RV_SUCCESSED;
+	//	}
+	//}
+
+	if (nRet == VTM_RV_SUCCESSED)
+		return true;
+	else
+		return false;
+}
+
+
+//=========================================================================
+// INTERFACE 관련
+//=========================================================================
+void CCommTcpIpObjectWAD::xNetCallbackRecieveData(LPVOID ud)
+{
+	//if (CSystemParamShare::GetInstance()->IsAutoMode() == false)
+	//	return;
+
+	if ((IsConnected() == true) && (m_pSystemConfigMgr->IsCommunicationTypeString() == true))
+	{
+		LPRECEIVEDDATA pRcvData = (LPRECEIVEDDATA)ud;
+
+		if (pRcvData->eCommState == (eXNET_COMM_STATE)XNET_NOTCONNECT)
+		{
+
+			SetEvent(m_hRecvDEvent[enumRecvEventID_RECIPE_CHANGE_NG]);
+			SetEvent(m_hRecvDEvent[enumRecvEventID_SET_PARAMETER_NG]);
+			SetEvent(m_hRecvDEvent[enumRecvEventID_INSP_START_NG]);
+			SetEvent(m_hRecvDEvent[enumRecvEventID_INSP_END_NG]);
+			SetEvent(m_hRecvDEvent[enumRecvEventID_INSP_COMPLETE_NG]);
+
+			CString strLog;
+			strLog.Format(_T("[%s] : %s"), GetName(), _T("Close Connected"));
+			m_pLogFileAccessor->KMLOG(SYST, strLog);
+		}
+		else if (pRcvData->eCommState == (eXNET_COMM_STATE)XNET_RECEIVEDATA)
+		{
+			
+		//	CString strMessage(pRcvData->szBody);
+
+			CString strMessage;
+			char* pchar = pRcvData->szBody;
+			MultiByteToWideChar(CP_ACP, MB_PRECOMPOSED, pchar, -1, NULL, NULL);
+			int nLen = pRcvData->sizeBody;
+
+			wchar_t* pszWide = nullptr;
+			pszWide = new wchar_t[nLen + 1];
+
+			memset(pszWide, 0, sizeof(wchar_t) * nLen + 1);
+			//wchar_t szWide[64000];
+			//memset(szWide, 0, sizeof(wchar_t) * 64000);
+
+			MultiByteToWideChar(CP_ACP, MB_PRECOMPOSED, pchar, nLen + 1, pszWide, nLen);
+
+			for (int i = 0; i < nLen; i++) 
+			{
+				if (pszWide[i] == 0X00)
+				{
+					pszWide[i] = ' ';
+				}
+			}
+
+			pszWide[nLen] = 0X00;
+
+			strMessage.Format(_T("%s"), pszWide);
+
+			delete pszWide;
+			pszWide = nullptr;
+
+
+			//	CString strLog = _T("[RECV - UTG] : ") + strMessage;
+			CString strLog;
+			strLog.Format(_T("[%s] : %s"), GetName(), strMessage);
+
+			//		CLogWrapper::GetInstance()->KMLOG(SYST, strLog);
+			m_pLogFileAccessor->KMLOG(RECV, strLog);
+
+			strMessage.Replace(_T(" "), _T(""));
+			if (strMessage.IsEmpty() == true)
+				return;
+
+			BOOL bAck = TRUE;
+		//	CString strPGCmd, strTmp;
+		//	strPGCmd = ExeHextoStr(strMessage);
+
+			CString strCmd;
+
+			std::vector<CString> vecPacketCommandPool = GetExeHextoStr(strMessage); //ExeHextoStr(strMessage);
+
+			for (size_t i = 0; i < vecPacketCommandPool.size(); ++i)
+			{
+				const CString strRevCmd = vecPacketCommandPool[i];
+
+				response_head stRcvPg;
+				ZeroMemory(&stRcvPg, sizeof(stRcvPg));
+
+				if (strRevCmd.GetLength() < 1)
+				{
+					SetEvent(m_hRecvDEvent[enumRecvEventID_SET_PARAMETER_NG]);
+					return;
+				}
+
+
+
+				int nEventOK = enumRecvEventID_SET_PARAMETER_OK, nEventNG = enumRecvEventID_SET_PARAMETER_NG;
+
+				// Response Command Header
+				if (strRevCmd.GetLength() >= 6)
+				{
+					TCHAR c;
+					c = (TCHAR)strRevCmd.GetAt(0);
+					strCmd.Format(_T("%x"), c);
+
+					stRcvPg.iCmd = _ttoi(strCmd);  // _ttoi(strRevCmd.Mid(0, 1));
+					stRcvPg.iError = _ttoi(strRevCmd.Mid(1, 1));
+					stRcvPg.iCause = _ttoi(strRevCmd.Mid(2, 1));
+					stRcvPg.iLen = _ttoi(strRevCmd.Mid(3, 3));
+				}
+				
+				// Response Command
+				if (stRcvPg.iCmd == 31)	// Model Change
+				{
+					nEventOK = enumRecvEventID_RECIPE_CHANGE_OK, nEventNG = enumRecvEventID_RECIPE_CHANGE_NG;
+				}
+				if (stRcvPg.iCmd == 35)			// Start Res
+				{
+					if (stRcvPg.iCause == 1)
+					{
+						nEventOK = enumRecvEventID_INSP_START_OK, nEventNG = enumRecvEventID_INSP_START_NG;
+					}
+					if (stRcvPg.iCause == 2)
+					{
+						nEventOK = enumRecvEventID_INSP2_START_OK, nEventNG = enumRecvEventID_INSP2_START_NG;
+					}
+
+					if (stRcvPg.iLen == 32)
+					{
+
+					}
+
+					/*	if (strRevCmd.GetLength() > 38)
+							_tcscpy_s(stRcvPg.InnerID[0], _countof(stRcvPg.InnerID[0]), strPGCmd.Mid(7, 32));*/
+				}
+				else if (stRcvPg.iCmd == 37)	// End Res
+				{
+					/*0x30 : 결과 OK or BIN1
+					  0x31 : 결과 NG or REJECT
+					  0x32 : 결과 PTN or BIN2*/
+
+					if (stRcvPg.iCause == 1)
+					{
+					//	TossResultFile(m_pShareMemory->GetSharedMemory()->stLotInfo.m_szInnerID[0], m_pCommTcpIpFactoryMgr->m_nAreaNum[0]);
+
+						nEventOK = enumRecvEventID_INSP_COMPLETE_OK, nEventNG = enumRecvEventID_INSP_COMPLETE_NG;
+					}
+					if (stRcvPg.iCause == 2)
+					{
+					//	TossResultFile(m_pShareMemory->GetSharedMemory()->stLotInfo.m_szInnerID[1], m_pCommTcpIpFactoryMgr->m_nAreaNum[1]);
+
+						nEventOK = enumRecvEventID_INSP2_COMPLETE_OK, nEventNG = enumRecvEventID_INSP2_COMPLETE_NG;
+					}
+
+					if (stRcvPg.iLen == 33)
+					{
+						stRcvPg.iResult = _ttoi(strRevCmd.Mid(7, 1));
+
+			//			_tcscpy_s(stRcvPg.InnerID[0], _countof(stRcvPg.InnerID[0]), strPGCmd.Mid(8, 32));
+					}
+				}
+				
+				else if (stRcvPg.iCmd == 42)	// Stick Start Res
+				{
+					nEventOK = enumRecvEventID_SET_STICK_MTP_OK, nEventNG = enumRecvEventID_SET_STICK_MTP_NG;
+				}
+				else if (stRcvPg.iCmd == 44)	// Stick End Res
+				{
+					nEventOK = enumRecvEventID_SET_STICK_MTP_OK, nEventNG = enumRecvEventID_SET_STICK_MTP_NG;
+				}
+				else if (stRcvPg.iCmd == 60)	// 2.6.1	Model Name Request
+				{
+					nEventOK = enumRecvEventID_GET_PARAMETER_OK, nEventNG = enumRecvEventID_GET_PARAMETER_NG;
+				}
+				else if (stRcvPg.iCmd == 63)	// SRM End Res
+				{
+					nEventOK = enumRecvEventID_INSP_COMPLETE_OK, nEventNG = enumRecvEventID_INSP_COMPLETE_NG;
+				}
+				else
+				{
+					;
+				}
+
+				if (stRcvPg.iError != 0)
+				{
+					SetEvent(m_hRecvDEvent[nEventNG]);
+				}
+				else
+				{
+					if (bAck)	SetEvent(m_hRecvDEvent[nEventOK]);
+				}
+
+				strLog.Format(_T("[ELP] Cmd(%2d), Error Code(%2d) Cause(%2d) Len(%03d)"), stRcvPg.iCmd, stRcvPg.iError, stRcvPg.iCause, stRcvPg.iLen);
+				m_pLogFileAccessor->KMLOG(OPER, strLog);
+			}
+		}
+	}
+}
+
+CLogFileAccessor* CCommTcpIpObjectWAD::GetLogFileAccessorPtr()
+{
+	return m_pLogFileAccessor;
+}
+
+int CCommTcpIpObjectWAD::SetCommand(ELPPROTOCOL stPg, bool bWadRHeadUse)
+{
+	int iRet = VTM_RV_SUCCESSED;
+	int i = 0, iLen = 0;
+	BYTE nByte = 0x30, nCmd, nLen[3], nStx = 0x02, nEtx = 0x03;
+	TCHAR	szTmp[1000];
+	TCHAR	szCmd[1000];
+	szTmp[0] = 0x00;
+	szCmd[0] = 0x00;
+	nCmd = 0x30;
+
+	if (stPg.hrd.cmd == 0)
+		return VTM_RV_FAILED;
+
+	_stprintf_s(szCmd, _countof(szCmd), _T("%c"), nStx);		// STX
+
+	// Head
+	nCmd = stPg.hrd.cmd + nByte;
+	_stprintf_s(szTmp, _countof(szTmp), _T("%c"), nCmd);	_tcscat_s(szCmd, _countof(szCmd), szTmp);
+
+	nLen[0] = stPg.hrd.len / 100 + nByte;
+	_stprintf_s(szTmp, _countof(szTmp), _T("%c"), nLen[0]);	_tcscat_s(szCmd, _countof(szCmd), szTmp);
+	nLen[1] = (stPg.hrd.len % 100) / 10 + nByte;
+	_stprintf_s(szTmp, _countof(szTmp), _T("%c"), nLen[1]);	_tcscat_s(szCmd, _countof(szCmd), szTmp);
+	nLen[2] = (stPg.hrd.len % 100) % 10 + nByte;
+	_stprintf_s(szTmp, _countof(szTmp), _T("%c"), nLen[2]);	_tcscat_s(szCmd, _countof(szCmd), szTmp);
+	//////////////////////////////////////////////////////////////////////////
+
+	if (stPg.hrd.cmd == 1)			// Model Change
+	{
+		iLen = _tcsclen(stPg.szModel);
+		for (i = 0; i < 32; i++)
+		{
+			if (i < iLen)
+			{
+				_stprintf_s(szTmp, _countof(szTmp), _T("%c"), stPg.szModel[i]);	_tcscat_s(szCmd, _countof(szCmd), szTmp);
+			}
+			else
+			{
+				_stprintf_s(szTmp, _countof(szTmp), _T("%s"), _T(" "));				_tcscat_s(szCmd, _countof(szCmd), szTmp);
+		//		_stprintf_s(szTmp, _countof(szTmp), _T("%c"), 0x00);				_tcscat_s(szCmd, _countof(szCmd), szTmp);
+			}
+		}
+
+		iLen += 32;
+	}
+	else if (stPg.hrd.cmd == 5)	 // Test Start
+	{
+		nCmd = stPg.Select + nByte;		// Select PG
+		_stprintf_s(szTmp, _countof(szTmp), _T("%c"), nCmd);	_tcscat_s(szCmd, _countof(szCmd), szTmp);
+
+		//nCmd = stPg.UseAverageMTPLeft + nByte;
+		//_stprintf_s(szTmp, _countof(szTmp), _T("%c"), nCmd);	_tcscat_s(szCmd, _countof(szCmd), szTmp);
+
+		//nCmd = stPg.UseAverageMTPRight + nByte;
+		//_stprintf_s(szTmp, _countof(szTmp), _T("%c"), nCmd);	_tcscat_s(szCmd, _countof(szCmd), szTmp);
+
+		iLen = _tcsclen(stPg.InnerID[0]);
+		for (i = 0; i < 32; i++)
+		{
+			if (i < iLen)
+			{
+				_stprintf_s(szTmp, _countof(szTmp), _T("%c"), stPg.InnerID[0][i]);	_tcscat_s(szCmd, _countof(szCmd), szTmp);
+			}
+			else
+			{
+				_stprintf_s(szTmp, _countof(szTmp), _T("%s"), _T(" "));				_tcscat_s(szCmd, _countof(szCmd), szTmp);
+			}
+		}
+
+		iLen = _tcsclen(stPg.InnerID[1]);
+		for (i = 0; i < 32; i++)
+		{
+			if (i < iLen)
+			{
+				_stprintf_s(szTmp, _countof(szTmp), _T("%c"), stPg.InnerID[1][i]);	_tcscat_s(szCmd, _countof(szCmd), szTmp);
+			}
+			else
+			{
+				_stprintf_s(szTmp, _countof(szTmp), _T("%s"), _T(" "));				_tcscat_s(szCmd, _countof(szCmd), szTmp);
+			}
+		}
+
+		iLen = _tcsclen(stPg.MCRID[0]);
+		for (i = 0; i < 32; i++)
+		{
+			if (i < iLen)
+			{
+				_stprintf_s(szTmp, _countof(szTmp), _T("%c"), stPg.MCRID[0][i]);	_tcscat_s(szCmd, _countof(szCmd), szTmp);
+			}
+			else
+			{
+				_stprintf_s(szTmp, _countof(szTmp), _T("%s"), _T(" "));				_tcscat_s(szCmd, _countof(szCmd), szTmp);
+			}
+		}
+
+		iLen = _tcsclen(stPg.MCRID[1]);
+		for (i = 0; i < 32; i++)
+		{
+			if (i < iLen)
+			{
+				_stprintf_s(szTmp, _countof(szTmp), _T("%c"), stPg.MCRID[1][i]);	_tcscat_s(szCmd, _countof(szCmd), szTmp);
+			}
+			else
+			{
+				_stprintf_s(szTmp, _countof(szTmp), _T("%s"), _T(" "));				_tcscat_s(szCmd, _countof(szCmd), szTmp);
+			}
+		}
+
+		////2023.06.09 특성 5점 프로토콜 마지막 한자리 0 or 1
+		int nType = 0;
+		if (bWadRHeadUse) nType = 1;
+		_stprintf_s(szTmp, _countof(szTmp), _T("%d"), nType);	
+		_tcscat_s(szCmd, _countof(szCmd), szTmp);
+		//
+	}
+	else if (stPg.hrd.cmd == 17)	 // Stick Start
+	{
+		;
+	}
+	else if (stPg.hrd.cmd == 19)	 // Stick End
+	{
+		;
+	}
+	else if (stPg.hrd.cmd == 32)	 // WAD 30 Start
+	{
+		//		nCmd = stPg.Select + nByte;		// Select PG
+		//		_stprintf_s(szTmp,  _countof(szTmp), "%c", nCmd);	_tcscat_s(szCmd,_countof(szCmd), szTmp);
+	}
+	else if (stPg.hrd.cmd == 48)	 // Request Model
+	{
+		;
+	}
+	else if (stPg.hrd.cmd == 50)	 // SRM Test
+	{
+		nCmd = stPg.Select + nByte;		// Select PG
+		_stprintf_s(szTmp, _countof(szTmp), _T("%c"), nCmd);	_tcscat_s(szCmd, _countof(szCmd), szTmp);
+	}
+
+	_stprintf_s(szTmp, _countof(szTmp), _T("%c"), nEtx);
+	_tcscat_s(szCmd, _countof(szCmd), szTmp);	// EXT
+
+	iLen = _tcsclen(szCmd);
+	szCmd[iLen] = 0;
+
+	CString strReturnCommand;
+	strReturnCommand.Format(_T("%s"), szCmd); 
+	 
+	CString strLog;
+	strLog.Format(_T("[%s](%d) : %s"), GetName(), iLen, strReturnCommand);
+	m_pLogFileAccessor->KMLOG(SEND, strLog);
+
+	if (IsOutOfService() == true)
+		return VTM_RV_SUCCESSED;
+
+	if (SendPacket(strReturnCommand) == true)
+	{
+		return VTM_RV_SUCCESSED;
+	}
+	else
+	{
+		strLog.Format(_T("[%s] : %s"), GetName(), _T("HEAD_NOT_CONNECTED"));
+		m_pLogFileAccessor->KMLOG(WARN, strLog);
+		CAlarmController::GetInstance()->SetAlarm(HEAD_NOT_CONNECTED + m_iAlarmIndex);
+
+		return HEAD_NOT_CONNECTED;
+	}
+	
+
+	//ResetEvent(m_hRecvDEvent[enumRecvEventID_INSP_COMPLETE_OK]);
+	//ResetEvent(m_hRecvDEvent[enumRecvEventID_INSP_COMPLETE_NG]);
+
+	//
+
+	//if (SendPacket(strReturnCommand) == true)
+	//{
+	////	if (bWait == true)
+	//	{
+	//		HANDLE hRecvEvent[2] = { m_hRecvDEvent[enumRecvEventID_INSP_COMPLETE_OK], m_hRecvDEvent[enumRecvEventID_INSP_COMPLETE_NG] };
+
+	//		DWORD dw = WaitForMultipleObjects(2, hRecvEvent, FALSE, DEFINE_RESPONSE_WAIT_TIME);
+	//		if (dw == WAIT_TIMEOUT) // Start Event 가 set될 때까지 기다린다.
+	//		{
+	//			strLog.Format(_T("[%s] : %s"), GetName(), _T("HEAD_ACK_TIMEOUT"));
+	//			m_pLogFileAccessor->KMLOG(WARN, strLog);
+	//			CAlarmController::GetInstance()->SetAlarm(HEAD_ACK_TIMEOUT + m_iSeqItemIndex);
+	//			return HEAD_ACK_TIMEOUT;
+	//		}
+	//		// jsyoon 2022.01.17 add
+	//		else if (dw == (WAIT_OBJECT_0 + 1)) // NG
+	//		{
+	//			strLog.Format(_T("[%s] : %s"), GetName(), _T("HEAD_ACK_FAIL"));
+	//			m_pLogFileAccessor->KMLOG(WARN, strLog);
+	//			CAlarmController::GetInstance()->SetAlarm(HEAD_ACK_FAIL + m_iSeqItemIndex);
+	//			return HEAD_ACK_FAIL;
+	//		}
+	//		else
+	//		{
+	//			return VTM_RV_SUCCESSED;
+	//		}
+	//	}
+	//	/*else
+	//	{
+	//		return VTM_RV_SUCCESSED;
+	//	}*/
+	//}
+
+	//strLog.Format(_T("[%s] : %s"), GetName(), _T("HEAD_NOT_CONNECTED"));
+	//m_pLogFileAccessor->KMLOG(WARN, strLog);
+	//CAlarmController::GetInstance()->SetAlarm(HEAD_NOT_CONNECTED + m_iSeqItemIndex);
+
+	//return HEAD_NOT_CONNECTED;
+}
+
+int  CCommTcpIpObjectWAD::_ExeMeasWAD(int iFunc, bool bWait, bool bWadRHeadUse)
+{
+	int iRet = 0;
+	CString str, strCellID, strGlassID, strInnerID, strMcrID;
+	ELPPROTOCOL stELP;
+	ZeroMemory(&stELP, sizeof(stELP));
+
+	int nEventOK = 0, nEventNG = 0;
+
+	switch (iFunc)
+	{
+	case enumTCPIpFactoryt_Event_WAD_TEST_LEFT:		// Test Start	Left
+	{
+		nEventOK = enumRecvEventID_INSP_START_OK;
+		nEventNG = enumRecvEventID_INSP_START_NG;
+
+		ResetEvent(m_hRecvDEvent[enumRecvEventID_INSP_END_OK]);
+		ResetEvent(m_hRecvDEvent[enumRecvEventID_INSP_END_NG]);
+		ResetEvent(m_hRecvDEvent[enumRecvEventID_INSP_COMPLETE_OK]);
+		ResetEvent(m_hRecvDEvent[enumRecvEventID_INSP_COMPLETE_NG]);
+
+		stELP.hrd.cmd = 5;		// Ox35
+	//	stELP.hrd.len = 131;
+		//stELP.hrd.len = 129;
+		stELP.hrd.len = 130;//2023.06.09 특성 5점 위해 마지막 한자리 추가 길이도 늘려야 하는지 확인
+		stELP.Select = 1;
+
+		stELP.UseAverageMTPLeft = 0;
+		stELP.UseAverageMTPRight = 0;
+
+		strInnerID.Format(_T("%s"), m_pShareMemory->GetSharedMemory()->stLotInfo.m_szInnerID[0]);
+		if (strInnerID.IsEmpty())
+		{
+			strInnerID.Format(_T("%d%s"), 1, gf_GetCurTimeString(3));
+			_tcscpy_s(m_pShareMemory->GetSharedMemory()->stLotInfo.m_szInnerID[0], 32, strInnerID);
+		}
+
+		strMcrID.Format(_T("%s"), m_pShareMemory->GetSharedMemory()->stLotInfo.m_szCellID[0]);
+
+		_tcscpy_s(stELP.InnerID[0], 32, strInnerID);
+		_tcscpy_s(stELP.MCRID[0], 32, strMcrID);
+
+		//int nLen = 0;
+		//nLen = strInnerID.GetLength();
+		//for (int i = nLen; i < 32; i++)
+		//{
+		//	stELP.InnerID[0][i] = 0x30; // 0x20;
+		//}
+
+		//nLen = strMcrID.GetLength();
+		//for (int i = nLen; i < 32; i++)
+		//{
+		//	stELP.MCRID[0][i] = 0x30; // 0x20;
+		//}
+
+		_tcscpy_s(stELP.InnerID[1], 32, _T(""));
+		_tcscpy_s(stELP.MCRID[1], 32, _T(""));
+
+		//for (int i = 0; i < 32; i++)
+		//{
+		//	stELP.InnerID[1][i] = 0x30; //v0x20;
+		//}
+
+		//for (int i = 0; i < 32; i++)
+		//{
+		//	stELP.MCRID[1][i] = 0x30; //0x20;
+		//}
+	}
+	break;
+
+	case enumTCPIpFactoryt_Event_WAD_TEST_RIGHT:		// Test Start	Right
+	{
+		nEventOK = enumRecvEventID_INSP2_START_OK;
+		nEventNG = enumRecvEventID_INSP2_START_NG;
+
+		ResetEvent(m_hRecvDEvent[enumRecvEventID_INSP2_END_OK]);
+		ResetEvent(m_hRecvDEvent[enumRecvEventID_INSP2_END_NG]);
+		ResetEvent(m_hRecvDEvent[enumRecvEventID_INSP2_COMPLETE_OK]);
+		ResetEvent(m_hRecvDEvent[enumRecvEventID_INSP2_COMPLETE_NG]);
+
+		stELP.hrd.cmd = 5;		// Ox35
+	//	stELP.hrd.len = 131;
+		//stELP.hrd.len = 129;
+		stELP.hrd.len = 130;//2023.06.09 특성 5점 위해 마지막 한자리 추가 길이도 늘려야 하는지 확인
+		stELP.Select = 2;
+
+		stELP.UseAverageMTPLeft = 0;
+		stELP.UseAverageMTPRight = 0;
+
+		int nLen = 0;
+
+		_tcscpy_s(stELP.InnerID[0], 32, _T(""));
+		_tcscpy_s(stELP.MCRID[0], 32, _T(""));
+
+		//for (int i = nLen; i < 32; i++)
+		//{
+		//	stELP.InnerID[0][i] = 0x00; //0x20;
+		//}
+
+		//for (int i = nLen; i < 32; i++)
+		//{
+		//	stELP.MCRID[0][i] = 0x00; //0x20;
+		//}
+
+		if (bWadRHeadUse) {
+			strInnerID.Format(_T("%s"), m_pShareMemory->GetSharedMemory()->stLotInfo.m_szInnerID[0]);
+			strMcrID.Format(_T("%s"), m_pShareMemory->GetSharedMemory()->stLotInfo.m_szCellID[0]);
+
+			_tcscpy_s(m_pShareMemory->GetSharedMemory()->stLotInfo.m_szInnerID[1], 32, m_pShareMemory->GetSharedMemory()->stLotInfo.m_szInnerID[0]);
+			_tcscpy_s(m_pShareMemory->GetSharedMemory()->stLotInfo.m_szCellID[1], 32, m_pShareMemory->GetSharedMemory()->stLotInfo.m_szCellID[0]);
+		}
+		else {
+			strInnerID.Format(_T("%s"), m_pShareMemory->GetSharedMemory()->stLotInfo.m_szInnerID[1]);
+			if (strInnerID.IsEmpty())
+			{
+				strInnerID.Format(_T("%d%s"), 2, gf_GetCurTimeString(3));
+				_tcscpy_s(m_pShareMemory->GetSharedMemory()->stLotInfo.m_szInnerID[1], 32, strInnerID);
+			}
+
+			strMcrID.Format(_T("%s"), m_pShareMemory->GetSharedMemory()->stLotInfo.m_szCellID[1]);
+		}
+
+		_tcscpy_s(stELP.InnerID[1], 32, strInnerID);
+		_tcscpy_s(stELP.MCRID[1], 32, strMcrID);
+
+		//nLen = strInnerID.GetLength();
+		//for (int i = nLen; i < 32; i++)
+		//{
+		//	stELP.InnerID[1][i] = 0x00; //0x20;
+		//}
+
+		//nLen = strMcrID.GetLength();
+		//for (int i = nLen; i < 32; i++)
+		//{
+		//	stELP.MCRID[1][i] = 0x00; //0x20;
+		//}
+	}
+	break;
+
+	case enumTCPIpFactoryt_Event_WAD_TEST_LEFT_RIGHT:
+	{
+		nEventOK = enumRecvEventID_INSP_START_OK;
+		nEventNG = enumRecvEventID_INSP_START_NG;
+
+		ResetEvent(m_hRecvDEvent[enumRecvEventID_INSP_END_OK]);
+		ResetEvent(m_hRecvDEvent[enumRecvEventID_INSP_END_NG]);
+		ResetEvent(m_hRecvDEvent[enumRecvEventID_INSP_COMPLETE_OK]);
+		ResetEvent(m_hRecvDEvent[enumRecvEventID_INSP_COMPLETE_NG]);
+
+		stELP.hrd.cmd = 5;		// Ox35
+		stELP.hrd.len = 129;
+	//	stELP.hrd.len = 131;
+		stELP.Select = 3;
+
+		stELP.UseAverageMTPLeft = 0;
+		stELP.UseAverageMTPRight = 0;
+
+		strInnerID.Format(_T("%s"), m_pShareMemory->GetSharedMemory()->stLotInfo.m_szInnerID[0]);
+		if (strInnerID.IsEmpty())
+		{
+			strInnerID.Format(_T("%d%s"), 1, gf_GetCurTimeString(3));
+			_tcscpy_s(m_pShareMemory->GetSharedMemory()->stLotInfo.m_szInnerID[0], 32, strInnerID);
+		}
+
+		strMcrID.Format(_T("%s"), m_pShareMemory->GetSharedMemory()->stLotInfo.m_szCellID[0]);
+
+		_tcscpy_s(stELP.InnerID[0], 32, strInnerID);
+		_tcscpy_s(stELP.MCRID[0], 32, strMcrID);
+
+		strInnerID.Format(_T("%s"), m_pShareMemory->GetSharedMemory()->stLotInfo.m_szInnerID[1]);
+		if (strInnerID.IsEmpty())
+		{
+			strInnerID.Format(_T("%d%s"), 2, gf_GetCurTimeString(3));
+			_tcscpy_s(m_pShareMemory->GetSharedMemory()->stLotInfo.m_szInnerID[1], 32, strInnerID);
+		}
+
+		strMcrID.Format(_T("%s"), m_pShareMemory->GetSharedMemory()->stLotInfo.m_szCellID[1]);
+
+		_tcscpy_s(stELP.InnerID[1], 32, strInnerID);
+		_tcscpy_s(stELP.MCRID[1], 32, strMcrID);
+	}
+	break;
+	case enumTCPIpFactoryt_Event_WAD_1:		// Recipe Change
+	{
+		nEventOK = enumRecvEventID_RECIPE_CHANGE_OK;
+		nEventNG = enumRecvEventID_RECIPE_CHANGE_NG;
+
+		stELP.hrd.cmd = 1;		// Ox31
+		stELP.hrd.len = 32;
+		str.Format(_T("%s"), m_pRecipeEditMgr->GetRecipeID());
+		_tcscpy_s(stELP.szModel, _countof(stELP.szModel), str);
+	}		
+		break;
+	case enumTCPIpFactoryt_Event_WAD_2:		// Request Model
+	{
+		nEventOK = enumRecvEventID_GET_PARAMETER_OK;
+		nEventNG = enumRecvEventID_GET_PARAMETER_NG;
+
+		stELP.hrd.cmd = 48;		// Ox60		96-48
+		stELP.hrd.len = 0;
+	}
+	break;
+
+	case enumTCPIpFactoryt_Event_WAD_3:		// Stick Start
+	{
+		nEventOK = enumRecvEventID_SET_STICK_MTP_OK;
+		nEventNG = enumRecvEventID_SET_STICK_MTP_NG;
+
+		stELP.hrd.cmd = 17;		// Ox41		65-48	
+		stELP.hrd.len = 0;
+	}
+		break;
+	case enumTCPIpFactoryt_Event_WAD_4:		// Stick End
+	{
+		nEventOK = enumRecvEventID_SET_STICK_MTP_OK;
+		nEventNG = enumRecvEventID_SET_STICK_MTP_NG;
+
+		stELP.hrd.cmd = 19;		// Ox43		67-48
+		stELP.hrd.len = 0;
+	}
+		break;
+	case enumTCPIpFactoryt_Event_WAD_SRM_LEFT:		// SRM TEST	Left
+	{
+		nEventOK = enumRecvEventID_INSP_COMPLETE_OK;
+		nEventNG = enumRecvEventID_INSP_COMPLETE_NG;
+
+		stELP.hrd.cmd = 50;		// Ox62		98-48
+		stELP.hrd.len = 1;
+		stELP.Select = 1;	// Left
+	}
+		break;
+	case enumTCPIpFactoryt_Event_WAD_SRM_RIGHT:		// SRM TEST	Right
+	{
+		nEventOK = enumRecvEventID_INSP_COMPLETE_OK;
+		nEventNG = enumRecvEventID_INSP_COMPLETE_NG;
+
+		stELP.hrd.cmd = 50;		// Ox62		98-48
+		stELP.hrd.len = 1;
+		stELP.Select = 2;	// Right
+	}
+		break;
+	}
+
+	ResetEvent(m_hRecvDEvent[nEventOK]);
+	ResetEvent(m_hRecvDEvent[nEventNG]);
+
+	CString strLog;
+	iRet = SetCommand(stELP, bWadRHeadUse);
+	if (iRet == VTM_RV_SUCCESSED)
+	{
+		if (bWait == true)
+		{
+			if (IsOutOfService() != true)
+			{
+				HANDLE hRecvEvent[2] = { m_hRecvDEvent[nEventOK], m_hRecvDEvent[nEventNG] }; 
+
+				DWORD dw = WaitForMultipleObjects(2, hRecvEvent, FALSE, DEFINE_RECIPE_WAIT_TIME * 100);
+				if (dw == WAIT_TIMEOUT) // Start Event 가 set될 때까지 기다린다.
+				{
+					strLog.Format(_T("[%s] : %s"), GetName(), _T("HEAD_ACK_TIMEOUT"));
+					m_pLogFileAccessor->KMLOG(WARN, strLog);
+					CAlarmController::GetInstance()->SetAlarm(HEAD_ACK_TIMEOUT + m_iAlarmIndex);
+					return HEAD_ACK_TIMEOUT;
+				}
+				// jsyoon 2022.01.17 add
+				else if (dw == (WAIT_OBJECT_0 + 1)) // NG
+				{
+					strLog.Format(_T("[%s] : %s"), GetName(), _T("HEAD_ACK_FAIL"));
+					m_pLogFileAccessor->KMLOG(WARN, strLog);
+					CAlarmController::GetInstance()->SetAlarm(HEAD_ACK_FAIL + m_iAlarmIndex);
+					return HEAD_ACK_FAIL;
+				}
+				else
+				{
+					return VTM_RV_SUCCESSED;
+				}
+			}
+		}		
+	}
+
+	return iRet;
+}
+
+bool CCommTcpIpObjectWAD::TossResultFile(CString strInnerID, int nArea, int iProbe, int nRetry)
+{
+	CString strLog;
+	//strLog.Format(_T("[%s] : %s, %s"), GetName(), _T("TossResultFile"), strInnerID);
+	//m_pLogFileAccessor->KMLOG(WARN, strLog);
+
+	//RawData 복사 진행
+	CString strNewPath, strNewFile, strRawFile;
+	CString strIDFile;
+	CString strTemp;
+
+	strIDFile.Format(_T("%s_1.dat"), strInnerID);
+
+	// 복사할 경로 위치 확인 필요
+	strNewPath.Format(_T("%sRawData\\%s\\%s\\%s\\"), CSystemParamShare::GetInstance()->GetResultFolderPath(), gf_GetCurDayString(), CSystemParamShare::GetInstance()->GetGlassID(), _T("WAD"));
+	strNewFile.Format(_T("%s%s"), strNewPath, strIDFile);
+	//	strNewFile.Format(_T("%sRawData\\%s\\%s\\%s"), CSystemParamShare::GetInstance()->GetResultFolderPath(), gf_GetCurDayString(), CSystemParamShare::GetInstance()->GetGlassID(), strIDFile);
+	strRawFile.Format(_T("%s\\%s"), m_strNetDrive, strIDFile);
+
+	//화질 제외 결과파일 생성될때까지 기다리기
+	strTemp.Format(_T("%s\\%s"), m_strNetDrive, strIDFile);
+	//CmFileFindTimeOut(strTemp, 5000);
+
+	bool bRet = false;
+	BOOL bTimeOut = TRUE;
+	bTimeOut = m_pCommTcpIpFactoryMgr->CmFileFindTimeOut(strTemp, DEFINE_PARAMETERS_WAIT_TIME); // DEFINE_RESET_INIT_WAIT_TIME);	// jsyoon 2022.06.24 change
+	if (bTimeOut != TRUE)
+	{
+		//폴더 생성, 파일 복사
+		gf_MakeDir(strNewFile);
+		if (CopyFile(strRawFile, strNewFile, FALSE))
+		{
+			//if (m_pJobProc->m_iUseDelData == 1)
+	//		DeleteFile(strRawFile);
+		}
+
+		//결과 파일 정보 전달
+		RSRITEMDATA resultData;
+		ZeroMemory(&resultData, sizeof(resultData));
+
+		resultData.nMeasMode = PGM_MODE_LUMIN; //확인 필요
+		resultData.iMeasArea = nArea;
+
+		_tcscpy(resultData.szLotID, CSystemParamShare::GetInstance()->GetLotID());
+		_tcscpy(resultData.szGlassID, CSystemParamShare::GetInstance()->GetGlassID());
+		_tcscpy(resultData.szRecipeID, CSystemParamShare::GetInstance()->GetRecipeID());
+
+		_tcscpy(resultData.szResultFile, strIDFile /*strInnerID*/);
+
+		_tcscpy(resultData.szResultPath, strNewPath);
+
+
+		CString strPos;
+		resultData.nCntData = 6;
+		_tcscpy(resultData.stData[0].szName, _T("Y"));
+		strPos.Format(_T("%.4f"), m_dMeasPosX); // m_pShareMemory->GetSharedMemory()->stMotionStatus[3].dAxisPos - dOffsetX[0] - m_pShareMemory->GetSharedMemory()->stMotionStatus[0].dAxisPos);
+		_tcscpy(resultData.stData[0].szData, strPos);
+	
+		_tcscpy(resultData.stData[1].szName, _T("X"));
+		strPos.Format(_T("%.4f"), m_dMeasPosY[1-iProbe]); // m_pShareMemory->GetSharedMemory()->stMotionStatus[8 + iProbe].dAxisPos - dOffsetY[iProbe]);
+		_tcscpy(resultData.stData[1].szData, strPos);
+
+		// CELL
+		_tcscpy(resultData.stData[4].szName, _T("CELL MAX"));
+		strPos.Format(_T("%d"), m_pShareMemory->GetSharedMemory()->stGlassInfo.m_nCellCount);
+		_tcscpy(resultData.stData[4].szData, strPos);
+
+		// STICK
+		_tcscpy(resultData.stData[5].szName, _T("STICK MAX"));
+		strPos.Format(_T("%d"), m_pShareMemory->GetSharedMemory()->stGlassInfo.m_nStickCount);
+		_tcscpy(resultData.stData[5].szData, strPos);
+
+	
+		resultData.m_iRetryCnt = nRetry;// 1;
+		_tcscpy(resultData.szCellData, m_pShareMemory->GetSharedMemory()->stLotInfo.m_szCellID[iProbe]);
+		
+
+		CResultMgr::GetInstance()->Updata_Data(&resultData);
+
+		strLog.Format(_T("[%s] : %s, %s"), GetName(), _T("TossResultFile Updata"), strInnerID);
+		m_pLogFileAccessor->KMLOG(OPER, strLog);
+
+		bRet = true;
+	}
+	else
+	{
+		strLog.Format(_T("[%s] : %s, %s"), GetName(), _T("TossResultFile Copy Fail"), strInnerID);
+		m_pLogFileAccessor->KMLOG(WARN, strLog);
+	}
+
+	return bRet;
+}
+
+void CCommTcpIpObjectWAD::SetMeasPos(double dx, double dy1, double dy2)
+{
+	m_dMeasPosX = dx;
+	m_dMeasPosY[0] = dy1;
+	m_dMeasPosY[1] = dy2;
+}

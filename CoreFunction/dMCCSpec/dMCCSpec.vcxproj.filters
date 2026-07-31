@@ -1,0 +1,147 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Project ToolsVersion="4.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <ItemGroup>
+    <ClCompile Include="DlgnMCCReport.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="dMCCSpec.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="MCCManger.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="API_MCC.cpp">
+      <Filter>API</Filter>
+    </ClCompile>
+    <ClCompile Include="..\common\FarPoint64\Ssdllmfc.cpp">
+      <Filter>FPSpreadDll</Filter>
+    </ClCompile>
+    <ClCompile Include="..\common\MySpreadDll.cpp">
+      <Filter>FPSpreadDll</Filter>
+    </ClCompile>
+    <ClCompile Include="..\common\StaticSpread.cpp">
+      <Filter>FPSpreadDll</Filter>
+    </ClCompile>
+  </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="DlgnMCCReport.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="dMCCSpec.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="MCCManger.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="SheardDefineMCC.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="API_MCC.h">
+      <Filter>API</Filter>
+    </ClInclude>
+    <ClInclude Include="Resource.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
+    <ClInclude Include="..\common\FarPoint64\Ssdllmfc.h">
+      <Filter>FPSpreadDll</Filter>
+    </ClInclude>
+    <ClInclude Include="..\common\MySpreadDll.h">
+      <Filter>FPSpreadDll</Filter>
+    </ClInclude>
+    <ClInclude Include="..\common\StaticSpread.h">
+      <Filter>FPSpreadDll</Filter>
+    </ClInclude>
+  </ItemGroup>
+  <ItemGroup>
+    <CustomBuild Include="ReadMe.txt" />
+    <CustomBuild Include="res\dMCCSpec.rc2">
+      <Filter>Resource Files</Filter>
+    </CustomBuild>
+    <CustomBuild Include="dMCCSpec.def">
+      <Filter>API</Filter>
+    </CustomBuild>
+  </ItemGroup>
+  <ItemGroup>
+    <Filter Include="Source Files">
+      <UniqueIdentifier>{9a49aae6-2f82-4c42-9029-7ad361ec9fd6}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Header Files">
+      <UniqueIdentifier>{ffb78740-26c8-4836-b74d-cca6787d98d6}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Resource Files">
+      <UniqueIdentifier>{50934afe-8616-4269-8c43-afc81cc5e3bd}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="API">
+      <UniqueIdentifier>{404b40e1-18de-42ad-a487-87cd09bfa89e}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="MCC Files">
+      <UniqueIdentifier>{bd39ff0f-b171-4f92-bb58-92860a1e3ce4}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="MCC Files\Config">
+      <UniqueIdentifier>{100fc818-f045-4a56-a0ea-13e1d93f433e}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="FPSpreadDll">
+      <UniqueIdentifier>{e719159a-55d8-4d21-b026-5b91fe5a79e0}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="MCC Files\Bin">
+      <UniqueIdentifier>{da4ca89c-7171-4d51-82e4-743a7a9deb4e}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="MCC Files\Src">
+      <UniqueIdentifier>{c24cdce9-96ea-4d99-82c0-efdbf961bfb7}</UniqueIdentifier>
+    </Filter>
+  </ItemGroup>
+  <ItemGroup>
+    <ResourceCompile Include="dMCCSpec.rc">
+      <Filter>Resource Files</Filter>
+    </ResourceCompile>
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="MCC\Config\MCCACTION.csv">
+      <Filter>MCC Files\Config</Filter>
+    </None>
+    <None Include="MCC\Config\MCCERROR.csv">
+      <Filter>MCC Files\Config</Filter>
+    </None>
+    <None Include="MCC\Config\MCCESIGNAL.csv">
+      <Filter>MCC Files\Config</Filter>
+    </None>
+    <None Include="MCC\Config\MCCNAME.csv">
+      <Filter>MCC Files\Config</Filter>
+    </None>
+    <None Include="MCC\BIN\dbghelp.dll">
+      <Filter>MCC Files\Bin</Filter>
+    </None>
+    <None Include="MCC\BIN\dMCCSpecRec.dll">
+      <Filter>MCC Files\Bin</Filter>
+    </None>
+    <None Include="MCC\BIN\dMCCSpecRec.pdb">
+      <Filter>MCC Files\Bin</Filter>
+    </None>
+    <None Include="MCC\BIN\dXCrashRpt.dll">
+      <Filter>MCC Files\Bin</Filter>
+    </None>
+    <None Include="MCC\BIN\FTP_Dll.dll">
+      <Filter>MCC Files\Bin</Filter>
+    </None>
+    <None Include="MCC\BIN\FTP_Dll.pdb">
+      <Filter>MCC Files\Bin</Filter>
+    </None>
+    <None Include="MCC\BIN\MCCLog.exe">
+      <Filter>MCC Files\Bin</Filter>
+    </None>
+    <None Include="MCC\BIN\MCCLog.pdb">
+      <Filter>MCC Files\Bin</Filter>
+    </None>
+    <None Include="MCC\BIN\XCrashRpt.exe">
+      <Filter>MCC Files\Bin</Filter>
+    </None>
+    <None Include="MCC\MCC_src.zip">
+      <Filter>MCC Files\Src</Filter>
+    </None>
+  </ItemGroup>
+  <ItemGroup>
+    <Library Include="..\common\FarPoint64\Lib\SPR64DU80.lib">
+      <Filter>FPSpreadDll</Filter>
+    </Library>
+  </ItemGroup>
+</Project>

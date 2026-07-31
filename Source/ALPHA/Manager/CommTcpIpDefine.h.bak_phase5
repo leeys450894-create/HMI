@@ -1,0 +1,265 @@
+#pragma once
+
+#include <afxmt.h>
+
+#define		DEFINE_RESET_INIT_WAIT_TIME		20000		// 20s
+#define		DEFINE_INSPECITON_WAIT_TIME		30000		// 30s
+#define		DEFINE_PARAMETERS_WAIT_TIME		5000		// 5s
+#define		DEFINE_RESPONSE_WAIT_TIME		2000		// 2s
+#define		DEFINE_AGING_WAIT_TIME			600000		// 600s
+#define		DEFINE_RECIPE_WAIT_TIME			30			// 30s
+#define		DEFINE_RECIPE_WAIT_TIME2		300			// 300s
+
+#define		LAST_ITEM						TRUE
+#define		NOT_LAST_ITEM					FALSE
+
+#define		EXE_QUALITY_GRAB				1
+#define		EXE_QUALITY_GRAB_WAIT			2
+#define		EXE_QUALITY_WAIT_USE			3
+#define		EXE_QUALITY_EMPTY_BUFFER		4
+#define		EXE_QUALITY_EMPTY_BUFFER_ALL	5
+#define		EXE_QUAITY_BUFFER_CHECK			6
+#define		EXE_QUALITY_RESET				7
+
+#define		DF_MAX_HEAD						2
+
+enum enumRecvEventID
+{
+	enumRecvEventID_TIME_SYNC_OK = 0,
+	enumRecvEventID_TIME_SYNC_NG,
+	//enumRecvEventID_SAFETY_RESET_OK,
+	//enumRecvEventID_SAFETY_RESET_NG,
+	enumRecvEventID_SET_PARAMETER_OK,
+	enumRecvEventID_SET_PARAMETER_NG,
+	enumRecvEventID_GET_PARAMETER_OK,
+	enumRecvEventID_GET_PARAMETER_NG,
+	enumRecvEventID_RECIPE_CHANGE_OK,
+	enumRecvEventID_RECIPE_CHANGE_NG,
+	enumRecvEventID_INSPECTION_READY_OK,
+	enumRecvEventID_INSPECTION_READY_NG,
+	//enumRecvEventID_GRAB_START_OK,
+	//enumRecvEventID_GRAB_START_NG,
+	//enumRecvEventID_GRAB_END_OK,
+	//enumRecvEventID_GRAB_END_NG,
+	enumRecvEventID_INSP_START_OK,		// 측정시작 응답
+	enumRecvEventID_INSP_START_NG,
+	enumRecvEventID_INSP_END_OK,		// 측정완료
+	enumRecvEventID_INSP_END_NG,
+	enumRecvEventID_INSP_COMPLETE_OK,	// 계산완료
+	enumRecvEventID_INSP_COMPLETE_NG,
+	//enumRecvEventID_DFS_START_OK,
+	//enumRecvEventID_DFS_START_NG,
+	//enumRecvEventID_DFS_SAVE_OK,
+	//enumRecvEventID_DFS_SAVE_NG,
+
+	// WAD
+	enumRecvEventID_SET_STICK_MTP_OK,   
+	enumRecvEventID_SET_STICK_MTP_NG,
+
+	enumRecvEventID_INSPECTION2_READY_OK,
+	enumRecvEventID_INSPECTION2_READY_NG,
+
+	enumRecvEventID_INSP2_START_OK,		// 측정시작 응답
+	enumRecvEventID_INSP2_START_NG,
+	enumRecvEventID_INSP2_END_OK,		// 측정완료 WAD RIGHT
+	enumRecvEventID_INSP2_END_NG,
+	enumRecvEventID_INSP2_COMPLETE_OK,	// 계산완료 WAD RIGHT
+	enumRecvEventID_INSP2_COMPLETE_NG,
+
+	enumRecvEventID_INSPECTION3_READY_OK,
+	enumRecvEventID_INSPECTION3_READY_NG,
+
+	enumRecvEventID_INSP3_START_OK,		// 측정시작 응답
+	enumRecvEventID_INSP3_START_NG,
+	enumRecvEventID_INSP3_END_OK,		// 측정완료 WAD RIGHT
+	enumRecvEventID_INSP3_END_NG,
+	enumRecvEventID_INSP3_COMPLETE_OK,	// 계산완료 WAD RIGHT
+	enumRecvEventID_INSP3_COMPLETE_NG,
+
+	enumRecvEventID_INSPECTION4_READY_OK,
+	enumRecvEventID_INSPECTION4_READY_NG,
+
+	enumRecvEventID_INSP4_START_OK,		// 측정시작 응답
+	enumRecvEventID_INSP4_START_NG,
+	enumRecvEventID_INSP4_END_OK,		// 측정완료 WAD RIGHT
+	enumRecvEventID_INSP4_END_NG,
+	enumRecvEventID_INSP4_COMPLETE_OK,	// 계산완료 WAD RIGHT
+	enumRecvEventID_INSP4_COMPLETE_NG,
+	enumRecvEventIDCount
+};
+
+enum enumTCPIpFactorytID_UTG
+{
+	enumTCPIpFactorytID_UTG = 0,
+	enumTCPIpFactorytID_UTG2,
+};
+
+//enum enumTCPIpFactorytID_D
+//{
+//	enumTCPIpFactorytID_VISION = 0,
+//	enumTCPIpFactorytID_VISION2,
+//	enumTCPIpFactorytID_COLOR,
+//	enumTCPIpFactorytID_COLOR2,
+//	enumTCPIpFactorytID_WAD,
+//	enumTCPIpFactorytID_ALIGNER,
+//	enumTCPIpFactorytID_PG,
+//	enumTCPIpFactorytID_LINE_SCAN,
+//	enumTCPIpFactorytID_CompleteEASE,
+//	enumTCPIpFactorytID_PPA,
+//	enumTCPIpFactorytID_PPA2,
+//	enumTCPIpFactorytID_PG2,
+//	enumTCPIpFactorytID_DFS,
+//	enumTCPIpFactorytID_PIXEL,
+//	enumTCPIpFactorytID_PIXEL2,
+//};
+
+enum enumTCPIpFactorytID_HMI
+{
+	enumTCPIpFactorytID_VISION = 0,
+	enumTCPIpFactorytID_VISION2,
+	enumTCPIpFactorytID_COLOR,
+	enumTCPIpFactorytID_COLOR2,
+	enumTCPIpFactorytID_WAD,
+	enumTCPIpFactorytID_PG,
+	enumTCPIpFactorytID_ANGLE,
+	enumTCPIpFactorytID_ANGLE2,
+	enumTCPIpFactorytID_AGING,
+	enumTCPIpFactorytID_LCR,
+	enumTCPIpFactorytID_TIME,
+	enumTCPIpFactorytID_MOTION,
+	enumTCPIpFactorytID_TSP,
+	enumTCPIpFactorytID_TSP1 = enumTCPIpFactorytID_TSP,
+	enumTCPIpFactorytID_TSP2,
+	enumTCPIpFactorytID_TSP3,
+	enumTCPIpFactorytID_TSP4,
+	enumTCPIpFactorytID_TSP5,
+	enumTCPIpFactorytID_TSP6,
+	enumTCPIpFactorytID_CIM,
+};
+
+// LCR or TSP ELP SW
+enum enumTCPIpFactoryt_Event_ELP
+{
+	enumTCPIpFactoryt_Event_ELP_1 = 0, // Recipe Change
+	enumTCPIpFactoryt_Event_ELP_2,     // Recipe Change Wait
+
+	enumTCPIpFactoryt_Event_ELP_PB_LEFT,		// Pin Board 
+	enumTCPIpFactoryt_Event_ELP_PB_RIGHT,		// Pin Board 
+
+	enumTCPIpFactoryt_Event_ELP_TEST_LEFT,
+	enumTCPIpFactoryt_Event_ELP_TEST_RIGHT,
+};
+
+enum enumTCPIpFactoryt_Event_WAD
+{
+	enumTCPIpFactoryt_Event_WAD_1 = 0, // Recipe Change
+	enumTCPIpFactoryt_Event_WAD_2,		// Request Model
+	enumTCPIpFactoryt_Event_WAD_3,		// Stick Start MTP
+	enumTCPIpFactoryt_Event_WAD_4,		// Stick End MTP
+
+	enumTCPIpFactoryt_Event_WAD_TEST_LEFT,
+	enumTCPIpFactoryt_Event_WAD_TEST_RIGHT,
+
+	enumTCPIpFactoryt_Event_WAD_TEST_LEFT_RIGHT,
+
+	enumTCPIpFactoryt_Event_WAD_SRM_LEFT,
+	enumTCPIpFactoryt_Event_WAD_SRM_RIGHT,
+};
+
+enum enumTCPIpFactoryt_Event_PG
+{
+	enumTCPIpFactoryt_PGEvent_0 = 0,  // Model Change
+	enumTCPIpFactoryt_PGEvent_1,	  // Model Change Wait, Download Done 대기시간 걸림
+	enumTCPIpFactoryt_PGEvent_2,	  // Recipe Change
+	enumTCPIpFactoryt_PGEvent_3,	  // Status check
+
+	// PG
+	enumTCPIpFactoryt_PGEvent_5,     // Turn On
+	enumTCPIpFactoryt_PGEvent_6,     // Pattern Next
+	enumTCPIpFactoryt_PGEvent_7,     // Pattern Previous
+	enumTCPIpFactoryt_PGEvent_8,     // Turn Off
+
+	// PG1
+	enumTCPIpFactoryt_PGEvent_9,	 // Cell Turn On
+	enumTCPIpFactoryt_PGEvent_10,	 // Cell Pattern Next
+	enumTCPIpFactoryt_PGEvent_11,	 // Cell Pattern Previous
+	enumTCPIpFactoryt_PGEvent_12,	 // Cell Turn Off
+
+	// PG2
+	enumTCPIpFactoryt_PGEvent_13,	 // Cell Turn On
+	enumTCPIpFactoryt_PGEvent_14,	 // Cell Pattern Next
+	enumTCPIpFactoryt_PGEvent_15,	 // Cell Pattern Previous
+	enumTCPIpFactoryt_PGEvent_16,	 // Cell Turn Off
+
+	// TEST
+	enumTCPIpFactoryt_PG_TEST_1,	  // PTP(Pin To Pin Test)
+	enumTCPIpFactoryt_PG_TEST_2,	  // OST(Open/short Test)
+	enumTCPIpFactoryt_PG_TEST_3,	  // R-TEST
+	enumTCPIpFactoryt_PG_TEST_4,	  // AGING
+	enumTCPIpFactoryt_PG_TEST_5,	  // TEST STOP
+
+	enumTCPIpFactoryt_PG_TEST_11,	  // PTP(Pin To Pin Test)
+	enumTCPIpFactoryt_PG_TEST_12,	  // OST(Open/short Test)
+	enumTCPIpFactoryt_PG_TEST_13,	  // R-TEST
+	enumTCPIpFactoryt_PG_TEST_14,	  // AGING  // For Ensis PG 
+
+	// TEST Program
+	enumTCPIpFactoryt_PG_TP_1,		// TP : 특성검사
+	enumTCPIpFactoryt_PG_TP_2,      // TP : 화질검사
+	enumTCPIpFactoryt_PG_TP_3,		// TP : 색이상 검사
+	enumTCPIpFactoryt_PG_TP_4,		// TP : 시야각 검사
+	enumTCPIpFactoryt_PG_TP_5,		// TP : TSP
+//	enumTCPIpFactoryt_PG_TP_6,		// TP : LCR
+
+	// CELL Select
+	enumTCPIpFactoryt_PG_SET_LEFT,     // CELL Select Left
+	enumTCPIpFactoryt_PG_SET_RIGHT,    // CELL Select Right
+};
+
+enum enumTCPIpFactoryt_Event_VisMotion
+{
+	enumTCPIpFactoryt_VisMotion_0 = 0,  // Model Change
+	enumTCPIpFactoryt_VisMotion_1,		// Homing
+	enumTCPIpFactoryt_VisMotion_2,		// Filter Move
+	enumTCPIpFactoryt_VisMotion_3,		// Motion Move
+};
+
+typedef struct {
+	int			iCmd;		// 
+	int			iActiveID;
+	int			iFilter;
+	int			iError;
+	double		dMotion;
+	TCHAR		szModel[100];
+}VisMotionPROTOCOL, * PVisMotionPROTOCOL;
+
+
+// Property
+typedef struct
+{
+	int               cmd;
+	int               len;
+} req_head;
+
+typedef struct
+{
+	int		iCmd;
+	int		iError;
+	int		iCause;
+	int		iLen;
+	int		iResult;
+} response_head;
+
+typedef struct {
+	req_head	hrd;
+	TCHAR		szModel[32];
+
+	int       Select;					// PG 0x31 : Left    0x32 : Right     0x33 : Left/Right
+	int       UseAverageMTPLeft;
+	int       UseAverageMTPRight;
+	int       Retest;					// 0X30 : Normal, 0x31 : Offline, 0x32 : ReAvt, 0x033 : ReConnect etc Undefined
+
+	TCHAR       InnerID[2][32];
+	TCHAR       MCRID[2][32];
+
+}ELPPROTOCOL, * PELPPPROTOCOL;

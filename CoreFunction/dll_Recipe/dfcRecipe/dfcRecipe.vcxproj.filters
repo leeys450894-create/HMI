@@ -1,0 +1,158 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Project ToolsVersion="4.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <ItemGroup>
+    <Filter Include="소스 파일">
+      <UniqueIdentifier>{4FC737F1-C7A5-4376-A066-2A32D752A2FF}</UniqueIdentifier>
+      <Extensions>cpp;c;cc;cxx;def;odl;idl;hpj;bat;asm;asmx</Extensions>
+    </Filter>
+    <Filter Include="헤더 파일">
+      <UniqueIdentifier>{93995380-89BD-4b04-88EB-625FBE52EBFB}</UniqueIdentifier>
+      <Extensions>h;hpp;hxx;hm;inl;inc;xsd</Extensions>
+    </Filter>
+    <Filter Include="리소스 파일">
+      <UniqueIdentifier>{67DA6AB6-F800-4c08-8B7A-83BB121AAD01}</UniqueIdentifier>
+      <Extensions>rc;ico;cur;bmp;dlg;rc2;rct;bin;rgs;gif;jpg;jpeg;jpe;resx;tiff;tif;png;wav;mfcribbon-ms</Extensions>
+    </Filter>
+    <Filter Include="소스 파일\Wnd">
+      <UniqueIdentifier>{b1b43be9-5907-4b5a-881d-4e5f21baec28}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="헤더 파일\Wnd">
+      <UniqueIdentifier>{b9dca4ec-f669-4ab9-b182-44a137149784}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="소스 파일\Dlg">
+      <UniqueIdentifier>{addd47c3-cb30-4fbf-9c50-910a3a6d33c1}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="헤더 파일\Dlg">
+      <UniqueIdentifier>{5aa2b286-b9cb-47cf-a59f-959cec43ff0b}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="소스 파일\Func">
+      <UniqueIdentifier>{6347010a-6159-4e22-892c-9fc337860b20}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="헤더 파일\Func">
+      <UniqueIdentifier>{25b9f16a-7efd-438c-865e-d908a561af27}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="Config">
+      <UniqueIdentifier>{4e64330a-f484-4e30-8521-a30a75611b15}</UniqueIdentifier>
+    </Filter>
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="ReadMe.txt" />
+    <None Include="dfcRecipe.def">
+      <Filter>소스 파일</Filter>
+    </None>
+    <None Include="res\dfcRecipe.rc2">
+      <Filter>리소스 파일</Filter>
+    </None>
+    <None Include="res\CELLINFO.bmp">
+      <Filter>리소스 파일</Filter>
+    </None>
+    <None Include="res\GLASSINFO.bmp">
+      <Filter>리소스 파일</Filter>
+    </None>
+    <None Include="..\Recipe.ini">
+      <Filter>Config</Filter>
+    </None>
+  </ItemGroup>
+  <ItemGroup>
+    <ClCompile Include="dfcRecipe.cpp">
+      <Filter>소스 파일</Filter>
+    </ClCompile>
+    <ClCompile Include="API_RECIPE.cpp">
+      <Filter>소스 파일</Filter>
+    </ClCompile>
+    <ClCompile Include="ButtonEx.cpp">
+      <Filter>소스 파일\Wnd</Filter>
+    </ClCompile>
+    <ClCompile Include="Global.cpp">
+      <Filter>소스 파일</Filter>
+    </ClCompile>
+    <ClCompile Include="RecipeMgrDlg.cpp">
+      <Filter>소스 파일\Dlg</Filter>
+    </ClCompile>
+    <ClCompile Include="BaseDialog.cpp">
+      <Filter>소스 파일\Dlg</Filter>
+    </ClCompile>
+    <ClCompile Include="MakeCellDlg.cpp">
+      <Filter>소스 파일\Dlg</Filter>
+    </ClCompile>
+    <ClCompile Include="IniFile.cpp">
+      <Filter>소스 파일</Filter>
+    </ClCompile>
+    <ClCompile Include="InRecipeFunc.cpp">
+      <Filter>소스 파일\Func</Filter>
+    </ClCompile>
+    <ClCompile Include="OutRecipeFunc.cpp">
+      <Filter>소스 파일\Func</Filter>
+    </ClCompile>
+    <ClCompile Include="SelectCellDlg.cpp">
+      <Filter>소스 파일\Dlg</Filter>
+    </ClCompile>
+    <ClCompile Include="AlignRcpDlg.cpp">
+      <Filter>소스 파일\Dlg</Filter>
+    </ClCompile>
+    <ClCompile Include="RecipeManager.cpp">
+      <Filter>소스 파일</Filter>
+    </ClCompile>
+    <ClCompile Include="pch.cpp">
+      <Filter>소스 파일</Filter>
+    </ClCompile>
+  </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="dfcRecipe.h">
+      <Filter>헤더 파일</Filter>
+    </ClInclude>
+    <ClInclude Include="targetver.h">
+      <Filter>헤더 파일</Filter>
+    </ClInclude>
+    <ClInclude Include="Resource.h">
+      <Filter>헤더 파일</Filter>
+    </ClInclude>
+    <ClInclude Include="preDefine.h">
+      <Filter>헤더 파일</Filter>
+    </ClInclude>
+    <ClInclude Include="API_RECIPE.h">
+      <Filter>헤더 파일</Filter>
+    </ClInclude>
+    <ClInclude Include="ButtonEx.h">
+      <Filter>헤더 파일\Wnd</Filter>
+    </ClInclude>
+    <ClInclude Include="Global.h">
+      <Filter>헤더 파일</Filter>
+    </ClInclude>
+    <ClInclude Include="RecipeMgrDlg.h">
+      <Filter>헤더 파일\Dlg</Filter>
+    </ClInclude>
+    <ClInclude Include="BaseDialog.h">
+      <Filter>헤더 파일\Dlg</Filter>
+    </ClInclude>
+    <ClInclude Include="MakeCellDlg.h">
+      <Filter>헤더 파일\Dlg</Filter>
+    </ClInclude>
+    <ClInclude Include="IniFile.h">
+      <Filter>헤더 파일</Filter>
+    </ClInclude>
+    <ClInclude Include="InRecipeFunc.h">
+      <Filter>헤더 파일\Func</Filter>
+    </ClInclude>
+    <ClInclude Include="OutRecipeFunc.h">
+      <Filter>헤더 파일\Func</Filter>
+    </ClInclude>
+    <ClInclude Include="SelectCellDlg.h">
+      <Filter>헤더 파일\Dlg</Filter>
+    </ClInclude>
+    <ClInclude Include="AlignRcpDlg.h">
+      <Filter>헤더 파일\Dlg</Filter>
+    </ClInclude>
+    <ClInclude Include="RecipeManager.h">
+      <Filter>헤더 파일</Filter>
+    </ClInclude>
+    <ClInclude Include="pch.h">
+      <Filter>헤더 파일</Filter>
+    </ClInclude>
+  </ItemGroup>
+  <ItemGroup>
+    <ResourceCompile Include="dfcRecipe.rc">
+      <Filter>리소스 파일</Filter>
+    </ResourceCompile>
+  </ItemGroup>
+</Project>

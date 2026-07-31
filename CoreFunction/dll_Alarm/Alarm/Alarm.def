@@ -1,0 +1,25 @@
+; Alarm.def : Declares the module parameters for the DLL.
+
+LIBRARY      "Alarm"
+DESCRIPTION  'Alarm Windows Dynamic Link Library'
+
+EXPORTS
+    ; Explicit exports can go here
+
+
+	Alarm_InitializeAlarm
+	Alarm_InitializeReport
+	Alarm_GetReportAlarmWnd
+	Alarm_FinalizeAlarm
+	Alarm_FinalizeReport
+	Alarm_SetAlarm
+	Alarm_GetListCount
+	Alarm_ExcelFile
+	Alarm_SetAlarmView
+	Alarm_SetHostMode
+	Alarm_SetSavePath
+	Alarm_ClearAlarm
+	Alarm_GetMessage
+	Alarm_GetText
+	Alarm_Update_Language
+	Alarm_GetAlarmWnd

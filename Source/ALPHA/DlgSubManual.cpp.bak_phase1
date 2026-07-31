@@ -1,0 +1,273 @@
+﻿// CDlgSubManual.cpp: 구현 파일
+//
+
+#include "pch.h"
+#include "ALPHA.h"
+#include "DlgSubManual.h"
+#include "afxdialogex.h"
+
+#include "SystemParamShare.h"
+#include "AuroraMgr.h"
+#include "Manager\SACCMgr.h"
+#include "DlgSubManual_STEP.h"
+#include "DlgSubManual_Meas.h"
+#include "DlgSubManual_Ionizer.h"
+#include "DlgSubManual_AutoContact.h"
+#include "DlgSubManual_AgingTest.h"
+#include "DlgSubManual_AgingSet.h"
+#include "Manager/SequenceManager.h"
+#include ".\FunctionModule\FunctionModuleEQState.h"
+
+#include "..\CoreFunction\common\MySpreadDll.h"
+
+// CDlgSubManual 대화 상자
+
+IMPLEMENT_DYNAMIC(CDlgSubManual, CMainSubDlgWin)
+
+CDlgSubManual::CDlgSubManual(CAuroraMgr* pAuroraMgr, CWnd* pParent /*=nullptr*/)
+	: CMainSubDlgWin(IDD_DLG_SUB_MANUAL, pParent)
+	, m_pAuroraMgr(pAuroraMgr)
+	, m_iCurFileView(0)
+{
+
+}
+
+CDlgSubManual::~CDlgSubManual()
+{
+	if (m_pDlgSub_Step)
+	{		
+		m_pDlgSub_Step->DestroyWindow();
+		delete m_pDlgSub_Step;
+		m_pDlgSub_Step = nullptr;		
+	}
+}
+
+void CDlgSubManual::DoDataExchange(CDataExchange* pDX)
+{
+	CMainSubDlgWin::DoDataExchange(pDX);
+}
+
+
+BEGIN_MESSAGE_MAP(CDlgSubManual, CMainSubDlgWin)
+	ON_BN_CLICKED(IDC_BUTTON_MANUAL_STEP, &CDlgSubManual::OnBnClickedButtonManualStep)
+	ON_BN_CLICKED(IDC_BUTTON_MANUAL_SACC, &CDlgSubManual::OnBnClickedButtonManualSacc)
+	ON_BN_CLICKED(IDC_BUTTON_MANUAL_IONIZER, &CDlgSubManual::OnBnClickedButtonManualIonizer)
+	ON_BN_CLICKED(IDC_BUTTON_MANUAL_AGING_TEST, &CDlgSubManual::OnBnClickedButtonManualAgingTest)
+	ON_BN_CLICKED(IDC_BUTTON_MANUAL_5, &CDlgSubManual::OnBnClickedButtonManual5)
+	ON_BN_CLICKED(IDC_BUTTON_MANUAL_AGING_SET, &CDlgSubManual::OnBnClickedButtonManualAgingSet)
+	ON_MESSAGE(WM_CONTRIL_DOWN_EVENT, &CDlgSubManual::OnContrilMsgEvent)
+END_MESSAGE_MAP()
+
+
+// CDlgSubManual 메시지 처리기
+
+
+BOOL CDlgSubManual::OnInitDialog()
+{
+	CMainSubDlgWin::OnInitDialog();
+
+	// TODO:  여기에 추가 초기화 작업을 추가합니다.
+	CRect rtROI;
+	GetDlgItem(IDC_STATIC_MANUAL_TITLE)->GetWindowRect(&rtROI);
+	ScreenToClient(&rtROI);
+
+	//m_pDlgSub_Step = new CDlgSubManual_STEP();
+	//m_pDlgSub_Step->Create(IDD_DLG_SUB_MANUAL_STEP, this);
+	//m_pDlgSub_Step->ShowWindow(SW_HIDE);
+
+	//--------------------------------------------------------------------
+	//1. 검사 단위동작 생성
+	//--------------------------------------------------------------------
+	CRect r;
+	m_pDlgSub_Meas = new CDlgSubManual_Meas(m_pAuroraMgr);
+	m_pDlgSub_Meas->Create(IDD_DLG_SUB_MANUAL_MEAS, this);
+	m_pDlgSub_Meas->GetWindowRect(r);
+	m_pDlgSub_Meas->MoveWindow(rtROI.left + 2, rtROI.top, r.Width(), r.Height());
+	m_pDlgSub_Meas->ShowWindow(SW_HIDE);
+
+	//--------------------------------------------------------------------
+	//2. SACC 생성
+	//--------------------------------------------------------------------
+	CString strAppPath, strRecipePath, strMCCLogPath;	
+	strAppPath.Format(_T("%s"), CSystemParamShare::GetInstance()->GetAppFolderPath());
+	strRecipePath.Format(_T("%s"), CSystemParamShare::GetInstance()->GetLoggerFolderPath());
+	strMCCLogPath.Format(_T("%s%s\\"), strRecipePath, _T("SACC"));
+
+	m_pDlgSub_Step = new CDlgSubManual_STEP(IDD_DLG_SUB_MANUAL_STEP);
+	m_pDlgSub_Step->Create(IDD_DLG_SUB_MANUAL_STEP, this);
+	CSACCMgr::GetInstance()->Initialize(GetSafeHwnd(), rtROI, m_pAuroraMgr->GetSystemInfo().name, strAppPath, strAppPath, strMCCLogPath);
+
+	CString strProbeID, strProbeMountTime;
+	int nProbeContact = 0;
+	for (size_t i = 0; i < 5; i++)
+	{
+		CSACCMgr::GetInstance()->Probe_GetInfo(i, &strProbeID, &strProbeMountTime, &nProbeContact);
+
+		_tcscpy_s(m_pAuroraMgr->GetShareMemoryMgrPtr()->GetSharedMemory()->stProbeInfo[i].m_szProbeCardIDTime, _countof(m_pAuroraMgr->GetShareMemoryMgrPtr()->GetSharedMemory()->stProbeInfo[i].m_szProbeCardIDTime), strProbeMountTime);
+		m_pAuroraMgr->GetShareMemoryMgrPtr()->GetSharedMemory()->stProbeInfo[i].m_nUseCnt = nProbeContact;
+
+	}
+
+	CSequenceManager::GetInstance()->GetFunctionModuleEQState()->SetEQClear(false);
+
+	//--------------------------------------------------------------------
+	//3. IONIZER 생성
+	//--------------------------------------------------------------------
+	m_pDlgSub_Ionizer = new CDlgSubManual_Ionizer();
+	m_pDlgSub_Ionizer->Create(IDD_DLG_SUB_MANUAL_IONIZER, this);
+	m_pDlgSub_Ionizer->GetWindowRect(r);
+	m_pDlgSub_Ionizer->MoveWindow(rtROI.left + 2, rtROI.top, r.Width(), r.Height());
+	m_pDlgSub_Ionizer->ShowWindow(SW_HIDE);
+
+	//--------------------------------------------------------------------
+	//4. AUTO CONTACT 생성
+	//--------------------------------------------------------------------
+	m_pDlgSub_AutoContact = new CDlgSubManual_AutoContact();
+	m_pDlgSub_AutoContact->Create(IDD_DLG_SUB_MANUAL_AUTO_CONTACT, this);
+	m_pDlgSub_AutoContact->GetWindowRect(r);
+	m_pDlgSub_AutoContact->MoveWindow(rtROI.left + 2, rtROI.top, r.Width(), r.Height());
+	m_pDlgSub_AutoContact->ShowWindow(SW_HIDE);
+
+	//--------------------------------------------------------------------
+	//5. AGING TEST 생성 
+	//--------------------------------------------------------------------
+	m_pDlgSub_AgingTest = new CDlgSubManual_AgingTest();
+	m_pDlgSub_AgingTest->Create(IDD_DLG_SUB_MANUAL_AGING_TEST, this);
+	m_pDlgSub_AgingTest->GetWindowRect(r);
+	m_pDlgSub_AgingTest->MoveWindow(rtROI.left + 2, rtROI.top, r.Width(), r.Height());
+	m_pDlgSub_AgingTest->ShowWindow(SW_HIDE);
+
+	//--------------------------------------------------------------------
+	//6. AGING SET 생성 
+	//--------------------------------------------------------------------
+	m_pDlgSub_AgingSet = new CDlgSubManual_AgingSet();
+	m_pDlgSub_AgingSet->Create(IDD_DLG_SUB_MANUAL_AGING_SET, this);
+	m_pDlgSub_AgingSet->GetWindowRect(r);
+	m_pDlgSub_AgingSet->MoveWindow(rtROI.left + 2, rtROI.top, r.Width(), r.Height());
+	m_pDlgSub_AgingSet->ShowWindow(SW_HIDE);
+
+	m_iCurFileView = enumManualTemID_MEAS;
+	RefreshFileView(TRUE);
+
+	return TRUE;  // return TRUE unless you set the focus to a control
+				  // 예외: OCX 속성 페이지는 FALSE를 반환해야 합니다.
+}
+
+
+void CDlgSubManual::RefreshFileView(BOOL bShow)
+{
+	// TODO: 여기에 구현 코드 추가.
+	m_pDlgSub_Meas->ShowWindow(SW_HIDE);
+	m_pDlgSub_Ionizer->ShowWindow(SW_HIDE);
+	m_pDlgSub_AgingTest->ShowWindow(SW_HIDE);
+	m_pDlgSub_AgingSet->ShowWindow(SW_HIDE);
+	m_pDlgSub_AutoContact->ShowWindow(SW_HIDE);
+	m_pDlgSub_Step->ShowWindow(SW_HIDE);
+
+	if(CSACCMgr::GetInstance()->GetReportmWnd() != nullptr)
+		CSACCMgr::GetInstance()->GetReportmWnd()->ShowWindow(SW_HIDE);
+
+	// jsyoon 2022.06.10 not used
+	GetDlgItem(IDC_BUTTON_MANUAL_IONIZER)->ShowWindow(SW_HIDE);
+	GetDlgItem(IDC_BUTTON_MANUAL_AGING_TEST)->ShowWindow(SW_SHOW);
+	GetDlgItem(IDC_BUTTON_MANUAL_5)->ShowWindow(SW_HIDE);
+	GetDlgItem(IDC_BUTTON_MANUAL_AGING_SET)->ShowWindow(SW_SHOW);
+	///
+
+	if (bShow == TRUE)
+	{
+		switch (m_iCurFileView)
+		{
+			case enumManualTemID_MEAS:
+				m_pDlgSub_Meas->ShowWindow(SW_SHOW);
+				break;
+			case enumManualTemID_IONIZER:
+				m_pDlgSub_Ionizer->ShowWindow(SW_SHOW);
+				break;
+			case enumManualTemID_AGINGTEST:
+				m_pDlgSub_AgingTest->ShowWindow(SW_SHOW);
+				break;
+			case enumManualTemID_AGINGSET:
+				m_pDlgSub_AgingSet->ShowWindow(SW_SHOW);
+				break;
+			case enumManualTemID_AUTOCONTACT:
+				m_pDlgSub_AutoContact->ShowWindow(SW_SHOW);
+				break;
+			case enumManualTemID_SACC:
+				m_pDlgSub_Step->ShowWindow(SW_SHOW);
+				if (CSACCMgr::GetInstance()->GetReportmWnd() != nullptr)
+				{
+					CSACCMgr::GetInstance()->GetReportmWnd()->ShowWindow(SW_SHOW);
+				}
+				break;
+			default:
+				break;
+		}
+	}
+}
+
+
+void CDlgSubManual::OnBnClickedButtonManualStep()
+{
+	// TODO: 여기에 컨트롤 알림 처리기 코드를 추가합니다.
+	CLogWrapper::GetInstance()->KMLOG(OPER, _T("CDlgSubManual::OnBnClickedButtonManualStep"));
+
+	m_iCurFileView = enumManualTemID_MEAS;
+	RefreshFileView(TRUE);
+}
+
+
+void CDlgSubManual::OnBnClickedButtonManualSacc()
+{
+	// TODO: 여기에 컨트롤 알림 처리기 코드를 추가합니다.
+	CLogWrapper::GetInstance()->KMLOG(OPER, _T("CDlgSubManual::OnBnClickedButtonManualSacc"));
+
+	m_iCurFileView = enumManualTemID_SACC;
+	RefreshFileView(TRUE);
+}
+
+
+void CDlgSubManual::OnBnClickedButtonManualIonizer()
+{
+	// TODO: 여기에 컨트롤 알림 처리기 코드를 추가합니다.
+	CLogWrapper::GetInstance()->KMLOG(OPER, _T("CDlgSubManual::OnBnClickedButtonManualIonizer"));
+
+	m_iCurFileView = enumManualTemID_IONIZER;
+	RefreshFileView(TRUE);
+}
+
+void CDlgSubManual::OnBnClickedButtonManual5()
+{
+	// TODO: 여기에 컨트롤 알림 처리기 코드를 추가합니다.
+	CLogWrapper::GetInstance()->KMLOG(OPER, _T("CDlgSubManual::OnBnClickedButtonManualAutoContact"));
+
+	m_iCurFileView = enumManualTemID_AUTOCONTACT;
+	RefreshFileView(TRUE);
+}
+
+
+void CDlgSubManual::OnBnClickedButtonManualAgingTest()
+{
+	// TODO: 여기에 컨트롤 알림 처리기 코드를 추가합니다.
+	CLogWrapper::GetInstance()->KMLOG(OPER, _T("CDlgSubManual::OnBnClickedButtonManualAgingTest"));
+
+	m_iCurFileView = enumManualTemID_AGINGTEST;
+	RefreshFileView(TRUE);
+}
+
+void CDlgSubManual::OnBnClickedButtonManualAgingSet()
+{
+	// TODO: 여기에 컨트롤 알림 처리기 코드를 추가합니다.
+	CLogWrapper::GetInstance()->KMLOG(OPER, _T("CDlgSubManual::OnBnClickedButtonManualAgingSet"));
+
+	m_iCurFileView = enumManualTemID_AGINGSET;
+	RefreshFileView(TRUE);
+}
+
+
+afx_msg LRESULT CDlgSubManual::OnContrilMsgEvent(WPARAM wParam, LPARAM lParam)
+{
+	CSACCMgr::GetInstance()->OnControlMsgReceive(wParam, lParam);
+
+	return 0;
+}

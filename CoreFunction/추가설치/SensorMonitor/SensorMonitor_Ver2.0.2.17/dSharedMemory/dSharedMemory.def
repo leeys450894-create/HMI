@@ -1,0 +1,32 @@
+; dSharedMemory.def : Declares the module parameters for the DLL.
+
+LIBRARY      "dSharedMemory"
+DESCRIPTION  'dSharedMemory Windows Dynamic Link Library'
+
+EXPORTS
+    ; Explicit exports can go here
+	API_SM_SetFFU_PV
+	API_SM_SetFFU_ALARM
+	API_SM_SetFFU_SV
+	API_SM_GetFFU_PV
+	API_SM_GetFFU_ALARM
+	API_SM_GetFFU_SV
+	API_SM_GetFFU_ALARM_CHECK
+	API_SM_SetFFU_ALARM_CHECK
+	API_SM_SetFFU_ALLOFF
+	API_SM_SetFFU_RESTORE
+	API_SM_GetFFU_ALLOFF
+	API_SM_GetFFU_RESTORE
+	API_SM_SetFFU_NUM
+	API_SM_GetFFU_NUM
+	API_SM_GetFFU_LiveCheck
+	API_SM_SetFFU_LiveCheck
+
+	API_SM_SetHEAD_PosX
+	API_SM_GetHEAD_PosX
+	API_SM_SetHEAD_PosY
+	API_SM_GetHEAD_PosY
+	API_SM_SetHEAD_PosZ
+	API_SM_GetHEAD_PosZ
+	API_SM_SetHEAD_PosSubX
+	API_SM_GetHEAD_PosSubX

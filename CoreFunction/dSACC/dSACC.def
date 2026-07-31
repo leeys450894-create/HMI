@@ -1,0 +1,16 @@
+﻿; dSACC.def : DLL에 대한 모듈 매개 변수를 선언합니다.
+
+LIBRARY      "dSACC"
+DESCRIPTION  'dSACC Windows Dynamic Link Library'
+
+EXPORTS
+    ; 명시적 내보내기를 여기에 사용할 수 있습니다.
+
+
+
+    	API_SACC_Initialize
+        API_SACC_Finalize
+        API_SACC_GetReportmWnd
+        API_SACC__Updata_Data
+		API_SACC_GetProbeInfo
+		API_SACC_SetProbeInfo

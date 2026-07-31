@@ -1,0 +1,18 @@
+===== FarPoint Technologies, Inc =====
+===== Begin of Excel Workbook General Load =====
+7/30/2026 - 10:18
+
+Col	Row	Information
+___	___	___________
+		Import Excel File: D:\OCP\0.SW_Matching\HMI\CoreFunction\EX_FDC\Bin\FDC_LIST\FDC_LIST.xls
+
+===== End of Excel Workbook General Load =====
+
+===== Begin of Excel Sheet Load =====
+		Import Sheet:  0
+0	0	134:Import encountered a function or formula in the Excel file; a float cell has been created in Spread.
+4	167	134:Import encountered a function or formula in the Excel file; a float cell has been created in Spread.
+-	-	102:Excel reads the AllowDragDrop, AutoClipboard, and EditEnterAction properties from the registry. If you modify these properties in Spread, the changes are not saved at export.
+
+===== End of Excel Sheet Load =====
+===== FarPoint Technologies, Inc =====

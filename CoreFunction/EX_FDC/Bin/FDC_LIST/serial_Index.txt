@@ -1,0 +1,25 @@
+pc_temp1_start	    1,	
+
+
+	
+efu_start		    51,		
+ionizer_connect_start   115 	
+ionizer_time_start	     123 	
+StaticElectric_start	    131	
+KMN2Result_start	    132		
+ACCURA_start	    134		
+	
+H2O_start	    294			
+ESD_START	    304			
+AZBIL_START	    314			
+PM5500_START	    319							
+
+Sheard Define
+Temp 1,
+Vacuum 51,
+CAD 61,
+ESD 71,
+EFU 101,
+SEM 161,
+CB 181,
+LAMP Time 201,

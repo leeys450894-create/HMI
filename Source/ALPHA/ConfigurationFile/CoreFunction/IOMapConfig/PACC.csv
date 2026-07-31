@@ -1,0 +1,30 @@
+Address,PACC
+M3900,PACC Auto Mode
+M3901,PACC Manual Mode
+M3902,PACC Alarm
+M3903,PACC Status Ready
+M3904,Load Buffer(Slot#1) High Position
+M3905,Load Buffer(Slot#1) Low Position
+M3906,Unload Buffer(Slot#2) High Position
+M3907,Unload Buffer(Slot#2) Low Position
+M3910,Ack Reply About EQ Command
+M3911,Nak Reply About EQ Command
+M3919,PACC All Sequence Safety
+M3940,Main Gate Always Open Mode
+M3950,EQ Auto Mode
+M3951,EQ Manual Mode
+M3952,EQ Loading Command Slot #1
+M3953,EQ Loading Command Slot #2
+M3954,EQ Loading Command Slot #3
+M3955,EQ Loading Command Slot #4
+M3956,EQ Unload Command Slot #1
+M3957,EQ Unload Command Slot #1
+M3958,EQ Unload Command Slot #1
+M3959,EQ Unload Command Slot #1
+M3960,EQ Load Command
+M3961,EQ Unload Command
+M3962,EQ Exchange Command
+M3966,EQ Command Start
+M3967,EQ Status Busy
+M3968,EQ Status Complete
+M3970,EQ Mix Run Mode

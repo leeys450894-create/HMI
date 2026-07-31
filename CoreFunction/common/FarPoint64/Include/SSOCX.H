@@ -1,0 +1,639 @@
+//----------------------------------------------------------
+//
+// File: SSOCX.H
+//
+// Copyright (C) 2004 FarPoint Technologies.
+// All rights reserved.
+//
+//----------------------------------------------------------
+
+#ifndef SSOCX_H
+#define SSOCX_H
+
+#ifdef __cplusplus
+extern "C" {
+#endif
+
+//********* MISCELLANEOUS DEFINES **********
+#define SS_SHEET_MAX 1000
+
+//********* SPREADSHEET PROPERTY SETTINGS **********
+
+// Action property settings
+#define SS_ACTION_ACTIVE_CELL  0
+#define SS_ACTION_GOTO_CELL  1
+#define SS_ACTION_SELECT_BLOCK  2
+#define SS_ACTION_CLEAR  3
+#define SS_ACTION_DELETE_COL  4
+#define SS_ACTION_DELETE_ROW  5
+#define SS_ACTION_INSERT_COL  6
+#define SS_ACTION_INSERT_ROW  7
+#define SS_ACTION_RECALC  11
+#define SS_ACTION_CLEAR_TEXT  12
+#define SS_ACTION_PRINT  13
+#define SS_ACTION_DESELECT_BLOCK  14
+#define SS_ACTION_DSAVE  15
+#define SS_ACTION_SET_CELL_BORDER  16
+#define SS_ACTION_ADD_MULTISELBLOCK  17
+#define SS_ACTION_GET_MULTI_SELECTION  18
+#define SS_ACTION_COPY_RANGE  19
+#define SS_ACTION_MOVE_RANGE  20
+#define SS_ACTION_SWAP_RANGE  21
+#define SS_ACTION_CLIPBOARD_COPY  22
+#define SS_ACTION_CLIPBOARD_CUT  23
+#define SS_ACTION_CLIPBOARD_PASTE  24
+#define SS_ACTION_SORT  25
+#define SS_ACTION_COMBO_CLEAR  26
+#define SS_ACTION_COMBO_REMOVE  27
+#define SS_ACTION_RESET  28
+#define SS_ACTION_SEL_MODE_CLEAR  29
+#define SS_ACTION_VMODE_REFRESH  30
+#define SS_ACTION_SMARTPRINT  32
+
+// ActiveCellHighlight property settings
+#define SS_ACTIVECELLHIGHLIGHTSTYLE_OFF    0
+#define SS_ACTIVECELLHIGHLIGHTSTYLE_NORMAL 1
+
+// Appearance property settings
+#define SS_APPEARANCE_FLAT  0
+#define SS_APPEARANCE_3D  1
+#define SS_APPEARANCE_3DWITHBORDER  2
+
+//AppearanceStyle flags
+#define SS_APPEARANCESTYLE_CLASSIC				0
+#define SS_APPEARANCESTYLE_VISUALSTYLES			1
+#define SS_APPEARANCESTYLE_ENHANCED				2
+
+//ScrollBarStyle flags
+#define SS_SCROLLBARSTYLE_INHERIT		0
+#define SS_SCROLLBARSTYLE_CLASSIC		1
+#define SS_SCROLLBARSTYLE_VISUALSTYLES	2
+#define SS_SCROLLBARSTYLE_ENHANCED		3
+
+//UseVisualStyles flags
+#define SS_USEVISUALSTYLES_INHERIT		0
+#define SS_USEVISUALSTYLES_YES			1
+#define SS_USEVISUALSTYLES_NO			2
+
+
+// BackColorStyle property settings
+#define SS_BACKCOLORSTYLE_OVERGRID  0
+#define SS_BACKCOLORSTYLE_UNDERGRID  1
+#define SS_BACKCOLORSTYLE_OVERHORZGRIDONLY  2
+#define SS_BACKCOLORSTYLE_OVERVERTGRIDONLY  3
+
+// ButtonDrawMode property settings
+#define SS_BDM_ALWAYS  0
+#define SS_BDM_CURRENT_CELL  1
+#define SS_BDM_CURRENT_COLUMN  2
+#define SS_BDM_CURRENT_ROW  4
+#define SS_BDM_ALWAYS_BUTTON  8
+#define SS_BDM_ALWAYS_COMBO  16
+
+// CellBorderStyle property settings
+#define SS_BORDER_STYLE_DEFAULT  0
+#define SS_BORDER_STYLE_SOLID  1
+#define SS_BORDER_STYLE_DASH  2
+#define SS_BORDER_STYLE_DOT  3
+#define SS_BORDER_STYLE_DASH_DOT  4
+#define SS_BORDER_STYLE_DASH_DOT_DOT  5
+#define SS_BORDER_STYLE_BLANK  6
+#define SS_BORDER_STYLE_FINE_SOLID  11
+#define SS_BORDER_STYLE_FINE_DASH  12
+#define SS_BORDER_STYLE_FINE_DOT  13
+#define SS_BORDER_STYLE_FINE_DASH_DOT  14
+#define SS_BORDER_STYLE_FINE_DASH_DOT_DOT  15
+
+// CellBorderType property settings
+#define SS_BORDER_TYPE_NONE  0
+#define SS_BORDER_TYPE_LEFT  1
+#define SS_BORDER_TYPE_RIGHT  2
+#define SS_BORDER_TYPE_TOP  4
+#define SS_BORDER_TYPE_BOTTOM  8
+#define SS_BORDER_TYPE_OUTLINE  16
+
+// CellNoteIndicator property settings
+#define SS_CELLNOTEINDICATOR_SHOWANDFIREEVENT  0
+#define SS_CELLNOTEINDICATOR_SHOWANDDONOTFIREEVENT  1
+#define SS_CELLNOTEINDICATOR_DONOTSHOWANDFIREEVENT  2
+#define SS_CELLNOTEINDICATOR_DONOTSHOWANDDONOTFIREEVENT  3
+
+
+//CellNoteIndicatorShape flags
+#define SS_CELLNOTEINDICATORSHAPE_SQUARE		0
+#define SS_CELLNOTEINDICATORSHAPE_TRIANGLE		1
+
+
+// CellType property settings
+#define SS_CELL_TYPE_DATE  0
+#define SS_CELL_TYPE_EDIT  1
+#define SS_CELL_TYPE_FLOAT  2
+#define SS_CELL_TYPE_INTEGER  3
+#define SS_CELL_TYPE_PIC  4
+#define SS_CELL_TYPE_STATIC_TEXT  5
+#define SS_CELL_TYPE_TIME  6
+#define SS_CELL_TYPE_BUTTON  7
+#define SS_CELL_TYPE_COMBOBOX  8
+#define SS_CELL_TYPE_PICTURE  9
+#define SS_CELL_TYPE_CHECKBOX  10
+#define SS_CELL_TYPE_OWNER_DRAWN  11
+#define SS_CELL_TYPE_CURRENCY 12
+#define SS_CELL_TYPE_NUMBER 13
+#define SS_CELL_TYPE_PERCENT 14
+#define SS_CELL_TYPE_SCIENTIFIC 15
+#define SS_CELL_TYPE_CUSTOM 16
+
+// ClipboardOptions property settings
+#define SS_CLIP_NOHEADERS  0
+#define SS_CLIP_COPYROWHEADERS  1
+#define SS_CLIP_PASTEROWHEADERS  2
+#define SS_CLIP_COPYCOLHEADERS  4
+#define SS_CLIP_PASTECOLHEADERS  8
+#define SS_CLIP_COPYPASTEALLHEADERS  15
+
+// ColHeadersAutoText and RowHeadersAutoText property settings
+#define SS_HEADER_BLANK  0
+#define SS_HEADER_NUMBERS  1
+#define SS_HEADER_LETTERS  2
+
+// ColHeaderRows and RowHeaderCols constant
+#define SPREADHEADER -1000
+
+// ColMerge and RowMerge property settings
+#define SS_MERGE_NONE 0
+#define SS_MERGE_ALWAYS 1
+#define SS_MERGE_RESTRICTED 2
+
+// ColUserSortIndicator property settings
+#define SS_COLUSERSORTINDICATOR_NONE          0
+#define SS_COLUSERSORTINDICATOR_ASCENDING     1
+#define SS_COLUSERSORTINDICATOR_DESCENDING    2
+#define SS_COLUSERSORTINDICATOR_DISABLED      3
+
+// CursorStyle property settings
+#define SS_CURSOR_STYLE_USER_DEFINED  0
+#define SS_CURSOR_STYLE_DEFAULT  1
+#define SS_CURSOR_STYLE_ARROW  2
+#define SS_CURSOR_STYLE_DEFCOLRESIZE  3
+#define SS_CURSOR_STYLE_DEFROWRESIZE  4
+
+// CursorType property settings
+#define SS_CURSOR_TYPE_DEFAULT  0
+#define SS_CURSOR_TYPE_COLRESIZE  1
+#define SS_CURSOR_TYPE_ROWRESIZE  2
+#define SS_CURSOR_TYPE_BUTTON  3
+#define SS_CURSOR_TYPE_GRAYAREA  4
+#define SS_CURSOR_TYPE_LOCKEDCELL  5
+#define SS_CURSOR_TYPE_COLHEADER  6
+#define SS_CURSOR_TYPE_ROWHEADER  7
+#define SS_CURSOR_TYPE_DRAGDROPAREA  8
+#define SS_CURSOR_TYPE_DRAGDROP  9
+
+// DAutoSizeCols property settings
+#define SS_AUTOSIZE_NO  0
+#define SS_AUTOSIZE_MAX_COL_WIDTH  1
+#define SS_AUTOSIZE_BEST_GUESS  2
+
+// EditEnterAction property settings
+#define SS_CELL_EDITMODE_EXIT_NONE  0
+#define SS_CELL_EDITMODE_EXIT_UP  1
+#define SS_CELL_EDITMODE_EXIT_DOWN  2
+#define SS_CELL_EDITMODE_EXIT_LEFT  3
+#define SS_CELL_EDITMODE_EXIT_RIGHT  4
+#define SS_CELL_EDITMODE_EXIT_NEXT  5
+#define SS_CELL_EDITMODE_EXIT_PREVIOUS  6
+#define SS_CELL_EDITMODE_EXIT_SAME  7
+#define SS_CELL_EDITMODE_EXIT_NEXTROW  8
+
+//Default HighlightAlphaBlend value
+#define SS_HIGHLIGHT_ALPHABLEND                  75
+
+//HighlightStyle flags
+#define SS_HIGHLIGHTSTYLE_DEFAULT				0
+#define SS_HIGHLIGHTSTYLE_INVERT				1
+#define SS_HIGHLIGHTSTYLE_COLOR					2
+#define SS_HIGHLIGHTSTYLE_ALPHABLEND			3
+
+//HighlightHeaders flags
+#define SS_HIGHLIGHTHEADERS_DEFAULT				0
+#define SS_HIGHLIGHTHEADERS_OFF					1
+#define SS_HIGHLIGHTHEADERS_ON					2
+
+// OperationMode property settings
+#define SS_OP_MODE_NORMAL  0
+#define SS_OP_MODE_READONLY  1
+#define SS_OP_MODE_ROWMODE  2
+#define SS_OP_MODE_SINGLE_SELECT  3
+#define SS_OP_MODE_MULTI_SELECT  4
+#define SS_OP_MODE_EXT_SELECT  5
+
+// Position property settings
+#define SS_POSITION_UPPER_LEFT  0
+#define SS_POSITION_UPPER_CENTER  1
+#define SS_POSITION_UPPER_RIGHT  2
+#define SS_POSITION_CENTER_LEFT  3
+#define SS_POSITION_CENTER_CENTER  4
+#define SS_POSITION_CENTER_RIGHT  5
+#define SS_POSITION_BOTTOM_LEFT  6
+#define SS_POSITION_BOTTOM_CENTER  7
+#define SS_POSITION_BOTTOM_RIGHT  8
+
+// PrintOrientation property settings
+#define SS_PRINTORIENT_DEFAULT  0
+#define SS_PRINTORIENT_PORTRAIT  1
+#define SS_PRINTORIENT_LANDSCAPE  2
+
+// PrintPageOrder property settings
+#define SS_PAGEORDER_AUTO  0
+#define SS_PAGEORDER_DOWNTHENOVER  1
+#define SS_PAGEORDER_OVERTHENDOWN  2
+
+// PrintType property settings
+#define SS_PRINT_ALL  0
+#define SS_PRINT_CELL_RANGE  1
+#define SS_PRINT_CURRENT_PAGE  2
+#define SS_PRINT_PAGE_RANGE  3
+
+// ScrollBars property settings
+#define SS_SCROLLBAR_NONE  0
+#define SS_SCROLLBAR_H_ONLY  1
+#define SS_SCROLLBAR_V_ONLY  2
+#define SS_SCROLLBAR_BOTH  3
+
+// ScrollBarTrack property settings
+#define SS_SCROLLBARTRACK_OFF  0
+#define SS_SCROLLBARTRACK_VERTICAL  1
+#define SS_SCROLLBARTRACK_HORIZONTAL  2
+#define SS_SCROLLBARTRACK_BOTH  3
+
+// ScrollTipTextMax
+#define SS_SCROLLTIP_TEXTMAX        1024
+
+// SelBackColor property settings
+#define SPREAD_COLOR_NONE   0x8000000B
+
+// SelectBlockOptions property settings
+#define SS_SELBLOCKOPT_COLS  1
+#define SS_SELBLOCKOPT_ROWS  2
+#define SS_SELBLOCKOPT_BLOCKS  4
+#define SS_SELBLOCKOPT_ALL  8
+
+// ShowScrollTips property settings
+#define SS_SHOWSCROLLTIPS_OFF        0
+#define SS_SHOWSCROLLTIPS_VERT		 1
+#define SS_SHOWSCROLLTIPS_HORZ		 2
+#define SS_SHOWSCROLLTIPS_BOTH       3
+
+// Sort method's SortBy parameter settings
+#define SS_SORT_BY_ROW  0
+#define SS_SORT_BY_COL  1
+
+// SortKeyOrder property settings
+#define SS_SORT_ORDER_NONE  0
+#define SS_SORT_ORDER_ASCENDING  1
+#define SS_SORT_ORDER_DESCENDING  2
+
+// TabStripPolicy property settings
+#define SS_TABSTRIPPOLICY_ASNEEDED 0
+#define SS_TABSTRIPPOLICY_ALWAYS   1
+#define SS_TABSTRIPPOLICY_NEVER    2
+
+//TabStripButtonPolicy flags
+#define SS_TABSTRIPBUTTONPOLICY_ASNEEDED 0
+#define SS_TABSTRIPBUTTONPOLICY_ALWAYS   1
+#define SS_TABSTRIPBUTTONPOLICY_NEVER    2
+
+//TabEnhancedShape flags
+#define SS_TABENHANCEDSHAPE_RECTANGLE			0
+#define SS_TABENHANCEDSHAPE_ROUNDEDRECTANGLE	1
+#define SS_TABENHANCEDSHAPE_TRAPEZOID			2
+#define SS_TABENHANCEDSHAPE_ISOSCELESTRAPEZOID	3
+
+// TextTip property settings
+#define SS_TEXTTIP_OFF  0
+#define SS_TEXTTIP_FIXED  1
+#define SS_TEXTTIP_FLOATING  2
+#define SS_TEXTTIP_FIXEDFOCUSONLY  3
+#define SS_TEXTTIP_FLOATINGFOCUSONLY  4
+
+// TypeButtonAlign property settings
+#define SS_CELL_BUTTON_ALIGN_BOTTOM  0
+#define SS_CELL_BUTTON_ALIGN_TOP  1
+#define SS_CELL_BUTTON_ALIGN_LEFT  2
+#define SS_CELL_BUTTON_ALIGN_RIGHT  3
+
+// TypeButtonType property settings
+#define SS_CELL_BUTTON_NORMAL  0
+#define SS_CELL_BUTTON_TWO_STATE  1
+
+// TypeCheckTextAlign property settings
+#define SS_CHECKBOX_TEXT_LEFT  0
+#define SS_CHECKBOX_TEXT_RIGHT  1
+
+// TypeCheckType property settings
+#define SS_CHECKBOX_NORMAL  0
+#define SS_CHECKBOX_THREE_STATE  1
+
+// TypeComboBoxAutoSearch property settings
+#define SS_COMBOBOX_AUTOSEARCH_NONE 0
+#define SS_COMBOBOX_AUTOSEARCH_SINGLECHAR 1
+#define SS_COMBOBOX_AUTOSEARCH_MULTIPLECHAR 2
+#define SS_COMBOBOX_AUTOSEARCH_SINGLECHARGREATER 3
+
+// TypeComboBoxWidth property settings
+#define SS_COMBOWIDTH_CELLWIDTH 0
+#define SS_COMBOWIDTH_AUTORIGHT 1
+#define SS_COMBOWIDTH_AUTOLEFT -1
+
+
+// TypeCurrencyLeadingZero, TypeNumberLeadingZero,
+// TypePercentLeadingZero property settings
+#define SS_LEADINGZERO_INTL 0
+#define SS_LEADINGZERO_NO 1
+#define SS_LEADINGZERO_YES 2
+
+// TypeCurrencyNegStyle property settings
+#define SS_CELL_CURRENCY_NEGSTYLE_INTL 0
+#define SS_CELL_CURRENCY_NEGSTYLE_1 1
+#define SS_CELL_CURRENCY_NEGSTYLE_2 2
+#define SS_CELL_CURRENCY_NEGSTYLE_3 3
+#define SS_CELL_CURRENCY_NEGSTYLE_4 4
+#define SS_CELL_CURRENCY_NEGSTYLE_5 5
+#define SS_CELL_CURRENCY_NEGSTYLE_6 6
+#define SS_CELL_CURRENCY_NEGSTYLE_7 7
+#define SS_CELL_CURRENCY_NEGSTYLE_8 8
+#define SS_CELL_CURRENCY_NEGSTYLE_9 9
+#define SS_CELL_CURRENCY_NEGSTYLE_10 10
+#define SS_CELL_CURRENCY_NEGSTYLE_11 11
+#define SS_CELL_CURRENCY_NEGSTYLE_12 12
+#define SS_CELL_CURRENCY_NEGSTYLE_13 13
+#define SS_CELL_CURRENCY_NEGSTYLE_14 14
+#define SS_CELL_CURRENCY_NEGSTYLE_15 15
+#define SS_CELL_CURRENCY_NEGSTYLE_16 16
+
+// TypeCurrencyPosStyle property settings
+#define SS_CELL_CURRENCY_POSSTYLE_INTL 0
+#define SS_CELL_CURRENCY_POSSTYLE_1 1
+#define SS_CELL_CURRENCY_POSSTYLE_2 2
+#define SS_CELL_CURRENCY_POSSTYLE_3 3
+#define SS_CELL_CURRENCY_POSSTYLE_4 4
+
+// TypeDateFormat property settings
+#define SS_CELL_DATE_FORMAT_DDMONYY		0
+#define SS_CELL_DATE_FORMAT_DDMMYY		1
+#define SS_CELL_DATE_FORMAT_MMDDYY		2
+#define SS_CELL_DATE_FORMAT_YYMMDD		3
+#define SS_CELL_DATE_FORMAT_YYMM		4
+#define SS_CELL_DATE_FORMAT_MMDD		5
+#define SS_CELL_DATE_FORMAT_DEFAULT		99
+
+// TypeEditCharCase property settings
+#define SS_CELL_EDIT_CASE_LOWER_CASE  0
+#define SS_CELL_EDIT_CASE_NO_CASE  1
+#define SS_CELL_EDIT_CASE_UPPER_CASE  2
+
+// TypeEditCharSet property settings
+#define SS_CELL_EDIT_CHAR_SET_ASCII  0
+#define SS_CELL_EDIT_CHAR_SET_ALPHA  1
+#define SS_CELL_EDIT_CHAR_SET_ALPHANUMERIC  2
+#define SS_CELL_EDIT_CHAR_SET_NUMERIC  3
+
+// TypeHAlign property settings
+#define SS_CELL_H_ALIGN_LEFT  0
+#define SS_CELL_H_ALIGN_RIGHT  1
+#define SS_CELL_H_ALIGN_CENTER  2
+
+// TypeNumberNegStyle property settings
+#define SS_CELL_NUMBER_NEGSTYLE_INTL 0
+#define SS_CELL_NUMBER_NEGSTYLE_1 1
+#define SS_CELL_NUMBER_NEGSTYLE_2 2
+#define SS_CELL_NUMBER_NEGSTYLE_3 3
+#define SS_CELL_NUMBER_NEGSTYLE_4 4
+#define SS_CELL_NUMBER_NEGSTYLE_5 5
+
+// TypePercentNegStyle property settings
+#define SS_CELL_PERCENT_NEGSTYLE_INTL 0
+#define SS_CELL_PERCENT_NEGSTYLE_1 1
+#define SS_CELL_PERCENT_NEGSTYLE_2 2
+#define SS_CELL_PERCENT_NEGSTYLE_3 3
+#define SS_CELL_PERCENT_NEGSTYLE_4 4
+#define SS_CELL_PERCENT_NEGSTYLE_5 5
+#define SS_CELL_PERCENT_NEGSTYLE_6 6
+#define SS_CELL_PERCENT_NEGSTYLE_7 7
+#define SS_CELL_PERCENT_NEGSTYLE_8 8
+
+// TypeTextAlignVert property settings
+#define SS_CELL_STATIC_V_ALIGN_BOTTOM  0
+#define SS_CELL_STATIC_V_ALIGN_CENTER  1
+#define SS_CELL_STATIC_V_ALIGN_TOP  2
+
+// TypeTextOrient property settings
+#define SS_CELL_TEXTORIENT_HORIZONTAL 0
+#define SS_CELL_TEXTORIENT_VERTICAL_LTR 1
+#define SS_CELL_TEXTORIENT_DOWN 2
+#define SS_CELL_TEXTORIENT_UP 3
+#define SS_CELL_TEXTORIENT_INVERT 4
+#define SS_CELL_TEXTORIENT_VERTICAL_RTL 5
+
+// TypeTime24Hour property settings
+#define SS_CELL_TIME_12_HOUR_CLOCK  0
+#define SS_CELL_TIME_24_HOUR_CLOCK  1
+#define SS_CELL_TIME_24_HOUR_DEFAULT  2
+
+// TypeVAlign property settings
+#define SS_CELL_V_ALIGN_TOP  0
+#define SS_CELL_V_ALIGN_BOTTOM  1
+#define SS_CELL_V_ALIGN_VCENTER  2
+
+// UnitType property settings
+#define SS_CELL_UNIT_NORMAL  0
+#define SS_CELL_UNIT_VGA  1
+#define SS_CELL_UNIT_TWIPS  2
+
+// UserColAction property settings
+#define SS_USERCOLACTION_MINVAL          0
+#define SS_USERCOLACTION_DEFAULT         0
+#define SS_USERCOLACTION_SORT            1
+#define SS_USERCOLACTION_SORTNOINDICATOR 2
+#define SS_USERCOLACTION_AUTOSIZE        3
+#define SS_USERCOLACTION_MAXVAL          3
+
+// UserResize property settings
+#define SS_USER_RESIZE_NONE  0
+#define SS_USER_RESIZE_COL  1
+#define SS_USER_RESIZE_ROW  2
+#define SS_USER_RESIZE_BOTH  3
+
+// UserResizeCol and UserResizeRow property settings
+#define SS_USER_RESIZE_DEFAULT  0
+#define SS_USER_RESIZE_ON  1
+#define SS_USER_RESIZE_OFF  2
+
+// VScrollSpecialType property settings
+#define SS_VSCROLLSPECIAL_NO_HOME_END  1
+#define SS_VSCROLLSPECIAL_NO_PAGE_UP_DOWN  2
+#define SS_VSCROLLSPECIAL_NO_LINE_UP_DOWN  4
+
+// SSSaveExcel2007File - Flag constants
+#define SS_SAVEEXCEL2007FILEFLAG_NONE = 0
+#define SS_SAVEEXCEL2007FILEFLAG_NOFORMULAS = 1
+#define SS_SAVEEXCEL2007FILEFLAG_DATAONLY = 32
+
+
+
+// ********* SPREADSHEET METHOD SETTINGS *********
+
+// ActionKey method settings
+#define SS_KBA_CLEAR  0
+#define SS_KBA_CURRENT  1
+#define SS_KBA_POPUP  2
+
+// AddCustomFunctionExt, GetCustomFunction method Flags parameter settings
+#define SS_CUSTFUNC_WANTCELLREF  1
+#define SS_CUSTFUNC_WANTRANGEREF  2
+
+// CFGetParamInfo method Type parameter settings
+#define SS_VALUE_TYPE_LONG  0
+#define SS_VALUE_TYPE_DOUBLE  1
+#define SS_VALUE_TYPE_STR  2
+#define SS_VALUE_TYPE_CELL  3
+#define SS_VALUE_TYPE_RANGE  4
+
+// CFGetParamInfo and CFGetStringParam method parameter settings
+#define SS_VALUE_STATUS_OK  0
+#define SS_VALUE_STATUS_ERROR  1
+#define SS_VALUE_STATUS_EMPTY  2
+
+// GetCellSpan method return values
+#define SS_SPAN_NO 0
+#define SS_SPAN_YES 1
+#define SS_SPAN_ANCHOR 2
+
+// ExportExcelBookEx, ExportExcelToFileEx
+#define SS_EXCELSAVEFLAG_NONE       0 
+#define SS_EXCELSAVEFLAG_NOFORMULAS 1
+
+// ExportTextFile, ExportRangeToTextFile, ExportToXML and  LoadTextFile
+#define SS_EXPORTTEXT_CREATE	 	1
+#define SS_EXPORTTEXT_APPEND	 	2
+#define SS_EXPORTTEXT_UNFORMATTED	4
+#define SS_EXPORTTEXT_COLHEADERS  	8
+#define SS_EXPORTTEXT_ROWHEADERS  	16
+#define SS_EXPORTTEXT_CHECKBOXFALSE 32
+
+#define SS_EXPORTXML_FORMATTED		0
+#define SS_EXPORTXML_UNFORMATTED    1
+
+#define SS_LOADTEXT_NOHEADERS		0
+#define SS_LOADTEXT_COLHEADERS  	1
+#define SS_LOADTEXT_ROWHEADERS  	2
+#define SS_LOADTEXT_CLEARDATAONLY 4
+
+// GetRefStyle/SetRefStyle method return values/parameter settings
+#define SS_REFSTYLE_DEFAULT  0
+#define SS_REFSTYLE_A1  1
+#define SS_REFSTYLE_R1C1  2
+
+// PrintScaling method values
+#define SS_PRINTSCALINGMETHOD_NONE       0
+#define SS_PRINTSCALINGMETHOD_SMARTPRINT 1
+#define SS_PRINTSCALINGMETHOD_ZOOM       2
+#define SS_PRINTSCALINGMETHOD_BESTFIT    3
+
+// PrintSheet flags
+#define SS_PRINTFLAGS_NONE 0
+#define SS_PRINTFLAGS_SHOWCOMMONDIALOG 1
+
+// SearchCol and SearchRow method's SearchFlags values
+#define SS_SEARCHFLAGS_NONE 0
+#define SS_SEARCHFLAGS_GREATEROREQUAL 1
+#define SS_SEARCHFLAGS_PARTIALMATCH 2
+#define SS_SEARCHFLAGS_VALUE 4
+#define SS_SEARCHFLAGS_CASESENSITIVE 8
+#define SS_SEARCHFLAGS_SORTEDASCENDING 16
+#define SS_SEARCHFLAGS_SORTEDDESCENDING 32
+
+
+// ********* SPREADSHEET EVENT SETTINGS **********
+
+// BeforeEditMode event - UserAction parameter settings
+#define SS_BEM_KEYBOARD 0
+#define SS_BEM_MOUSE    1
+#define SS_BEM_CODE     2
+
+// BeforeEditMode event - CursorPos parameter settings
+#define SS_BEM_CURSORPOS_DEFAULT   0
+#define SS_BEM_CURSORPOS_SELECTALL 1
+#define SS_BEM_CURSORPOS_BEGINNING 2
+#define SS_BEM_CURSORPOS_END       3
+#define SS_BEM_CURSORPOS_MOUSE     4
+#define SS_BEM_CURSORPOS_DECIMAL   5
+
+// BeforeUserSort event - DefaultAction parameter settings
+#define SS_BEFOREUSERSORT_DEFAULTACTION_CANCEL 0
+#define SS_BEFOREUSERSORT_DEFAULTACTION_AUTOSORT 1
+#define SS_BEFOREUSERSORT_DEFAULTACTION_MANUALSORT 2
+
+// BeforeUserSort event - State parameter settings
+#define SS_BEFOREUSERSORT_STATE_NONE	           0
+#define SS_BEFOREUSERSORT_STATE_ASCENDING          1
+#define SS_BEFOREUSERSORT_STATE_DESCENDING         2
+
+// TextTipFetch event MultiLine parameter settings
+#define SS_TT_MULTILINE_SINGLE  0
+#define SS_TT_MULTILINE_MULTI  1
+#define SS_TT_MULTILINE_AUTO  2
+
+
+// ********* PRINT PREVIEW PROPERTY SETTINGS **********
+
+// CPreview GrayAreaMarginType property settings
+#define SPV_GRAYAREAMARGINTYPE_SCALED  0
+#define SPV_GRAYAREAMARGINTYPE_ACTUAL  1
+
+// CPreview MousePointer property settings
+#define SPV_MOUSEPOINTER_DEFAULT  0
+#define SPV_MOUSEPOINTER_ARROW  1
+#define SPV_MOUSEPOINTER_CROSS  2
+#define SPV_MOUSEPOINTER_I_BEAM  3
+#define SPV_MOUSEPOINTER_ICON  4
+#define SPV_MOUSEPOINTER_SIZE  5
+#define SPV_MOUSEPOINTER_SIZE_NE_SW  6
+#define SPV_MOUSEPOINTER_SIZE_N_S  7
+#define SPV_MOUSEPOINTER_SIZE_NW_SE  8
+#define SPV_MOUSEPOINTER_SIZE_W_E  9
+#define SPV_MOUSEPOINTER_UP_ARROW  10
+#define SPV_MOUSEPOINTER_HOURGLASS  11
+#define SPV_MOUSEPOINTER_NO_DROP  12
+
+// CPreview PageViewType property settings
+#define SPV_PAGEVIEWTYPE_WHOLE_PAGE  0
+#define SPV_PAGEVIEWTYPE_NORMAL_SIZE  1
+#define SPV_PAGEVIEWTYPE_PERCENTAGE  2
+#define SPV_PAGEVIEWTYPE_PAGE_WIDTH  3
+#define SPV_PAGEVIEWTYPE_PAGE_HEIGHT  4
+#define SPV_PAGEVIEWTYPE_MULTIPLE_PAGES  5
+
+// CPreview ScrollBarH property settings
+#define SPV_SCROLLBARH_SHOW  0
+#define SPV_SCROLLBARH_AUTO  1
+#define SPV_SCROLLBARH_HIDE  2
+
+// CPreview ScrollBarV property settings
+#define SPV_SCROLLBARV_SHOW  0
+#define SPV_SCROLLBARV_AUTO  1
+#define SPV_SCROLLBARV_HIDE  2
+
+// CPreview ZoomState property settings
+#define SPV_ZOOMSTATE_INDETERMINATE  0
+#define SPV_ZOOMSTATE_IN  1
+#define SPV_ZOOMSTATE_OUT  2
+#define SPV_ZOOMSTATE_SWITCH  3
+
+//----------------------------------------------------------
+
+#ifdef __cplusplus
+}
+#endif
+
+#endif
