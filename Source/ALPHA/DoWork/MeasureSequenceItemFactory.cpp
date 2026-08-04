@@ -98,5 +98,6 @@ std::vector<CMeasureSequenceItemImpl *> CMeasureSequenceItemFactory::GetItemList
 //	vecData.push_back(dynamic_cast<CMeasureSequenceItemImpl *>(new CMeasureSequenceItem_UTG(m_MgrPool_link, 1)));
 //s	vecData.push_back(dynamic_cast<CMeasureSequenceItemImpl *>(new CMeasureSequenceItem_UTG(m_MgrPool_link, 2)));
 
+    // Ä¿¹Ô TEST 2
     return vecData;
 }
