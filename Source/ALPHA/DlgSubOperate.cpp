@@ -2912,7 +2912,8 @@ void CDlgSubOperate::OnBnClickedButton1()
 	// TODO: 여기에 컨트롤 알림 처리기 코드를 추가합니다.
 	// 
 
-	m_pAuroraMgr->GetMaintControlMgr()->GetIOMapControlMgrPtr()->SetMemoryBitToDevice(PLC_BIT_TEMP_SENSOR_RESET_SWITCH_14, true);
+	// jblee 20260804 removed Not used new M-map // TODO: Verify this
+	//m_pAuroraMgr->GetMaintControlMgr()->GetIOMapControlMgrPtr()->SetMemoryBitToDevice(PLC_BIT_TEMP_SENSOR_RESET_SWITCH_14, true);
 
 	/*for (size_t i = 0; i < 15; i++)
 	{

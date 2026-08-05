@@ -161,6 +161,9 @@ M4173,Y1 Unload Position
 M4174,Y2 Unload Position
 M4175,Y3 Unload Position
 M4176,Y4 Unload Position
+M4177,Y5 Unload Position
+M4178,Y6 Unload Position
+M4179,Y7 Unload Position
 M4180,Loader  Arm     Detect  01
 M4182,Light   Curtain Muting  Status
 M4183,Muting S.R51 On
@@ -223,7 +226,6 @@ M4250,IsolatorPositionSensor  01
 M4251,IsolatorPositionSensor  02
 M4252,IsolatorPositionSensor  03
 M4253,IsolatorPositionSensor  04
-M4254,IsolatorPositionSensor  05
 M4255,Temp.   Sensor  Reset 11
 M4256,Temperature Alarm Reset Switch 11
 M4259,Smoke Sensor 11
@@ -436,24 +438,21 @@ M4506,Auto    L2R     Start   CMD
 M4509,Alarm   Reset   Fr.EQ
 M4510,EQ      Door    Unlock
 M4511,PACC    Door    Unlock
-M4515,Glove   Door    Unlock  01
 M4520,X-Ray   Ionizer REMSte  On 01
 M4521,X-Ray   Ionizer REMSte  Off 01
 M4522,X-Ray   Ionizer Int.LockOn 01
+M4524,X-Ray Ionizer LED On
 M4525,X-Ray   Ionizer REMSte  On 02
 M4526,X-Ray   Ionizer REMSte  Off 02
 M4527,X-Ray   Ionizer Int.LockOn 02
-M4530,Lift PinUp
+M4530,Lift Pin Up
+M4531,Lift Pin Down
 M4540,Shutter Close
 M4541,Shutter Open
-M4550,Glass   Guide   Up      01
-M4551,Glass   Guide   Up      02
 M4560,MULTI   Power   Off     01
 M4561,MULTI   Power   Off     02
 M4562,MULTI   Power   Off     03
 M4563,MULTI   Power   Off     04
-M4564,TSP B/D MultitapOn      01
-M4565,TSP B/D MultitapOn      02
 M4570,AF      Ctrl.   On      01
 M4571,AF      Ctrl.   On      02
 M4572,AF      Ctrl.   On      03
@@ -461,18 +460,18 @@ M4573,AF      Ctrl.   On      04
 M4580,Maint.  LED     Off
 M4585,Glass   Sensor  Power   Off
 M4590,Select  Key     Lock
+M4595,Select Switch Teach Mode Interlock
+M4610,Main Lamp Shutter Close 01
+M4611,Main Lamp Shutter Close 02
 M4620,Focus   Lamp    On      01
+M4621,Focus   Lamp    On      02
 M4630,CCD     Power   Off     01
 M4631,CCD     Power   Off     02
 M4632,CCD     Power   Off     03
 M4633,CCD     Power   Off     04
-M4640,SE      Lamp    A/B     Switch
-M4645,SE      Lamp    IgnitionOn
-M4650,SE      Light   Source  On
-M4655,SE      Cont.   Power   On
-M4680,RS      Probe   Down
-M4685,RS MeterPower   On
-M4740,TR      Lamp    Shutter Open 01
+M4710,EQ H2O Alarm Skip
+M4720,Repeater Off 01
+M4721,Repeater Off 02
 M4790,All     Fixture FWD
 M4791,Front   Fixture
 M4792,Right   Fixture
@@ -483,38 +482,28 @@ M4796,Front   Fixture Up/Down
 M4797,Right   Fixture Up/Down
 M4798,Back    Fixture Up/Down
 M4799,Left    Fixture Up/Down
-M4800,Air     Start   [S/W]   EQ
-M4801,Air     Stop    [S/W]   EQ
-M4802,N2      Active  [S/W]   EQ
-M4803,N2      Deactive[S/W]   EQ
-M4804,Quick   Start   [S/W]   EQ
-M4805,Quick   Stop    [S/W]   EQ
 M4810,Sample  Plate   Air     Blow 01
 M4811,Sample  Plate   Air     Blow 02
-M4820,Sample  Plate   N2      Blow 01
-M4821,Sample  Plate   N2      Blow 02
-M4830,Sample  Plate   Vacuum  01
-M4831,Sample  Plate   Vacuum  02
-M4832,Sample  Plate   Vacuum  03
-M4833,Sample  Plate   Vacuum  04
+M4830,Sample  Plate   Vacuum  01 On
+M4831,Sample  Plate   Vacuum  01 Off
+M4832,Sample  Plate   Vacuum  02 On
+M4833,Sample  Plate   Vacuum  02 Off
+M4834,Sample  Plate   Vacuum  03 On
+M4835,Sample  Plate   Vacuum  03 Off
+M4836,Sample  Plate   Vacuum  04 On
+M4837,Sample  Plate   Vacuum  04 Off
 M4840,Chuck   Vacuum  01
 M4841,Chuck   Vacuum  02
 M4842,Chuck   Vacuum  03
 M4843,Chuck   Vacuum  04
-M4850,Chuck   01
-M4851,Chuck   02
-M4852,Chuck   03
-M4853,Chuck   04
+M4850,Chuck   Fwd/Rev 01
+M4851,Chuck   Fwd/Rev 02
+M4852,Chuck   Fwd/Rev 03
+M4853,Chuck   Fwd/Rev 04
 M4855,Chuck   Up/Down 01
 M4856,Chuck   Up/Down 02
 M4857,Chuck   Up/Down 03
 M4858,Chuck   Up/Down 04
-M4860,Main CDAAngle   Valve   Open 01
-M4865,PACC CDAAngle   Valve   Open 01
-M4870,Main N2 Angle   Valve   Open 01
-M4875,PACC N2 Angle   Valve   Open 01
-M4880,Main    Exhaust AngleV/VOpen 01
-M4885,PACC    Exhaust AngleV/VOpen 01
 M4890,Probe   Card    Clamp   01
 M4891,Probe   Card    Unclamp 01
 M4892,Probe   Card    Clamp   02
@@ -525,22 +514,10 @@ M4896,Probe   Card    Clamp   04
 M4897,Probe   Card    Unclamp 04
 M4898,Probe   Card    Clamp   05
 M4899,Probe   Card    Unclamp 05
-M4900,H2O     Sensor  On      01
-M4901,H2O     Sensor  On      02
 M4907,LCR     Meter   Power   Off 01
 M4908,LCR     Meter   Power   Off 02
-M4910,O2      Signal  Tower   RED
-M4911,O2      Signal  Tower   GREEN
-M4912,O2      Signal  Tower   Melody01
-M4913,O2      Signal  Tower   Melody02
-M4915,O2      Signal  Tower   RED
-M4916,O2      Signal  Tower   GREEN
-M4917,O2      Signal  Tower   Melody01
-M4918,O2      Signal  Tower   Melody02
 M4920,Buzzer  01
 M4921,Buzzer  02
-M4922,Buzzer  03
-M4923,Buzzer  04
 M4925,Signal  Tower   Melody  01
 M4926,Signal  Tower   Melody  02
 M4930,Signal  Tower   RED
@@ -553,6 +530,8 @@ M4936,Signal  Tower   GREEN_  Blink
 M4937,Signal  Tower   BLUE_   Blink
 M4940,Probe   Jig     Up      01
 M4941,Probe   Jig     Down    01
+M4942,Probe   Jig     Up      02
+M4943,Probe   Jig     Down    02
 M4950,Probe   Card    PCB     Lock 01
 M4951,Probe   Card    PCB     Unlock01
 M4952,Probe   Card    PCB     Lock 02

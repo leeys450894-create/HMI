@@ -255,7 +255,8 @@ int CSystemInitializeStep_InitIO::ResetIO()
 	// Fixture Down
 	if (bRet = true)
 	{
-		bRet = m_pShareItem->GetIOMapControlMgrPtr()->SetMemoryNBitToDevice(PLC_BIT_W_FIXTURE_UP_ALL, 0, 1);
+		// TODO: 
+		bRet = m_pShareItem->GetIOMapControlMgrPtr()->SetMemoryNBitToDevice(PLC_BIT_W_FIXTURE_UPDOWN_ALL, 0, 1);
 		if (bRet == true)
 		{
 			bRet = CSequenceManager::GetInstance()->GetFunctionModuleEQState()->WaitActionDone(PLC_BIT_FIXTURE_FD01, 8, 1, true, PLC_IO_ACTION_DONE_TIME_60);

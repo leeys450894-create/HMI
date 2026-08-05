@@ -167,7 +167,7 @@ void CDlgNaviBar::OnBnClickedButtonBuzzerOff()
 	// TODO: 여기에 컨트롤 알림 처리기 코드를 추가합니다.
 	CLogWrapper::GetInstance()->KMLOG(OPER, _T("CD_MainNavigate::OnBnClickedButtonBuzzerOff"));
 
-	m_pAuroraMgr->GetIOMapControlMgrPtr()->SetMemoryBitToDevice(PLC_BIT_EQ_BUZZER, false);
+	m_pAuroraMgr->GetIOMapControlMgrPtr()->SetMemoryBitToDevice(PLC_BIT_EQ_BUZZER_01, false);
 
 	m_pAuroraMgr->GetIOMapControlMgrPtr()->SetMemoryNBitToDevice(PLC_BIT_ALRAM_RESET_STATUS, 1, 1);
 	Sleep(200);

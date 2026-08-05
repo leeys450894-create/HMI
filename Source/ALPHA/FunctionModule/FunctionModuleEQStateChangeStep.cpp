@@ -1949,7 +1949,7 @@ bool CFunctionModuleEQStateChangeStep_FixtureUp::Run()
 	bool bGlassExist = CSequenceManager::GetInstance()->GetFunctionModuleEQState()->IsGlassSensorOn();
 	if (bGlassExist == true)
 	{
-		bRet = m_pShareItem->GetIOMapControlMgrPtr()->SetMemoryNBitToDevice(PLC_BIT_W_FIXTURE_UP_ALL, 1, 1);
+		bRet = m_pShareItem->GetIOMapControlMgrPtr()->SetMemoryNBitToDevice(PLC_BIT_W_FIXTURE_UPDOWN_ALL, 1, 1);
 		if (bRet == true)
 		{
 			bRet = CSequenceManager::GetInstance()->GetFunctionModuleEQState()->WaitActionDone(PLC_BIT_FIXTURE_FU01, 8, 1, true, PLC_IO_ACTION_DONE_TIME_60);
@@ -1992,7 +1992,7 @@ bool CFunctionModuleEQStateChangeStep_FixtureDown::Run()
 
 		if (bRet == true)
 		{
-			bRet = m_pShareItem->GetIOMapControlMgrPtr()->SetMemoryNBitToDevice(PLC_BIT_W_FIXTURE_UP_ALL, 0, 1);
+			bRet = m_pShareItem->GetIOMapControlMgrPtr()->SetMemoryNBitToDevice(PLC_BIT_W_FIXTURE_UPDOWN_ALL, 0, 1);
 		}
 		
 		if (bRet == true)
@@ -2128,7 +2128,7 @@ bool CFunctionModuleEQStateChangeStep_FixtureUpBack::Run()
 	bool bGlassExist = CSequenceManager::GetInstance()->GetFunctionModuleEQState()->IsGlassSensorOn();
 	if (bGlassExist == true)
 	{
-		bRet = m_pShareItem->GetIOMapControlMgrPtr()->SetMemoryNBitToDevice(PLC_BIT_W_FIXTURE_UP_ALL, 1, 1);
+		bRet = m_pShareItem->GetIOMapControlMgrPtr()->SetMemoryNBitToDevice(PLC_BIT_W_FIXTURE_UPDOWN_ALL, 1, 1);
 		if (bRet == true)
 		{
 			bRet = CSequenceManager::GetInstance()->GetFunctionModuleEQState()->WaitActionDone(PLC_BIT_FIXTURE_FU01, 8, 1, true, PLC_IO_ACTION_DONE_TIME_60);

@@ -4741,7 +4741,7 @@ int CMaintControlMgr::DoWork_Clamp_UpNDown(bool bUp)
 		return VTM_RV_SUCCESSED;
 
 	int nRet = VTM_RV_SUCCESSED;
-	int nWBit = PLC_BIT_W_FIXTURE_UP_ALL;
+	int nWBit = PLC_BIT_W_FIXTURE_UPDOWN_ALL;
 	bool bRet = false;
 
 	if (bUp == true)
@@ -5192,6 +5192,7 @@ int CMaintControlMgr::Do_StageVac_Off()
 	return nRtn;
 }
 
+// TODO: Fix this.	// jblee 20260804 
 int CMaintControlMgr::DoWork_StageVac_OnNOff(bool bOn)
 {
 	if (GetIOMapControlMgrPtr()->IsOutOfService() == true)

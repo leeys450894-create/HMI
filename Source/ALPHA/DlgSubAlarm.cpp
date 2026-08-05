@@ -123,7 +123,7 @@ LRESULT CDlgSubAlarm::OnAlarmOccured(WPARAM wp, LPARAM lp)
 #ifdef _USE_IOBOARD
 			m_pAuroraMgr->GetIOMapControlMgrPtr()->SetMemoryBitToDevice(IO_BOARD_READ_OUTPUT_000, true);
 #else
-			m_pAuroraMgr->GetIOMapControlMgrPtr()->SetMemoryBitToDevice(PLC_BIT_EQ_BUZZER, true);
+			m_pAuroraMgr->GetIOMapControlMgrPtr()->SetMemoryBitToDevice(PLC_BIT_EQ_BUZZER_01, true);
 #endif
 		}
 
@@ -142,7 +142,7 @@ LRESULT CDlgSubAlarm::OnAlarmOccured(WPARAM wp, LPARAM lp)
 #ifdef _USE_IOBOARD
 		m_pAuroraMgr->GetIOMapControlMgrPtr()->SetMemoryBitToDevice(IO_BOARD_READ_OUTPUT_000, true);
 #else
-		m_pAuroraMgr->GetIOMapControlMgrPtr()->SetMemoryBitToDevice(PLC_BIT_EQ_BUZZER, true);
+		m_pAuroraMgr->GetIOMapControlMgrPtr()->SetMemoryBitToDevice(PLC_BIT_EQ_BUZZER_01, true);
 #endif // _USE_IOBOARD
 	}
 	else
@@ -176,7 +176,7 @@ LRESULT CDlgSubAlarm::OnAlarmCleared(WPARAM wp, LPARAM lp)
 #ifdef _USE_IOBOARD
 		m_pAuroraMgr->GetIOMapControlMgrPtr()->SetMemoryBitToDevice(IO_BOARD_READ_OUTPUT_000, false);
 #else
-		m_pAuroraMgr->GetIOMapControlMgrPtr()->SetMemoryBitToDevice(PLC_BIT_EQ_BUZZER, false);
+		m_pAuroraMgr->GetIOMapControlMgrPtr()->SetMemoryBitToDevice(PLC_BIT_EQ_BUZZER_01, false);
 #endif // _USE_IOBOARD
 	}
 	

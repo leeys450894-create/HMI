@@ -294,7 +294,7 @@ bool CIOMapControlMgr::SetStageVaccumOn()
 	}
 
 #else
-
+	// TODO: Fix this.	// jblee 20260804 
 	ret = SetMemoryBitToDevice(PLC_BIT_VACCUM_ON01, true);
 
 	if (ret == true)
@@ -348,7 +348,7 @@ bool CIOMapControlMgr::SetStageVaccumOff()
 		}
 	}
 #else
-
+	// TODO: Fix this.	// jblee 20260804 
 	ret = SetMemoryBitToDevice(PLC_BIT_VACCUM_ON01, false);
 
 	if (ret == true)
