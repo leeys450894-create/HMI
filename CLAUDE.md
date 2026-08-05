@@ -7,15 +7,16 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ALPHA HMI — Samsung 디스플레이 Glass 검사 자동화 설비 제어 소프트웨어. MFC C++ Dialog-based 애플리케이션.
 이 디렉토리에서 Claude Code를 실행하는 경우, HMI 코드 자체의 분석·수정·빌드·운용이 목적이다.
 
-상세 분석: `docs/` 폴더 (14개 분석 문서) 및 `PROJECT_INDEX.md` 참조.
+상세 분석: `docs/` 폴더 (핵심 아키텍처 분석 문서 00~12번 + 기능별 포팅/이슈 문서) 및 `PROJECT_INDEX.md` 참조.
 
 ## Build System
 
 - **IDE:** Visual Studio 2022 Community (toolset v143), MFC Dynamic DLL, **Unicode** character set
 - **Platform:** x64
-- **Solution:** `Source/ALPHA/ALPHA.sln` (7 projects: ALPHA EXE + 6 DLLs)
+- **Solution:** `Source/ALPHA/ALPHA.sln` (8 projects: ALPHA EXE + 6 DLLs + FDCSense EXE)
 - **Output:** `Source/Bin/ALPHA.exe`
 - **DLL Projects:** Alarm, dSACC, dResult, dfcRecipe, dMCCSpec, ProbeHistory
+- **EXE Project (embedded):** FDCSense (`CoreFunction/EX_FDC/FDCSense/`) — separate FDC data-collection process, built alongside ALPHA but launched independently
 
 ```bash
 # Debug build
@@ -167,8 +168,8 @@ Layer: `CAlignCameraMgr` → `CFrameGrabberFunction` → `CFrameGrabber_BS4M` (I
 
 ### Communication (TCP/IP Factory)
 
-13종 장비 통신 — Factory 패턴 (`CCommTcpIpFactoryMgr`):
-Vision, Color, WAD, Angle, PG, AgingPG, LCR, TSP, CIM, SysTime, Motion, UTG
+14종 장비 통신 — Factory 패턴 (`CCommTcpIpFactoryMgr`, `Source/ALPHA/Manager/CommTcpIpFactoryMgr.cpp`, ~2,400줄):
+Vision, Color, WAD, Angle, PG, AgingPG, LCR, TSP, CIM, SysTime, Motion, UTG(x2), **PGMon**(ELP ElecBox 모니터링, 2026-07-29 추가)
 모두 `CCommEthFunction` 상속, 개별 send/receive 프로토콜 구현.
 상세: [docs/02_CallGraph.md](docs/02_CallGraph.md)
 
@@ -188,7 +189,7 @@ Vision, Color, WAD, Angle, PG, AgingPG, LCR, TSP, CIM, SysTime, Motion, UTG
 | Alarm monitors | 75-107 | 개별 센서 폴링 (200ms~1s) | `Alarm/AlarmMonitorTo*.cpp` |
 | Sequence | 6+9+N | Event-driven WaitForMultipleObjects | `DoWork/*.cpp` |
 | PLC scanners | 6 | 주기적 폴링 | `CoreFunction/IOMapFunction/McProtocol/` |
-| TCP/IP comm | 13+ | 수신 대기 Thread | `CommTcpIpObject*.cpp` |
+| TCP/IP comm | 14+ | 수신 대기 Thread | `CommTcpIpObject*.cpp` |
 | UI worker | 1+ | 50ms 주기 모니터링 | `DlgMainForm.cpp` |
 
 동기화: `CCriticalSection` + `CCriticalSectionSync` (RAII), `CEvent`, `WaitForSingleObject/Multiple`
@@ -218,7 +219,7 @@ Recipe Save/Load uses sequential `ReadString`/`ReadDouble`/`ReadInt` — **order
 
 Allows resuming an interrupted Glass inspection from where it stopped (e.g., after Alarm/Stop).
 
-- **ResumeInfo.ini:** Persisted via `CResumeInfoMgr` (Singleton) — saves InnerID, last completed step, measurement index
+- **ResumeInfo.ini:** Persisted via `CResumeInfoMgr` (owned by `CAuroraMgr`'s manager pool, not a singleton — access via `m_pAuroraMgr->GetResumeInfoMgrPtr()` / `m_pShareItem->GetResumeInfoMgrPtr()`) — saves InnerID, last completed step, measurement index
 - **Entry points:** Manual start (`DlgSubOperate.cpp`) and CIM Online (`TO_SERVER_MEAS_START`) both call `CheckAndApplyResumeMode()`
 - **Recipe step:** In Resume mode, skips `ResultClear` and reloads previous raw data files into FPSpread via `Updata_Data()`
 - 상세: [docs/Resume_Inspection_Plan.md](docs/Resume_Inspection_Plan.md)
@@ -232,8 +233,8 @@ Allows resuming an interrupted Glass inspection from where it stopped (e.g., aft
 3. **`AlarmIDList.h` 수정** — pch.h에 포함되어 있어 전체 리빌드
 4. **`IOMapAddressDefine.h` (plc_MBIT_t enum)** — PLC 주소 상수는 물리 I/O에 직접 매핑, 변경 시 하드웨어 영향
 5. **`AxisType.h` 수정** — 모든 모션 코드의 기반, 축 추가/변경 시 Position.ini와 Config_Motion_ACS.dat도 함께 수정
-6. **`CommTcpIpFactoryMgr.cpp`** — ~26,000줄 대형 파일, 반드시 특정 라인 범위만 읽을 것
-7. **`preDefine.h` (Recipe 구조체)** — App(`Source/Include/`)과 DLL(`CoreFunction/dll_Recipe/dfcRecipe/`) 양쪽에 동일 파일 존재, 구조체 변경 시 반드시 양쪽 동기화. `RCP_VERSION` enum과 `S_RecipeInfo` struct 포함
+6. **`preDefine.h` (Recipe 구조체)** — App(`Source/Include/`)과 DLL(`CoreFunction/dll_Recipe/dfcRecipe/`) 양쪽에 동일 파일 존재, 구조체 변경 시 반드시 양쪽 동기화. `RCP_VERSION` enum과 `S_RecipeInfo` struct 포함
+7. **`FDCSheardDefine.h` / `SheardDefineMCC.h` (FDC/MCC 공유메모리 계약)** — `Source/Include/`와 DLL 프로젝트 내부에 수기 사본 존재, 배포된 외부 프로세스(FDCSense.exe, MCCLog.exe)와 struct 레이아웃이 바이트 단위로 일치해야 함. 필드 추가는 반드시 struct 끝에만
 
 ### 수정 영향도 (Impact Matrix)
 
@@ -252,14 +253,15 @@ Allows resuming an interrupted Glass inspection from where it stopped (e.g., aft
 
 | File | Path | Lines |
 |------|------|-------|
-| MaintControlMgr.cpp | `Source/ALPHA/Manager/` | ~9,000 |
-| MotorControlMgr.cpp | `Source/ALPHA/Manager/` | ~1,400 |
-| CommTcpIpFactoryMgr.cpp | `Source/ALPHA/Manager/` | ~26,000 |
+| MaintControlMgr.cpp | `Source/ALPHA/Manager/` | ~8,400 |
+| MotorControlMgr.cpp | `Source/ALPHA/Manager/` | ~2,900 |
 | SystemInitializeStep.cpp | `Source/ALPHA/DoWork/` | ~2,000 |
 | DlgMainForm.cpp | `Source/ALPHA/` | ~2,240 |
+| ShareMem.h | `Source/Include/` | ~2,000 |
 | DefinesPLC.h | `Source/Include/` | 1,000+ |
-| ShareMem.h | `Source/Include/` | ~1,700 |
-| preDefine.h | `Source/Include/` + `CoreFunction/dll_Recipe/dfcRecipe/` | ~700 (dual copy) |
+| preDefine.h | `Source/Include/` + `CoreFunction/dll_Recipe/dfcRecipe/` | ~770 (dual copy, kept in sync) |
+
+`CommTcpIpFactoryMgr.cpp` (`Source/ALPHA/Manager/`) was previously ~26,000 lines but has since been refactored down to ~2,400 — no longer needs line-range-only reads.
 
 ## Knowledge Base (docs/)
 
@@ -279,4 +281,19 @@ Allows resuming an interrupted Glass inspection from where it stopped (e.g., aft
 | [11_DataFlow.md](docs/11_DataFlow.md) | Start → PLC → Motion → Vision → Result → CIM 데이터 흐름 |
 | [12_ImpactAnalysis.md](docs/12_ImpactAnalysis.md) | 10개 서브시스템별 수정 영향도 매트릭스 |
 | [OCP_Option_ChangeHistory.md](docs/OCP_Option_ChangeHistory.md) | OCP 옵션 분개 전체 작업 히스토리 (7 Step + 추가 작업) |
+| [ACS_Dual_Controller_Plan.md](docs/ACS_Dual_Controller_Plan.md) | OCP 모드 Dual ACS Controller 설계 |
+| [Resume_Inspection_Plan.md](docs/Resume_Inspection_Plan.md) | 검사 재개(Resume) 설계 |
 | [PROJECT_INDEX.md](PROJECT_INDEX.md) | 마스터 인덱스 (주요 클래스, Manager, 파일 목록) |
+
+### 기능별 포팅/이슈 문서 (docs/)
+
+| Document | Content |
+|----------|---------|
+| [FDC_Structure_Comparison.md](docs/FDC_Structure_Comparison.md) | HMI vs GMI FDC(Factory Data Collection) 구조 비교 |
+| [ELP_ElecBox_Porting_Plan.md](docs/ELP_ElecBox_Porting_Plan.md) | ELP ElecBox 모니터링(PGMon) 이식 계획 |
+| [ELP_FDC_MCC_Upload_Plan.md](docs/ELP_FDC_MCC_Upload_Plan.md) | ELP 데이터의 FDC/MCC 업로드 경로 통합 계획 |
+| [ELP_Upload_Confirmation_Requests.md](docs/ELP_Upload_Confirmation_Requests.md) | ELP 데이터 매핑 관련 미확정 항목(고객사/담당자 확인 필요) |
+| [MCC_GMI_HMI_Comparison.md](docs/MCC_GMI_HMI_Comparison.md) | MCC(Machine Condition Check) GMI 기준 vs HMI 구조 비교 |
+| [MCC_Implementation_Plan.md](docs/MCC_Implementation_Plan.md) | MCC 기능 이식 구현 계획 |
+| [MCC_GMI_TO_HMI_IMPLEMENTATION_REPORT.md](docs/MCC_GMI_TO_HMI_IMPLEMENTATION_REPORT.md) | MCC 이식 결과 보고서 (파일 목록, 검증 결과, 미확정 항목) |
+| [WAD_MultiMeas_Porting_Plan.md](docs/WAD_MultiMeas_Porting_Plan.md) | WAD 다점측정 이식 계획 |

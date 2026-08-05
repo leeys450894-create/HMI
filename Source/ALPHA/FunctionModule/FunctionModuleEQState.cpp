@@ -1133,11 +1133,18 @@ bool CFunctionModuleEQState::IsSafetySensorOnProbe(int iProbeUnit)
 	if (iProbeUnit == -1)
 	{
 		bRet = true;
+
 		for (size_t i = df_PROBE_AGING1; i <= df_PROBE_MEAS; i++)
 		{
 			bRet &= IsSafetySensorOnProbe(i);
 		}
 
+		// LYS 2026-08-04 OCP mode: P1-P4 always return true
+		if (GetSystemConfigMgrPtr() && GetSystemConfigMgrPtr()->IsOCP())
+		{
+			bRet &= IsSafetySensorOnProbe(df_PROBE_MEAS);
+		}
+		
 		return bRet;
 	}
 
