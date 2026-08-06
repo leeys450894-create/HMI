@@ -1,6 +1,11 @@
 ﻿#include "pch.h"
 #include "ALPHA.h"
 #include "DlgSubManual_AgingTest.h"
+#include "AuroraMgr.h"					// LYS 2026-08-06 Phase 1
+#include "Manager\ShareMemoryMgr.h"	// LYS 2026-08-06 Phase 1
+#include "Recipe\RecipeEditMgr.h"		// LYS 2026-08-06 Phase 1
+#include "SystemParamShare.h"			// LYS 2026-08-06 Phase 4
+#include "Manager\SequenceManager.h"	// LYS 2026-08-06 Phase 4
 #include "afxdialogex.h"
 
 #include <iostream>
@@ -8,9 +13,15 @@
 
 IMPLEMENT_DYNAMIC(CDlgSubManual_AgingTest, CDialogEx)
 
-CDlgSubManual_AgingTest::CDlgSubManual_AgingTest(CWnd* pParent /*=NULL*/) 
+CDlgSubManual_AgingTest::CDlgSubManual_AgingTest(CAuroraMgr* pAuroraMgr, CWnd* pParent /*=NULL*/) 
 	:CDialogEx(CDlgSubManual_AgingTest::IDD, pParent)
+	, m_pAuroraMgr(pAuroraMgr)	// LYS 2026-08-06 Phase 1
 {
+	m_spreadAgingList = NULL;	// LYS 2026-08-06 Phase 1
+	m_spreadAgingMeas = NULL;	// LYS 2026-08-06 Phase 1
+	m_hfont = NULL;				// LYS 2026-08-06 Phase 1
+	m_nHlRow = 0;			// LYS 2026-08-06 E4
+	m_nHlCol = 0;
 	//m_pSystem = NULL;
 	//m_pSystem = SMEM_GetSharedMemory();
 }
@@ -31,6 +42,7 @@ void CDlgSubManual_AgingTest::DoDataExchange(CDataExchange* pDX)
 
 BEGIN_MESSAGE_MAP(CDlgSubManual_AgingTest, CDialogEx)
 	ON_WM_ERASEBKGND()
+	ON_WM_TIMER()	// LYS 2026-08-06 E4
 	ON_COMMAND(IDC_BUTTON_1, OnStop)
 	ON_COMMAND(IDC_BUTTON_2, OnRcpOpen)
 	ON_COMMAND(IDC_BUTTON_3, OnItemClearAll)
@@ -39,6 +51,7 @@ BEGIN_MESSAGE_MAP(CDlgSubManual_AgingTest, CDialogEx)
 	ON_COMMAND(IDC_BUTTON_6, OnItemSave)
 	ON_COMMAND(IDC_BUTTON_7, OnLoadAgingInfo)
 	ON_COMMAND(IDC_BUTTON_8, OnAgingProcStrart)
+	ON_MESSAGE(SSM_DBLCLK, OnSpreadDBClick)	// LYS 2026-08-06 Phase 3: DLL spread forwards dblclick
 END_MESSAGE_MAP()
 
 BEGIN_EVENTSINK_MAP(CDlgSubManual_AgingTest, CDialog)
@@ -129,8 +142,14 @@ BOOL CDlgSubManual_AgingTest::OnInitDialog()
 	}
 	m_cmbCycle.SetCurSel(0);
 
-	m_strAgingRcpPath = theApp.GetProfileString(_T("DIR"), _T("AGING_RCP"), _T("D:\\KMAC\\PARAM_ICP\\PARAM\\AgingRcp\\"));
-	GetDlgItem(IDC_EDIT_2)->SetWindowText(m_strAgingRcpPath);
+	m_strAgingRcpPath = theApp.GetProfileString(_T("DIR"), _T("AGING_RCP"), _T("D:\\HBS\\PARAM_OCP\\PARAM\\AgingRcp\\"));
+	GetDlgItem(IDC_EDIT_2)->SetWindowText(m_strAgingRcpPath);	// LYS 2026-08-06 default path D:\HBS\PARAM_OCP
+
+	// LYS 2026-08-06 Phase 1: show current recipe name
+	if (m_pAuroraMgr != NULL && m_pAuroraMgr->GetRecipeEditMgrPtr() != NULL)
+		GetDlgItem(IDC_EDIT_1)->SetWindowText(m_pAuroraMgr->GetRecipeEditMgrPtr()->GetRecipeID());
+
+	SetTimer(1, 500, NULL);	// LYS 2026-08-06 E4: aging progress highlight poll
 
 	return TRUE;
 }
@@ -167,63 +186,118 @@ void CDlgSubManual_AgingTest::UpdateStatus(BOOL bEnable)
 	//bOdd = !bOdd;
 }
 
+void CDlgSubManual_AgingTest::OnTimer(UINT_PTR nIDEvent)
+{
+	// LYS 2026-08-06 E4: aging cycle progress highlight.
+	// Engine writes m_nAgingListRow(1-base item row) / m_nAgingListCol
+	// (1=Aging 2=PTN 3=SEC 4=WAD 5=VISION 6=ANGLE), 0/0 when idle.
+	if (nIDEvent == 1)
+	{
+		do
+		{
+			if (m_spreadAgingList == NULL || m_spreadAgingList->GetSafeHwnd() == NULL) break;
+			if (m_pAuroraMgr == NULL || m_pAuroraMgr->GetShareMemoryMgrPtr() == NULL) break;
+			if (m_pAuroraMgr->GetShareMemoryMgrPtr()->GetSharedMemory() == NULL) break;
+
+			int nRow = 0, nCol = 0;
+			if (m_pAuroraMgr->GetShareMemoryMgrPtr()->GetSharedMemory()->m_bAutoAgingMode)
+			{
+				nRow = m_pAuroraMgr->GetShareMemoryMgrPtr()->GetSharedMemory()->m_nAgingListRow;
+				nCol = m_pAuroraMgr->GetShareMemoryMgrPtr()->GetSharedMemory()->m_nAgingListCol;
+			}
+
+			if (nRow == m_nHlRow && nCol == m_nHlCol) break;	// no change
+
+			if (m_nHlRow > 0 && m_nHlCol > 0 &&
+				m_nHlRow <= m_spreadAgingList->GetMaxRows() && m_nHlCol <= m_spreadAgingList->GetMaxCols())
+			{
+				m_spreadAgingList->SetColor(m_nHlCol, m_nHlRow, RGB_WHITE, RGB_BLACK);
+			}
+
+			if (nRow > 0 && nCol > 0 &&
+				nRow <= m_spreadAgingList->GetMaxRows() && nCol <= m_spreadAgingList->GetMaxCols())
+			{
+				m_spreadAgingList->SetColor(nCol, nRow, RGB_YELLOW, RGB_BLACK);
+			}
+
+			m_nHlRow = nRow;
+			m_nHlCol = nCol;
+		} while (false);
+	}
+
+	CDialogEx::OnTimer(nIDEvent);
+}
+
 void CDlgSubManual_AgingTest::OnStop()
 {
-	//gLog(m_pSystem->hLog, "CDlgSubManual_AgingTest::OnStop()", LOG_LEVEL_O);
-	//m_pJobProc->ActionStop();
+	// LYS 2026-08-06 Phase 4: stop aging cycle test (HMI equivalent of OCP m_pJobProc->ActionStop)
+	CLogWrapper::GetInstance()->KMLOG(OPER, _T("CDlgSubManual_AgingTest::OnStop"));
+
+	CSystemParamShare::GetInstance()->SetCycleState(false);
+
+	if (m_pAuroraMgr != NULL && m_pAuroraMgr->GetShareMemoryMgrPtr() != NULL &&
+		m_pAuroraMgr->GetShareMemoryMgrPtr()->GetSharedMemory() != NULL)
+	{
+		m_pAuroraMgr->GetShareMemoryMgrPtr()->GetSharedMemory()->m_bAutoAgingMode = FALSE;
+	}
+
+	if (CSequenceManager::GetInstance()->IsEngineCompleteAll() == false)
+	{
+		CSequenceManager::GetInstance()->EngineStop();
+	}
+
+	m_chkStop.ShowWindow(FALSE);
 }
 
 void CDlgSubManual_AgingTest::OnRcpOpen()
 {
-	//if (!IsOfflineStatus()) return;
-	//
-	//gLog(m_pSystem->hLog, _T("CDlgSubManual_AgingTest::OnRcpOpen()"), LOG_LEVEL_O);
-	//
-	////CDlgNaviManualMeas::LoadRecipeDlg()
-	//CString filename = _T(""), strRcpFile;
-	//CString filter = _T("Recipe Files (*.rcp)|*.rcp|");
-	//filename.Format(_T("%s%s%s*.rcp"), m_pSystem->m_strRootPath, STR_DIR_PARAM, dfRECIPE_DATA_FILE_PATH);
-	//
-	//CFileDialog dlg(TRUE, _T("rcp"), filename, OFN_FILEMUSTEXIST, filter); //OFN_FILEMUSTEXIST (존재하지 않는 파일명을 입력할 수 없음)
-	//dlg.GetFileName().Format(_T("%s"), m_pSystem->stLotInfo.m_szRecipeID);
-	//
-	//if (dlg.DoModal() == IDOK)
-	//{
-	//	filename = dlg.GetFileName();
-	//
-	//	if (filename.IsEmpty()) MessageBox(_T("File is not an Recipe file or is locked and cannot be imported."));
-	//	else
-	//	{
-	//		int j = 0;
-	//		j = filename.Find(_T(".rcp"));
-	//
-	//		if (j > 0)
-	//		{
-	//			strRcpFile = filename.Left(j);		// remove ".rcp"
-	//		}
-	//		else
-	//		{
-	//			strRcpFile = filename;
-	//		}
-	//
-	//		if (m_pDlgNaviRecipe->LoadPPID2(strRcpFile) == VTM_RV_SUCCESSED)
-	//		{
-	//			MessageBox(_T("Recipe file be imported complete."));
-	//
-	//			GetDlgItem(IDC_EDIT_1)->SetWindowText(m_pSystem->stLotInfo.m_szRecipeID);
-	//
-	//			UpdateAgingCell();
-	//			LoadAgingInfo();
-	//			return;
-	//		}
-	//		else
-	//		{
-	//			AfxMessageBox(_T("Load Recipe Error"));
-	//		}
-	//	}
-	//}
+	// LYS 2026-08-06 Phase 3: pick .rcp -> RecipeChange (HMI equivalent of OCP LoadPPID2)
+	//                        -> rebuild cell map + load aging info for the new recipe
+	if (!IsOfflineStatus()) return;
 
-	return;
+	if (m_pAuroraMgr == NULL || m_pAuroraMgr->GetRecipeEditMgrPtr() == NULL) return;
+
+	CString filename = _T(""), strRcpFile;
+	CString filter = _T("Recipe Files (*.rcp)|*.rcp|");
+
+	CFileDialog dlg(TRUE, _T("rcp"), filename, OFN_FILEMUSTEXIST, filter);
+
+	if (dlg.DoModal() == IDOK)
+	{
+		filename = dlg.GetFileName();
+
+		if (filename.IsEmpty()) MessageBox(_T("File is not an Recipe file or is locked and cannot be imported."));
+		else
+		{
+			int j = filename.Find(_T(".rcp"));
+
+			if (j > 0)	strRcpFile = filename.Left(j);		// remove ".rcp"
+			else		strRcpFile = filename;
+
+			if (m_pAuroraMgr->GetRecipeEditMgrPtr()->RecipeChange(strRcpFile) == VTM_RV_SUCCESSED)
+			{
+				MessageBox(_T("Recipe file be imported complete."));
+
+				GetDlgItem(IDC_EDIT_1)->SetWindowText(m_pAuroraMgr->GetRecipeEditMgrPtr()->GetRecipeID());
+
+				// LYS 2026-08-06 warn if no matching aging recipe exists in AgingRcp path
+				CString strAgingRcp = dfcStr(_T("%s%s.rcp"), m_strAgingRcpPath, m_pAuroraMgr->GetRecipeEditMgrPtr()->GetRecipeID());
+				if (::GetFileAttributes(strAgingRcp) == INVALID_FILE_ATTRIBUTES)
+				{
+					CString strMsg;
+					strMsg.Format(_T("No Recipe in %s.\nSave the aging recipe first and reopen."), m_strAgingRcpPath);
+					AfxMessageBox(strMsg, MB_ICONWARNING);
+				}
+
+				LoadAgingInfo();	// UpdateAgingCell + MeasCellLoad run inside
+				return;
+			}
+			else
+			{
+				AfxMessageBox(_T("Load Recipe Error"));
+			}
+		}
+	}
 }
 
 void CDlgSubManual_AgingTest::OnItemClearAll()
@@ -245,12 +319,15 @@ void CDlgSubManual_AgingTest::OnItemDel()
 	
 	m_spreadAgingList->SetMaxRows(nMaxRow - 1);
 	
-	//UpdateListNum();
+	UpdateListNum();	// LYS 2026-08-06 Phase 1 restore
 }
 
 void CDlgSubManual_AgingTest::OnItemSave()
 {
-	CString strCurrentRcp = _T("");/*(CString)m_pSystem->stLotInfo.m_szRecipeID;*/
+	CString strCurrentRcp = _T("");	// LYS 2026-08-06 Phase 1: was hardcoded empty (save always blocked)
+	if (m_pAuroraMgr != NULL && m_pAuroraMgr->GetRecipeEditMgrPtr() != NULL)
+		strCurrentRcp = m_pAuroraMgr->GetRecipeEditMgrPtr()->GetRecipeID();
+	GetDlgItem(IDC_EDIT_1)->SetWindowText(strCurrentRcp);
 	if (strCurrentRcp == _T("") || strCurrentRcp == _T("UNKNOWN")) {
 		AfxMessageBox(_T("기본 레시피가 없습니다.\n 기본 레시피 Open 후 진행 하십시오."), MB_ICONWARNING);
 		return;
@@ -272,197 +349,184 @@ void CDlgSubManual_AgingTest::OnLoadAgingInfo()
 
 void CDlgSubManual_AgingTest::OnAgingProcStrart()
 {
-	//if (!IsOfflineStatus()) return;
-	//if (SMEM_GetSys_ProcessStatus() == SPS_PROCESS) {
-	//	AfxMessageBox(_T("프로세스 진행중 입니다.\n 프로세스 완료후 진행 하십시오."), MB_ICONWARNING);
-	//	return;
-	//}
-	//
-	////20180429 add by Hee
-	//if (!m_pSystem->stInterLock.m_bSafetyPos_X) {
-	//	AfxMessageBox(_T("Safety 위치가 아닙니다. \n\n안전위치 이동 후 진행하십시오."));
-	//	return;
-	//}
-	//
-	////OCP 는 적용 제외
-	////if (m_pSystem->m_bProbeRotateInstall) {
-	////	if (fabs (m_pDlgNaviMaint->m_dlgNaviMaintMotionACS.GetCurPos (AXIS_R1)) > 0.01) {
-	////		AfxMessageBox (_T("Safety 위치가 아닙니다. \n\n안전위치 이동 후 진행하십시오."));
-	////		return;
-	////	}
-	////}
-	//
-	//if (AfxMessageBox(_T("Aging Proc 를 진행 합니다.\n 계속 하시겠습니까?"), MB_YESNO | MB_ICONQUESTION) != IDYES) return;
-	//
-	//CString strRcp;
-	//GetDlgItem(IDC_EDIT_1)->GetWindowText(strRcp);
-	//
-	//if (strRcp == _T("") || strRcp == _T("UNKNOWN")) {
-	//	AfxMessageBox(_T("레시피 정보가 없습니다.\n 레시피 설정 후 진행 하십시오."), MB_ICONWARNING);
-	//	return;
-	//}
-	//
-	//int nMaxCount = m_spreadAgingList.GetMaxRows();
-	//
-	//if (nMaxCount <= 1) {
-	//	AfxMessageBox(_T("리스트 정보가 없습니다.\n 리스트 추가 및 저장 후 진행 하십시오."), MB_ICONWARNING);
-	//	return;
-	//}
-	//
-	////Cycle Count 정보
-	//CString strTemp;
-	//int nCycleCount = 1;
-	//m_cmbCycle.GetWindowText(strTemp);
-	//nCycleCount = atoi(strTemp);
-	//
-	//////스틱 정보
-	////m_nStick.clear ();
-	////for (int i = 0; i < MAX_AGING_STICK; i++) {
-	////	if (m_chkStick[i].IsWindowEnabled ()) {
-	////		m_nStick.push_back (m_chkStick[i].GetCheck ());
-	////	}
-	////	else break;
-	////}
-	//
-	//////Aging 리스트 정보
-	////m_vecAginList.clear ();
-	////S_AgingTest sAgingList;
-	////for (int i = 0; i < nMaxCount - 1; i++) {
-	////	m_spreadAgingList.SetRow (i + 2);
-	//
-	////	for (int j = 2; j < MAX_AGING_ITEM + 1; j++) {
-	////		m_spreadAgingList.SetCol (j);
-	//
-	////		if (j == 2) {
-	////			strTemp = m_spreadAgingList.GetValue (); 
-	////			sAgingList.m_bUseAging = atoi (strTemp);
-	////		}
-	////		else if (j == 3) {
-	////			m_spreadAgingList.GetWindowText (strTemp);
-	////			sAgingList.m_nPtnRGB = atoi (strTemp);
-	////		}
-	////		else if (j == 4) {
-	////			m_spreadAgingList.GetWindowText (strTemp);
-	////			sAgingList.m_nPtnSec = atoi (strTemp);
-	////		}
-	////		else if (j == 5) {
-	////			strTemp = m_spreadAgingList.GetValue ();
-	////			sAgingList.m_bUseProperty = atoi (strTemp);
-	////		}
-	////		else if (j == 6) {
-	////			strTemp = m_spreadAgingList.GetValue ();
-	////			sAgingList.m_bUseQuality = atoi (strTemp);
-	////		}
-	////	}
-	//
-	////	m_vecAginList.push_back (sAgingList);
-	////}
-	//
-	//m_pSystem->m_bAutoAgingMode = TRUE;
-	//m_pSystem->nJobCount = nCycleCount;
-	//
-	////진행 위치
-	//m_pSystem->m_nAgingListRow = 0;
-	//m_pSystem->m_nAgingListCol = 0;
-	//
-	//m_pJobProc->DoStartCycleTest();
+	// LYS 2026-08-06 Phase 4: start aging cycle test via the HMI cycle-inspection path
+	// (OCP: m_bAutoAgingMode + nJobCount + JOB_Proc::DoStartCycleTest).
+	// The HMI engine repeats the measure sequence CSystemParamShare::GetCycleCount() times
+	// (DoWorkGlassSequenceEngine/MeasureSequenceItemEngine consume IsCycleState/GetCycleCount).
+	// TODO: AGINGTEST_CONFIRM - aging-list driven measurement engine (OCP DoWorkStartMeasOCP_A,
+	//       6,743 lines: per-pattern lighting + per-cell WAD/VISION/Color/ANGLE) is NOT ported;
+	//       m_bAutoAgingMode has no consumer in the HMI engine yet, cycles run the standard sequence.
+	if (!IsOfflineStatus()) return;
+
+	if (m_pAuroraMgr == NULL || m_pAuroraMgr->GetShareMemoryMgrPtr() == NULL ||
+		m_pAuroraMgr->GetRecipeEditMgrPtr() == NULL) return;
+
+	if (m_pAuroraMgr->GetShareMemoryMgrPtr()->GetSys_ProcessStatus() == SPS_PROCESS)
+	{
+		AfxMessageBox(_T("Process is running.\nTry again after it completes."), MB_ICONWARNING);
+		return;
+	}
+
+	if (AfxMessageBox(_T("Start Aging Proc.\nContinue?"), MB_YESNO | MB_ICONQUESTION) != IDYES) return;
+
+	CString strRcp = m_pAuroraMgr->GetRecipeEditMgrPtr()->GetRecipeID();
+	if (strRcp.IsEmpty() || strRcp == _T("UNKNOWN"))
+	{
+		AfxMessageBox(_T("No recipe information.\nOpen a recipe first."), MB_ICONWARNING);
+		return;
+	}
+
+	int nMaxCount = m_spreadAgingList->GetMaxRows();	// HMI grid: MaxRows = item count
+	if (nMaxCount < 1)
+	{
+		AfxMessageBox(_T("No list information.\nAdd and save the list first."), MB_ICONWARNING);
+		return;
+	}
+
+	// cycle count from combo
+	CString strTemp;
+	int nCycleCount = 1;
+	m_cmbCycle.GetWindowText(strTemp);
+	nCycleCount = _ttoi(strTemp);
+	if (nCycleCount < 1) nCycleCount = 1;
+
+	// collect grid -> m_vecAginList (cols 1..6 = Aging/PTN/Sec/Property/Quality/ANGLE)
+	m_vecAginList.clear();
+	S_AgingTest sAgingList;
+	for (int i = 0; i < nMaxCount; i++)
+	{
+		int nRow = i + 1;
+		sAgingList.m_bUseAging    = m_spreadAgingList->GetDataInt(1, nRow);
+		sAgingList.m_nPtnRGB      = m_spreadAgingList->GetDataInt(2, nRow);
+		sAgingList.m_nPtnSec      = m_spreadAgingList->GetDataInt(3, nRow);
+		sAgingList.m_bUseProperty = m_spreadAgingList->GetDataInt(4, nRow);
+		sAgingList.m_bUseQuality  = m_spreadAgingList->GetDataInt(5, nRow);
+		sAgingList.m_bUseAngle    = m_spreadAgingList->GetDataInt(6, nRow);
+		m_vecAginList.push_back(sAgingList);
+	}
+
+	// shared state (OCP parity: JOB_Proc reads these in auto aging mode)
+	if (m_pAuroraMgr->GetShareMemoryMgrPtr()->GetSharedMemory() != NULL)
+	{
+		m_pAuroraMgr->GetShareMemoryMgrPtr()->GetSharedMemory()->m_bAutoAgingMode = TRUE;
+		m_pAuroraMgr->GetShareMemoryMgrPtr()->GetSharedMemory()->m_nAgingListRow = 0;
+		m_pAuroraMgr->GetShareMemoryMgrPtr()->GetSharedMemory()->m_nAgingListCol = 0;
+		m_pAuroraMgr->GetShareMemoryMgrPtr()->GetSharedMemory()->nJobCount = nCycleCount;
+	}
+
+	// HMI cycle-inspection start (same path as DlgSubOperate cycle button)
+	CSystemParamShare::GetInstance()->SetCycleCount(nCycleCount);
+	CSystemParamShare::GetInstance()->SetCycleState(true);
+
+	CWindowEventHandler::GetInstance()->SendMessageToUI(enumWndID_FRAME, WM_MSG_UPDATE_CYCLE_INSPECTION_START, NULL, NULL);
+	CWindowEventHandler::GetInstance()->SendMessageToUI(enumWndID_TITLE, WM_MSG_UPDATE_CYCLE_INSPECTION_START, NULL, NULL);
+
+	m_chkStop.ShowWindow(TRUE);
+
+	CLogWrapper::GetInstance()->KMLOG(OPER, _T("CDlgSubManual_AgingTest::OnAgingProcStrart - cycle test start"));
+
+	CSequenceManager::GetInstance()->EngineStart();
 }
 
 LRESULT CDlgSubManual_AgingTest::OnSpreadDBClick(WPARAM wParam, LPARAM lParam)
 {
-	return 1;
+	// LYS 2026-08-06 Phase 3: forwarded by CMySpreadDll (wParam = component ID, lParam = LPSS_CELLCOORD)
+	if ((UINT)wParam != IDC_FPSPREAD_AGING_CELL_STATUS) return 0;
+
+	LPSS_CELLCOORD pCoord = (LPSS_CELLCOORD)lParam;
+	if (pCoord == NULL) return 0;
+
+	if (m_spreadAgingMeas == NULL || m_spreadAgingMeas->GetSafeHwnd() == NULL) return 0;
+
+	DblClickFpspreadCellStatus((long)pCoord->Col, (long)pCoord->Row);
+	return 0;
 }
 
 void CDlgSubManual_AgingTest::UpdateListNum()
 {
+	// LYS 2026-08-06 Phase 1: No goes to row header col 0 (old code wrote into col 1 = Aging)
 	CString str;
 	int nMaxRow = m_spreadAgingList->GetMaxRows();
-	//m_spreadAgingList.SetCol(1);
-
-	for (int i = 1; i < nMaxRow; i++) {
-		//m_spreadAgingList.SetRow(i + 1);
-		//m_spreadAgingList.SetCellType(1);
-		//m_spreadAgingList.SetTypeHAlign(2);
-		//m_spreadAgingList.SetTypeVAlign(2);
+	for (int i = 1; i <= nMaxRow; i++) {
 		str.Format(_T("%d"), i);
-		m_spreadAgingList->SetData(1, i + 1, str);
+		m_spreadAgingList->SetDataString(0, i, str);
 	}
 }
 
 BOOL CDlgSubManual_AgingTest::IsOfflineStatus()
 {
-	//if (m_pSystem->stTitle.m_nHostMode != df_HOST_OFFLINE) {
-	//	AfxMessageBox(_T("Offline 모드가 아닙니다..\n Offline 모드로 변경 후 진행 하십시오."), MB_ICONWARNING);
-	//	return FALSE;
-	//}
+	// LYS 2026-08-06 Phase 1: restore offline check via ShareMemoryMgr
+	if (m_pAuroraMgr != NULL && m_pAuroraMgr->GetShareMemoryMgrPtr() != NULL) {
+		if (m_pAuroraMgr->GetShareMemoryMgrPtr()->GetSys_MachineMode() != df_HOST_OFFLINE) {
+			AfxMessageBox(_T("Offline 모드가 아닙니다..\n Offline 모드로 변경 후 진행 하십시오."), MB_ICONWARNING);
+			return FALSE;
+		}
+	}
 
 	return TRUE;
 }
 
 BOOL CDlgSubManual_AgingTest::LoadAgingInfo()
 {
+	// LYS 2026-08-06 Phase 1: restore rcp path (current recipe) + fix grid indexing
+	// HMI grid coords: header = SS_HEADER row, data rows 1..MaxRows, cols 1..6
+	CString strRcpID = _T("");
+	if (m_pAuroraMgr != NULL && m_pAuroraMgr->GetRecipeEditMgrPtr() != NULL)
+		strRcpID = m_pAuroraMgr->GetRecipeEditMgrPtr()->GetRecipeID();
+	if (strRcpID.IsEmpty()) return FALSE;
+
 	CString strAgingRcpPath;
-	//strAgingRcpPath = dfcStr(_T("%s%s.rcp"), m_strAgingRcpPath, (CString)m_pSystem->stLotInfo.m_szRecipeID);
-		
+	strAgingRcpPath = dfcStr(_T("%s%s.rcp"), m_strAgingRcpPath, strRcpID);
+
 	TCHAR cValue[MAX_PATH];
-	ZeroMemory(cValue, MAX_PATH);
-	
+	ZeroMemory(cValue, sizeof(cValue));
+
 	GetPrivateProfileString(_T("COUNT"), _T("MaxCount"), _T("0"), cValue, MAX_PATH, strAgingRcpPath);
 	int nMaxCount = _ttoi(cValue);
-	
+
 	AgingItemClearAll();
 	if (nMaxCount <= 0) return FALSE;
-	
+
 	m_vecAginList.clear();
 	S_AgingTest sAgingList;
-	
+
 	CString strItem;
-	for (int i = 0; i < nMaxCount; i++) {
-		strItem.Format(_T("ITEM_%d"), i + 1);
+	for (int iItem = 0; iItem < nMaxCount; iItem++) {
+		strItem.Format(_T("ITEM_%d"), iItem + 1);
 		AgingItemAdd();
-	
-		//m_spreadAgingList.SetRow(i + 2);
-	
-		for (int i = 2; i < MAX_AGING_ITEM + 1; i++) {
-			//m_spreadAgingList.SetCol(i);
-	
-			if (i == 2) {
-				GetPrivateProfileString(strItem, _T("USE_AGING"), _T("0"), cValue, MAX_PATH, strAgingRcpPath);
-				//m_spreadAgingList.SetValue(cValue);
-				m_spreadAgingList->SetData(i, i + 2, cValue);
-				sAgingList.m_bUseAging = _ttoi(cValue);
-			}
-			else if (i == 3) {
-				GetPrivateProfileString(strItem, _T("PTN_RGB"), _T("0"), cValue, MAX_PATH, strAgingRcpPath);
-				//m_spreadAgingList.SetTypeComboBoxCurSel(_ttoi(cValue));
-				m_spreadAgingList->SetData(i, i + 2, cValue);
-				sAgingList.m_nPtnRGB = _ttoi(cValue);
-			}
-			else if (i == 4) {
-				GetPrivateProfileString(strItem, _T("PTN_SEC"), _T("0"), cValue, MAX_PATH, strAgingRcpPath);
-				//m_spreadAgingList.SetValue(cValue);
-				m_spreadAgingList->SetData(i, i + 2, cValue);
-				sAgingList.m_nPtnSec = _ttoi(cValue);
-			}
-			else if (i == 5) {
-				GetPrivateProfileString(strItem, _T("USE_PROPERTY"), _T("0"), cValue, MAX_PATH, strAgingRcpPath);
-				//m_spreadAgingList.SetValue(cValue);
-				m_spreadAgingList->SetData(i, i + 2, cValue);
-				sAgingList.m_bUseProperty = _ttoi(cValue);
-			}
-			else if (i == 6) {
-				GetPrivateProfileString(strItem, _T("USE_QUALITY"), _T("0"), cValue, MAX_PATH, strAgingRcpPath);
-				//m_spreadAgingList.SetValue(cValue);
-				m_spreadAgingList->SetData(i, i + 2, cValue);
-				sAgingList.m_bUseQuality = _ttoi(cValue);
-			}
-		}
-	
+
+		int nRow = iItem + 1;
+
+		GetPrivateProfileString(strItem, _T("USE_AGING"), _T("0"), cValue, MAX_PATH, strAgingRcpPath);
+		m_spreadAgingList->SetData(1, nRow, cValue);
+		sAgingList.m_bUseAging = _ttoi(cValue);
+
+		GetPrivateProfileString(strItem, _T("PTN_RGB"), _T("0"), cValue, MAX_PATH, strAgingRcpPath);
+		m_spreadAgingList->SetData(2, nRow, cValue);
+		sAgingList.m_nPtnRGB = _ttoi(cValue);
+
+		GetPrivateProfileString(strItem, _T("PTN_SEC"), _T("0"), cValue, MAX_PATH, strAgingRcpPath);
+		m_spreadAgingList->SetData(3, nRow, cValue);
+		sAgingList.m_nPtnSec = _ttoi(cValue);
+
+		GetPrivateProfileString(strItem, _T("USE_PROPERTY"), _T("0"), cValue, MAX_PATH, strAgingRcpPath);
+		m_spreadAgingList->SetData(4, nRow, cValue);
+		sAgingList.m_bUseProperty = _ttoi(cValue);
+
+		GetPrivateProfileString(strItem, _T("USE_QUALITY"), _T("0"), cValue, MAX_PATH, strAgingRcpPath);
+		m_spreadAgingList->SetData(5, nRow, cValue);
+		sAgingList.m_bUseQuality = _ttoi(cValue);
+
+		// LYS 2026-08-06 Phase 2: ANGLE col (HMI: replaces OCP USE_LCR)
+		GetPrivateProfileString(strItem, _T("USE_ANGLE"), _T("0"), cValue, MAX_PATH, strAgingRcpPath);
+		m_spreadAgingList->SetData(6, nRow, cValue);
+		sAgingList.m_bUseAngle = _ttoi(cValue);
+
 		m_vecAginList.push_back(sAgingList);
 	}
-	
-	MeasCellLoad();
-	UpdateAgingCell();
+
+	UpdateAgingCell();	// LYS 2026-08-06 Phase 3: build 3-sheet map first
+	MeasCellLoad();		// LYS 2026-08-06 Phase 3: then fill from [MASECELL]
 
 	return TRUE;
 }
@@ -470,21 +534,25 @@ BOOL CDlgSubManual_AgingTest::LoadAgingInfo()
 void CDlgSubManual_AgingTest::SaveAgingInfo()
 {
 	CString strAgingRcpPath;
-	//strAgingRcpPath = dfcStr(_T("%s%s.rcp"), m_strAgingRcpPath, (CString)m_pSystem->stLotInfo.m_szRecipeID);
+	CString strRcpID = _T("");	// LYS 2026-08-06 Phase 1: current recipe from RecipeEditMgr
+	if (m_pAuroraMgr != NULL && m_pAuroraMgr->GetRecipeEditMgrPtr() != NULL)
+		strRcpID = m_pAuroraMgr->GetRecipeEditMgrPtr()->GetRecipeID();
+	if (strRcpID.IsEmpty()) return;
+	strAgingRcpPath = dfcStr(_T("%s%s.rcp"), m_strAgingRcpPath, strRcpID);
 	
 	dfcCreateFolder(m_strAgingRcpPath);
 	
 	CString strValue, strItem;	
 	int nMaxCount = m_spreadAgingList->GetMaxRows();
-	if (nMaxCount <= 1) {
+	if (nMaxCount < 1) {	// LYS 2026-08-06 Phase 1 (HMI: MaxRows = item count)
 		AfxMessageBox(_T("Aging 레시피 항목 추가후 저장 하십시오."));
 		return;
 	}
 	
-	strValue.Format(_T("%d"), nMaxCount - 1);
+	strValue.Format(_T("%d"), nMaxCount);	// LYS 2026-08-06 Phase 1
 	WritePrivateProfileString(_T("COUNT"), _T("MaxCount"), strValue, strAgingRcpPath);
 	
-	for (int i = 0; i < nMaxCount - 1; i++) {
+	for (int i = 0; i < nMaxCount; i++) {	// LYS 2026-08-06 Phase 1
 		//m_spreadAgingList.SetRow(i + 2);
 	
 		strItem.Format(_T("ITEM_%d"), i + 1);
@@ -494,30 +562,35 @@ void CDlgSubManual_AgingTest::SaveAgingInfo()
 	
 			if (j == 1) {
 				//strValue = m_spreadAgingList.GetValue();
-				strValue = m_spreadAgingList->GetDataString(j, i + 2);
+				strValue = m_spreadAgingList->GetDataString(j, i + 1);
 				WritePrivateProfileString(strItem, _T("USE_AGING"), strValue, strAgingRcpPath);
 			}
 			else if (j == 2) {
 				//strValue.Format(_T("%d"), m_spreadAgingList->GetTypeComboBoxCurSel());
-				strValue = m_spreadAgingList->GetDataString(j, i + 2);
+				strValue = m_spreadAgingList->GetDataString(j, i + 1);
 				WritePrivateProfileString(strItem, _T("PTN_RGB"), strValue, strAgingRcpPath);
 			}
 			else if (j == 3) {
 				//strValue.Format (_T("%d"), m_spreadAgingList.GetTypeComboBoxCurSel ());
 				//m_spreadAgingList.GetWindowText (strValue);
 				//strValue = m_spreadAgingList.GetValue();
-				strValue = m_spreadAgingList->GetDataString(j, i + 2);
+				strValue = m_spreadAgingList->GetDataString(j, i + 1);
 				WritePrivateProfileString(strItem, _T("PTN_SEC"), strValue, strAgingRcpPath);
 			}
 			else if (j == 4) {
 				//strValue = m_spreadAgingList.GetValue();
-				strValue = m_spreadAgingList->GetDataString(j, i + 2);
+				strValue = m_spreadAgingList->GetDataString(j, i + 1);
 				WritePrivateProfileString(strItem, _T("USE_PROPERTY"), strValue, strAgingRcpPath);
 			}
 			else if (j == 5) {
 				//strValue = m_spreadAgingList.GetValue();
-				strValue = m_spreadAgingList->GetDataString(j, i + 2);
+				strValue = m_spreadAgingList->GetDataString(j, i + 1);
 				WritePrivateProfileString(strItem, _T("USE_QUALITY"), strValue, strAgingRcpPath);
+			}
+			// LYS 2026-08-06 Phase 2: ANGLE col (HMI: replaces OCP USE_LCR)
+			else if (j == 6) {
+				strValue = m_spreadAgingList->GetDataString(j, i + 1);
+				WritePrivateProfileString(strItem, _T("USE_ANGLE"), strValue, strAgingRcpPath);
 			}
 		}
 	}
@@ -544,7 +617,7 @@ void CDlgSubManual_AgingTest::AgingItemAdd()
 	for (int i = 1; i < MAX_AGING_ITEM; i++) {
 		//m_spreadAgingList.SetCol(i);
 		//if (i == 2 || i == 5 || i == 6) {
-		if (i == 1 || i == 4 || i == 5) {
+		if (i == 1 || i == 4 || i == 5 || i == 6) {	// LYS 2026-08-06 Phase 2 +ANGLE col
 			m_spreadAgingList->SetTypeCheckBox(&cellType, SSS_ALIGN_VCENTER | SSS_ALIGN_CENTER, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL);
 			m_spreadAgingList->SetCellType(i, nMaxRow
 				+ 1, &cellType);
@@ -557,7 +630,7 @@ void CDlgSubManual_AgingTest::AgingItemAdd()
 	
 		if (i == 2) {
 		
-			sComboList = _T("1\t2\t3\t4\t5\t6\t7\t8\t9\t10\t");
+			sComboList = _T("0\t1\t2\t3\t4\t5\t6\t7\t8\t9\t10\t");	// LYS 2026-08-06 Phase 2: add missing pattern 0
 			m_spreadAgingList->SetTypeComboBox(&cellType, SSS_ALIGN_VCENTER | SSS_ALIGN_CENTER, sComboList);
 			m_spreadAgingList->SetCellType(i, nMaxRow + 1, &cellType);
 			//m_spreadAgingList.SetCellType(8);			//Combo Box
@@ -582,131 +655,66 @@ void CDlgSubManual_AgingTest::AgingItemAdd()
 		}
 	}
 	
-	//UpdateListNum();
+	UpdateListNum();	// LYS 2026-08-06 Phase 1 restore
 }
 
 void CDlgSubManual_AgingTest::UpdateAgingCell()
 {
-	//int iCol = 0, iRow = 0, iColMax = 0, iRowMax = 0;
-	//CString strValue;
-	//
-	////if (m_pDlgNaviRecipe->m_stRecipePath.m_nRotate == 0 || m_pDlgNaviRecipe->m_stRecipePath.m_nRotate == 2) {
-	////	iColMax = (int)m_pDlgNaviRecipe->m_stRecipePath.stCellInfo.CellCount.y;
-	////	iRowMax = (int)m_pDlgNaviRecipe->m_stRecipePath.stCellInfo.CellCount.x;
-	////}
-	////else {
-	////	iColMax = (int)m_pDlgNaviRecipe->m_stRecipePath.stCellInfo.CellCount.x;
-	////	iRowMax = (int)m_pDlgNaviRecipe->m_stRecipePath.stCellInfo.CellCount.y;
-	////}
-	//
-	////iColMax = (int)m_pDlgNaviRecipe->m_RecipePosICP.stCellInfo.CellCount.x;
-	////iRowMax = (int)m_pDlgNaviRecipe->m_RecipePosICP.stCellInfo.CellCount.y;
-	//
-	//TCHAR* szText[3] = { _T("특성"),_T("화질"),_T("색이상") };
-	//
-	//// BOTTOM
-	////m_spreadAgingMeas.SetSheetCount(3);	// Set number of sheets
-	//
-	//for (int iSheet = 0; iSheet < 3; iSheet++)
-	//{
-	//	m_spreadAgingMeas.SetSheet(iSheet + 1);	// Set sheet names
-	//
-	//	m_spreadAgingMeas.SetMaxCols(iColMax);
-	//	m_spreadAgingMeas.SetMaxRows(iRowMax);
-	//
-	//	m_spreadAgingMeas->ClearRange(1, 1, -1, -1);
-	//
-	//	strValue.Format(_T("%s"), szText[iSheet]);
-	//	m_spreadAgingMeas.SetSheetName(strValue);
-	//
-	//	m_spreadAgingMeas.SetColHeadersShow(TRUE);
-	//	m_spreadAgingMeas.SetRowHeadersShow(TRUE);
-	//	m_spreadAgingMeas.SetScrollBars(3);
-	//
-	//	m_spreadAgingMeas->SetRowHeight(0, 12);
-	//
-	//	MEASGROUP stMeasArea;
-	//	ZeroMemory(&stMeasArea, sizeof(stMeasArea));
-	//	int iAreaMax = 0, iArea = 0;
-	//	//iAreaMax = m_pDlgNaviRecipe->m_stRecipePath.m_aryMeasGroup.GetSize();
-	//	//20190213 add by Hee (단변 행열 문자 변경)
-	//	char cRow = 'A';
-	//	int	 nCol = 1;
-	//
-	//	for (int i = 0; i < iRowMax; i++) {
-	//		//m_spreadAgingMeas.SetRow(i + 1);
-	//		m_spreadAgingMeas->SetRowHeight(i + 1, 15);
-	//		//m_spreadAgingMeas.SetCol(0);
-	//		if (m_pDlgNaviRecipe->m_stRecipePath.m_nRotate == 0 || m_pDlgNaviRecipe->m_stRecipePath.m_nRotate == 2) {
-	//			strValue.Format(_T("%c"), cRow + i);
-	//			//m_spreadAgingMeas.SetValue(strValue);
-	//			m_spreadAgingMeas->SetData(0, i + 1, strValue);
-	//		}
-	//		else {
-	//			strValue.Format(_T("%d"), iRowMax - i);
-	//			//m_spreadAgingMeas.SetValue(strValue);
-	//			m_spreadAgingMeas->SetData(0, i + 1, strValue);
-	//		}
-	//
-	//		for (int j = 0; j < iColMax; j++) {
-	//			if (i != 0) continue;
-	//			//m_spreadAgingMeas.SetRow(0);
-	//			//m_spreadAgingMeas.SetCol(j + 1);
-	//
-	//			if (m_pDlgNaviRecipe->m_stRecipePath.m_nRotate == 0 || m_pDlgNaviRecipe->m_stRecipePath.m_nRotate == 2) {
-	//				strValue.Format(_T("%d"), j + 1);
-	//				//m_spreadAgingMeas.SetValue(strValue);
-	//				m_spreadAgingMeas->SetData(j + 1, 0, strValue);
-	//			}
-	//			else {
-	//				strValue.Format(_T("%c"), cRow + j);
-	//				//m_spreadAgingMeas.SetValue(strValue);
-	//				m_spreadAgingMeas->SetData(j + 1, 0, strValue);
-	//			}
-	//		}
-	//	}
-	//
-	//	for (iRow = 0; iRow < iRowMax; iRow++)
-	//	{
-	//		//m_spreadAgingMeas.SetRow(iRow + 1);
-	//		m_spreadAgingMeas->SetRowHeight(iRow + 1, 15);
-	//
-	//		// jsyoon 20170111 add
-	//		//m_spreadAgingMeas.SetCol(0);
-	//		//strValue.Format("%d", iRowMax-iRow);
-	//		//m_spreadAgingMeas.SetValue(strValue);
-	//		//////////////////////////////////////////////////////////////////////////
-	//
-	//		for (iCol = 0; iCol < iColMax; iCol++)
-	//		{
-	//			iArea = iCol + iRow * iColMax;
-	//
-	//			if (iArea > iAreaMax)
-	//				continue;
-	//
-	//			//stMeasArea = m_pDlgNaviRecipe->m_stRecipePath.m_aryMeasGroup.GetAt(iArea);
-	//
-	//			//m_spreadAgingMeas.SetCol(iCol + 1);
-	//			m_spreadAgingMeas->SetColWidth(iCol + 1, 6);
-	//			m_spreadAgingMeas.SetCellType(10);						// Define cell type as check box
-	//			//m_spreadAgingMeas.SetTypeCheckCenter(TRUE);				// Make it a three state check box
-	//			//m_spreadAgingMeas.SetTypeCheckType(0);					// Define the pictures used for each state of the check box
-	//			//m_spreadAgingMeas.SetTypeCheckText(_T("USE"));
-	//
-	//			strValue.Format("%d", GetMeasUse(iSheet, stMeasArea.stProbe[0].m_iUsedMeas));
-	//			//m_spreadAgingMeas.SetTypeHAlign(2);
-	//			//m_spreadAgingMeas.SetTypeVAlign(2);
-	//			//m_spreadAgingMeas.SetValue(strValue);
-	//		}
-	//
-	//		//m_spreadAgingMeas.SetSelection(1, 1, -1, 1);
-	//	}
-	//}
-	//
-	//m_spreadAgingMeas.SetSheet(1);
-	//m_spreadAgingMeas.SetActiveSheet(1);
-	//m_spreadAgingMeas.Refresh();
-}	
+	// LYS 2026-08-06 Phase 3: rebuild 3-sheet cell-use map (WAD/VISION/ANGLE - no COLOR mode in HMI)
+	// HMI-native: rows = sticks, cols = cells from current RecipeData.
+	// Values live in [MASECELL] of the AgingRcp file only - recipe MEASGROUP is NOT
+	// touched (WadMultiMeasMgr precedent), unlike OCP which mirrored m_iUsedMeas.
+	if (m_spreadAgingMeas == NULL || m_spreadAgingMeas->GetSafeHwnd() == NULL) return;
+
+	int nStick = 0, nCell = 0;
+	S_RecipeData* pRD = NULL;
+	if (m_pAuroraMgr != NULL && m_pAuroraMgr->GetRecipeEditMgrPtr() != NULL)
+		pRD = m_pAuroraMgr->GetRecipeEditMgrPtr()->GetRecipeData();
+
+	if (pRD != NULL && pRD->m_vecStick.size() > 0)
+	{
+		nStick = (int)pRD->m_vecStick.size();
+		nCell = (int)pRD->m_vecStick[0].m_vecCell.size();
+	}
+
+	//static const TCHAR* szSheet[4] = { _T("WAD"), _T("VISION"), _T("Color"), _T("ANGLE") };
+	static const TCHAR* szSheet[3] = { _T("WAD"), _T("VISION"),_T("ANGLE") };
+
+	m_spreadAgingMeas->SetSheetCount(3);
+
+	SS_CELLTYPE ctCheck;
+	m_spreadAgingMeas->SetTypeCheckBox(&ctCheck, SSS_ALIGN_VCENTER | SSS_ALIGN_CENTER, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL);
+
+	CString str;
+	for (int iSheet = 0; iSheet < 3; iSheet++)
+	{
+		m_spreadAgingMeas->SetSheet(iSheet + 1);
+		m_spreadAgingMeas->SetSheetName(iSheet + 1, szSheet[iSheet]);
+
+		m_spreadAgingMeas->SetMaxCols(nCell);
+		m_spreadAgingMeas->SetMaxRows(nStick);
+
+		if (nStick <= 0 || nCell <= 0) continue;
+
+		m_spreadAgingMeas->SetColWidth(SS_ALLCOLS, 4);
+		m_spreadAgingMeas->SetRowHeight(SS_ALLROWS, 13);
+		m_spreadAgingMeas->SetColWidth(SS_HEADER, 6);
+
+		for (int nRow = 1; nRow <= nStick; nRow++)
+		{
+			str.Format(_T("S%d"), nRow);
+			m_spreadAgingMeas->SetData(SS_HEADER, nRow, str);
+
+			for (int nCol = 1; nCol <= nCell; nCol++)
+			{
+				m_spreadAgingMeas->SetCellType(nCol, nRow, &ctCheck);
+				m_spreadAgingMeas->SetData(nCol, nRow, _T("0"));
+			}
+		}
+	}
+
+	m_spreadAgingMeas->SetSheet(1);
+}
 
 int CDlgSubManual_AgingTest::GetMeasUse(int iMeas, int nMeasUse)
 {
@@ -724,100 +732,91 @@ int CDlgSubManual_AgingTest::GetMeasUse(int iMeas, int nMeasUse)
 
 void CDlgSubManual_AgingTest::MeasCellSave()
 {
-	//int nCellXMax = 0, nCellYMax = 0;
-	//std::bitset<3> bit = 0;
-	//
-	//if (m_pDlgNaviRecipe->m_stRecipePath.m_nRotate == 0 || m_pDlgNaviRecipe->m_stRecipePath.m_nRotate == 2) {
-	//	nCellXMax = (int)m_pDlgNaviRecipe->m_stRecipePath.stCellInfo.CellCount.y;
-	//	nCellYMax = (int)m_pDlgNaviRecipe->m_stRecipePath.stCellInfo.CellCount.x;
-	//}
-	//else {
-	//	nCellXMax = (int)m_pDlgNaviRecipe->m_stRecipePath.stCellInfo.CellCount.x;
-	//	nCellYMax = (int)m_pDlgNaviRecipe->m_stRecipePath.stCellInfo.CellCount.y;
-	//}
-	//
-	////nCellXMax = m_pDlgNaviRecipe->m_RecipePosICP.stCellInfo.CellCount.x;
-	////nCellYMax = m_pDlgNaviRecipe->m_RecipePosICP.stCellInfo.CellCount.y;
-	//
-	//if (nCellXMax < 0 || nCellYMax < 0) return;
-	//
-	//CString strCellData;
-	//CString strAgingRcpPath = dfcStr(_T("%s%s.rcp"), m_strAgingRcpPath, (CString)m_pSystem->stLotInfo.m_szRecipeID);
-	//
-	//for (int i = 0; i < nCellYMax; i++) {
-	//	strCellData.Empty();
-	//
-	//	for (int j = 0; j < nCellXMax; j++) {
-	//
-	//		for (int k = 0; k < 3; k++) { //특성, 화질, 색이상
-	//			m_spreadAgingMeas.SetSheet(k + 1);
-	//			m_spreadAgingMeas.SetRow(i + 1);
-	//			m_spreadAgingMeas.SetCol(j + 1);
-	//			bit[k] = atoi(m_spreadAgingMeas.GetValue());
-	//		}
-	//		strCellData += dfcStr(_T("%d,"), bit.to_ulong());
-	//
-	//	}
-	//
-	//	WritePrivateProfileString(_T("MASECELL"), dfcStr(_T("STICK_%d"), i + 1), strCellData, strAgingRcpPath);
-	//
-	//}
+	// LYS 2026-08-06 Phase 3: grid -> [MASECELL] STICK_n = CSV of 3bit masks
+	// bit0..2 = WAD / VISION / ANGLE (no COLOR mode in HMI; OCP was 4 kinds)
+	if (m_spreadAgingMeas == NULL || m_spreadAgingMeas->GetSafeHwnd() == NULL) return;
+
+	CString strRcpID = _T("");
+	if (m_pAuroraMgr != NULL && m_pAuroraMgr->GetRecipeEditMgrPtr() != NULL)
+		strRcpID = m_pAuroraMgr->GetRecipeEditMgrPtr()->GetRecipeID();
+	if (strRcpID.IsEmpty()) return;
+
+	CString strAgingRcpPath = dfcStr(_T("%s%s.rcp"), m_strAgingRcpPath, strRcpID);
+
+	short nKeepSheet = m_spreadAgingMeas->GetSheet();
+
+	m_spreadAgingMeas->SetSheet(1);
+	int nCell = m_spreadAgingMeas->GetMaxCols();
+	int nStick = m_spreadAgingMeas->GetMaxRows();
+	if (nStick < 1 || nCell < 1) { m_spreadAgingMeas->SetSheet(nKeepSheet); return; }
+
+	std::bitset<3> bit;
+	CString strCellData;
+	for (int i = 0; i < nStick; i++) {
+		strCellData.Empty();
+
+		for (int j = 0; j < nCell; j++) {
+			bit.reset();
+			for (int k = 0; k < 3; k++) {	// WAD, VISION, ANGLE
+				m_spreadAgingMeas->SetSheet(k + 1);
+				bit[k] = (m_spreadAgingMeas->GetDataInt(j + 1, i + 1) != 0);
+			}
+			strCellData += dfcStr(_T("%d,"), (int)bit.to_ulong());
+		}
+
+		WritePrivateProfileString(_T("MASECELL"), dfcStr(_T("STICK_%d"), i + 1), strCellData, strAgingRcpPath);
+	}
+
+	m_spreadAgingMeas->SetSheet(nKeepSheet);
 }
 
 void CDlgSubManual_AgingTest::MeasCellLoad()
 {
-	//int nCellXMax = 0, nCellYMax = 0;
-	//std::bitset<3> bit = 0;
-	//
-	//if (m_pDlgNaviRecipe->m_stRecipePath.m_nRotate == 0 || m_pDlgNaviRecipe->m_stRecipePath.m_nRotate == 2) {
-	//	nCellXMax = (int)m_pDlgNaviRecipe->m_stRecipePath.stCellInfo.CellCount.y;
-	//	nCellYMax = (int)m_pDlgNaviRecipe->m_stRecipePath.stCellInfo.CellCount.x;
-	//}
-	//else {
-	//	nCellXMax = (int)m_pDlgNaviRecipe->m_stRecipePath.stCellInfo.CellCount.x;
-	//	nCellYMax = (int)m_pDlgNaviRecipe->m_stRecipePath.stCellInfo.CellCount.y;
-	//}
-	//
-	////nCellXMax = m_pDlgNaviRecipe->m_RecipePosICP.stCellInfo.CellCount.x;
-	////nCellYMax = m_pDlgNaviRecipe->m_RecipePosICP.stCellInfo.CellCount.y;
-	//
-	//if (nCellXMax < 0 || nCellYMax < 0) return;
-	//
-	//CString strAgingRcpPath = dfcStr(_T("%s%s.rcp"), m_strAgingRcpPath, (CString)m_pSystem->stLotInfo.m_szRecipeID);
-	//CString strID;
-	//CArray <int, int> nCellChkArray;
-	//
-	//char cCellData[MAX_PATH];
-	//ZeroMemory(cCellData, MAX_PATH);
-	//MEASGROUP stMeasArea;
-	//
-	//int nArea = 0;
-	//
-	//for (int i = 0; i < nCellYMax; i++) {
-	//
-	//	GetPrivateProfileString(_T("MASECELL"), dfcStr(_T("STICK_%d"), i + 1), _T(""), cCellData, MAX_PATH, strAgingRcpPath);
-	//
-	//	int pos = 0;
-	//	nCellChkArray.RemoveAll();
-	//	CString strCellData = (CString)cCellData;
-	//	CString resToken = strCellData.Tokenize(_T(","), pos);
-	//	while (resToken != _T("")) {
-	//		nCellChkArray.Add(atoi(resToken.Trim()));
-	//		resToken = strCellData.Tokenize(_T(","), pos);
-	//	}
-	//
-	//	if (nCellChkArray.GetSize() != nCellXMax) return;
-	//
-	//	ZeroMemory(&stMeasArea, sizeof(stMeasArea));
-	//
-	//	for (int j = 0; j < nCellXMax; j++) {
-	//		nArea = j + i * nCellXMax;
-	//		stMeasArea = m_pDlgNaviRecipe->m_stRecipePath.m_aryMeasGroup.GetAt(nArea);
-	//		stMeasArea.stProbe[0].m_iUsedMeas = nCellChkArray.GetAt(j);
-	//		m_pDlgNaviRecipe->m_stRecipePath.m_aryMeasGroup.SetAt(nArea, stMeasArea);
-	//	}
-	//
-	//}
+	// LYS 2026-08-06 Phase 3: [MASECELL] -> grid. Call AFTER UpdateAgingCell built the sheets.
+	if (m_spreadAgingMeas == NULL || m_spreadAgingMeas->GetSafeHwnd() == NULL) return;
+
+	CString strRcpID = _T("");
+	if (m_pAuroraMgr != NULL && m_pAuroraMgr->GetRecipeEditMgrPtr() != NULL)
+		strRcpID = m_pAuroraMgr->GetRecipeEditMgrPtr()->GetRecipeID();
+	if (strRcpID.IsEmpty()) return;
+
+	CString strAgingRcpPath = dfcStr(_T("%s%s.rcp"), m_strAgingRcpPath, strRcpID);
+
+	short nKeepSheet = m_spreadAgingMeas->GetSheet();
+
+	m_spreadAgingMeas->SetSheet(1);
+	int nCell = m_spreadAgingMeas->GetMaxCols();
+	int nStick = m_spreadAgingMeas->GetMaxRows();
+	if (nStick < 1 || nCell < 1) { m_spreadAgingMeas->SetSheet(nKeepSheet); return; }
+
+	TCHAR cCellData[1024];	// OCP used MAX_PATH - too small for many cells
+	CArray<int, int> nCellChkArray;
+
+	for (int i = 0; i < nStick; i++) {
+		ZeroMemory(cCellData, sizeof(cCellData));
+		GetPrivateProfileString(_T("MASECELL"), dfcStr(_T("STICK_%d"), i + 1), _T(""), cCellData, 1024, strAgingRcpPath);
+
+		int pos = 0;
+		nCellChkArray.RemoveAll();
+		CString strCellData = cCellData;
+		CString resToken = strCellData.Tokenize(_T(","), pos);
+		while (resToken != _T("")) {
+			nCellChkArray.Add(_ttoi(resToken.Trim()));
+			resToken = strCellData.Tokenize(_T(","), pos);
+		}
+
+		if (nCellChkArray.GetSize() != nCell) continue;	// row missing/mismatched -> keep defaults
+
+		for (int j = 0; j < nCell; j++) {
+			int nMask = nCellChkArray.GetAt(j);
+			for (int k = 0; k < 3; k++) {	// WAD, VISION, ANGLE
+				m_spreadAgingMeas->SetSheet(k + 1);
+				m_spreadAgingMeas->SetData(j + 1, i + 1, ((nMask >> k) & 0x01) ? _T("1") : _T("0"));
+			}
+		}
+	}
+
+	m_spreadAgingMeas->SetSheet(nKeepSheet);
 }
 
 void CDlgSubManual_AgingTest::DblClickFpspreadCellStatus(long Col, long Row)
@@ -866,5 +865,6 @@ void CDlgSubManual_AgingTest::DblClickFpspreadCellStatus(long Col, long Row)
 
 void CDlgSubManual_AgingTest::SheetChangedFsMeasArea(short OldSheet, short NewSheet)
 {
-	//m_spreadAgingMeas.SetSheet(NewSheet);
+	// LYS 2026-08-06 Phase 3: OCX-era event, never fires with CMySpreadDll (DLL spread
+	// updates its current sheet on tab click by itself; kept for EVENTSINK map).
 }

@@ -90,12 +90,13 @@ const enum RCP_VERSION{
 	RECIPE_FILE_V1003,
 	RECIPE_FILE_V1004,
 	RECIPE_FILE_V1005,		// LYS 2026-07-08 Add
+	RECIPE_FILE_V1006,		// LYS 2026-08-06 Add
 	RECIPE_FILE_END,
 };
 
 ///////////////////////레시피 구조체
 #define M_RCP_PROBE_MAX 5	//메인 프로브 ID 개수
-#define M_RCP_INS_ITEM	9	//레시피 검사 항목 수
+#define M_RCP_INS_ITEM	10	//레시피 검사 항목 수
 
 //검사 항목 구조체
 struct S_InspectItem {
@@ -113,6 +114,9 @@ struct S_InspectItem {
 	// LYS 2026-07-14 추가 기능
 	BOOL m_bUseEFA;
 	BOOL m_bUseSpec_Multi;
+
+	// LYS 2026-08-06 강화 검사
+	BOOL m_bUseAging_Test;
 
 	int  m_nTimeOut[M_RCP_INS_ITEM];
 
@@ -133,6 +137,7 @@ struct S_InspectItem {
 		m_bUseLCR_8		  = FALSE;
 		m_bUseEFA		  = FALSE;
 		m_bUseSpec_Multi  = FALSE;
+		m_bUseAging_Test  = FALSE;
 
 		ZeroMemory (&m_nTimeOut, sizeof (m_nTimeOut));
 	}

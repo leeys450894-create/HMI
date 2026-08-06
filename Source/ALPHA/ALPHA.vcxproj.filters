@@ -1197,6 +1197,12 @@
     <ClInclude Include="DoWork\DoWorkGlassMeasureStep.h">
       <Filter>헤더 파일\Sequence\2.Measure Sequence\2.5.Measure</Filter>
     </ClInclude>
+    <ClInclude Include="DoWork\AgingAlarmCheck.h">
+      <Filter>헤더 파일\Sequence\2.Measure Sequence\2.5.Measure</Filter>
+    </ClInclude>
+    <ClInclude Include="DoWork\AgingCycleInfo.h">
+      <Filter>헤더 파일\Sequence\2.Measure Sequence\2.5.Measure</Filter>
+    </ClInclude>
     <ClInclude Include="DoWork\DoWorkGlassSWAlign.h">
       <Filter>헤더 파일\Sequence\2.Measure Sequence\2.3.Align</Filter>
     </ClInclude>
@@ -1719,6 +1725,12 @@
       <Filter>소스 파일\Sequence\2.Measure Sequence\2.5.Measure</Filter>
     </ClCompile>
     <ClCompile Include="DoWork\DoWorkGlassMeasureStep.cpp">
+      <Filter>소스 파일\Sequence\2.Measure Sequence\2.5.Measure</Filter>
+    </ClCompile>
+    <ClCompile Include="DoWork\AgingAlarmCheck.cpp">
+      <Filter>소스 파일\Sequence\2.Measure Sequence\2.5.Measure</Filter>
+    </ClCompile>
+    <ClCompile Include="DoWork\AgingCycleInfo.cpp">
       <Filter>소스 파일\Sequence\2.Measure Sequence\2.5.Measure</Filter>
     </ClCompile>
     <ClCompile Include="DoWork\DoWorkGlassAdsorption.cpp">

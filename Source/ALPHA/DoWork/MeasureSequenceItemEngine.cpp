@@ -15,6 +15,7 @@
 
 #include "common\IniHelper.h"
 #include "..\Manager\NetworkConfigMgr.h"
+#include "..\Manager\SystemConfigMgr.h"	// LYS 2026-08-06 AgingCycle E3
 
 #ifdef _DEBUG
 #define new DEBUG_NEW
@@ -27,6 +28,8 @@ CMeasureSequenceItemEngine::CMeasureSequenceItemEngine(stAuroraMgrPool &MgrPool)
 	, m_pLogFileAccessor(new CLogFileAccessor)
     , m_pStInnerID(nullptr)
     , m_nMeasureArea(0)
+	, m_bAgingCycleActive(false)	// LYS 2026-08-06 AgingCycle E3
+	, m_nAgingCurItem(-1)			// LYS 2026-08-06 AgingCycle E3
 {
     const CString strFolderPath	= MgrPool.strLogPath + _T("\\LogFile\\");
     const CString strLogFile	= strFolderPath + _T("measure_seq_item_engine.log");
@@ -706,4 +709,63 @@ void CMeasureSequenceItemEngine::SetMeasureArea(int nMeasureArea)
 int CMeasureSequenceItemEngine::GetMeasureArea()
 {
     return m_nMeasureArea;
+}
+//=========================================================================
+// LYS 2026-08-06 AgingCycle E3: aging-list cycle context (OCP DoWorkStartMeasOCP_A)
+//=========================================================================
+bool CMeasureSequenceItemEngine::AgingCycleBegin()
+{
+	m_bAgingCycleActive = false;
+	m_nAgingCurItem = -1;
+
+	if (m_MgrPool_link.pSystemConfigMgr == nullptr || m_MgrPool_link.pSystemConfigMgr->IsOCP() == false)
+		return false;
+
+	S_RecipeInfo* pRecipeInfo = GetRecipeEditMgrPtr()->GetRecipeInfo();
+	if (pRecipeInfo == nullptr || pRecipeInfo->m_sInspectItem.m_bUseAgingTest_2 == FALSE)
+		return false;
+
+	if (m_AgingCycleInfo.Load(GetRecipeEditMgrPtr()->GetRecipeID()) == false)
+	{
+		m_pLogFileAccessor->KMLOG(WARN, _T("AgingCycle: aging rcp not found - run standard sequence"));
+		return false;
+	}
+
+	m_bAgingCycleActive = AgingCycleNextItem();
+
+	CString strLog;
+	strLog.Format(_T("AgingCycle: begin, items(%d) active(%d)"), m_AgingCycleInfo.GetItemCount(), (int)m_bAgingCycleActive);
+	m_pLogFileAccessor->KMLOG(OPER, strLog);
+
+	return m_bAgingCycleActive;
+}
+
+bool CMeasureSequenceItemEngine::AgingCycleNextItem()
+{
+	for (int i = m_nAgingCurItem + 1; i < m_AgingCycleInfo.GetItemCount(); i++)
+	{
+		const S_AgingTest* pItem = m_AgingCycleInfo.GetItem(i);
+		if (pItem != nullptr && pItem->m_bUseAging)
+		{
+			m_nAgingCurItem = i;
+			return true;
+		}
+	}
+
+	return false;
+}
+
+void CMeasureSequenceItemEngine::AgingCycleEnd()
+{
+	if (m_bAgingCycleActive)
+		m_pLogFileAccessor->KMLOG(OPER, _T("AgingCycle: end"));
+
+	m_bAgingCycleActive = false;
+	m_nAgingCurItem = -1;
+
+	if (m_MgrPool_link.pShareMemoryMgr != nullptr && m_MgrPool_link.pShareMemoryMgr->GetSharedMemory() != nullptr)
+	{
+		m_MgrPool_link.pShareMemoryMgr->GetSharedMemory()->m_nAgingListRow = 0;
+		m_MgrPool_link.pShareMemoryMgr->GetSharedMemory()->m_nAgingListCol = 0;
+	}
 }

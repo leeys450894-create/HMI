@@ -2296,7 +2296,7 @@ long CMaintControlMgr::MoveCmdPosVision(stMotorPosition* pPos, int nAxis, int iS
 		{
 			if (stPositionX[0].axis == AXIS_X2)
 			{
-				if (GetCurPos(AXIS_X2) < stPositionX[0].dPosition)
+				if (m_pMotorControlMgr->GetOrgPos(AXIS_X2) < stPositionX[0].dPosition)	// LYS 2026-08-06 raw pos: SetHeadOffset above shifts GetCurPos, interlock compares raw
 				{
 					nRet = MoveCmdPosA(stPositionX[0].axis, stPositionX[0].dPosition, false);
 

@@ -72,6 +72,9 @@ bool CDoWorkGlassResultStep_CompleteCheck::Run()
     pRecipeInfo = m_pShareItem->GetRecipeEditMgrPtr()->GetRecipeInfo();
     if (pRecipeInfo != nullptr)
     {
+        if (pRecipeInfo->m_sInspectItem.m_bUseAgingTest_2 == true)       // LYS 2026-08-06 Add
+            bUseMeas = true;
+
         if (pRecipeInfo->m_sInspectItem.m_bUseSpec_3 == true)
             bUseMeas = true;
 

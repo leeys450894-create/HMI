@@ -297,3 +297,6 @@ Allows resuming an interrupted Glass inspection from where it stopped (e.g., aft
 | [MCC_Implementation_Plan.md](docs/MCC_Implementation_Plan.md) | MCC 기능 이식 구현 계획 |
 | [MCC_GMI_TO_HMI_IMPLEMENTATION_REPORT.md](docs/MCC_GMI_TO_HMI_IMPLEMENTATION_REPORT.md) | MCC 이식 결과 보고서 (파일 목록, 검증 결과, 미확정 항목) |
 | [WAD_MultiMeas_Porting_Plan.md](docs/WAD_MultiMeas_Porting_Plan.md) | WAD 다점측정 이식 계획 |
+| [AgingSet_Porting_Plan.md](docs/AgingSet_Porting_Plan.md) | OCP AgingSet 다이얼로그(Aging 목표값 알람) 기능 완성 이식 계획 |
+| [AgingTest_Porting_Plan.md](docs/AgingTest_Porting_Plan.md) | OCP AgingTest 다이얼로그(Aging 시퀀스 레시피/셀맵/Cycle Test) 완성 이식 계획 |
+| [AgingCycleEngine_Design_Plan.md](docs/AgingCycleEngine_Design_Plan.md) | OCP DoWorkStartMeasOCP_A(6,743줄) 대응 에이징 리스트 측정 엔진 설계 |

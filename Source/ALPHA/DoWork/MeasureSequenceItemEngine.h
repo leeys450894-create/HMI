@@ -1,6 +1,7 @@
 #pragma once
 
 #include "..\AuroraMgrPool.h"
+#include "AgingCycleInfo.h"	// LYS 2026-08-06 AgingCycle E3
 
 class CIniHelper;
 class CBinaryHelper;
@@ -83,6 +84,22 @@ public:
 	void ThreadRunExit();
 	void ThreadRu_nSequence(int cycle_index);
 	bool IsThreadStopState();
+
+//=========================================================================
+// LYS 2026-08-06 AgingCycle E3: aging-list cycle context (OCP DoWorkStartMeasOCP_A)
+// driven by CDoWorkGlassMeasure::ThreadRun on the measure thread (single-thread use)
+//=========================================================================
+public:
+	bool				AgingCycleBegin();		// gate(bIsOCP + recipe m_bUseAgingTest_2) + aging rcp load
+	void				AgingCycleEnd();
+	bool				AgingCycleNextItem();	// advance to next USE_AGING item. FALSE = exhausted
+	bool				IsAgingCycleActive() const	{ return m_bAgingCycleActive; }
+	int					GetAgingCurItem() const		{ return m_nAgingCurItem; }
+	CAgingCycleInfo*	GetAgingCycleInfo()			{ return &m_AgingCycleInfo; }
+private:
+	CAgingCycleInfo		m_AgingCycleInfo;
+	bool				m_bAgingCycleActive;
+	int					m_nAgingCurItem;
 
 public:
 	CMeasureSequenceItemEngine(stAuroraMgrPool &MgrPool);

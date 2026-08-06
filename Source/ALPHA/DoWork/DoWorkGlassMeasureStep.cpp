@@ -2,6 +2,7 @@
 #include "DoWorkGlassMeasureStep.h"
 #include "..\Manager\SystemConfigMgr.h"	// LYS 2026-06-26 OCP option
 #include "CommTcpIpObjectPG.h"			// LYS 2026-06-30 add for Aging Test
+#include "AgingAlarmCheck.h"			// LYS 2026-08-05 AgingSet Phase 4
 
 #include "DoWorkGlassSequenceImpl.h"
 #include "..\Manager\WadMultiMeasMgr.h"	// LYS 2026-07-23 WAD Multi Point (Phase 4)
@@ -1856,6 +1857,21 @@ bool CDoWorkGlassMeasureStep_Measure_WAD::Run()
 	if (pReciepInfo != nullptr)
 	{
 		bUseMeas = pReciepInfo->m_sInspectItem.m_bUseSpec_3;
+		// LYS 2026-08-06 AgingCycle E3: per-item select (WAD = Property flag + stick cell map)
+		if (m_pMeasSeqItemEngine != NULL && m_pMeasSeqItemEngine->IsAgingCycleActive())
+		{
+			const S_AgingTest* pAgingItem = m_pMeasSeqItemEngine->GetAgingCycleInfo()->GetItem(m_pMeasSeqItemEngine->GetAgingCurItem());
+			bUseMeas = (pAgingItem != NULL && pAgingItem->m_bUseProperty)
+				&& (m_pMeasSeqItemEngine->GetAgingCycleInfo()->GetStickCount() == 0
+					|| m_pMeasSeqItemEngine->GetAgingCycleInfo()->IsStickUse(GetMeasureStick(), enumAgingMeasKind_WAD));
+
+			if (bUseMeas && m_pShareItem->GetShareMemoryMgrPtr()->GetSharedMemory() != NULL)
+			{
+				// LYS 2026-08-06 AgingCycle E4: progress marker (col 4 = WAD)
+				m_pShareItem->GetShareMemoryMgrPtr()->GetSharedMemory()->m_nAgingListRow = m_pMeasSeqItemEngine->GetAgingCurItem() + 1;
+				m_pShareItem->GetShareMemoryMgrPtr()->GetSharedMemory()->m_nAgingListCol = 4;
+			}
+		}
 
 		nTimeOut = pReciepInfo->m_sInspectItem.m_nTimeOut[3];
 
@@ -2643,6 +2659,21 @@ bool CDoWorkGlassMeasureStep_Measure_VISION::Run()
 	if (pReciepInfo != nullptr)
 	{
 		bUseMeas = pReciepInfo->m_sInspectItem.m_bUseQuality_4;
+		// LYS 2026-08-06 AgingCycle E3: per-item select (VISION = Quality flag + stick cell map)
+		if (m_pMeasSeqItemEngine != NULL && m_pMeasSeqItemEngine->IsAgingCycleActive())
+		{
+			const S_AgingTest* pAgingItem = m_pMeasSeqItemEngine->GetAgingCycleInfo()->GetItem(m_pMeasSeqItemEngine->GetAgingCurItem());
+			bUseMeas = (pAgingItem != NULL && pAgingItem->m_bUseQuality)
+				&& (m_pMeasSeqItemEngine->GetAgingCycleInfo()->GetStickCount() == 0
+					|| m_pMeasSeqItemEngine->GetAgingCycleInfo()->IsStickUse(GetMeasureStick(), enumAgingMeasKind_VISION));
+
+			if (bUseMeas && m_pShareItem->GetShareMemoryMgrPtr()->GetSharedMemory() != NULL)
+			{
+				// LYS 2026-08-06 AgingCycle E4: progress marker (col 5 = VISION)
+				m_pShareItem->GetShareMemoryMgrPtr()->GetSharedMemory()->m_nAgingListRow = m_pMeasSeqItemEngine->GetAgingCurItem() + 1;
+				m_pShareItem->GetShareMemoryMgrPtr()->GetSharedMemory()->m_nAgingListCol = 5;
+			}
+		}
 		nTimeOut = pReciepInfo->m_sInspectItem.m_nTimeOut[4];
 
 		bUseRtestNgPass = pReciepInfo->m_sOptionItem.m_bUseRtestNgPass;	// jsyoon 2022.06.21
@@ -4025,6 +4056,22 @@ bool CDoWorkGlassMeasureStep_Measure_ANGLE::Run()
 	{
 		bUseMeas    = (bool)pReciepInfo->m_sInspectItem.m_bUseAngle_6;
 		bUseMeasLCR = (bool)pReciepInfo->m_sInspectItem.m_bUseLCR_8;
+		// LYS 2026-08-06 AgingCycle E3: per-item select (ANGLE flag + stick cell map)
+		if (m_pMeasSeqItemEngine != NULL && m_pMeasSeqItemEngine->IsAgingCycleActive())
+		{
+			const S_AgingTest* pAgingItem = m_pMeasSeqItemEngine->GetAgingCycleInfo()->GetItem(m_pMeasSeqItemEngine->GetAgingCurItem());
+			bUseMeas = (pAgingItem != NULL && pAgingItem->m_bUseAngle)
+				&& (m_pMeasSeqItemEngine->GetAgingCycleInfo()->GetStickCount() == 0
+					|| m_pMeasSeqItemEngine->GetAgingCycleInfo()->IsStickUse(GetMeasureStick(), enumAgingMeasKind_ANGLE));
+
+			if (bUseMeas && m_pShareItem->GetShareMemoryMgrPtr()->GetSharedMemory() != NULL)
+			{
+				// LYS 2026-08-06 AgingCycle E4: progress marker (col 6 = ANGLE)
+				m_pShareItem->GetShareMemoryMgrPtr()->GetSharedMemory()->m_nAgingListRow = m_pMeasSeqItemEngine->GetAgingCurItem() + 1;
+				m_pShareItem->GetShareMemoryMgrPtr()->GetSharedMemory()->m_nAgingListCol = 6;
+			}
+		}
+		if (m_pMeasSeqItemEngine != NULL && m_pMeasSeqItemEngine->IsAgingCycleActive()) bUseMeasLCR = false;	// LYS 2026-08-06 AgingCycle E3
 
 		nTimeOut = pReciepInfo->m_sInspectItem.m_nTimeOut[6];
 		nTimeOutLCR = pReciepInfo->m_sInspectItem.m_nTimeOut[8];
@@ -5635,11 +5682,90 @@ bool CDoWorkGlassMeasureStep_RTEST::Run()
 	return bRet;
 }
 
+// LYS 2026-08-06 AgingCycle E3: aging-list per-item pattern lighting
+// (OCP DoWorkStartMeasOCP_A: TURNON_ALL -> (PTN-1) x NEXT_PTN_ALL -> PtnSec hold -> TurnOff)
+bool CDoWorkGlassMeasureStep_AGING_PTN::Run()
+{
+	if (m_pMeasSeqItemEngine == NULL || m_pMeasSeqItemEngine->IsAgingCycleActive() == false)
+		return true;	// standard sequence: pass-through
+
+	const S_AgingTest* pItem = m_pMeasSeqItemEngine->GetAgingCycleInfo()->GetItem(m_pMeasSeqItemEngine->GetAgingCurItem());
+	if (pItem == NULL) return true;
+
+	CString strLog;
+	strLog.Format(_T("CDoWorkGlassMeasureStep_AGING_PTN Start. item(%d) ptn(%d) sec(%d)"),
+		m_pMeasSeqItemEngine->GetAgingCurItem() + 1, pItem->m_nPtnRGB, pItem->m_nPtnSec);
+	m_pShareItem->GetLogFileAccessorPtr()->KMLOG(SYST, strLog);
+
+	// progress: row = current item(1-base), col 2 = lighting
+	if (m_pShareItem->GetShareMemoryMgrPtr()->GetSharedMemory() != NULL)
+	{
+		m_pShareItem->GetShareMemoryMgrPtr()->GetSharedMemory()->m_nAgingListRow = m_pMeasSeqItemEngine->GetAgingCurItem() + 1;
+		m_pShareItem->GetShareMemoryMgrPtr()->GetSharedMemory()->m_nAgingListCol = 2;
+	}
+
+	long lRet = VTM_RV_SUCCESSED;
+
+	if (pItem->m_nPtnRGB > 0)
+	{
+		lRet = m_pShareItem->GetCommTcpIpFactoryMgr()->DoWorkInspectStart(enumTCPIpFactorytID_PG, enumTCPIpFactoryt_PGEvent_5);	// Turn On All
+
+		for (int i = 1; i < pItem->m_nPtnRGB && lRet == VTM_RV_SUCCESSED; i++)
+		{
+			lRet = m_pShareItem->GetCommTcpIpFactoryMgr()->DoWorkInspectStart(enumTCPIpFactorytID_PG, enumTCPIpFactoryt_PGEvent_6);	// Next Pattern
+		}
+
+		if (lRet == VTM_RV_SUCCESSED)
+		{
+			// col 3 = holding (PtnSec)
+			if (m_pShareItem->GetShareMemoryMgrPtr()->GetSharedMemory() != NULL)
+				m_pShareItem->GetShareMemoryMgrPtr()->GetSharedMemory()->m_nAgingListCol = 3;
+
+			DWORD dwS = GetTickCount();
+			DWORD dwHold = (DWORD)pItem->m_nPtnSec * 1000;
+			DWORD dwT = 0;
+			while (dwT < dwHold)
+			{
+				Sleep(100);
+				DWORD dwR = GetTickCount();
+				dwT = (dwR >= dwS) ? (dwR - dwS) : (((DWORD)0xFFFFFFFF) - (dwS - dwR));
+
+				if (m_pShareItem->IfPauseEvt_WaitResumeEvt() != true) break;	// user stop
+			}
+		}
+
+		// Turn Off (always attempt, keep the first error)
+		long lOff = m_pShareItem->GetCommTcpIpFactoryMgr()->DoWorkInspectStart(enumTCPIpFactorytID_PG, enumTCPIpFactoryt_PGEvent_8);
+		if (lRet == VTM_RV_SUCCESSED) lRet = lOff;
+	}
+
+	bool bRet = true;
+	if (lRet != VTM_RV_SUCCESSED)
+	{
+		bRet = false;
+		m_pShareItem->SetFail(true, lRet);
+	}
+
+	if (m_pShareItem->IfPauseEvt_WaitResumeEvt() != true) bRet = false;
+
+	m_pShareItem->GetLogFileAccessorPtr()->KMLOG(SYST, _T("CDoWorkGlassMeasureStep_AGING_PTN End."));
+
+	return bRet;
+}
+
 bool CDoWorkGlassMeasureStep_AGING::Run()
 {
 	if (m_pShareItem->GetCommTcpIpFactoryMgr()->IsOutOfService(enumTCPIpFactorytID_PG) == true) Sleep(1000);
 	
 	 m_pShareItem->GetLogFileAccessorPtr()->KMLOG(SYST, _T("CDoWorkGlassMeasureStep_AGING Start."));
+
+	// LYS 2026-08-06 AgingCycle E4: progress marker (col 1 = Aging)
+	if (m_pMeasSeqItemEngine != NULL && m_pMeasSeqItemEngine->IsAgingCycleActive()
+		&& m_pShareItem->GetShareMemoryMgrPtr()->GetSharedMemory() != NULL)
+	{
+		m_pShareItem->GetShareMemoryMgrPtr()->GetSharedMemory()->m_nAgingListRow = m_pMeasSeqItemEngine->GetAgingCurItem() + 1;
+		m_pShareItem->GetShareMemoryMgrPtr()->GetSharedMemory()->m_nAgingListCol = 1;
+	}
 
     bool bRet = false;
     long lRet = VTM_RV_SUCCESSED;
@@ -5673,6 +5799,24 @@ bool CDoWorkGlassMeasureStep_AGING::Run()
 
 		double dCurPos = 0.;
 		dCurPos = m_pShareItem->GetMaintControlMgrPtr()->GetCurPos(AXIS_X2);	// 2023.08.31 add
+
+		// LYS 2026-08-05 AgingSet aging target-current alarm
+		bool bAgingAlarmUse = false;
+		std::vector<S_AgingTargetAlarm> vecAgingTarget;
+		if (bIsOCP)
+		{
+			bAgingAlarmUse = (CAgingAlarmCheck::GetAlarmUse() == TRUE);
+			if (bAgingAlarmUse)
+			{
+				CAgingAlarmCheck::DeleteAgingResultFile();
+				if (!CAgingAlarmCheck::LoadTargetRcp(m_pShareItem->GetRecipeEditMgrPtr()->GetRecipeID(), vecAgingTarget))
+				{
+					m_pShareItem->GetLogFileAccessorPtr()->KMLOG(SYST, _T("CDoWorkGlassMeasureStep_AGING target rcp open fail."));
+					m_pShareItem->SetFail(true, PROPERTY_AGING_RCP_OPEN_FAIL);
+					return false;
+				}
+			}
+		}
 
         // Start
 		bool bMeasAging = false;
@@ -5959,6 +6103,26 @@ bool CDoWorkGlassMeasureStep_AGING::Run()
 				{
 					lRet = m_pShareItem->GetCommTcpIpFactoryMgr()->DoWorkInspectComplate(enumTCPIpFactorytID_AGING, 0, nTimeOut);
 				}
+
+			// LYS 2026-08-05 AgingSet aging target-current alarm
+			if (lRet == VTM_RV_SUCCESSED && bIsOCP && bAgingAlarmUse && bMeasAging)
+			{
+				CString strAgingPtn;
+				int nAgingCell = 0;
+				int nAgingAlarm = CAgingAlarmCheck::Find(vecAgingTarget, strAgingPtn, nAgingCell);
+				if (nAgingAlarm == AGING_NOT_FILE)
+				{
+					m_pShareItem->GetLogFileAccessorPtr()->KMLOG(SYST, _T("CDoWorkGlassMeasureStep_AGING result file not found."));
+					lRet = PROPERTY_AGING_FILE_OPEN_FAIL;
+				}
+				else if (nAgingAlarm == AGING_FIND_ALARM)
+				{
+					CString strAgingLog;
+					strAgingLog.Format(_T("CDoWorkGlassMeasureStep_AGING Spec Out : Ptn(%s) Cell(%d)"), (LPCTSTR)strAgingPtn, nAgingCell);
+					m_pShareItem->GetLogFileAccessorPtr()->KMLOG(SYST, strAgingLog);
+					lRet = PROPERTY_AGING_SPEC_OUT_ALARM;
+				}
+			}
 			}
 			else
 			{

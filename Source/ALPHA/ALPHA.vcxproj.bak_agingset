@@ -1,0 +1,929 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Project DefaultTargets="Build" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <ItemGroup Label="ProjectConfigurations">
+    <ProjectConfiguration Include="Debug|Win32">
+      <Configuration>Debug</Configuration>
+      <Platform>Win32</Platform>
+    </ProjectConfiguration>
+    <ProjectConfiguration Include="Release|Win32">
+      <Configuration>Release</Configuration>
+      <Platform>Win32</Platform>
+    </ProjectConfiguration>
+    <ProjectConfiguration Include="Debug|x64">
+      <Configuration>Debug</Configuration>
+      <Platform>x64</Platform>
+    </ProjectConfiguration>
+    <ProjectConfiguration Include="Release|x64">
+      <Configuration>Release</Configuration>
+      <Platform>x64</Platform>
+    </ProjectConfiguration>
+  </ItemGroup>
+  <PropertyGroup Label="Globals">
+    <VCProjectVersion>17.0</VCProjectVersion>
+    <ProjectGuid>{77FABB73-48FD-4EFA-815F-07161FB403F2}</ProjectGuid>
+    <Keyword>MFCProj</Keyword>
+    <RootNamespace>ALPHA</RootNamespace>
+    <WindowsTargetPlatformVersion>10.0</WindowsTargetPlatformVersion>
+    <SccProjectName>Svn</SccProjectName>
+    <SccAuxPath>Svn</SccAuxPath>
+    <SccLocalPath>Svn</SccLocalPath>
+    <SccProvider>SubversionScc</SccProvider>
+  </PropertyGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.Default.props" />
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'" Label="Configuration">
+    <ConfigurationType>Application</ConfigurationType>
+    <UseDebugLibraries>true</UseDebugLibraries>
+    <PlatformToolset>v143</PlatformToolset>
+    <CharacterSet>Unicode</CharacterSet>
+    <UseOfMfc>Dynamic</UseOfMfc>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|Win32'" Label="Configuration">
+    <ConfigurationType>Application</ConfigurationType>
+    <UseDebugLibraries>false</UseDebugLibraries>
+    <PlatformToolset>v143</PlatformToolset>
+    <WholeProgramOptimization>true</WholeProgramOptimization>
+    <CharacterSet>Unicode</CharacterSet>
+    <UseOfMfc>Dynamic</UseOfMfc>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'" Label="Configuration">
+    <ConfigurationType>Application</ConfigurationType>
+    <UseDebugLibraries>true</UseDebugLibraries>
+    <PlatformToolset>v143</PlatformToolset>
+    <CharacterSet>Unicode</CharacterSet>
+    <UseOfMfc>Dynamic</UseOfMfc>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'" Label="Configuration">
+    <ConfigurationType>Application</ConfigurationType>
+    <UseDebugLibraries>false</UseDebugLibraries>
+    <PlatformToolset>v143</PlatformToolset>
+    <WholeProgramOptimization>false</WholeProgramOptimization>
+    <CharacterSet>Unicode</CharacterSet>
+    <UseOfMfc>Dynamic</UseOfMfc>
+  </PropertyGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.props" />
+  <ImportGroup Label="ExtensionSettings">
+  </ImportGroup>
+  <ImportGroup Label="Shared">
+  </ImportGroup>
+  <ImportGroup Label="PropertySheets" Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">
+    <Import Project="$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props" Condition="exists('$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props')" Label="LocalAppDataPlatform" />
+  </ImportGroup>
+  <ImportGroup Label="PropertySheets" Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">
+    <Import Project="$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props" Condition="exists('$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props')" Label="LocalAppDataPlatform" />
+  </ImportGroup>
+  <ImportGroup Label="PropertySheets" Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
+    <Import Project="$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props" Condition="exists('$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props')" Label="LocalAppDataPlatform" />
+  </ImportGroup>
+  <ImportGroup Label="PropertySheets" Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
+    <Import Project="$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props" Condition="exists('$(UserRootDir)\Microsoft.Cpp.$(Platform).user.props')" Label="LocalAppDataPlatform" />
+  </ImportGroup>
+  <PropertyGroup Label="UserMacros" />
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">
+    <LinkIncremental>true</LinkIncremental>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
+    <LinkIncremental>true</LinkIncremental>
+    <IncludePath>$(SolutionDir)..\..\CoreFunction\common\NI\x64\Include;$(IncludePath)</IncludePath>
+    <LibraryPath>$(SolutionDir)..\..\CoreFunction\common\NI\x64\Lib;$(LibraryPath)</LibraryPath>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">
+    <LinkIncremental>false</LinkIncremental>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
+    <LinkIncremental>false</LinkIncremental>
+    <IncludePath>$(SolutionDir)..\..\CoreFunction\common\NI\x64\Include;$(IncludePath)</IncludePath>
+    <LibraryPath>$(SolutionDir)..\..\CoreFunction\common\NI\x64\Lib;$(LibraryPath)</LibraryPath>
+  </PropertyGroup>
+  <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">
+    <ClCompile>
+      <PrecompiledHeader>Use</PrecompiledHeader>
+      <WarningLevel>Level3</WarningLevel>
+      <SDLCheck>true</SDLCheck>
+      <PreprocessorDefinitions>WIN32;_WINDOWS;_DEBUG;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <PrecompiledHeaderFile>pch.h</PrecompiledHeaderFile>
+    </ClCompile>
+    <Link>
+      <SubSystem>Windows</SubSystem>
+    </Link>
+    <Midl>
+      <MkTypLibCompatible>false</MkTypLibCompatible>
+      <ValidateAllParameters>true</ValidateAllParameters>
+      <PreprocessorDefinitions>_DEBUG;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+    </Midl>
+    <ResourceCompile>
+      <Culture>0x0412</Culture>
+      <PreprocessorDefinitions>_DEBUG;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <AdditionalIncludeDirectories>$(IntDir);%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+    </ResourceCompile>
+  </ItemDefinitionGroup>
+  <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">
+    <ClCompile>
+      <PrecompiledHeader>Use</PrecompiledHeader>
+      <WarningLevel>Level3</WarningLevel>
+      <SDLCheck>false</SDLCheck>
+      <PreprocessorDefinitions>WIN64;_WINDOWS;_DEBUG;_USE_TEST_ALIGN;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <PrecompiledHeaderFile>pch.h</PrecompiledHeaderFile>
+      <AdditionalIncludeDirectories>$(SolutionDir)..\..\CoreFunction;$(SolutionDir);%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <MultiProcessorCompilation>true</MultiProcessorCompilation>
+    </ClCompile>
+    <Link>
+      <SubSystem>Windows</SubSystem>
+      <AdditionalDependencies>version.lib;..\\Lib\\olch2du8.lib;..\\Lib\\Alarm.lib;..\\Lib\\dMCCSpec.lib;..\\Lib\\dSACC.lib;..\\Lib\\ProbeHistory.lib;..\\Lib\\dResult.lib;..\\Lib\\dfcRecipe64d.lib</AdditionalDependencies>
+    </Link>
+    <Midl>
+      <MkTypLibCompatible>false</MkTypLibCompatible>
+      <ValidateAllParameters>true</ValidateAllParameters>
+      <PreprocessorDefinitions>_DEBUG;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+    </Midl>
+    <ResourceCompile>
+      <Culture>0x0412</Culture>
+      <PreprocessorDefinitions>_DEBUG;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <AdditionalIncludeDirectories>$(IntDir);%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+    </ResourceCompile>
+    <PostBuildEvent>
+      <Command>copy $(OutDir)$(TargetName).exe "$(ProjectDir)..\Bin\"
+copy $(OutDir)$(TargetName).pdb "$(ProjectDir)..\Bin\"
+</Command>
+    </PostBuildEvent>
+    <PreBuildEvent>
+      <Command>mkdir "$(ProjectDir)..\\Bin"
+mkdir "$(ProjectDir)..\\Bin\\Config"
+mkdir "$(ProjectDir)..\\Bin\\Config\\DB"
+mkdir "$(ProjectDir)..\\Bin\\Config\\CoreFunction"
+mkdir "$(ProjectDir)..\\Bin\\Config\\CoreFunction\IOMapConfig"
+mkdir "$(ProjectDir)..\\Bin\\Config\\CoreFunction\AlarmConfig"
+mkdir "$(ProjectDir)..\\Bin\\Config\\CoreFunction\MotorConfig"
+mkdir "$(ProjectDir)..\\Bin\\DefaultRcp"
+mkdir "$(ProjectDir)..\\Bin\\Recipe"
+
+copy /-Y "$(SolutionDir)..\\..\\CoreFunction\\dll_Alarm\\DB\\*.*"  "$(ProjectDir)..\Bin\Config\DB\"
+copy "$(SolutionDir)..\\..\\CoreFunction\\dll_Alarm\\Include\\*.*" "$(ProjectDir)..\Include\"
+copy "$(SolutionDir)..\\..\\CoreFunction\\dll_Alarm\\lib\\*.*"  "$(ProjectDir)..\lib\"
+copy "$(SolutionDir)..\\..\\CoreFunction\\dll_Alarm\\dll\\*.*"  "$(ProjectDir)..\bin\"
+copy /-Y "$(SolutionDir)..\\..\\CoreFunction\\dll_Alarm\\Files\\*.*"  "$(ProjectDir)..\Bin\Config\\CoreFunction\AlarmConfig\"
+
+copy /-Y "$(ProjectDir)ConfigurationFile\*.png" "$(ProjectDir)..\Bin\"
+copy /-Y "$(ProjectDir)ConfigurationFile\*.ini" "$(ProjectDir)..\Bin\Config\"
+copy /-Y "$(ProjectDir)ConfigurationFile\CoreFunction\\*.*" "$(ProjectDir)..\Bin\Config\\CoreFunction\"
+copy /-Y "$(ProjectDir)ConfigurationFile\CoreFunction\IOMapConfig\*.*" "$(ProjectDir)..\Bin\Config\\CoreFunction\IOMapConfig\"
+copy /-Y "$(ProjectDir)ConfigurationFile\CoreFunction\MotorConfig\*.*" "$(ProjectDir)..\Bin\Config\\CoreFunction\MotorConfig\"
+copy /-Y "$(SolutionDir)..\..\CoreFunction\common\FarPoint64\Dll\SPR64DU80.DLL" "$(ProjectDir)..\Bin\SPR64DU80.DLL"
+</Command>
+    </PreBuildEvent>
+  </ItemDefinitionGroup>
+  <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">
+    <ClCompile>
+      <PrecompiledHeader>Use</PrecompiledHeader>
+      <WarningLevel>Level3</WarningLevel>
+      <FunctionLevelLinking>true</FunctionLevelLinking>
+      <IntrinsicFunctions>true</IntrinsicFunctions>
+      <SDLCheck>true</SDLCheck>
+      <PreprocessorDefinitions>WIN32;_WINDOWS;NDEBUG;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <PrecompiledHeaderFile>pch.h</PrecompiledHeaderFile>
+    </ClCompile>
+    <Link>
+      <SubSystem>Windows</SubSystem>
+      <EnableCOMDATFolding>true</EnableCOMDATFolding>
+      <OptimizeReferences>true</OptimizeReferences>
+    </Link>
+    <Midl>
+      <MkTypLibCompatible>false</MkTypLibCompatible>
+      <ValidateAllParameters>true</ValidateAllParameters>
+      <PreprocessorDefinitions>NDEBUG;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+    </Midl>
+    <ResourceCompile>
+      <Culture>0x0412</Culture>
+      <PreprocessorDefinitions>NDEBUG;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <AdditionalIncludeDirectories>$(IntDir);%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+    </ResourceCompile>
+  </ItemDefinitionGroup>
+  <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release|x64'">
+    <ClCompile>
+      <PrecompiledHeader>Use</PrecompiledHeader>
+      <WarningLevel>Level3</WarningLevel>
+      <FunctionLevelLinking>true</FunctionLevelLinking>
+      <IntrinsicFunctions>true</IntrinsicFunctions>
+      <SDLCheck>true</SDLCheck>
+      <PreprocessorDefinitions>WIN64;_WINDOWS;NDEBUG;_WINSOCK_DEPRECATED_NO_WARNINGS;_CRT_SECURE_NO_WARNINGS;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <PrecompiledHeaderFile>pch.h</PrecompiledHeaderFile>
+      <AdditionalIncludeDirectories>$(SolutionDir)..\..\CoreFunction;$(SolutionDir);%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+      <DebugInformationFormat>ProgramDatabase</DebugInformationFormat>
+      <MultiProcessorCompilation>true</MultiProcessorCompilation>
+    </ClCompile>
+    <Link>
+      <SubSystem>Windows</SubSystem>
+      <EnableCOMDATFolding>true</EnableCOMDATFolding>
+      <OptimizeReferences>true</OptimizeReferences>
+      <AdditionalDependencies>version.lib;..\\Lib\\olch2du8.lib;..\\Lib\\Alarm.lib;..\\Lib\\dMCCSpec.lib;..\\Lib\\dSACC.lib;..\\Lib\\dResult.lib;..\\Lib\\dfcRecipe64.lib;..\\Lib\\ProbeHistory.lib;%(AdditionalDependencies)</AdditionalDependencies>
+    </Link>
+    <Midl>
+      <MkTypLibCompatible>false</MkTypLibCompatible>
+      <ValidateAllParameters>true</ValidateAllParameters>
+      <PreprocessorDefinitions>NDEBUG;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+    </Midl>
+    <ResourceCompile>
+      <Culture>0x0412</Culture>
+      <PreprocessorDefinitions>NDEBUG;%(PreprocessorDefinitions)</PreprocessorDefinitions>
+      <AdditionalIncludeDirectories>$(IntDir);%(AdditionalIncludeDirectories)</AdditionalIncludeDirectories>
+    </ResourceCompile>
+    <PreBuildEvent>
+      <Command>mkdir "$(ProjectDir)..\\Bin"
+mkdir "$(ProjectDir)..\\Bin\\Config"
+mkdir "$(ProjectDir)..\\Bin\\Config\\DB"
+mkdir "$(ProjectDir)..\\Bin\\Config\\CoreFunction"
+mkdir "$(ProjectDir)..\\Bin\\Config\\CoreFunction\IOMapConfig"
+mkdir "$(ProjectDir)..\\Bin\\Config\\CoreFunction\AlarmConfig"
+mkdir "$(ProjectDir)..\\Bin\\Config\\CoreFunction\MotorConfig"
+mkdir "$(ProjectDir)..\\Bin\\DefaultRcp"
+mkdir "$(ProjectDir)..\\Bin\\Recipe"
+
+copy /-Y "$(SolutionDir)..\\..\\CoreFunction\\dll_Alarm\\DB\\*.*"  "$(ProjectDir)..\Bin\Config\DB\"
+copy "$(SolutionDir)..\\..\\CoreFunction\\dll_Alarm\\Include\\*.*" "$(ProjectDir)..\Include\"
+copy "$(SolutionDir)..\\..\\CoreFunction\\dll_Alarm\\lib\\*.*"  "$(ProjectDir)..\lib\"
+copy "$(SolutionDir)..\\..\\CoreFunction\\dll_Alarm\\dll\\*.*"  "$(ProjectDir)..\bin\"
+copy /-Y "$(SolutionDir)..\\..\\CoreFunction\\dll_Alarm\\Files\\*.*"  "$(ProjectDir)..\Bin\Config\\CoreFunction\AlarmConfig\"
+
+copy /-Y "$(ProjectDir)ConfigurationFile\*.png" "$(ProjectDir)..\Bin\"
+copy /-Y "$(ProjectDir)ConfigurationFile\*.ini" "$(ProjectDir)..\Bin\Config\"
+copy /-Y "$(ProjectDir)ConfigurationFile\CoreFunction\\*.*" "$(ProjectDir)..\Bin\Config\\CoreFunction\"
+copy /-Y "$(ProjectDir)ConfigurationFile\CoreFunction\IOMapConfig\*.*" "$(ProjectDir)..\Bin\Config\\CoreFunction\IOMapConfig\"
+copy /-Y "$(ProjectDir)ConfigurationFile\CoreFunction\MotorConfig\*.*" "$(ProjectDir)..\Bin\Config\\CoreFunction\MotorConfig\"
+copy /-Y "$(SolutionDir)..\..\CoreFunction\common\FarPoint64\Dll\SPR64DU80.DLL" "$(ProjectDir)..\Bin\SPR64DU80.DLL"
+</Command>
+    </PreBuildEvent>
+    <PostBuildEvent>
+      <Command>copy $(OutDir)$(TargetName).exe "$(ProjectDir)..\Bin\"
+copy $(OutDir)$(TargetName).pdb "$(ProjectDir)..\Bin\"
+</Command>
+    </PostBuildEvent>
+  </ItemDefinitionGroup>
+  <ItemGroup>
+    <ClInclude Include="..\..\CoreFunction\Comm232Function\Comm232Config.h" />
+    <ClInclude Include="..\..\CoreFunction\Comm232Function\Comm232Function.h" />
+    <ClInclude Include="..\..\CoreFunction\Comm232Function\CommSerialDefine.h" />
+    <ClInclude Include="..\..\CoreFunction\CommEthFunction\ClientSocket.h" />
+    <ClInclude Include="..\..\CoreFunction\CommEthFunction\CommEthFunction.h" />
+    <ClInclude Include="..\..\CoreFunction\CommEthFunction\EthernetManagerTCP.h" />
+    <ClInclude Include="..\..\CoreFunction\CommEthFunction\EthernetManagerTCPDefine.h" />
+    <ClInclude Include="..\..\CoreFunction\CommEthFunction\EthernetSocket.h" />
+    <ClInclude Include="..\..\CoreFunction\CommEthFunction\ServerSocket.h" />
+    <ClInclude Include="..\..\CoreFunction\CommFtpFunction\CommFtpFunction.h" />
+    <ClInclude Include="..\..\CoreFunction\CommFtpFunction\EthernetManagerFTP.h" />
+    <ClInclude Include="..\..\CoreFunction\CommFtpFunction\EthernetManagerFTPDefine.h" />
+    <ClInclude Include="..\..\CoreFunction\CommFtpFunction\xNetFTP.h" />
+    <ClInclude Include="..\..\CoreFunction\common\AutoEdit.h" />
+    <ClInclude Include="..\..\CoreFunction\common\BinaryHelper.h" />
+    <ClInclude Include="..\..\CoreFunction\common\BtnST.h" />
+    <ClInclude Include="..\..\CoreFunction\common\Chart\ChartMarker.h" />
+    <ClInclude Include="..\..\CoreFunction\common\Chart\ChartOrbit.h" />
+    <ClInclude Include="..\..\CoreFunction\common\Chart\ChartSpec.h" />
+    <ClInclude Include="..\..\CoreFunction\common\Chart\SetScaleDlg.h" />
+    <ClInclude Include="..\..\CoreFunction\common\CommonFunc.h" />
+    <ClInclude Include="..\..\CoreFunction\common\crc16.h" />
+    <ClInclude Include="..\..\CoreFunction\common\FarPoint64\Ssdllmfc.h" />
+    <ClInclude Include="..\..\CoreFunction\common\IMAQImageCtrl\FineCentering.h" />
+    <ClInclude Include="..\..\CoreFunction\common\IMAQImageCtrl\IMAQImage.h" />
+    <ClInclude Include="..\..\CoreFunction\common\IMAQImageCtrl\IMAQImageCtrl.h" />
+    <ClInclude Include="..\..\CoreFunction\common\InfoWnd.h" />
+    <ClInclude Include="..\..\CoreFunction\common\IniHelper.h" />
+    <ClInclude Include="..\..\CoreFunction\common\Label.h" />
+    <ClInclude Include="..\..\CoreFunction\common\LedButton.h" />
+    <ClInclude Include="..\..\CoreFunction\common\MFCGridControl\GridCtrl_src\CellRange.h" />
+    <ClInclude Include="..\..\CoreFunction\common\MFCGridControl\GridCtrl_src\GridCell.h" />
+    <ClInclude Include="..\..\CoreFunction\common\MFCGridControl\GridCtrl_src\GridCellBase.h" />
+    <ClInclude Include="..\..\CoreFunction\common\MFCGridControl\GridCtrl_src\GridCtrl.h" />
+    <ClInclude Include="..\..\CoreFunction\common\MFCGridControl\GridCtrl_src\GridDropTarget.h" />
+    <ClInclude Include="..\..\CoreFunction\common\MFCGridControl\GridCtrl_src\InPlaceEdit.h" />
+    <ClInclude Include="..\..\CoreFunction\common\MFCGridControl\GridCtrl_src\MemoryDC.h" />
+    <ClInclude Include="..\..\CoreFunction\common\MFCGridControl\GridCtrl_src\TitleTip.h" />
+    <ClInclude Include="..\..\CoreFunction\common\MFCGridControl\NewCellTypes\CheckComboBox.h" />
+    <ClInclude Include="..\..\CoreFunction\common\MFCGridControl\NewCellTypes\GridCellButton.h" />
+    <ClInclude Include="..\..\CoreFunction\common\MFCGridControl\NewCellTypes\GridCellCheck.h" />
+    <ClInclude Include="..\..\CoreFunction\common\MFCGridControl\NewCellTypes\GridCellCheckCombo.h" />
+    <ClInclude Include="..\..\CoreFunction\common\MFCGridControl\NewCellTypes\GridCellCombo.h" />
+    <ClInclude Include="..\..\CoreFunction\common\MFCGridControl\NewCellTypes\GridCellDateTime.h" />
+    <ClInclude Include="..\..\CoreFunction\common\MFCGridControl\NewCellTypes\GridCellNumeric.h" />
+    <ClInclude Include="..\..\CoreFunction\common\MFCGridControl\NewCellTypes\GridURLCell.h" />
+    <ClInclude Include="..\..\CoreFunction\common\MyLabelTimer.h" />
+    <ClInclude Include="..\..\CoreFunction\common\MySpreadDll.h" />
+    <ClInclude Include="..\..\CoreFunction\common\NI\x64\Include\niimaq.h" />
+    <ClInclude Include="..\..\CoreFunction\common\NI\x64\Include\NIIMAQdx.h" />
+    <ClInclude Include="..\..\CoreFunction\common\NI\x64\Include\nimachinevision.h" />
+    <ClInclude Include="..\..\CoreFunction\common\NI\x64\Include\niocr.h" />
+    <ClInclude Include="..\..\CoreFunction\common\NI\x64\Include\nivision.h" />
+    <ClInclude Include="..\..\CoreFunction\common\PingTest.h" />
+    <ClInclude Include="..\..\CoreFunction\common\RawDataHelper.h" />
+    <ClInclude Include="..\..\CoreFunction\common\Registry.h" />
+    <ClInclude Include="..\..\CoreFunction\common\StaticSpread.h" />
+    <ClInclude Include="..\..\CoreFunction\common\TimeChecker.h" />
+    <ClInclude Include="..\..\CoreFunction\common\WinMgr.h" />
+    <ClInclude Include="..\..\CoreFunction\common\XButtonXP\CreateGrayscaleIcon.h" />
+    <ClInclude Include="..\..\CoreFunction\common\XButtonXP\OddButton.h" />
+    <ClInclude Include="..\..\CoreFunction\common\XButtonXP\XButtonXP.h" />
+    <ClInclude Include="..\..\CoreFunction\common\XButtonXP\XThemeHelper.h" />
+    <ClInclude Include="..\..\CoreFunction\common\XLS\XLAutomation.h" />
+    <ClInclude Include="..\..\CoreFunction\common\XLS\XLEzAutomation.h" />
+    <ClInclude Include="..\..\CoreFunction\common\XStringHelper.h" />
+    <ClInclude Include="..\..\CoreFunction\CoreFunction.h" />
+    <ClInclude Include="..\..\CoreFunction\dll_Alarm\Include\AlarmDefine.h" />
+    <ClInclude Include="..\..\CoreFunction\dll_Alarm\Include\API_Alarm.h" />
+    <ClInclude Include="..\..\CoreFunction\FrameGrabberFunction\FrameGrabberFunction.h" />
+    <ClInclude Include="..\..\CoreFunction\FrameGrabberFunction\FrameGrabberImpl.h" />
+    <ClInclude Include="..\..\CoreFunction\FrameGrabberFunction\FrameGrabberImplDefine.h" />
+    <ClInclude Include="..\..\CoreFunction\FrameGrabberFunction\GigECamera_Basler\FrameGrabber_BS4M.h" />
+    <ClInclude Include="..\..\CoreFunction\FrameGrabberFunction\GigECamera_Basler\FrameGrabber_GigE_BS4M.h" />
+    <ClInclude Include="..\..\CoreFunction\IOMapFunction\DataStructure.h" />
+    <ClInclude Include="..\..\CoreFunction\IOMapFunction\IOMapFunction.h" />
+    <ClInclude Include="..\..\CoreFunction\IOMapFunction\IOMapImpl.h" />
+    <ClInclude Include="..\..\CoreFunction\IOMapFunction\McProtocol\McAddressScannerImpl.h" />
+    <ClInclude Include="..\..\CoreFunction\IOMapFunction\McProtocol\McCaddressScanner.h" />
+    <ClInclude Include="..\..\CoreFunction\IOMapFunction\McProtocol\McDaddressScanner.h" />
+    <ClInclude Include="..\..\CoreFunction\IOMapFunction\McProtocol\McFaddressScanner.h" />
+    <ClInclude Include="..\..\CoreFunction\IOMapFunction\McProtocol\McGaddressScanner.h" />
+    <ClInclude Include="..\..\CoreFunction\IOMapFunction\McProtocol\McMaddressScanner.h" />
+    <ClInclude Include="..\..\CoreFunction\IOMapFunction\McProtocol\McPaddressScanner.h" />
+    <ClInclude Include="..\..\CoreFunction\IOMapFunction\McProtocol\McProtocolManager.h" />
+    <ClInclude Include="..\..\CoreFunction\LightFunction\CAS\CommSerialObjectCAS.h" />
+    <ClInclude Include="..\..\CoreFunction\LightFunction\ECS\CommSerialObjectECS.h" />
+    <ClInclude Include="..\..\CoreFunction\LightFunction\LightFunction.h" />
+    <ClInclude Include="..\..\CoreFunction\LightFunction\LightImpl.h" />
+    <ClInclude Include="..\..\CoreFunction\LightFunction\SPO\CommSerialObjectSPO.h" />
+    <ClInclude Include="..\..\CoreFunction\LightFunction\XCITE\CommSerialObjectXCITE.h" />
+    <ClInclude Include="..\..\CoreFunction\LogFunction\LogAccessor\file_access\FileAccessor.h" />
+    <ClInclude Include="..\..\CoreFunction\LogFunction\LogAccessor\LogFileAccessor.h" />
+    <ClInclude Include="..\..\CoreFunction\LogFunction\LogDefine.h" />
+    <ClInclude Include="..\..\CoreFunction\LogFunction\LogWrapper\LogWrapper.h" />
+    <ClInclude Include="..\..\CoreFunction\LogFunction\LogWrapper\spdlog\async.h" />
+    <ClInclude Include="..\..\CoreFunction\LogFunction\LogWrapper\spdlog\async_logger.h" />
+    <ClInclude Include="..\..\CoreFunction\LogFunction\LogWrapper\spdlog\common.h" />
+    <ClInclude Include="..\..\CoreFunction\LogFunction\LogWrapper\spdlog\details\async_logger_impl.h" />
+    <ClInclude Include="..\..\CoreFunction\LogFunction\LogWrapper\spdlog\details\circular_q.h" />
+    <ClInclude Include="..\..\CoreFunction\LogFunction\LogWrapper\spdlog\details\console_globals.h" />
+    <ClInclude Include="..\..\CoreFunction\LogFunction\LogWrapper\spdlog\details\file_helper.h" />
+    <ClInclude Include="..\..\CoreFunction\LogFunction\LogWrapper\spdlog\details\fmt_helper.h" />
+    <ClInclude Include="..\..\CoreFunction\LogFunction\LogWrapper\spdlog\details\logger_impl.h" />
+    <ClInclude Include="..\..\CoreFunction\LogFunction\LogWrapper\spdlog\details\log_msg.h" />
+    <ClInclude Include="..\..\CoreFunction\LogFunction\LogWrapper\spdlog\details\mpmc_blocking_q.h" />
+    <ClInclude Include="..\..\CoreFunction\LogFunction\LogWrapper\spdlog\details\null_mutex.h" />
+    <ClInclude Include="..\..\CoreFunction\LogFunction\LogWrapper\spdlog\details\os.h" />
+    <ClInclude Include="..\..\CoreFunction\LogFunction\LogWrapper\spdlog\details\pattern_formatter.h" />
+    <ClInclude Include="..\..\CoreFunction\LogFunction\LogWrapper\spdlog\details\periodic_worker.h" />
+    <ClInclude Include="..\..\CoreFunction\LogFunction\LogWrapper\spdlog\details\registry.h" />
+    <ClInclude Include="..\..\CoreFunction\LogFunction\LogWrapper\spdlog\details\thread_pool.h" />
+    <ClInclude Include="..\..\CoreFunction\LogFunction\LogWrapper\spdlog\fmt\bin_to_hex.h" />
+    <ClInclude Include="..\..\CoreFunction\LogFunction\LogWrapper\spdlog\fmt\bundled\chrono.h" />
+    <ClInclude Include="..\..\CoreFunction\LogFunction\LogWrapper\spdlog\fmt\bundled\color.h" />
+    <ClInclude Include="..\..\CoreFunction\LogFunction\LogWrapper\spdlog\fmt\bundled\core.h" />
+    <ClInclude Include="..\..\CoreFunction\LogFunction\LogWrapper\spdlog\fmt\bundled\format-inl.h" />
+    <ClInclude Include="..\..\CoreFunction\LogFunction\LogWrapper\spdlog\fmt\bundled\format.h" />
+    <ClInclude Include="..\..\CoreFunction\LogFunction\LogWrapper\spdlog\fmt\bundled\locale.h" />
+    <ClInclude Include="..\..\CoreFunction\LogFunction\LogWrapper\spdlog\fmt\bundled\ostream.h" />
+    <ClInclude Include="..\..\CoreFunction\LogFunction\LogWrapper\spdlog\fmt\bundled\posix.h" />
+    <ClInclude Include="..\..\CoreFunction\LogFunction\LogWrapper\spdlog\fmt\bundled\printf.h" />
+    <ClInclude Include="..\..\CoreFunction\LogFunction\LogWrapper\spdlog\fmt\bundled\ranges.h" />
+    <ClInclude Include="..\..\CoreFunction\LogFunction\LogWrapper\spdlog\fmt\bundled\time.h" />
+    <ClInclude Include="..\..\CoreFunction\LogFunction\LogWrapper\spdlog\fmt\fmt.h" />
+    <ClInclude Include="..\..\CoreFunction\LogFunction\LogWrapper\spdlog\fmt\ostr.h" />
+    <ClInclude Include="..\..\CoreFunction\LogFunction\LogWrapper\spdlog\formatter.h" />
+    <ClInclude Include="..\..\CoreFunction\LogFunction\LogWrapper\spdlog\logger.h" />
+    <ClInclude Include="..\..\CoreFunction\LogFunction\LogWrapper\spdlog\sinks\android_sink.h" />
+    <ClInclude Include="..\..\CoreFunction\LogFunction\LogWrapper\spdlog\sinks\ansicolor_sink.h" />
+    <ClInclude Include="..\..\CoreFunction\LogFunction\LogWrapper\spdlog\sinks\base_sink.h" />
+    <ClInclude Include="..\..\CoreFunction\LogFunction\LogWrapper\spdlog\sinks\basic_file_sink.h" />
+    <ClInclude Include="..\..\CoreFunction\LogFunction\LogWrapper\spdlog\sinks\daily_file_sink.h" />
+    <ClInclude Include="..\..\CoreFunction\LogFunction\LogWrapper\spdlog\sinks\dist_sink.h" />
+    <ClInclude Include="..\..\CoreFunction\LogFunction\LogWrapper\spdlog\sinks\msvc_sink.h" />
+    <ClInclude Include="..\..\CoreFunction\LogFunction\LogWrapper\spdlog\sinks\null_sink.h" />
+    <ClInclude Include="..\..\CoreFunction\LogFunction\LogWrapper\spdlog\sinks\ostream_sink.h" />
+    <ClInclude Include="..\..\CoreFunction\LogFunction\LogWrapper\spdlog\sinks\rotating_file_sink.h" />
+    <ClInclude Include="..\..\CoreFunction\LogFunction\LogWrapper\spdlog\sinks\sink.h" />
+    <ClInclude Include="..\..\CoreFunction\LogFunction\LogWrapper\spdlog\sinks\stdout_color_sinks.h" />
+    <ClInclude Include="..\..\CoreFunction\LogFunction\LogWrapper\spdlog\sinks\stdout_sinks.h" />
+    <ClInclude Include="..\..\CoreFunction\LogFunction\LogWrapper\spdlog\sinks\syslog_sink.h" />
+    <ClInclude Include="..\..\CoreFunction\LogFunction\LogWrapper\spdlog\sinks\systemd_sink.h" />
+    <ClInclude Include="..\..\CoreFunction\LogFunction\LogWrapper\spdlog\sinks\wincolor_sink.h" />
+    <ClInclude Include="..\..\CoreFunction\LogFunction\LogWrapper\spdlog\spdlog.h" />
+    <ClInclude Include="..\..\CoreFunction\LogFunction\LogWrapper\spdlog\tweakme.h" />
+    <ClInclude Include="..\..\CoreFunction\LogFunction\LogWrapper\spdlog\version.h" />
+    <ClInclude Include="..\..\CoreFunction\MotorFunction\AxisType.h" />
+    <ClInclude Include="..\..\CoreFunction\MotorFunction\MotorCtrl_ACS\ACSC.h" />
+    <ClInclude Include="..\..\CoreFunction\MotorFunction\MotorCtrl_ACS\include\ACSC.h" />
+    <ClInclude Include="..\..\CoreFunction\MotorFunction\MotorCtrl_ACS\MotorControl_ACS.h" />
+    <ClInclude Include="..\..\CoreFunction\MotorFunction\MotorFunction.h" />
+    <ClInclude Include="..\..\CoreFunction\MotorFunction\MotorImpl.h" />
+    <ClInclude Include="..\..\CoreFunction\ShareMemFunction\CPtrnInfo.h" />
+    <ClInclude Include="..\..\CoreFunction\ShareMemFunction\OtherPPADefine.h" />
+    <ClInclude Include="..\..\CoreFunction\ShareMemFunction\ShareMem.h" />
+    <ClInclude Include="..\..\CoreFunction\ShareMemFunction\ShareMemFunction.h" />
+    <ClInclude Include="..\Include\AlarmDefine.h" />
+    <ClInclude Include="..\Include\AlarmIDList.h" />
+    <ClInclude Include="..\Include\API_RECIPE.h" />
+    <ClInclude Include="..\Include\DefinesCIM.h" />
+    <ClInclude Include="..\Include\DefinesSys.h" />
+    <ClInclude Include="..\Include\FDCSheardDefine.h" />
+    <ClInclude Include="..\Include\OutRecipeFunc.h" />
+    <ClInclude Include="..\Include\preDefine.h" />
+    <ClInclude Include="..\Include\RecipeShareMem.h" />
+    <ClInclude Include="Alarm\AlarmController.h" />
+    <ClInclude Include="Alarm\AlarmMonitorImpl.h" />
+    <ClInclude Include="Alarm\AlarmMonitorMgr.h" />
+    <ClInclude Include="Alarm\AlarmMonitorToDoorOpen.h" />
+    <ClInclude Include="Alarm\AlarmMonitorToDoorOpenState.h" />
+    <ClInclude Include="Alarm\AlarmMonitorToDoorVoice.h" />
+    <ClInclude Include="Alarm\AlarmMonitorToEmergency.h" />
+    <ClInclude Include="Alarm\AlarmMonitorToEmergencyButton.h" />
+    <ClInclude Include="Alarm\AlarmMonitorToLampTime.h" />
+    <ClInclude Include="Alarm\AlarmMonitorToMcOFF.h" />
+    <ClInclude Include="Alarm\AlarmMonitorToMcOFFState.h" />
+    <ClInclude Include="Alarm\AlarmMonitorToSafetyPLC.h" />
+    <ClInclude Include="Alarm\AlarmMonitorToSensor.h" />
+    <ClInclude Include="Alarm\AlarmMonitorToSensorCurtain.h" />
+    <ClInclude Include="Alarm\AlarmMonitorToSensorFAN.h" />
+    <ClInclude Include="Alarm\AlarmMonitorToSensorHandSwitch.h" />
+    <ClInclude Include="Alarm\AlarmMonitorToSensorIsolater.h" />
+    <ClInclude Include="Alarm\AlarmMonitorToSensorPressure.h" />
+    <ClInclude Include="Alarm\AlarmMonitorToSensorSmoke.h" />
+    <ClInclude Include="Alarm\AlarmMonitorToSensorTemperature.h" />
+    <ClInclude Include="Alarm\AlarmMonitorToSensorTemperatureLow.h" />
+    <ClInclude Include="Alarm\AlarmMonitorToSensorVacSwitch.h" />
+    <ClInclude Include="Alarm\AlarmMonitorToTeachKEY.h" />
+    <ClInclude Include="Alarm\AlarmMonitorToTeachKEYLock.h" />
+    <ClInclude Include="ALPHA.h" />
+    <ClInclude Include="AuroraFuncDefine.h" />
+    <ClInclude Include="AuroraMgr.h" />
+    <ClInclude Include="AuroraMgrPool.h" />
+    <ClInclude Include="AuroraSubMgr.h" />
+    <ClInclude Include="BaseSequenceBody.h" />
+    <ClInclude Include="BaseSequenceImpl.h" />
+    <ClInclude Include="CD_PopUp_Alarm_F.h" />
+    <ClInclude Include="CD_PopUp_Motion_Move.h" />
+    <ClInclude Include="CD_SelectColor.h" />
+    <ClInclude Include="CommTcpIpObjectAgingPG.h" />
+    <ClInclude Include="CommTcpIpObjectAngle.h" />
+    <ClInclude Include="CommTcpIpObjectCIM.h" />
+    <ClInclude Include="CommTcpIpObjectColor.h" />
+    <ClInclude Include="CommTcpIpObjectLCR.h" />
+    <ClInclude Include="CommTcpIpObjectPG.h" />
+    <ClInclude Include="CommTcpIpObjectPGMon.h" />
+    <ClInclude Include="CommTcpIpObjectTSP.h" />
+    <ClInclude Include="CommTcpIpObjectVision.h" />
+    <ClInclude Include="CommTcpIpObjectWAD.h" />
+    <ClInclude Include="DlgSMarkUI.h" />
+    <ClInclude Include="DlgSubMeasure_Progress.h" />
+    <ClInclude Include="DlgSubManual_AgingTest.h" />
+    <ClInclude Include="DlgSubManual_AutoContact.h" />
+    <ClInclude Include="DlgAlignCCD.h" />
+    <ClInclude Include="DlgALPHA.h" />
+    <ClInclude Include="DlgMainForm.h" />
+    <ClInclude Include="DlgNaviBar.h" />
+    <ClInclude Include="DlgSubAlarm.h" />
+    <ClInclude Include="DlgSubConfig.h" />
+    <ClInclude Include="DlgSubConfigLoginFile.h" />
+    <ClInclude Include="DlgSubConfigModuleFile.h" />
+    <ClInclude Include="DlgSubConfigMotionFile.h" />
+    <ClInclude Include="DlgSubData.h" />
+    <ClInclude Include="DlgSubLog.h" />
+    <ClInclude Include="DlgSubLogFile.h" />
+    <ClInclude Include="DlgSubMaint.h" />
+    <ClInclude Include="DlgSubMaint_ETCFile.h" />
+    <ClInclude Include="DlgSubMaint_IOFile.h" />
+    <ClInclude Include="DlgSubMaint_MotionFile.h" />
+    <ClInclude Include="DlgSubManual.h" />
+    <ClInclude Include="DlgSubManual_Ionizer.h" />
+    <ClInclude Include="DlgSubManual_Meas.h" />
+<ClInclude Include="DlgSubManual_STEP.h" />
+    <ClInclude Include="DlgSubManual_AgingSet.h" />
+    <ClInclude Include="DlgSubManual_MultiMeas.h" />
+    <ClInclude Include="DlgSubOperate.h" />
+    <ClInclude Include="DlgSubRecipe.h" />
+    <ClInclude Include="DlgTitleBar.h" />
+    <ClInclude Include="DoWork\DoWorkGlassAdsorption.h" />
+    <ClInclude Include="DoWork\DoWorkGlassAdsorptionStep.h" />
+    <ClInclude Include="DoWork\DoWorkGlassAGING.h" />
+    <ClInclude Include="DoWork\DoWorkGlassAGINGStep.h" />
+    <ClInclude Include="DoWork\DoWorkGlassMeasure.h" />
+    <ClInclude Include="DoWork\DoWorkGlassMeasureStep.h" />
+    <ClInclude Include="DoWork\DoWorkGlassPreMeas.h" />
+    <ClInclude Include="DoWork\DoWorkGlassPreMeasStep.h" />
+    <ClInclude Include="DoWork\DoWorkGlassReady.h" />
+    <ClInclude Include="DoWork\DoWorkGlassReadyStep.h" />
+    <ClInclude Include="DoWork\DoWorkGlassRecipe.h" />
+    <ClInclude Include="DoWork\DoWorkGlassRecipeStep.h" />
+    <ClInclude Include="DoWork\DoWorkGlassResult.h" />
+    <ClInclude Include="DoWork\DoWorkGlassResultStep.h" />
+    <ClInclude Include="DoWork\DoWorkGlassSequence.h" />
+    <ClInclude Include="DoWork\DoWorkGlassSequenceEngine.h" />
+    <ClInclude Include="DoWork\DoWorkGlassSequenceImpl.h" />
+    <ClInclude Include="DoWork\DoWorkGlassSWAlign.h" />
+    <ClInclude Include="DoWork\DoWorkGlassSWAlignStep.h" />
+    <ClInclude Include="DoWork\DoWorkGlassUnload.h" />
+    <ClInclude Include="DoWork\DoWorkGlassUnloadStep.h" />
+    <ClInclude Include="DoWork\DoWorkProbeSWAlign.h" />
+    <ClInclude Include="DoWork\DoWorkProbeSWAlignStep.h" />
+    <ClInclude Include="DoWork\DoWorkSequenceCIM.h" />
+    <ClInclude Include="DoWork\DoWorkSequenceCIMStep.h" />
+    <ClInclude Include="DoWork\MeasureSequenceItemEngine.h" />
+    <ClInclude Include="DoWork\MeasureSequenceItemFactory.h" />
+    <ClInclude Include="DoWork\MeasureSequenceItemImpl.h" />
+    <ClInclude Include="DoWork\SystemInitialize.h" />
+    <ClInclude Include="DoWork\SystemInitializeStep.h" />
+    <ClInclude Include="D_AuroraDlgWin.h" />
+    <ClInclude Include="D_CCD_Review.h" />
+    <ClInclude Include="D_DisplayMessage.h" />
+    <ClInclude Include="D_InputPassWord.h" />
+    <ClInclude Include="D_LogInMgr.h" />
+    <ClInclude Include="D_MainOperateInitializing.h" />
+    <ClInclude Include="D_MeasureCycle.h" />
+    <ClInclude Include="D_MoveHomePosition.h" />
+    <ClInclude Include="D_PM_MODE.h" />
+    <ClInclude Include="D_RoiSet.h" />
+    <ClInclude Include="D_SelectMeasOrUnload.h" />
+    <ClInclude Include="D_SetLampTime.h" />
+    <ClInclude Include="D_SystemHostMode.h" />
+    <ClInclude Include="framework.h" />
+    <ClInclude Include="FTP_Link_CIM.h" />
+    <ClInclude Include="FTP_Link_Interface.h" />
+    <ClInclude Include="FunctionModule\FunctionModuleEQInterlock.h" />
+    <ClInclude Include="FunctionModule\FunctionModuleEQState.h" />
+    <ClInclude Include="FunctionModule\FunctionModuleEQStateChange.h" />
+    <ClInclude Include="FunctionModule\FunctionModuleEQStateChangeStep.h" />
+    <ClInclude Include="FunctionModule\FunctionModuleProbeACC.h" />
+    <ClInclude Include="FunctionModule\FunctionModuleProbeACCStep.h" />
+    <ClInclude Include="MainSubDlgWin.h" />
+    <ClInclude Include="Manager\AlignCameraMgr.h" />
+    <ClInclude Include="Manager\CCommTcpIpObjectMotion.h" />
+    <ClInclude Include="Manager\CCommTcpIpObjectSysTime.h" />
+    <ClInclude Include="Manager\CommTcpIpDefine.h" />
+    <ClInclude Include="Manager\CommTcpIpFactoryMgr.h" />
+    <ClInclude Include="Manager\CommTcpIPMgr.h" />
+    <ClInclude Include="Manager\IOMapAddressDefine.h" />
+    <ClInclude Include="Manager\IOMapControlMgr.h" />
+    <ClInclude Include="Manager\LightControlMgr.h" />
+    <ClInclude Include="Manager\LogInControlMgr.h" />
+    <ClInclude Include="Manager\MaintControlMgr.h" />
+    <ClInclude Include="Manager\MCCLogMgr.h" />
+    <ClInclude Include="Manager\MotorControlMgr.h" />
+    <ClInclude Include="Manager\NetworkConfigMgr.h" />
+    <ClInclude Include="Manager\PositionConfigMgr.h" />
+    <ClInclude Include="Manager\RecipeMgr.h" />
+    <ClInclude Include="Manager\ResumeInfoMgr.h" />
+    <ClInclude Include="Manager\WadMultiMeasMgr.h" />
+    <ClInclude Include="Manager\ResultMgr.h" />
+    <ClInclude Include="Manager\SACCMgr.h" />
+    <ClInclude Include="Manager\SeqTactTimeMgr.h" />
+    <ClInclude Include="Manager\SequenceManager.h" />
+    <ClInclude Include="Manager\ShareMemoryMgr.h" />
+    <ClInclude Include="Manager\SystemConfigMgr.h" />
+    <ClInclude Include="pch.h" />
+    <ClInclude Include="Recipe\RecipeData.h" />
+    <ClInclude Include="Recipe\RecipeEditMgr.h" />
+    <ClInclude Include="Resource.h" />
+    <ClInclude Include="SystemParamShare.h" />
+    <ClInclude Include="targetver.h" />
+    <ClInclude Include="TransporterResult.h" />
+    <ClInclude Include="UIMeasPathDlg.h" />
+    <ClInclude Include="WindowEventHandler.h" />
+  </ItemGroup>
+  <ItemGroup>
+    <ClCompile Include="..\..\CoreFunction\Comm232Function\Comm232Config.cpp" />
+    <ClCompile Include="..\..\CoreFunction\Comm232Function\Comm232Function.cpp" />
+    <ClCompile Include="..\..\CoreFunction\CommEthFunction\ClientSocket.cpp" />
+    <ClCompile Include="..\..\CoreFunction\CommEthFunction\CommEthFunction.cpp" />
+    <ClCompile Include="..\..\CoreFunction\CommEthFunction\EthernetManagerTCP.cpp" />
+    <ClCompile Include="..\..\CoreFunction\CommEthFunction\EthernetSocket.cpp" />
+    <ClCompile Include="..\..\CoreFunction\CommEthFunction\ServerSocket.cpp" />
+    <ClCompile Include="..\..\CoreFunction\CommFtpFunction\CommFtpFunction.cpp" />
+    <ClCompile Include="..\..\CoreFunction\CommFtpFunction\EthernetManagerFTP.cpp" />
+    <ClCompile Include="..\..\CoreFunction\CommFtpFunction\xNetFTP.cpp" />
+    <ClCompile Include="..\..\CoreFunction\common\AutoEdit.cpp" />
+    <ClCompile Include="..\..\CoreFunction\common\BinaryHelper.cpp" />
+    <ClCompile Include="..\..\CoreFunction\common\BtnST.cpp" />
+    <ClCompile Include="..\..\CoreFunction\common\Chart\ChartMarker.cpp" />
+    <ClCompile Include="..\..\CoreFunction\common\Chart\ChartOrbit.cpp" />
+    <ClCompile Include="..\..\CoreFunction\common\Chart\ChartSpec.cpp" />
+    <ClCompile Include="..\..\CoreFunction\common\Chart\och2dmfc.cpp" />
+    <ClCompile Include="..\..\CoreFunction\common\Chart\SetScaleDlg.cpp" />
+    <ClCompile Include="..\..\CoreFunction\common\CommonFunc.cpp" />
+    <ClCompile Include="..\..\CoreFunction\common\crc16.cpp">
+      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">NotUsing</PrecompiledHeader>
+      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Release|x64'">NotUsing</PrecompiledHeader>
+    </ClCompile>
+    <ClCompile Include="..\..\CoreFunction\common\FarPoint64\Ssdllmfc.cpp" />
+    <ClCompile Include="..\..\CoreFunction\common\IMAQImageCtrl\FineCentering.cpp" />
+    <ClCompile Include="..\..\CoreFunction\common\IMAQImageCtrl\IMAQImage.cpp" />
+    <ClCompile Include="..\..\CoreFunction\common\IMAQImageCtrl\IMAQImageCtrl.cpp" />
+    <ClCompile Include="..\..\CoreFunction\common\InfoWnd.cpp" />
+    <ClCompile Include="..\..\CoreFunction\common\IniHelper.cpp" />
+    <ClCompile Include="..\..\CoreFunction\common\Label.cpp" />
+    <ClCompile Include="..\..\CoreFunction\common\LedButton.cpp" />
+    <ClCompile Include="..\..\CoreFunction\common\MFCGridControl\GridCtrl_src\GridCell.cpp" />
+    <ClCompile Include="..\..\CoreFunction\common\MFCGridControl\GridCtrl_src\GridCellBase.cpp" />
+    <ClCompile Include="..\..\CoreFunction\common\MFCGridControl\GridCtrl_src\GridCtrl.cpp" />
+    <ClCompile Include="..\..\CoreFunction\common\MFCGridControl\GridCtrl_src\GridDropTarget.cpp" />
+    <ClCompile Include="..\..\CoreFunction\common\MFCGridControl\GridCtrl_src\InPlaceEdit.cpp" />
+    <ClCompile Include="..\..\CoreFunction\common\MFCGridControl\GridCtrl_src\TitleTip.cpp" />
+    <ClCompile Include="..\..\CoreFunction\common\MFCGridControl\NewCellTypes\CheckComboBox.cpp" />
+    <ClCompile Include="..\..\CoreFunction\common\MFCGridControl\NewCellTypes\GridCellButton.cpp" />
+    <ClCompile Include="..\..\CoreFunction\common\MFCGridControl\NewCellTypes\GridCellCheck.cpp" />
+    <ClCompile Include="..\..\CoreFunction\common\MFCGridControl\NewCellTypes\GridCellCheckCombo.cpp" />
+    <ClCompile Include="..\..\CoreFunction\common\MFCGridControl\NewCellTypes\GridCellCombo.cpp" />
+    <ClCompile Include="..\..\CoreFunction\common\MFCGridControl\NewCellTypes\GridCellDateTime.cpp" />
+    <ClCompile Include="..\..\CoreFunction\common\MFCGridControl\NewCellTypes\GridCellNumeric.cpp" />
+    <ClCompile Include="..\..\CoreFunction\common\MFCGridControl\NewCellTypes\GridURLCell.cpp" />
+    <ClCompile Include="..\..\CoreFunction\common\MyLabelTimer.cpp" />
+    <ClCompile Include="..\..\CoreFunction\common\MySpreadDll.cpp" />
+    <ClCompile Include="..\..\CoreFunction\common\NI\x64\Include\NIMachineVision.c">
+      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">NotUsing</PrecompiledHeader>
+      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Release|x64'">NotUsing</PrecompiledHeader>
+    </ClCompile>
+    <ClCompile Include="..\..\CoreFunction\common\PingTest.cpp" />
+    <ClCompile Include="..\..\CoreFunction\common\RawDataHelper.cpp" />
+    <ClCompile Include="..\..\CoreFunction\common\Registry.cpp" />
+    <ClCompile Include="..\..\CoreFunction\common\StaticSpread.cpp" />
+    <ClCompile Include="..\..\CoreFunction\common\TimeChecker.cpp" />
+    <ClCompile Include="..\..\CoreFunction\common\WinMgr.cpp" />
+    <ClCompile Include="..\..\CoreFunction\common\WinRect.cpp" />
+    <ClCompile Include="..\..\CoreFunction\common\XButtonXP\OddButton.cpp" />
+    <ClCompile Include="..\..\CoreFunction\common\XButtonXP\XButtonXP.cpp" />
+    <ClCompile Include="..\..\CoreFunction\common\XButtonXP\XThemeHelper.cpp" />
+    <ClCompile Include="..\..\CoreFunction\common\XLS\XLAutomation.cpp" />
+    <ClCompile Include="..\..\CoreFunction\common\XLS\XLEzAutomation.cpp" />
+    <ClCompile Include="..\..\CoreFunction\common\XStringHelper.cpp" />
+    <ClCompile Include="..\..\CoreFunction\FrameGrabberFunction\FrameGrabberFunction.cpp" />
+    <ClCompile Include="..\..\CoreFunction\FrameGrabberFunction\FrameGrabberImpl.cpp" />
+    <ClCompile Include="..\..\CoreFunction\FrameGrabberFunction\GigECamera_Basler\FrameGrabber_BS4M.cpp" />
+    <ClCompile Include="..\..\CoreFunction\FrameGrabberFunction\GigECamera_Basler\FrameGrabber_GigE_BS4M.cpp" />
+    <ClCompile Include="..\..\CoreFunction\IOMapFunction\IOMapFunction.cpp" />
+    <ClCompile Include="..\..\CoreFunction\IOMapFunction\IOMapImpl.cpp" />
+    <ClCompile Include="..\..\CoreFunction\IOMapFunction\McProtocol\McAddressScannerImpl.cpp" />
+    <ClCompile Include="..\..\CoreFunction\IOMapFunction\McProtocol\McCaddressScanner.cpp" />
+    <ClCompile Include="..\..\CoreFunction\IOMapFunction\McProtocol\McDaddressScanner.cpp" />
+    <ClCompile Include="..\..\CoreFunction\IOMapFunction\McProtocol\McFaddressScanner.cpp" />
+    <ClCompile Include="..\..\CoreFunction\IOMapFunction\McProtocol\McGaddressScanner.cpp" />
+    <ClCompile Include="..\..\CoreFunction\IOMapFunction\McProtocol\McMaddressScanner.cpp" />
+    <ClCompile Include="..\..\CoreFunction\IOMapFunction\McProtocol\McPaddressScanner.cpp" />
+    <ClCompile Include="..\..\CoreFunction\IOMapFunction\McProtocol\McProtocolManager.cpp" />
+    <ClCompile Include="..\..\CoreFunction\LightFunction\CAS\CommSerialObjectCAS.cpp" />
+    <ClCompile Include="..\..\CoreFunction\LightFunction\ECS\CommSerialObjectECS.cpp" />
+    <ClCompile Include="..\..\CoreFunction\LightFunction\LightFunction.cpp" />
+    <ClCompile Include="..\..\CoreFunction\LightFunction\LightImpl.cpp" />
+    <ClCompile Include="..\..\CoreFunction\LightFunction\SPO\CommSerialObjectSPO.cpp" />
+    <ClCompile Include="..\..\CoreFunction\LightFunction\XCITE\CommSerialObjectXCITE.cpp" />
+    <ClCompile Include="..\..\CoreFunction\LogFunction\LogAccessor\file_access\FileAccessor.cpp" />
+    <ClCompile Include="..\..\CoreFunction\LogFunction\LogAccessor\LogFileAccessor.cpp" />
+    <ClCompile Include="..\..\CoreFunction\LogFunction\LogWrapper\LogWrapper.cpp" />
+    <ClCompile Include="..\..\CoreFunction\MotorFunction\AxisType.cpp" />
+    <ClCompile Include="..\..\CoreFunction\MotorFunction\MotorCtrl_ACS\MotorControl_ACS.cpp" />
+    <ClCompile Include="..\..\CoreFunction\MotorFunction\MotorFunction.cpp" />
+    <ClCompile Include="..\..\CoreFunction\MotorFunction\MotorImpl.cpp" />
+    <ClCompile Include="..\..\CoreFunction\ShareMemFunction\CPtrnInfo.cpp" />
+    <ClCompile Include="..\..\CoreFunction\ShareMemFunction\ShareMemFunction.cpp" />
+    <ClCompile Include="Alarm\AlarmController.cpp" />
+    <ClCompile Include="Alarm\AlarmMonitorImpl.cpp" />
+    <ClCompile Include="Alarm\AlarmMonitorMgr.cpp" />
+    <ClCompile Include="Alarm\AlarmMonitorToDoorOpen.cpp" />
+    <ClCompile Include="Alarm\AlarmMonitorToDoorOpenState.cpp" />
+    <ClCompile Include="Alarm\AlarmMonitorToDoorVoice.cpp" />
+    <ClCompile Include="Alarm\AlarmMonitorToEmergency.cpp" />
+    <ClCompile Include="Alarm\AlarmMonitorToEmergencyButton.cpp" />
+    <ClCompile Include="Alarm\AlarmMonitorToLampTime.cpp" />
+    <ClCompile Include="Alarm\AlarmMonitorToMcOFF.cpp" />
+    <ClCompile Include="Alarm\AlarmMonitorToMcOFFState.cpp" />
+    <ClCompile Include="Alarm\AlarmMonitorToSafetyPLC.cpp" />
+    <ClCompile Include="Alarm\AlarmMonitorToSensor.cpp" />
+    <ClCompile Include="Alarm\AlarmMonitorToSensorCurtain.cpp" />
+    <ClCompile Include="Alarm\AlarmMonitorToSensorFAN.cpp" />
+    <ClCompile Include="Alarm\AlarmMonitorToSensorHandSwitch.cpp" />
+    <ClCompile Include="Alarm\AlarmMonitorToSensorIsolater.cpp" />
+    <ClCompile Include="Alarm\AlarmMonitorToSensorPressure.cpp" />
+    <ClCompile Include="Alarm\AlarmMonitorToSensorSmoke.cpp" />
+    <ClCompile Include="Alarm\AlarmMonitorToSensorTemperature.cpp" />
+    <ClCompile Include="Alarm\AlarmMonitorToSensorTemperatureLow.cpp" />
+    <ClCompile Include="Alarm\AlarmMonitorToSensorVacSwitch.cpp" />
+    <ClCompile Include="Alarm\AlarmMonitorToTeachKEY.cpp" />
+    <ClCompile Include="Alarm\AlarmMonitorToTeachKEYLock.cpp" />
+    <ClCompile Include="ALPHA.cpp" />
+    <ClCompile Include="AuroraMgr.cpp" />
+    <ClCompile Include="BaseSequenceBody.cpp" />
+    <ClCompile Include="BaseSequenceImpl.cpp" />
+    <ClCompile Include="CD_PopUp_Alarm_F.cpp" />
+    <ClCompile Include="CD_PopUp_Motion_Move.cpp" />
+    <ClCompile Include="CD_SelectColor.cpp" />
+    <ClCompile Include="CommTcpIpObjectAgingPG.cpp" />
+    <ClCompile Include="CommTcpIpObjectAngle.cpp" />
+    <ClCompile Include="CommTcpIpObjectCIM.cpp" />
+    <ClCompile Include="CommTcpIpObjectColor.cpp" />
+    <ClCompile Include="CommTcpIpObjectLCR.cpp" />
+    <ClCompile Include="CommTcpIpObjectPG.cpp" />
+    <ClCompile Include="CommTcpIpObjectPGMon.cpp" />
+    <ClCompile Include="CommTcpIpObjectTSP.cpp" />
+    <ClCompile Include="CommTcpIpObjectVision.cpp" />
+    <ClCompile Include="CommTcpIpObjectWAD.cpp" />
+    <ClCompile Include="DlgSMarkUI.cpp" />
+    <ClCompile Include="DlgSubMeasure_Progress.cpp" />
+    <ClCompile Include="DlgSubManual_AgingTest.cpp" />
+    <ClCompile Include="DlgSubManual_AutoContact.cpp" />
+    <ClCompile Include="DlgAlignCCD.cpp" />
+    <ClCompile Include="DlgALPHA.cpp" />
+    <ClCompile Include="DlgMainForm.cpp" />
+    <ClCompile Include="DlgNaviBar.cpp" />
+    <ClCompile Include="DlgSubAlarm.cpp" />
+    <ClCompile Include="DlgSubConfig.cpp" />
+    <ClCompile Include="DlgSubConfigLoginFile.cpp" />
+    <ClCompile Include="DlgSubConfigModuleFile.cpp" />
+    <ClCompile Include="DlgSubConfigMotionFile.cpp" />
+    <ClCompile Include="DlgSubData.cpp" />
+    <ClCompile Include="DlgSubLog.cpp">
+      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">Create</PrecompiledHeader>
+    </ClCompile>
+    <ClCompile Include="DlgSubLogFile.cpp" />
+    <ClCompile Include="DlgSubMaint.cpp" />
+    <ClCompile Include="DlgSubMaint_ETCFile.cpp" />
+    <ClCompile Include="DlgSubMaint_IOFile.cpp" />
+    <ClCompile Include="DlgSubMaint_MotionFile.cpp" />
+    <ClCompile Include="DlgSubManual.cpp" />
+    <ClCompile Include="DlgSubManual_Ionizer.cpp" />
+    <ClCompile Include="DlgSubManual_Meas.cpp" />
+<ClCompile Include="DlgSubManual_STEP.cpp" />
+    <ClCompile Include="DlgSubManual_AgingSet.cpp" />
+    <ClCompile Include="DlgSubManual_MultiMeas.cpp" />
+    <ClCompile Include="DlgSubOperate.cpp" />
+    <ClCompile Include="DlgSubRecipe.cpp" />
+    <ClCompile Include="DlgTitleBar.cpp" />
+    <ClCompile Include="DoWork\DoWorkGlassAdsorption.cpp" />
+    <ClCompile Include="DoWork\DoWorkGlassAdsorptionStep.cpp" />
+    <ClCompile Include="DoWork\DoWorkGlassAGING.cpp" />
+    <ClCompile Include="DoWork\DoWorkGlassAGINGStep.cpp" />
+    <ClCompile Include="DoWork\DoWorkGlassMeasure.cpp" />
+    <ClCompile Include="DoWork\DoWorkGlassMeasureStep.cpp" />
+    <ClCompile Include="DoWork\DoWorkGlassPreMeas.cpp" />
+    <ClCompile Include="DoWork\DoWorkGlassPreMeasStep.cpp" />
+    <ClCompile Include="DoWork\DoWorkGlassReady.cpp" />
+    <ClCompile Include="DoWork\DoWorkGlassReadyStep.cpp" />
+    <ClCompile Include="DoWork\DoWorkGlassRecipe.cpp" />
+    <ClCompile Include="DoWork\DoWorkGlassRecipeStep.cpp" />
+    <ClCompile Include="DoWork\DoWorkGlassResult.cpp" />
+    <ClCompile Include="DoWork\DoWorkGlassResultStep.cpp" />
+    <ClCompile Include="DoWork\DoWorkGlassSequence.cpp" />
+    <ClCompile Include="DoWork\DoWorkGlassSequenceEngine.cpp" />
+    <ClCompile Include="DoWork\DoWorkGlassSequenceImpl.cpp" />
+    <ClCompile Include="DoWork\DoWorkGlassSWAlign.cpp" />
+    <ClCompile Include="DoWork\DoWorkGlassSWAlignStep.cpp" />
+    <ClCompile Include="DoWork\DoWorkGlassUnload.cpp" />
+    <ClCompile Include="DoWork\DoWorkGlassUnloadStep.cpp" />
+    <ClCompile Include="DoWork\DoWorkProbeSWAlign.cpp" />
+    <ClCompile Include="DoWork\DoWorkProbeSWAlignStep.cpp" />
+    <ClCompile Include="DoWork\DoWorkSequenceCIM.cpp" />
+    <ClCompile Include="DoWork\DoWorkSequenceCIMStep.cpp" />
+    <ClCompile Include="DoWork\MeasureSequenceItemEngine.cpp" />
+    <ClCompile Include="DoWork\MeasureSequenceItemFactory.cpp" />
+    <ClCompile Include="DoWork\MeasureSequenceItemImpl.cpp" />
+    <ClCompile Include="DoWork\SystemInitialize.cpp" />
+    <ClCompile Include="DoWork\SystemInitializeStep.cpp" />
+    <ClCompile Include="D_AuroraDlgWin.cpp" />
+    <ClCompile Include="D_CCD_Review.cpp" />
+    <ClCompile Include="D_DisplayMessage.cpp" />
+    <ClCompile Include="D_InputPassWord.cpp" />
+    <ClCompile Include="D_LogInMgr.cpp" />
+    <ClCompile Include="D_MainOperateInitializing.cpp" />
+    <ClCompile Include="D_MeasureCycle.cpp" />
+    <ClCompile Include="D_MoveHomePosition.cpp" />
+    <ClCompile Include="D_PM_MODE.cpp" />
+    <ClCompile Include="D_RoiSet.cpp" />
+    <ClCompile Include="D_SelectMeasOrUnload.cpp" />
+    <ClCompile Include="D_SetLampTime.cpp" />
+    <ClCompile Include="D_SystemHostMode.cpp" />
+    <ClCompile Include="FTP_Link_CIM.cpp" />
+    <ClCompile Include="FTP_Link_Interface.cpp" />
+    <ClCompile Include="FunctionModule\FunctionModuleEQInterlock.cpp" />
+    <ClCompile Include="FunctionModule\FunctionModuleEQState.cpp" />
+    <ClCompile Include="FunctionModule\FunctionModuleEQStateChange.cpp" />
+    <ClCompile Include="FunctionModule\FunctionModuleEQStateChangeStep.cpp" />
+    <ClCompile Include="FunctionModule\FunctionModuleProbeACC.cpp" />
+    <ClCompile Include="FunctionModule\FunctionModuleProbeACCStep.cpp" />
+    <ClCompile Include="MainSubDlgWin.cpp" />
+    <ClCompile Include="Manager\AlignCameraMgr.cpp" />
+    <ClCompile Include="Manager\CCommTcpIpObjectMotion.cpp" />
+    <ClCompile Include="Manager\CCommTcpIpObjectSysTime.cpp" />
+    <ClCompile Include="Manager\CommTcpIpFactoryMgr.cpp" />
+    <ClCompile Include="Manager\CommTcpIPMgr.cpp" />
+    <ClCompile Include="Manager\IOMapControlMgr.cpp" />
+    <ClCompile Include="Manager\LightControlMgr.cpp" />
+    <ClCompile Include="Manager\LogInControlMgr.cpp" />
+    <ClCompile Include="Manager\MaintControlMgr.cpp" />
+    <ClCompile Include="Manager\MCCLogMgr.cpp" />
+    <ClCompile Include="Manager\MotorControlMgr.cpp" />
+    <ClCompile Include="Manager\NetworkConfigMgr.cpp" />
+    <ClCompile Include="Manager\PositionConfigMgr.cpp" />
+    <ClCompile Include="Manager\RecipeMgr.cpp" />
+    <ClCompile Include="Manager\ResumeInfoMgr.cpp" />
+    <ClCompile Include="Manager\WadMultiMeasMgr.cpp" />
+    <ClCompile Include="Manager\ResultMgr.cpp" />
+    <ClCompile Include="Manager\SACCMgr.cpp" />
+    <ClCompile Include="Manager\SeqTactTimeMgr.cpp" />
+    <ClCompile Include="Manager\SequenceManager.cpp" />
+    <ClCompile Include="Manager\ShareMemoryMgr.cpp" />
+    <ClCompile Include="Manager\SystemConfigMgr.cpp" />
+    <ClCompile Include="pch.cpp">
+      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">Create</PrecompiledHeader>
+      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug|x64'">Create</PrecompiledHeader>
+      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">Create</PrecompiledHeader>
+      <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Release|x64'">Create</PrecompiledHeader>
+    </ClCompile>
+    <ClCompile Include="Recipe\RecipeData.cpp" />
+    <ClCompile Include="Recipe\RecipeEditMgr.cpp" />
+    <ClCompile Include="SystemParamShare.cpp" />
+    <ClCompile Include="TransporterResult.cpp" />
+    <ClCompile Include="UIMeasPathDlg.cpp" />
+    <ClCompile Include="WindowEventHandler.cpp" />
+  </ItemGroup>
+  <ItemGroup>
+    <ResourceCompile Include="ALPHA.rc" />
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="..\..\CoreFunction\LightFunction\CAS\Manual\CVT-Emini Series Protocol Manual(kor).pdf" />
+    <None Include="..\..\CoreFunction\LightFunction\XCITE\Manual\035-00425R05 X-Cite Products Software Development Kit-SDK(Mktg ONLY).pdf" />
+    <None Include="..\..\CoreFunction\LogFunction\LogWrapper\spdlog\fmt\bundled\LICENSE.rst" />
+    <None Include="..\..\CoreFunction\MotorFunction\MotorCtrl_ACS\dll\ACSCL_x64.dll" />
+    <None Include="..\..\Doc\01_SPEC\BOM\분판 CELL_AGING-검사기_알파-양산_(925150ASL-288M-LUKAS-M606S-GS1174-SACC)_BOM_211202_SW_NEW.xlsx" />
+    <None Include="..\..\Doc\01_SPEC\PC 견적서\IH5000-G2 (AVI-12M) 2021-12-02.pdf" />
+    <None Include="..\..\Doc\01_SPEC\PC 견적서\IH5000-G2 (AVI-29M) 2021-12-02.pdf" />
+    <None Include="..\..\Doc\01_SPEC\PC 견적서\IL4100-G3 (HBS-CIM) - 2021-12-02.pdf" />
+    <None Include="..\..\Doc\01_SPEC\PC 견적서\IV5300-GX (AVI-M606s) 면계측 검사 2021-12-02.pdf" />
+    <None Include="..\..\Doc\05_DR자료모음\HMI Stage Position 검토_211123.dwg" />
+    <None Include="..\..\Doc\05_DR자료모음\SDC HMI 광학계 거리 정보_220214.pptx" />
+    <None Include="..\..\Doc\06_SCHEDULE\분판 CELL 알파검사기 제작 Schedule_20211207.xlsx" />
+    <None Include="..\..\Doc\07_설계문서\03_SW설계문서.xlsx" />
+    <None Include="..\..\Doc\07_설계문서\HBS_분판 CELL 검사기 SW 대응 자료.pptx" />
+    <None Include="..\..\Doc\07_설계문서\HBS_분판 CELL 검사기 SW 대응 자료_PC구성.pptx" />
+    <None Include="..\..\Doc\07_설계문서\MCC SUMMARY SHEET(HB솔루션_HMI)2022.01.24.xlsx" />
+    <None Include="..\..\Doc\07_설계문서\SDC 분판 Cell _M-Memory Map.xlsx" />
+    <None Include="..\..\Doc\07_설계문서\분판 CELL Axis Name_211201.pptx" />
+    <None Include="..\..\Doc\07_설계문서\제어기 견적_분판 CELL(20211118).xlsx" />
+    <None Include="ClassDiagram2.cd" />
+    <None Include="ConfigurationFile\AutoFocus.ini" />
+    <None Include="ConfigurationFile\Config.ini" />
+    <None Include="ConfigurationFile\Config_MCC.ini" />
+    <None Include="ConfigurationFile\CoreFunction\AlarmConfig\Alarm.dat" />
+    <None Include="ConfigurationFile\CoreFunction\AlarmConfig\Alarm.xls" />
+    <None Include="ConfigurationFile\CoreFunction\AlarmConfig\AlarmMessage.csv" />
+    <None Include="ConfigurationFile\CoreFunction\AlarmConfig\AlarmMessage.dat" />
+    <None Include="ConfigurationFile\CoreFunction\AlarmConfig\ReportSource.mdb" />
+    <None Include="ConfigurationFile\CoreFunction\CoreFunction.ini" />
+    <None Include="ConfigurationFile\CoreFunction\IOMapConfig\D.csv" />
+    <None Include="ConfigurationFile\CoreFunction\IOMapConfig\F.csv" />
+    <None Include="ConfigurationFile\CoreFunction\IOMapConfig\M.csv" />
+    <None Include="ConfigurationFile\CoreFunction\IOMapConfig\PLCMAdress.csv" />
+    <None Include="ConfigurationFile\CoreFunction\IOMapConfig\PLCMAdress_정리.xlsx" />
+    <None Include="ConfigurationFile\CoreFunction\IOMapConfig\PLC_LOAD.csv" />
+    <None Include="ConfigurationFile\CoreFunction\IOMapConfig\PLC_MEAS.csv" />
+    <None Include="ConfigurationFile\CoreFunction\IOMapConfig\PLC_READY.csv" />
+    <None Include="ConfigurationFile\CoreFunction\IOMapConfig\ProbeCard.csv" />
+    <None Include="ConfigurationFile\CoreFunction\IOMapConfig\SACC.csv" />
+    <None Include="ConfigurationFile\CoreFunction\MotorConfig\Config_Motion_ACS.dat" />
+    <None Include="ConfigurationFile\FTP_CIM.ini" />
+    <None Include="ConfigurationFile\GlassInfo.ini" />
+    <None Include="ConfigurationFile\LoginInfo.ini" />
+    <None Include="ConfigurationFile\MeasureItem.ini" />
+    <None Include="ConfigurationFile\Network.ini" />
+    <None Include="ConfigurationFile\Position.ini" />
+    <None Include="ConfigurationFile\SystemConfig.ini" />
+    <None Include="ConfigurationFile\VisionConfig.ini" />
+    <None Include="res\ALPHA.rc2" />
+  </ItemGroup>
+  <ItemGroup>
+    <Image Include="res\ALPHA.ico" />
+    <Image Include="res\bitmap1.bmp" />
+    <Image Include="res\Bitmap\bmpArrow00001.bmp" />
+    <Image Include="res\Bitmap\bmpArrow00002.bmp" />
+    <Image Include="res\Bitmap\bmpArrow00003.bmp" />
+    <Image Include="res\Bitmap\bmpArrow00004.bmp" />
+    <Image Include="res\Bitmap\bmpArrow00005.bmp" />
+    <Image Include="res\Bitmap\btn_redg.bmp" />
+    <Image Include="res\check32.bmp" />
+    <Image Include="res\checkno32.bmp" />
+    <Image Include="res\logo.bmp" />
+    <Image Include="res\navigator\bitmap1.bmp" />
+    <Image Include="res\Navigator\cycle_icon.ico" />
+    <Image Include="res\Navigator\Menu_d.bmp" />
+    <Image Include="res\Navigator\Menu_dis.bmp" />
+    <Image Include="res\Navigator\Menu_u.bmp" />
+    <Image Include="res\Navigator\pause_icon.ico" />
+    <Image Include="res\Navigator\resume_icon.ico" />
+    <Image Include="res\Navigator\stop_icon.ico" />
+    <Image Include="res\Warning\no_touch.bmp" />
+  </ItemGroup>
+  <ItemGroup>
+    <Library Include="..\..\CoreFunction\common\FarPoint64\Lib\SPR64DU80.lib" />
+    <Library Include="..\..\CoreFunction\common\NI\x64\Lib\imaq.lib" />
+    <Library Include="..\..\CoreFunction\common\NI\x64\Lib\niimaqdx.lib" />
+    <Library Include="..\..\CoreFunction\common\NI\x64\Lib\nivision.lib" />
+    <Library Include="..\..\CoreFunction\MotorFunction\MotorCtrl_ACS\lib\ACSCL_x64.LIB" />
+  </ItemGroup>
+  <ItemGroup>
+    <Text Include="ToDo.txt" />
+  </ItemGroup>
+  <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
+  <ImportGroup Label="ExtensionTargets">
+  </ImportGroup>
+</Project>

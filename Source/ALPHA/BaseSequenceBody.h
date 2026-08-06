@@ -96,6 +96,7 @@ public:
 	void GoToNextStep()					{ m_iStepIndex++;					}
 	void GoToBackStep()					{ m_iStepIndex--;					}
 	void GoToLoopStep()					{ m_iStepIndex = m_iStepIndex_loop;	}
+	void GoToStep(long value)			{ m_iStepIndex = value;				}	// LYS 2026-08-06 AgingCycle E3
 	void GoToExitStep()					{ m_iStepIndex = m_iStepIndex_exit;	}
 	void GoToIDLEStep()					{ m_iStepIndex = m_iStepIndex_idle;	}
 	long GetCurStep() const 			{ return m_iStepIndex;				}

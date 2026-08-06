@@ -251,3 +251,13 @@ public:
 	CDoWorkGlassMeasureStep_AGING(CBaseSequenceImpl* pShareItem, CMeasureSequenceItemEngine* pMeasSeqItemEngine) : CDoWorkGlassMeasureStep(pShareItem, pMeasSeqItemEngine) { m_strNmae = _T("Aging"); }
 	virtual ~CDoWorkGlassMeasureStep_AGING() {}
 };
+
+// LYS 2026-08-06 AgingCycle E3: per-item pattern lighting (OCP DoWorkStartMeasOCP_A lighting block)
+class CDoWorkGlassMeasureStep_AGING_PTN : public CDoWorkGlassMeasureStep
+{
+public:
+	virtual bool Run() override;
+public:
+	CDoWorkGlassMeasureStep_AGING_PTN(CBaseSequenceImpl* pShareItem, CMeasureSequenceItemEngine* pMeasSeqItemEngine) : CDoWorkGlassMeasureStep(pShareItem, pMeasSeqItemEngine) { m_strNmae = _T("AgingPtn"); }
+	virtual ~CDoWorkGlassMeasureStep_AGING_PTN() {}
+};

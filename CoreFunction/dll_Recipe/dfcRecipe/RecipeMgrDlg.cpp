@@ -459,6 +459,7 @@ BOOL	C_RecipeMgrDlg::SaveFile (CString strRcpName)
 	WriteInt (&File, (int)g_inRcpInfo.m_recipeMgr.m_sInfo.m_sInspectItem.m_bUseAngle_6);
 	WriteInt (&File, (int)g_inRcpInfo.m_recipeMgr.m_sInfo.m_sInspectItem.m_bUseEFA);
 	WriteInt (&File, (int)g_inRcpInfo.m_recipeMgr.m_sInfo.m_sInspectItem.m_bUseSpec_Multi);
+	WriteInt (&File, (int)g_inRcpInfo.m_recipeMgr.m_sInfo.m_sInspectItem.m_bUseAging_Test);
 
 	for (int i = 0; i < M_RCP_INS_ITEM; i++) {
 		str.Format (_T("%d,"), g_inRcpInfo.m_recipeMgr.m_sInfo.m_sInspectItem.m_nTimeOut[i]);
@@ -832,27 +833,27 @@ void	C_RecipeMgrDlg::InitInspectItem ()
 	//m_gridInspectItemData.SetItemText (8, 0, _T("LCR"));
 
 	// LYS 2026-07-02 안쓰는 Mode 삭제
-	InitGridUI(m_gridInspectItemData, IDC_GRID_7, 8, 3, TRUE);
+	InitGridUI(m_gridInspectItemData, IDC_GRID_7, 9, 3, TRUE);
 	m_gridInspectItemData.SetItemText(0, 0, _T("사전검사"));
 	m_gridInspectItemData.SetItemText(1, 0, _T("전기검사"));
 	m_gridInspectItemData.SetItemText(2, 0, _T("AGING TEST"));
 	m_gridInspectItemData.SetItemText(3, 0, _T("특성검사"));
 	m_gridInspectItemData.SetItemText(4, 0, _T("화질검사"));
 	m_gridInspectItemData.SetItemText(5, 0, _T("시야각검사"));
-
 	m_gridInspectItemData.SetItemText(6, 0, _T("EFA"));
 	m_gridInspectItemData.SetItemText(7, 0, _T("특성Multi"));
+	m_gridInspectItemData.SetItemText(8, 0, _T("강화검사"));
 
 
 	//콤보박스
-	//for (int i = 0; i < 9; i++) {
-	//	m_gridInspectItemData.SetCellType  (i, 2, RUNTIME_CLASS(CGridCellCombo));
-	//	m_gridInspectItemData.SetItemState (i, 2, m_gridInspectItemData.GetItemState (i, 2) & GVIS_READONLY);
-	//}
-	for (int i = 0; i < 8; i++) {
-		m_gridInspectItemData.SetCellType(i, 2, RUNTIME_CLASS(CGridCellCombo));
-		m_gridInspectItemData.SetItemState(i, 2, m_gridInspectItemData.GetItemState(i, 2) & GVIS_READONLY);
+	for (int i = 0; i < 9; i++) {
+		m_gridInspectItemData.SetCellType  (i, 2, RUNTIME_CLASS(CGridCellCombo));
+		m_gridInspectItemData.SetItemState (i, 2, m_gridInspectItemData.GetItemState (i, 2) & GVIS_READONLY);
 	}
+	//for (int i = 0; i < 8; i++) {
+	//	m_gridInspectItemData.SetCellType(i, 2, RUNTIME_CLASS(CGridCellCombo));
+	//	m_gridInspectItemData.SetItemState(i, 2, m_gridInspectItemData.GetItemState(i, 2) & GVIS_READONLY);
+	//}
 
 	//콤보 데이터
 	CStringArray use;
@@ -860,20 +861,20 @@ void	C_RecipeMgrDlg::InitInspectItem ()
 	use.Add (_T("사용"));
 
 	CGridCellCombo* pCell = NULL;
-	//for (int i = 0; i < 9; i++) {
-	//	pCell = (CGridCellCombo*)m_gridInspectItemData.GetCell (i, 2);
-	//	pCell->SetStyle (CBS_DROPDOWNLIST);	
-	//	pCell->SetOptions (use);
-	//
-	//	m_gridInspectItemData.SetItemCurSel (i, 2, 0);
-	//}
-	for (int i = 0; i < 8; i++) {
-		pCell = (CGridCellCombo*)m_gridInspectItemData.GetCell(i, 2);
-		pCell->SetStyle(CBS_DROPDOWNLIST);
-		pCell->SetOptions(use);
-
-		m_gridInspectItemData.SetItemCurSel(i, 2, 0);
+	for (int i = 0; i < 9; i++) {
+		pCell = (CGridCellCombo*)m_gridInspectItemData.GetCell (i, 2);
+		pCell->SetStyle (CBS_DROPDOWNLIST);	
+		pCell->SetOptions (use);
+	
+		m_gridInspectItemData.SetItemCurSel (i, 2, 0);
 	}
+	//for (int i = 0; i < 8; i++) {
+	//	pCell = (CGridCellCombo*)m_gridInspectItemData.GetCell(i, 2);
+	//	pCell->SetStyle(CBS_DROPDOWNLIST);
+	//	pCell->SetOptions(use);
+	//
+	//	m_gridInspectItemData.SetItemCurSel(i, 2, 0);
+	//}
 }
 
 void	C_RecipeMgrDlg::SetInspectItemData ()
@@ -898,6 +899,8 @@ void	C_RecipeMgrDlg::SetInspectItemData ()
 
 	m_gridInspectItemData.SetItemCurSel(6, 2, g_inRcpInfo.m_recipeMgr.m_sInfo.m_sInspectItem.m_bUseEFA);
 	m_gridInspectItemData.SetItemCurSel(7, 2, g_inRcpInfo.m_recipeMgr.m_sInfo.m_sInspectItem.m_bUseSpec_Multi);
+
+	m_gridInspectItemData.SetItemCurSel(8, 2, g_inRcpInfo.m_recipeMgr.m_sInfo.m_sInspectItem.m_bUseAging_Test);
 
 	for (int i = 0; i < M_RCP_INS_ITEM; i++) {
 		m_gridInspectItemData.SetItemText (i, 1, dfcStr (g_inRcpInfo.m_recipeMgr.m_sInfo.m_sInspectItem.m_nTimeOut[i]));
@@ -926,6 +929,7 @@ BOOL	C_RecipeMgrDlg::GetInspectItemData ()
 
 	g_inRcpInfo.m_recipeMgr.m_sInfo.m_sInspectItem.m_bUseEFA		= m_gridInspectItemData.GetItemCurSel(6, 2);
 	g_inRcpInfo.m_recipeMgr.m_sInfo.m_sInspectItem.m_bUseSpec_Multi = m_gridInspectItemData.GetItemCurSel(7, 2);
+	g_inRcpInfo.m_recipeMgr.m_sInfo.m_sInspectItem.m_bUseAging_Test = m_gridInspectItemData.GetItemCurSel(8, 2);
 
 	for (int i = 0; i < M_RCP_INS_ITEM; i++) {
 		g_inRcpInfo.m_recipeMgr.m_sInfo.m_sInspectItem.m_nTimeOut[i] = _wtoi (m_gridInspectItemData.GetItemText (i, 1));

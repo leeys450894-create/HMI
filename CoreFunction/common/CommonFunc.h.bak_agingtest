@@ -1,0 +1,2135 @@
+#if !defined(AFX_COMMONFUNC_H__DC9B0DF0_E4E0_4AF9_A684_CC908535BB39__INCLUDED_)
+#define AFX_COMMONFUNC_H__DC9B0DF0_E4E0_4AF9_A684_CC908535BB39__INCLUDED_
+
+#if _MSC_VER > 1000
+#pragma once
+//#pragma comment(lib, _T("..\\ni\\Lib\\NiVision.lib"))		// jsyoon 20160204 add
+//#pragma comment(lib, _T("..\\ni\\NiVision.lib"))
+
+#include <afxmt.h>			//CCriticalSection
+//#include <afxdao.h>			//CDaoDatabase
+//#include "..\\ni\\IMAQImageCtrl.h"
+#endif // _MSC_VER > 1000
+// CommonFunc.h : header file
+//
+
+// System Set
+#define	dfMAX_SLOT							25
+
+// Macro
+#define MKPCHAR(s)	(LPTSTR)(LPCTSTR)s
+
+const enum EQUIP_TYPE_VALUE{
+	EQU_TYPE_ICE		= 0,
+	EQU_TYPE_ICM,
+	EQU_TYPE_ICP,
+	EQU_TYPE_OCP,
+	EQU_TYPE_END
+};
+
+#define CUR_EQU_TYPE EQU_TYPE_OCP
+
+////////////////////////////////////////////////////////////////////////////////////////////
+// File Path
+#define dfDEFAULT_ELOG_FILE_PATH			"\\ErrLog"
+#define dfDEFAULT_CLOG_FILE_PATH			"CLog\\"
+#define	dfDEFAULT_DLOG_FILE_PATH			"DLog\\"
+#define	dfDEFAULT_OLOG_FILE_PATH			"OLog\\"
+#define	dfDEFAULT_TLOG_FILE_PATH			"TLog\\"
+#define	dfDEFAULT_MCC_FILE_PATH				"MCC"
+#define dfDEFAULT_SYSTEM_FILE_PATH			"Config\\System.ini" 
+#define dfDEFAULT_CONFIG_FILE_PATH			"Config\\DEFAULT\\Config.ini" 
+
+// 
+#define dfDEFAULT_GLASSINFO_FILE_PATH		"Config\\GlassInfo.ini"
+#define dfDEFAULT_MEASINFO_FILE				"Config\\MeasInfo.ini"
+#define dfDEFAULT_CONFIG_MCC_FILE_PATH		"Config\\Config_MCC.ini" 
+#define dfDEFAULT_TARGETINFO_FILE_PATH		"Config\\TargetInfo.ini"
+
+// MAINT
+#define dfDEFAULT_CONFIG_JOYSTICK_FILE_PATH "Config\\Config_JoyStick.ini" 
+#define dfDEFAULT_CONFIG_ZOOM_FILE_PATH		"Config\\Config_Maint_ZOOM.ini" 
+#define dfDEFAULT_CONFIG_PCAN_FILE_PATH		"Config\\Config_Maint_PCAN.ini" 
+#define dfDEFAULT_CONFIG_LIGHT_FILE_PATH	"Config\\Config_Maint_LIGHT.ini" 
+#define dfDEFAULT_CONFIG_AGING_FILE_PATH	"Config\\AgingProc.ini"
+
+#define dfDEFAULT_CONFIG_FILE				"Config.ini" 
+#define dfDEFAULT_CONFIG_MAINT_FILE			"Config_Maint.ini" 
+
+#define	dfDEFAULT_MOTION_CONFIG_FILE		"Config_Motion.ini"
+#define	dfDEFAULT_MOTION_ACS_CONFIG_FILE	"Config_Motion_ACS.ini"
+#define	dfDEFAULT_CCD_CONFIG_FILE			"Config_Vision.ini" 
+
+#define dfDEFAULT_CHANGERCP_FILE_PATH		_T("ChangeRecipe.ini")
+#define	dfRECIPE_PPID						"PPID.ini"
+#define	dfRECIPE_LIST						"RcpList.txt"
+#define	dfDEFAULT_GLASSDATA_FILE			"GlassData.ini"
+#define	dfDEFAULT_GLASSEXIST_FILE			_T("GlassExist.ini")
+#define	dfDEFAULT_SRM_FILE					"SRM.ini"
+#define	dfDEFAULT_SRM_PPA_FILE				"SRM_PPA.ini"
+#define dfDEFAULT_ILLUMINO_FILE				"Illuminometer.ini"
+#define	dfDEFAULT_SVID_FILE					"SVID.ini"
+#define	dfDEFAULT_RSCONTACT_LOG_FILE		"RSContact.ini"
+#define dfDEFAULT_PROBEINFO_FILE			"ProbeInfo.ini"
+#define	dfDEFAULT_PROBEID_FILE				"ProbeID.ini"		// jsyoon 20161216 add
+
+//#define dfDEFAULT_ALARM_FILE_PATH			"Alarm.csv"
+#define dfDEFAULT_ALARM_FILE_PATH			"Alarm.xls"
+#define dfDEFAULT_DB_SOURCE_PATH			"Config\\ReportSource.mdb"
+#define dfDEFAULT_DB_PROBESOURCE_PATH		"Config\\ProbeReportSource.mdb"
+#define dfDEFAULT_PROBE_HISTORY_FILE_PATH	"\\ProbeHistory.csv"
+#define dfDEFAULT_PROBE_FILE_PATH			"PROBESearch\\"
+#define dfDEFAULT_DB_DEST_PATH				"Database\\"
+#define dfDEFAULT_DIO_ADDRESS_FILE_PATH		"\\Config\\DIOAddress.csv"
+#define dfDEFAULT_RECIPE_FILE_PATH			"\\Config\\Recipe.ini"
+#define dfDEFAULT_STAGE_DATA_PATH			"\\StageData\\"
+#define	dfRECIPE_DATA_FILE_PATH				_T("Recipe\\")
+#define	dfRECIPE_DATA_BACK_FILE_PATH		"\\RecipeBack\\"
+#define	dfRECIPE_DATA_SUB_PATH				"\\SubRecipe\\"
+#define	dfRECIPE_REVIEW_PATH				"\\REVIEW\\"		
+#define	dfRECIPE_SE_PATH					"\\SE\\"
+#define	dfRECIPE_RS_PATH					"\\RS\\"
+#define	dfRECIPE_PPA_PATH					"PPA\\"
+#define	dfRECIPE_ICP_PATH					"ICP\\"
+#define	dfRECIPE_LIST_FILE_PATH				"\\RecipeList\\"
+#define	dfAPD_BACK_FILE_PATH				"\\APD\\"
+#define dfDEFAULT_ALR_FILE_PATH				"ALARMSearch\\"
+
+#define	dfRECIPE_DATA_ALIGN_PATH			"ALIGN\\"
+#define	dfRECIPE_DATA_MEAS_PATH				"MEAS\\"
+#define	dfRECIPE_DATA_POS_PATH				"POS\\"
+
+#define	STR_DIR_RESULT						"Result\\"
+#define	STR_DIR_CONFIG						"Config\\"
+//#define	STR_DIR_ROWIMAGE					"RowImage\\"	//ksk 20150731 change
+#define	STR_DIR_ROWIMAGE					"G:\\RowImage\\"
+#define	STR_DIR_MEASIMAGE					"MeasImage\\"
+#define	dfDEFAULT_ILLUMINATION_PATH			"ILLUMINATION\\"
+#define	dfDEFAULT_SRM_PATH					"SRM\\"
+
+
+// Delimeter
+#define		dfCR						0x0D
+#define     dfLF						0x0A
+#define     dfCRLF						"\r\n"
+#define     dfBRACE						0x3E
+#define		dfSTX						0x02
+#define     dfETX						0x03
+
+#define dfTIMEOUT_COM_WTR					90000
+#define dfTIMEOUT_COM_ALN					90000
+#define dfTIMEOUT_COM_OPN					90000
+
+//20170601 add by Hee
+#define IONIZER_LOAD			0
+#define IONIZER_UNLOAD			1
+#define IONIZER_USE_MAX			2
+//
+
+#define df_MAX_LAMP				12
+#define	df_MAX_PROBE			2
+#define	df_MAX_GANTRY			1
+#define	df_MAX_RESERVE_RECIPE	64		//Reserved
+#define	df_USE_ALIGN_MARK		2
+#define	df_MAX_ALIGN_MARK		2		//Align Mark 사용할 Image 갯수
+#define	df_MAX_RECIPE_ID		256		//Recipe ID 최대 길이
+#define	INT_LAYER_NO_MAX 		10
+#define	df_MAX_VISION_DLG		3
+#define	INT_SUB_PATTERN_NO_MAX 		10	
+#define	df_MAX_PPA_MARK			50
+
+#define SAFE_DELETE(ptr)		if (ptr)	{ delete ptr;	ptr = NULL;	}
+
+#define	dfMAX_PLC_IN_CNT			1000		//PLC Input 최대 접점 갯 수//Added by Jay Hong : 2009.05.20	// jsyoon 20131023 change 200 to 10000
+
+#define	MAX_STR_SIZE_NORMAL			1024
+#define	MAX_STR_SIZE_MAX			4096
+
+//lhj 160823 add
+#define PLC_CMD_ETHERNET_WORD_READ_D            "500000FF03FF000018009004010000"
+#define PLC_D_READ_STARY_BIT					2410
+#define	dfMAX_PLC_IN_CNTD						10*10
+
+#define PLC_D_READ_PROBE_BUFFER					2610
+#define	dfMAX_READ_PROBE_BUFFER					10*2	// 2
+//
+
+#define INT_SNAP_APD1				1			//ksk 20150511 add
+#define INT_SNAP_APD2				2			//ksk 20150511 add
+
+#define	MAX_AFSENSOR				2			// jsyoon 20170308 add
+
+//const enum USE_ALARM{
+//	df_USE_PLC_TEACH,
+//	df_USE_PLC_IONIZER_ALARM,
+//	df_USE_PLC_IONIZER_LOW,			// W
+//	df_USE_PLC_IONIZER_CONDITION,	// W
+//	df_USE_PLC_TEMPERSS,			// Temperature
+//	df_USE_PLC_AREASS,				// ARM
+//	df_USE_PLC_VACUUM,
+//	df_USE_PLC_AIRSS,
+//	df_USE_PLC_DOOR,
+//	df_USE_PLC_EMO,
+//	df_USE_PLC_BOX_FAN,
+//	df_USE_PLC_GLOVE, 
+//	df_USE_PLC_PCW_LEAK,
+//	df_USE_PLC_ISOLATOR,
+//	df_USE_PLC_WINDOWS,
+//	df_USE_SMOKE_DETECT,		// jsyoon 20170602 add
+//	df_USE_PLC_DOOR_USER_UNLOCK,  //20170310 add by Hee		// jsyoon 20170605 add
+//	df_USE_PLC_ISOLATOR_PRESS,    //20170520 add by Hee		// jsyoon 20170605 add
+//
+//	df_USE_MAX_ALARM
+//};
+
+////dfMAX_SUBMODULE			32 설정 되어 있으니까 모듈을 늘리려면 dfMAX_SUBMODULE값 수정할 것
+//const enum VTM_SUBMODULE{
+//	VTM_MOTION		= 0,
+//	VTM_PLC,
+//	VTM_CIM,	
+//	VTM_VISION,	
+//	VTM_VISION2,
+//	VTM_VISION_ALIGN,
+////	VTM_SE,		
+//	VTM_CCLINK,
+//
+//	VTM_GANTRY,
+//	VTM_PROBE1,		//1			// 화질
+//	VTM_PROBE2,		//2			// 화질
+//	VTM_PROBE3,		//3			// 시야각
+//	VTM_PROBE4,		//4			// 시야각
+//	VTM_PROBE5,		//5			// 특성
+//	VTM_PROBE6,		//6			// ALIGNER
+//	VTM_PROBE7,		//7			// PG
+//	VTM_PROBE8,		//8			// LINE SCAN
+//	VTM_PROBE9,		//9			// SE
+//	VTM_PROBE10,	//10		// PPA
+//	VTM_PROBE11,	//11		// PPA
+//	VTM_PROBE12,	//12
+//	VTM_PROBE13,	//13
+//	VTM_PROBE14,	//14
+//	VTM_PROBE15,	//15
+//	VTM_PROBE16,	//16
+//
+//	VTM_PLC_WRITE,
+//
+//	// RS-232
+//	VTM_LED,	
+//	VTM_LED2,
+//	VTM_LED3,
+//	VTM_UV_LED,		
+//	VTM_AFSENSOR,	
+//	VTM_AFSENSOR2,
+//	VTM_FIXTURE,	
+//	VTM_CLAMP,
+//	VTM_PCAN = VTM_CLAMP,
+//	VTM_ZOOMSCOPE,
+//	VTM_ZOOMSCOPE2,
+//	VTM_RSMETER,	// RS8
+//
+//	// USB
+//	VTM_ILLUMINOMETER,	// 조도계
+//
+//	MAX_SUBMODULE
+////	VTM_END
+//};
+
+// // 3 8 6 T F R D A C O S V
+//typedef enum _pgm_mode_type
+//{
+//	PGM_MODE_3D = 0,// "3"
+//	PGM_MODE_8K,	// "8"
+//	PGM_MODE_6K,	// "6"
+//	PGM_MODE_TR,	// "T"
+//	PGM_MODE_RF,	// "F" : reflectance
+//	PGM_MODE_RS,	// "R"
+//	PGM_MODE_PPA,	// "D"
+//	PGM_MODE_CA,	// "A"
+//	PGM_MODE_CM,	// "C" : chromaticity meas. ?
+//	PGM_MODE_OD,	// "O"
+//	PGM_MODE_ST,	// "S" : stress
+//	PGM_MODE_RV,	// "V" : review
+//	PGM_MODE_SE,	// "E" : SE		//uhkang 20101101 
+//	PGM_MODE_REVIEW,	// "E" : SE	
+//	PGM_MODE_ICP,
+//	PGM_MODE_END,
+//};
+
+ const enum _pgm_mode_type
+ {
+	 PGM_MODE_3D = 0,// "3"
+	 PGM_MODE_8K,	// "8"
+	 PGM_MODE_6K,	// "6"
+	 PGM_MODE_TR,	// "T"
+	 PGM_MODE_RF,	// "F" : reflectance
+	 PGM_MODE_RS,	// "R"
+	 PGM_MODE_PPA,	// "D"
+	 PGM_MODE_CA,	// "A"
+	 PGM_MODE_CM,	// "C" : chromaticity meas. ?
+	 PGM_MODE_OD,	// "O"
+	 PGM_MODE_ST,	// "S" : stress
+	 PGM_MODE_RV,	// "V" : review
+	 PGM_MODE_SE,	// "E" : SE		//uhkang 20101101 
+	 PGM_MODE_REVIEW,	// "E" : SE	
+	 PGM_MODE_LUMIN,		// LUMINANCE
+	 PGM_MODE_VISION,	// VISION
+	 PGM_MODE_ANGLE,    // 시야각
+	 PGM_MODE_COLOR,		// COLOR
+	 PGM_MODE_PIXEL,		// PIXEL BITE
+	 PGM_MODE_CD,		// CD		// jdm 20190202 add.
+	 PGM_MODE_IVL,		// IVL		// jdm 20190202 add.
+	 PGM_MODE_END,
+ };
+
+enum _ppa_measmode_type
+{
+	PPA_MEAS_PPA = 0,
+	PPA_MEAS_SNAP,
+	PPA_MEAS_HOLE,
+	PPA_MEAS_MASK,
+	PPA_MEAS_END,
+};
+
+enum refdark_safety_select {
+	SELECT_NONE=-1,
+	SELECT_REF =0,
+	SELECT_DARK,
+	SELECT_SAFETY,
+};
+
+const enum VISION_DLG{
+	DLG_VISION		= 0,
+	DLG_PATTERN,	//1
+	DLG_ALIGN,		//2
+	DLG_MAX,
+};
+
+const enum LED_CONTROL_CH{
+	LED_CH_1 = 0,	// white Led	Align Led
+	LED_CH_2,		// Align Led
+	LED_CH_3,		// Align Led #1
+	LED_CH_4,		// Align Led #2
+	LED_CH_5,		// Review 
+	LED_CH_6,		// Review 
+	LED_CH_7,		// Probe AF
+	LED_CH_8,		// Probe AF
+	LED_CH_9,		// Loader Align
+	LED_CH_10,		// Loader Align 
+	LED_CH_11,
+	LED_CH_12,
+	LED_CH_13,		// Line Scan
+	LED_CH_14,
+	LED_CH_15,
+	LED_CH_16,
+	LED_CH_END,
+};
+
+const enum MEAS_PROCESS_JOB_NO{
+		WORK_MEAS_CMD			= 100,
+		WORK_MEAS_ALIGN,
+		WORK_MEAS_PTRN,
+		WORK_MEAS_LTPS,
+		WORK_MEAS_EVEN,
+		WORK_MEAS_SAVE,		// ROW IMAGE
+		WORK_MEAS_SAVE2,	// MEAS IMAGE
+// 		WORK_MOVE_AFCZ,
+// 		WORK_MOVE_HOMEZ,
+// 		WORK_MOVE_CURZ,
+ 		WORK_SEND_AF,
+// 		WORK_SEND_Q,
+// 		WORK_SEND_CH,
+		WORK_CCD_INIT,
+		WORK_PTRN_SEARCH,	// jsyoon 20170215 add
+
+		WORK_MEAS_SHUTDOWN,
+		WORK_MEAS_NONE,
+};
+
+
+const enum PCAN_PROCESS_JOB_NO{
+	WORK_PCAN_CMD			= 600,
+	WORK_PCAN_STATE,
+	WORK_PCAN_HOME,
+	WORK_PCAN_MOVEA,
+	WORK_PCAN_MOVER,
+	WORK_PCAN_NOME,
+};
+
+const enum ZOOM_PROCESS_JOB_NO{
+		WORK_ZOOM_CMD			= 700,
+		WORK_ZOOM_HOME,
+		WORK_ZOOM_MOVEA,
+		WORK_ZOOM_MOVEA_1,
+		WORK_ZOOM_MOVEA_2,
+		WORK_ZOOM_MOVER_1,
+		WORK_ZOOM_MOVER_2,
+
+		WORK_ZOOM2_HOME,
+		WORK_ZOOM2_MOVEA,
+		WORK_ZOOM2_MOVEA_1,
+		WORK_ZOOM2_MOVEA_2,
+		WORK_ZOOM2_MOVER_1,
+		WORK_ZOOM2_MOVER_2,
+
+		WORK_ZOOM_NOME,
+};
+
+const enum GANTRY_PROCESS_JOB_NO{
+		WORK_GANTRY_CMD			= 100,
+		WORK_MOTION_INIT,
+		WORK_MOTION_HOME,
+
+		WORK_TOP_HOME,
+		WORK_BOTTOM_HOME,
+		WORK_ALIGN_HOME,
+
+		WORK_HOME_START,
+ 		WORK_X_HOME,
+
+		WORK_HOME_END = WORK_X_HOME + 100,
+
+		WORK_MOVE_START,
+ 		WORK_X_MOVE,
+		WORK_MOVE_END = WORK_X_MOVE + 100,
+
+		WORK_MOVER_START,
+		WORK_X_MOVER,
+		WORK_MOVER_END = WORK_X_MOVER + 100,
+		
+		WORK_MOVE_XYZ,
+		WORK_MOVE_XYZ2,
+		WORK_GANTRY_MOVE_DONE_CHK,
+		WORK_MOTION_SHUTDOWN,
+		WORK_GANTRY_TEST,
+		WORK_GANTRY_NONE,
+};
+
+enum meas_cmd {
+		MEAS_CMD_SE = 0,
+		MEAS_SE_INIT_MODULE,
+		MEAS_UPDATE_RECIPE_LIST,
+		MEAS_LOAD_RECIPE,
+		MEAS_GET_MODEL_STRUCTURE,
+		MEAS_GET_RECIPE_INFO,
+		MEAS_RS_INIT_MODULE,
+		MEAS_PPA_INIT_MODULE,
+		
+		MEAS_CMD_START,
+		MEAS_APPLYTO_RECIPE,
+		MEAS_GET_PRV_AXIS_POS,
+		MEAS_MV_PRV_POS,
+		MEAS_GET_POS_XY_INFO,
+		MEAS_MV_POS_XY,
+		MEAS_MV_POS_XY2,
+		MEAS_MV_PPA_POS_XY,
+		MEAS_MV_PPA2_POS_XY,
+		MEAS_AUTO_FOCUS,
+		MEAS_AUTO_FOCUS_PPA,
+		MEAS_DETECT_PTRN,
+		MEAS_DETECT_PTRN2,
+		MEAS_GET_SPL,
+		MEAS_COMPUTE,
+		MEAS_ALL_PROBE_CMD,
+		MEAS_CMD_END,
+		
+		ALIGN_CMD_START,
+		ALIGN_APPLYTO_RECIPE,
+		ALIGN_MARK_GET_POS,
+		ALIGN_MARK_MOVE_POS,
+		ALIGN_MARK_MOVE_POS2,
+		ALIGN_MARK_MOVE_POS3,
+		ALIGN_MARK_MOVE_POS4,
+		ALIGN_MARK_AUTO_FOCUS,
+		ALIGN_MARK_GET_MARK,
+		ALIGN_MARK_DETECT,
+		ALIGN_MARK_DETECT2,
+		ALIGN_MARK_DETECT3,
+		ALIGN_MARK_DETECT4,
+		ALIGN_START_DETECT,
+		ALIGN_RESET_DETECT,
+		ALIGN_CMD_END,
+
+		CCD_CHANGE_START,
+		CCD_CHANGE_SNAP_I,		// Snap Image
+		CCD_CHANGE_SNAP_I2,
+		CCD_CHANGE_SEARCH_I,
+		CCD_CHANGE_SEARCH_I2,
+
+		CCD_CHANGE_LAMP_I,		// LampIntensity
+		CCD_CHANGE_LAMP_I2,
+		CCD_CHANGE_LAMP_I3,
+		CCD_CHANGE_LAMP_I4,
+		CCD_CHANGE_LAMP_I5,
+		CCD_CHANGE_LAMP_I6,
+		CCD_CHANGE_LAMP_I7,
+		CCD_CHANGE_LAMP_I8,
+		CCD_CHANGE_LAMP_I9,
+		CCD_CHANGE_LAMP_I10,
+		CCD_CHANGE_LAMP_I11,
+		CCD_CHANGE_LAMP_I12,
+		CCD_CHANGE_LAMP_I13,
+		CCD_CHANGE_LAMP_I14,
+		CCD_CHANGE_LAMP_I15,
+		CCD_CHANGE_LAMP_I16,
+		CCD_CHANGE_LAMP_ALL,
+
+		CCD_CHANGE_E,			// ExposureTime
+		CCD_CHANGE_E2,
+		CCD_CHANGE_G,			// GAIN
+		CCD_CHANGE_G2,
+		CCD_CHANGE_LENS_ALIGN,	// LENS
+		CCD_CHANGE_LENS_ALIGN_2,
+		CCD_CHANGE_LENS_MEAS,	// LENS
+		CCD_CHANGE_LENS_MEAS_2,
+		CCD_CHANGE_AFCH,		// LENS
+		CCD_CHANGE_AFCH_2,
+		CCD_CHANGE_WHITE,		// White
+		CCD_CHANGE_WHITE_2,
+		CCD_CHANGE_UV,			// UV
+		CCD_CHANGE_UV_2,
+		MEAS_LTPS_SHOT_MODE,
+//		MEAS_LTPS_SHOT_MODE2,
+		MEAS_EVEN_SHOT_MODE,
+//		MEAS_EVEN_SHOT_MODE2,
+		CCD_CHANGE_END,
+
+		EVENT_RECIPE_BUTTONCLICKED_START,
+		// Contact Z
+		MEAS_MOVE_CONTACT_Z_START,
+		MEAS_MOVE_CONTACT_Z_READY,
+		MEAS_MOVE_CONTACT_Z_PRE,
+		MEAS_MOVE_CONTACT_Z_CONTACT,
+		MEAS_MOVE_CONTACT_Z_OD,
+		MEAS_MOVE_CONTACT_Z_END,
+
+		// RS
+		SET_MOVE_RS_CYLINDER_UP,
+		SET_MOVE_RS_CYLINDER_DOWN,
+		SET_CHNG_RS_CURRNET_HIGH,
+		SET_CHNG_RS_CURRNET_LOW,
+		SET_MEAS_RS_CURRNET_DATA,
+
+		// AFSENSOR
+		SET_AFSENSOR_SHOW,
+
+		EVENT_RECIPE_BUTTONCLICKED_END,
+
+		// ALIGN
+		SET_CHN_ALIGN_RCP,
+
+		// SE
+		SET_SE_SHUTTER_ON,
+		SET_SE_SHUTTER_OFF,
+		SET_SE_GET_INTENSITY,
+
+		// PPA
+		SET_PPA_LIGHT_CTRL,
+
+		// illuminometer
+		SET_illumi_CONNECT,
+		SET_illumi_DISCONNECT,
+		SET_illumi_GetPower,
+		SET_illumi_GetWaveLenth,
+		SET_illumi_SetWaveLenth,
+		SET_illumi_SetRange,		// jsyoon 20180104 add
+
+};
+
+enum refdark_safety_cmd {
+	REF_APPLYTO_RECIPE = 0,
+		REF_MV_PRV_AXIS_POS,
+		REF_MV_PRV_REF_AXIS_POS,
+		REF_MV_PRV_DARK_AXIS_POS,
+		REF_MV_PRV_SAFETY_AXIS_POS,
+		REF_GET_PRV_AXIS_POS,
+		REF_MV_POS_XY,
+		REF_GET_POS_XY,
+		REF_GET_REF_DARK_SAFETY_POS,
+		REF_AUTO_FOCUS,
+		REF_ALL_PROBE_CMD,
+};
+
+//Added by Jay Hong : 2009.05.26
+enum meas_rcp_col_t {
+	MEAS_AREA_COL_START		= 0,
+	MEAS_AREA_COL_GROUP_NUM,			
+	MEAS_AREA_COL_POS_P1X,	
+	MEAS_AREA_COL_POS_P1S,		
+	MEAS_AREA_COL_POS_P1Y,				
+	MEAS_AREA_COL_POS_P1Z, 
+	MEAS_AREA_COL_POS_P1AFMULTI,			
+	MEAS_AREA_COL_POS_P1AREA_NUM,		//tg.you 20130212 add
+	MEAS_AREA_COL_POS_P1CELL,
+	MEAS_AREA_COL_POS_P2X,
+	MEAS_AREA_COL_POS_P2S,
+	MEAS_AREA_COL_POS_P2Y,				
+	MEAS_AREA_COL_POS_P2Z,								
+	MEAS_AREA_COL_POS_P2AFMULTI,					
+	MEAS_AREA_COL_POS_P2AREA_NUM,		//tg.you 20130212 add
+	MEAS_AREA_COL_POS_P2CELL,
+	MEAS_AREA_COL_JOB_NUM,
+	MEAS_AREA_COL_TYPE_END,
+};
+
+typedef enum _view_idx_type
+{
+	VI_ALIGN,
+	VI_PTRN_MULTI,
+	VI_PTRN_MEAS,
+	VI_PTRN_VISION,
+	VI_TYPE_END
+};
+
+
+const enum TACT_PROCESS_SEQ_NO{
+	TACT_MOVE_S = 1,
+	TACT_MOVE_E,
+
+	TACT_ALIGNER_S,
+	TACT_ALIGNER_E,
+	TACT_PROBE_AF_S,
+	TACT_PROBE_AF_E,
+	TACT_SNAP_IMAGE_S,
+	TACT_SNAP_IMAGE_E,
+
+	TACT_PROBE_CONTACT_S,
+	TACT_PROBE_CONTACT_E,
+	TACT_PROBE_CHANGE_S,
+	TACT_PROBE_CHANGE_E,
+	TACT_SEARCH_PTN_S,
+	TACT_SEARCH_PTN_E,
+
+	TACT_MEAS_PTP_S = 21,	
+	TACT_MEAS_PTP_E,
+	TACT_MEAS_OST_S,
+	TACT_MEAS_OST_E,
+	TACT_MEAS_RTEST_S,
+	TACT_MEAS_RTEST_E,
+
+	TACT_MEAS_AGING_S,		// 전기
+	TACT_MEAS_AGING_E,
+
+	TACT_MEAS_PRO_S,		// 특성
+	TACT_MEAS_PRO_E,		
+	TACT_MEAS_QUL_S,		// 화질
+	TACT_MEAS_QUL_E,
+	TACT_MEAS_ANG_S,		// 색이상
+	TACT_MEAS_ANG_E,
+
+	TACT_MEAS_SE_S,			// SE
+	TACT_MEAS_SE_E,		
+	TACT_MEAS_RS_S,			// RS
+	TACT_MEAS_RS_E,		
+	TACT_MEAS_PPA_S,		// PPA
+	TACT_MEAS_PPA_E,		
+};
+
+//const enum MCC_PROCESS_ACTION_NO{
+//	MCC_A_INIT_PLC = 1,
+//	MCC_A_INIT_CAM,
+//	MCC_A_INIT_AFC,
+//	MCC_A_INIT_SE,
+//	MCC_A_INIT_RS,
+//	MCC_A_INIT_CLAMP,
+//	MCC_A_INIT_MOT,
+//	MCC_A_MOT_HOME,
+//
+//	MCC_A_LOAD_READY,
+//	MCC_A_MEAS_READY,
+//	MCC_A_UNLOAD_READY,
+//
+//	MCC_A_STEP_LOADER_LOAD,
+//	MCC_A_STEP_LOADER_UNLOAD,
+//	MCC_A_STEP_MOVE_UNLOAD,
+//
+//	MCC_A_STEP_GLASS_GET,
+//	MCC_A_PROC_ALIGN,
+//	MCC_A_PROC_MEAS,
+//	MCC_A_STEP_MEAS,
+//	MCC_A_STEP_GLASS_PUT,
+//
+//	MCC_A_CLAMP_HOME,
+//	MCC_A_CLAMP_IN,
+//	MCC_A_CLAMP_OUT,
+//	MCC_A_VACUUM_ON,
+//	MCC_A_VACUUM_OFF,
+//	MCC_A_AIR_BLOWING,
+//// 	MCC_A_AIR_BLOWING_ON,
+//// 	MCC_A_AIR_BLOWING_OFF,
+//	MCC_A_COMPONENT_IN,
+//	MCC_A_COMPONENT_OUT,
+//
+//	MCC_A_PROBE_PCB_LOCK,
+//	MCC_A_PROBE_PCB_UNLOCK,
+//	MCC_A_PROBE_CLAM_LOCK,
+//	MCC_A_PROBE_CLAM_UNLOCK,
+//	MCC_A_PROBE_ZERO_LOCK,
+//	MCC_A_PROBE_ZERO_UNLOCK,
+//
+//	MCC_A_AUTO_CYCLE,
+//
+//	MCC_A_PROC_MEAS_SE,
+//	MCC_A_MEAS_STEP_SE,
+//	MCC_A_MEAS_SAMP_SE,
+//
+//	MCC_A_PROC_MEAS_RS,
+//	MCC_A_MEAS_STEP_RS,
+//	MCC_A_MEAS_SAMP_RS,
+//
+//	MCC_A_PROC_MEAS_PPA,
+//	MCC_A_MEAS_STEP_PPA,
+//	MCC_A_MEAS_SAMP_PPA,
+//
+//	MCC_A_PROC_MEAS_BP,
+//	MCC_A_MEAS_STEP_BP,
+//	MCC_A_MEAS_SAMP_BP,
+//
+//	MCC_A_PROC_MEAS_CAM,
+//	MCC_A_MEAS_STEP_CAM,
+//	MCC_A_MEAS_SAMP_CAM,
+//
+//	MCC_A_PROC_MEAS_ANGLE,
+//	MCC_A_MEAS_STEP_ANGLE,
+//	MCC_A_MEAS_SAMP_ANGLE,
+//
+//	MCC_A_CHNG_LAMP,
+//	MCC_A_CHNG_LENS,
+//	MCC_A_CHNG_SE_SHUTTER,
+//	MCC_A_CHNG_PROBE,
+//	MCC_A_MOVE_ORGIN,
+//	MCC_A_MOVE_UNLOAD,
+//	MCC_A_MOVE_MEAS,
+//};
+//
+//const enum MCC_PROCESS_SIGNAL_NO{
+//	// X
+//	MCC_S_X_ENTRY_ARM	  =1,		// sih 20180201 change 0 -> 1
+//	MCC_S_X_GLASS_EXIST,
+//	MCC_S_X_PIN_UP,
+//	MCC_S_X_PIN_DOWN,
+//	MCC_S_X_SAFETY_ON,	
+//	MCC_S_X_LOADER_ROT_POS_0,		// 0
+//	MCC_S_X_LOADER_ROT_POS_1,		// 90
+//	MCC_S_X_LOADER_ROT_POS_2,		// 180
+//	MCC_S_X_LOADER_ROT_POS_3,		// 270
+//	MCC_S_X_RUN_AUTO_SWITCH,		// AUTO
+//	MCC_S_X_WT_VAC_ON,
+//	MCC_S_X_WT_VAC_OFF,
+//	MCC_S_X_WT_AIR_ON,
+//	MCC_S_X_WT_AIR_OFF,
+//
+//	MCC_S_X_PROBE_EXIST,
+//	MCC_S_X_PCB_LOCK,
+//	MCC_S_X_CLAM_LOCK,
+//	MCC_S_X_ZERO_LOCK,
+//
+//	MCC_S_X_PLC_INIT,
+//	MCC_S_X_PLC_READY,
+//	MCC_S_X_PLC_LOAD,
+//	MCC_S_X_PLC_MEAS,
+//
+//	// Y
+//	MCC_S_Y_WT_VAC_ON,
+//	MCC_S_Y_WT_VAC_OFF,
+//	MCC_S_Y_WT_AIR_ON,
+//	MCC_S_Y_WT_AIR_OFF,
+//
+//	MCC_S_Y_POWOR_ON_1,				// AF
+//	MCC_S_Y_POWOR_ON_2,				// RS
+//	MCC_S_Y_POWOR_ON_3,				// SE
+//	MCC_S_Y_POWOR_ON_4,				// CCD
+//
+//	MCC_S_Y_PLC_INIT,
+//	MCC_S_Y_PLC_READY,
+//	MCC_S_Y_PLC_LOAD,
+//	MCC_S_Y_PLC_MEAS,
+//
+//	MCC_S_X_SEND_ABLE		= 101,
+//	MCC_S_X_SEND_START,
+//	MCC_S_X_SEND_COMPLETE,
+//	MCC_S_X_RCV_ABLE,
+//	MCC_S_X_RCV_START,
+//	MCC_S_X_RCV_COMPLETE,
+//
+//	MCC_S_Y_RCV_ABLE,
+//	MCC_S_Y_RCV_START,
+//	MCC_S_Y_RCV_COMPLETE,
+//	MCC_S_Y_SEND_ABLE,
+//	MCC_S_Y_SEND_START,
+//	MCC_S_Y_SEND_COMPLETE,
+//};
+
+
+//Added by Jay Hong : 2009.05.20
+#define df_defultRow	2
+#define df_StartRow		3
+#define df_MaxCol		12
+#define df_MaxRow		2500
+#define df_Gap			6		//uhkang 20121204 4-->5	
+#define df_MaxLens		5
+#define df_MaxAFCH		5
+
+#define df_MaxGroup		2500
+#define df_MaxProbe		2
+#define df_MaxZoom		5
+//#define df_MaxRcpLen	16
+#define df_MaxRcpLen	30					// jsyoon 20171124 change 20 to 30
+
+#define df_UseMaxHead  16					// jsyoon 20170306 change 8 to 16
+
+#define DUMMY_POS	9999.9999
+
+
+#define STR_DIR_ALIGN			_T("ALIGN\\")
+#define STR_DIR_PATTERN			_T("Pattern\\")
+#define STR_DIR_RECIPE			_T("Recipe\\")
+#define STR_DIR_IMAGE			_T("Image\\")
+#define STR_DIR_PARAM			_T("PARAM\\")
+
+//Colors
+#define		CLR_WHITE					RGB(0xFF, 0xFF, 0xFF)
+#define		CLR_MAGENTA					RGB(0xFB, 0x0C, 0xD1)
+#define		CLR_BLACK					RGB(0x00, 0x00, 0x00)
+#define		CLR_GRAY					RGB(0x80, 0x80, 0x80)
+#define		CLR_LIGHT_GRAY				RGB(0xC0, 0xC0, 0xC0)
+#define		CLR_RED						RGB(0xFF, 0x00, 0x00)
+#define		CLR_LIGHT_RED				RGB(0xFF, 0x40, 0x40)
+#define		CLR_GREEN					RGB(0x00, 0xFF, 0x00)
+#define		CLR_BLUE					RGB(0x00, 0x00, 0xFF)
+#define		CLR_LIGHT_BLUE				RGB(0x80, 0x80, 0xFF)
+#define		CLR_YELLOW					RGB(0xFF, 0xFF, 0x00)
+#define		CLR_LIGHT_YELLOW			RGB(0xFF, 0xFF, 0xB0)
+
+////=========================================================
+//// Object Lens
+////=========================================================
+//#if !defined( LENS_USE_T_DEFINED )
+//#define LENS_USE_T_DEFINED
+//enum lens_use_t {
+//	LENS_USE_ALIGN = 0,
+//		LENS_USE_MEAS,
+//		LENS_USE_AUX1,
+//		LENS_USE_AUX2,
+//		LENS_USE_AUX3,
+//		USE_LENS_END
+//};
+//#endif // LENS_USE_T_DEFINED
+//#define INT_OBJ_LENS_USE_MAX		USE_LENS_END
+//#define INT_OBJ_LENS_DB_MAX			20
+
+
+enum Log_Level_t {
+	LOG_LEVEL_S = 0,
+	LOG_LEVEL_O,
+	LOG_LEVEL_TT,
+	LOG_LEVEL_T1,
+	LOG_LEVEL_T2,
+	LOG_LEVEL_T3,
+	LOG_LEVEL_D,
+	LOG_LEVEL_E,
+	LOG_LEVEL_END,
+};
+
+#ifndef		PI
+#define		PI			3.1415926535897932384626433832795
+#endif		//#ifndef		PI
+#ifndef		RADIAN
+#define		RADIAN		57.295779513082320876798154814105
+#endif		//#ifndef		RADIAN
+
+/////////////////////////////////////////////////////////////////////////////
+
+extern CString			g_sAppPath;
+//extern CDaoDatabase		g_dbReport;
+extern CCriticalSection	g_csQuery;
+extern CCriticalSection	g_csTime;
+
+extern void gf_Initialize();
+extern BOOL gf_MakeDir(CString sPath);
+extern CString gf_MakeCurTimeString();
+extern CString gf_MakeCurTimeString2();
+extern CString gf_GetCurDayString(int iOption = 0);
+extern CString gf_GetCurTimeString(int itype = 0);
+extern CString gf_GetStartTime();
+extern double gf_GetCurTSec();
+extern BOOL gf_CharacterCheck(CString str);
+extern void DLOG(CString sLog);
+extern CString gf_GetFileTime(CString sPath);
+extern CString gf_GetFilePath(CString sPath);
+extern CString gf_GetCnfPath(int nEQType, CString sPath);
+extern CString gf_MakeMcrID(CString str);
+
+extern void gLog(HWND hWnd,LPCTSTR pszEvt, int nLevel = 0);
+extern unsigned char HexToByte(char hex);		// kjoh 20120214 add.
+extern unsigned int hextoi(CString strHex);		// kjoh 20120214 add.
+extern double	DegreeToRadian				(double dDegree);
+extern double	RadianToDegree				(double dRadian);
+extern CString	dfcStr (LPCTSTR fmt, ...);			//jh.kang 20180223 add Using for AgingTest
+extern BOOL		dfcCreateFolder (CString &filePath);//jh.kang 20180223 add Using for AgingTest
+extern void		gf_PrepareRetryPos(int nRetry, BOOL bRelativePos, double x0, double y0, double dx, double dy, double *px, double *py);
+
+BOOL gf_GetValue(LPCTSTR section, LPCTSTR key, LPCTSTR default, LPTSTR value, DWORD nSize, LPCTSTR filepath);
+BOOL gf_WriteValue(LPCTSTR section, LPCTSTR key, LPCTSTR value, LPCTSTR filepath);
+CString gf_CharToString(char* pchar);
+char* gf_StringToChar(CString str);
+#define SAFE_DELETEA(p) if(p) { delete[] p; p = NULL; }
+
+//////////////////////////////////////////////////////////////////////////
+
+/////////////////////////////////////////////////////////////////////////////
+//====================================================================
+// CPtrnInfo
+//====================================================================
+// class CPtrnInfo : public CObject  
+// {
+// public:
+// 	CPtrnInfo();
+// 	virtual ~CPtrnInfo();
+// 	
+// public:
+// 	virtual void	Serialize(CArchive& ar, int iVer = 0);
+// 	//=========================================================
+// 	// not save : m_pImgOrg, m_pImgScaled, m_dRealX, m_dRealY
+// 	//=========================================================
+// 	
+// 	void		ClearPtrn();
+// 	void		ClearPosData();
+// 	void		ClearInfo();
+// 	
+// 	CPtrnInfo&	operator= (CPtrnInfo& rVal);
+// 	
+// public:
+// 	CString		m_strName;		// ptrn name
+// 	
+// 	Image*		m_pImgInput;	
+// 	Image*		m_pImgOrg;		// 패턴 이미지 (original size image)
+// 	Image*		m_pImgOrgHSL;	//uhkang 20100317 Pattern Color Image
+// 	Image*		m_pImgOrgBW;	//uhkang 20100317 Pattern BW Image
+// 	Image*		m_pImgScaled;	// 보여주기 위해 UI에 맞기 크기변경된 이미지
+// 	Image*		m_pImgHSLScaled;// 보여주기 위해 UI에 맞기 크기변경된 이미지
+// 	Image*		m_pImgBWScaled;	// 보여주기 위해 UI에 맞기 크기변경된 이미지
+// 	
+// 	CRect		m_rectPtrn;		// defined Rectangle
+// 	double		m_dThreshold;	// matching threshold
+// 	int			m_iFindNum;		// Retry Number
+// 	int			m_iCntrNum;		// Centering Number
+// 
+// 	int			m_iCenMarginX;
+// 	int			m_iCenMarginY;
+// 	double		dCenOffsetX;
+// 	double		dCenOffsetY;
+// 	int			m_iPtrnMatchPriority;
+// 	
+// 	BOOL		m_bDetected;	// 사용하는 패턴 종류에 따라서..detected or defined
+// 	
+// 	double		m_dx, m_dy;			// 나에서 master까지 거리 (offset)
+// 	// master는 m_dx = m_dy = 0.;
+// 	// slave는  m_dx = master.m_dRealX - slave.m_dRealX
+// 	
+// 	double		m_dRealX, m_dRealY;	// 현재 내 좌표.. (temp) 이놈은 저장 안해요~
+// 	// Master/Slave define 시에 사용.
+// 
+// 	BOOL		m_bPtrnLearn;	// blue 2009.06.30 움.. 이건 좀 나중에 하세~
+// };
+
+#define VTM_RV_SUCCESSED			1
+#define VTM_RV_FAILED				0
+#define df_HOST_OFFLINE				0
+#define	df_HOST_ONLINE_REMOTE		1
+#define	df_HOST_ONLINE_LOCAL		2
+#define	df_HOST_MAINT_MODE			3
+#define	df_HOST_PM_MODE				4
+
+////ALARM //ksk 20120229 계속적으로 추가하자.. //kjhg 20140519 remove for change Alarm Bit
+//static const enum ALARM_ID{
+//	JOB_PROCESS_ALARM = 1000,
+//	JOB_PROCESS_UNKONWN_ALARM,	//1001
+//	JOB_PROCESS_OUTOFSERVICE,	//1002
+//	JOB_PROCESS_VIRTUAL_MODE,	//1003
+//
+//	//Job or Processing
+//	JOB_LOTID_NOT_EXIST			= 1011,			// H
+//	JOB_GLSID_NOT_EXIST,						// H
+//	JOB_RECIPE_NOT_EXIST,						// H
+//	JOB_RECIPE_NOT_SELECTED,					// H
+//	JOB_LOAD_SEQ_GLASS_DETECTED,				// H
+//	JOB_MOVE_TO_UNLOAD_FAIL,					// H
+//	JOB_INIT_AF_MODULE_ERROR,					// H
+//	JOB_GLASS_NOT_EXIST,						// H
+//	JOB_GLASS_AND_VACUUM_SENSOR_MISMATCH_ERROR,	// H
+//	VTM_RV_STOP_BY_USER,						// L
+//	JOB_FILE_OPEN_ERROR,						// L
+//	JOB_FILE_WRITE_ERROR,						// L
+//	JOB_SEND_APD_FAIL,							// L
+//	JOB_LAMP_TIMEOUT,							// L			
+//	JOB_MEAS_DATA_OUT_OF_SPEC,					// L	// 15
+//	JOB_CHANGE_CTRL_MODE_OFFLINE_ERROR,
+//	JOB_CHANGE_CTRL_MODE_ONLINE_ERROR,
+//	JOB_PARAMTER_OUT_OF_SPEC,
+//	JOB_RECIPE_OPEN_FAIL_ERROR,
+//
+//
+//	// Job proc
+//	JOB_PROC_NO_ERROR = 1100,						// H
+//	JOB_PROC_MEAS_STATUS_ERROR,
+//	JOB_PROC_ALIGN_ERROR,
+//	JOB_PROC_SHUTTER_ERROR,
+//	JOB_PROC_SAFETY_POS_ERROR,					// H
+//	JOB_PROC_ALIGN_POS_ERROR,					// H
+//	JOB_PROC_MEAS_POS_ERROR,					// H
+//
+//	// Loader
+//	JOB_PROC_LOADER_ALIGN_ERROR,
+//	JOB_PROC_LOADER_POSX_ERROR,
+//	JOB_PROC_LOADER_POSY_ERROR,
+//	JOB_PROC_LOADER_POSR_ERROR,
+//
+//	// HEAD
+//	HEAD_NOT_CONNECTED = 2001,
+//	HEAD_ACK_TIMEOUT   = 2021,
+//	HEAD_ACK_FAIL	   = 2041,
+//	HEAD_COMMAND_ERROR = 2061,
+//
+//	CLIENT_NOT_CONNECTED = 2081,
+//	CLIENT_ACK_TIMEOUT,
+//	CLIENT_ACK_FAIL,
+//
+//	//MOTION
+//	MEI_NOT_CREATED = 3001,						// H
+//	MEI_INIT_MC_FAIL,							// H
+////	MEI_SERVO_FAIL,								// H	
+//	MOTION_CMDPOS_ERROR		= 3012,				// Can not move
+//// 	MOTION_LIFTPIN_UP_POS	= 3051,				// H
+//// 	MOTION_LIFTPIN_DOWN_POS_ERROR,				// H	
+//	MOTION_RS_STANDBY_POS_FAIL,					// H	// 225
+//	MOTION_PB_STANDBY_POS_FAIL,
+//	MOTION_LP1_POS_ERROR,
+//	MOTION_LP2_POS_ERROR,
+//	MOTION_INTERLOCK_1,							// Gantry			// RJ Align or Loading 아니면 
+//	MOTION_INTERLOCK_2,							// Rotate			// LP UP and not Align or Loading 아니면
+//	MOTION_INTERLOCK_3,							// Rack Jack		// LP UP 아니면
+//	MOTION_INTERLOCK_4,
+//	MOTION_ROTATE_POS_ERROR,					// 0 or 180 check
+//	MOTION_INTERLOCK_GRIP_ALARM,				// TEACH 모드시 이동중 Grip off 시 알람
+//
+//	MOTION_AMPENABLE_ERR  = 3401,
+//	MOTION_OVER_LIMIT_POS = 3501,
+//	MOTION_OVER_LIMIT_NEG = 3601,
+//	MOTION_MOVE_CHECK_ALARM = 3701,
+//
+//	
+//	//PLC						
+// 	PLC_SOCKET_CREATE_FAIL = 4001,				// H
+// 	PLC_INITIAL_FAIL,							// H	
+//	PLC_COMMAND_TIMEOUT,						// H
+// 	PLC_READY_FAIL_TIMEOUT,						// H
+// 	PLC_LOAD_FAIL_TIMEOUT,						// H
+// 	PLC_MEAS_FAIL_TIMEOUT,						// H
+// 	PLC_STATE_NOT_LOAD,							// H
+// 	PLC_STATE_NOT_MEASURE,						// H
+// 	PLC_STATE_NOT_READY,						// H
+//
+// 	PLC_CANNOT_DETECT_SAFETY_SENSOR_X,			// H
+// 	PLC_CANNOT_DETECT_SAFETY_SENSOR_Y,			// H
+//
+//	PLC_GLASS_EXIST_SENSOR_ERROR,				// H
+//	PLC_GLASS_EXIST_LIFEPIN_SENSOR_ALARM,		// H
+//	PLC_GLASS_OBLIVIOUS_LIFEPIN_SENSOR_ALARM,
+//	PLC_GLASS_EXIST_WORKPLATE_SENSOR_ALARM,		// H
+//	PLC_GLASS_OBLIVIOUS_WORKPLATE_SENSOR_ALARM,
+//
+// 	PLC_AIR_SENSOR_ERROR,						// H
+// 	PLC_VACUUM_SENSOR_ERROR,					// H
+// 	PLC_ARM_SENSOR_DETECT,						// H
+// 	PLC_DOOR_SENSOR_DETECT,						// H
+//	PLC_UNLOAD_SENSOR_ERROR,
+// 	PLC_EMO_STATE,								// H
+// 	PLC_MC_OFF_STATE,							// H
+// 	PLC_TEMPERATURE_SENSOR_ERROR,				// H
+//	PLC_RS_CYLINDER_UP_ERROR,					// H	
+//	PLC_RS_CYLINDER_DOWN_ERROR,					// H
+//	PLC_FIXTURE_CYLINDER_UP_ERROR,				// H
+//	PLC_FIXTURE_CYLINDER_DOWN_ERROR,			// H
+//	PLC_FIXTURE_CYLINDER_FWD_ERROR,				// H
+//	PLC_FIXTURE_CYLINDER_REV_ERROR,				// H
+//	PLC_LIFTPIN_STATE_ERROR,					// H	
+//	PLC_LIFTPIN_UP_POS_ERROR,					// H	
+//	PLC_LIFTPIN_DOWN_POS_ERROR,					// H	
+//	PLC_LIFTPIN_ALIGN_POS_ERROR,				// H
+//	PLC_WHITE_LED_SHUTTER_ON_ERROR,				// H
+//	PLC_WHITE_LED_SHUTTER_OFF_ERROR,			// H
+//	PLC_UV_LED_SHUTTER_ON_ERROR,				// H
+// 	PLC_UV_LED_SHUTTER_OFF_ERROR,				// H
+//	PLC_AIRBLOWING_ON_ERROR,					// H
+//	PLC_AIRBLOWING_OFF_ERROR,					// H
+//	PLC_DOOR_LOCK_TEACHMODE_STATE,				// H
+//	PLC_DOOR_LOCK_AUTOMODE_STATE,				// H
+//	PLC_RS_CYLINDER_UP_STATE,					// H
+//	PLC_GROVE_DETECT_STATE,						// H
+//	PLC_CCD_POWER_STATE_ERROR,					// H
+//	PLC_CCD_REPEATER_STATE_ERROR,
+//	PLC_ISOLATOR_SENSOR_ERROR,					// H
+//	PLC_IONIZER_CONDITION_WARNING,				// L
+//	PLC_IONIZER_LOW_WARNING,					// L
+// 	PLC_IONIZER_ERROR,							// H
+//	PLC_O2_LOW_WARNING,							// L
+//	PLC_O2_LOW_STATE_ERROR,						// H		// DOOR Open O2 Low 
+//	PLC_PCW_LEAK_OFF_STATE,						// H		// jsyoon 20150224 add
+//	PLC_PROBE_CARD_EXIST_ALARM,					
+//	PLC_CHAMBER_LOW_PRESSURE_ALARM,
+//	PLC_CHAMBER_HIGH_PRESSURE_ALARM,
+//	PLC_GRIP_USE_STATE,
+//	PLC_GATE_VALVE_CLOSE_ALARM,
+//	PLC_USER_MANUAL_OFF_ALARM,					// jsyoon 20170105 add
+//	PLC_CP_OFF_STATE,
+//	PLC_SMOKE_DETECT_ALARM,	
+//	PLC_MAIN_DOOR_USER_UNLOCK_ALARM,
+//	PLC_LOADER_SHUTTER_UP_ERROR,				// H	
+//	PLC_LOADER_SHUTTER_DOWN_ERROR,				// H
+//	PLC_STATE_UNKNOWN_ERROR,
+//	PLC_IONIZER_POWER_ALARM_01,
+//	PLC_PURIFIER_N2PURGE_OFF_ALARM,
+//	PLC_CDA_ON_ALARM,
+//	PLC_GROVE_DETECT_ALARM_01,					// H	// sih 20171213 add 
+//	PLC_GROVE_DETECT_ALARM_02,					// H	// sih 20171213 add 
+//	PLC_SAFETY_CP_OFF_STATE,					// H	//Dongs 20180221 add
+//
+//	PLC_EMO_SWITCH_PUSHED_01	  = 4501,		// H
+//	PLC_EMO_SWITCH_PUSHED_02,					// H
+//	PLC_EMO_SWITCH_PUSHED_03,					// H
+//	PLC_EMO_SWITCH_PUSHED_04,					// H
+//	PLC_EMO_SWITCH_PUSHED_05,					// H
+//	PLC_EMO_SWITCH_PUSHED_06,					// H
+//	PLC_EMO_SWITCH_PUSHED_07,
+//	PLC_EMO_SWITCH_PUSHED_08,
+//
+//	PLC_LOADER_EMO_SWITCH_PUSHED_01,
+//// 	PLC_LOADER_EMO_SWITCH_PUSHED_02,
+//// 	PLC_LOADER_EMO_SWITCH_PUSHED_03,
+//
+//
+//	PLC_DOOR_OPENED_01			 = 4511,		// H
+//	PLC_DOOR_OPENED_02,							// H
+//	PLC_DOOR_OPENED_03,							// H
+//	PLC_DOOR_OPENED_04,							// H
+//	PLC_DOOR_OPENED_05,							// H
+//	PLC_DOOR_OPENED_06,							// H
+//
+//	PLC_ELECTRIC_BOX_FAN_ERROR_01  = 4521,
+//
+//
+//	PLC_TEMPERATURE_SENSOR_OVER_01 = 4531,		// H		// jsyoon 20150302 add
+//	PLC_TEMPERATURE_SENSOR_OVER_02,				// H
+//	PLC_TEMPERATURE_SENSOR_OVER_03,				// H
+//	PLC_TEMPERATURE_SENSOR_OVER_04,				// H
+//	PLC_TEMPERATURE_SENSOR_OVER_05,				// H
+//	
+//	PLC_CHUCK_VACUUM1_ON_ERROR		= 4541,		// H
+//	PLC_CHUCK_VACUUM2_ON_ERROR,					// H
+//	PLC_CHUCK_VACUUM3_ON_ERROR,					// H
+//	PLC_CHUCK_VACUUM4_ON_ERROR,					// H
+//	PLC_CHUCK_VACUUM5_ON_ERROR,					// H
+//	PLC_CHUCK_VACUUM1_OFF_ERROR,				// H
+//	PLC_CHUCK_VACUUM2_OFF_ERROR,				// H
+//	PLC_CHUCK_VACUUM3_OFF_ERROR,				// H
+//	PLC_CHUCK_VACUUM4_OFF_ERROR,				// H
+//	PLC_CHUCK_VACUUM5_OFF_ERROR,				// H
+//
+//	PLC_PROBE_EXIST_ERROR			= 4551,		// H
+//	PLC_PROBE_UNEXIST_ERROR,
+//	PLC_PROBE_PCB_LOCK_ERROR,
+//	PLC_PROBE_PCB_UNLOCK_ERROR,
+//	PLC_PROBE_ZERO_POS_ERROR,
+//	PLC_PROBE_UNZERO_POS_ERROR,
+//	PLC_SACC_SAFETY_ERROR			= 4561,		// H
+//
+//	PLC_WINDOW_OPENED_01			= 4571,
+//	PLC_WINDOW_OPENED_02,
+//	PLC_WINDOW_OPENED_03,
+//	PLC_WINDOW_OPENED_04,
+//	PLC_WINDOW_OPENED_05,
+//	PLC_WINDOW_OPENED_06,
+//	PLC_WINDOW_OPENED_07,
+//	PLC_WINDOW_OPENED_08,
+//	PLC_WINDOW_OPENED_09,
+//	PLC_WINDOW_OPENED_10,
+//
+//	PLC_ISOLATOR_SENSOR_ALARM_01	= 4591,
+//	PLC_ISOLATOR_SENSOR_ALARM_02,
+//	PLC_ISOLATOR_SENSOR_ALARM_03,
+//	PLC_ISOLATOR_SENSOR_ALARM_04,
+//	PLC_ISOLATOR_SENSOR_ALARM_05,
+//	PLC_ISOLATOR_SENSOR_ALARM_06,
+//	PLC_ISOLATOR_SENSOR_ALARM_07,
+//	PLC_ISOLATOR_SENSOR_ALARM_08,
+//	PLC_ISOLATOR_SENSOR_ALARM_END,
+//
+//	PLC_ISOLATOR_PRESSURE_ALARM_01 = 4601,
+//
+//	PLC_ELECTRIC_BOX_FAN_ERROR_09  = 4611,
+//
+//	PLC_PCW_LEAK_01_ALARM		   = 4621,
+//	PLC_PCW_LEAK_02_ALARM,
+//	PLC_PCW_LEAK_03_ALARM,
+//	PLC_PCW_LEAK_12_ALARM	= PLC_PCW_LEAK_01_ALARM + 12,
+//
+//
+//
+//
+// 	// pwk change from plc to cc link				
+// 	CCLINK_INITIAL_FAIL = 4901,						// H		
+// 	CCLINK_CANNOT_DETECT_SAFETY_SENSOR_X0,			// H
+// 	CCLINK_CANNOT_DETECT_SAFETY_SENSOR_X1,			// H
+// 	CCLINK_CANNOT_DETECT_SAFETY_SENSOR_Y0,			// H
+// 	CCLINK_CANNOT_DETECT_SAFETY_SENSOR_Y1,			// H
+// 	CCLINK_GLASS_EXIST_SENSOR_ERROR,				// H
+// 	CCLINK_AIR_SENSOR_ERROR,						// H
+// 	CCLINK_VACUUM_SENSOR_ERROR,						// H
+// 	CCLINK_ARM_SENSOR_DETECT,						// H
+// 	CCLINK_DOOR_SENSOR_DETECT,						// H
+// 	CCLINK_LIFT_PIN_UP_STATE,						// H
+// 	CCLINK_EMO_STATE,								// H
+// 	CCLINK_MC_OFF_01,								// H
+// 	CCLINK_MC_OFF_02,								// H
+// 	CCLINK_ELECTRIC_BOX_FAN_ERROR_01,				// H
+// 	CCLINK_ELECTRIC_BOX_FAN_ERROR_02,				// H
+// 	CCLINK_TEMPERATURE_SENSOR_ERROR,				// H
+// 	CCLINK_IONIZER_LOW_ION_ERROR,					// H
+// 	CCLINK_IONIZER_HIGH_VOLTAGE_ERROR,				// H
+// 	CCLINK_RS_CYLINDER_UP_ERROR,					// H	
+// 	CCLINK_RS_CYLINDER_DOWN_ERROR,					// H
+// 	CCLINK_WHITE_LED_SHUTTER_ON_ERROR,				// H
+// 	CCLINK_WHITE_LED_SHUTTER_OFF_ERROR,				// H
+// 	CCLINK_UV_LED_SHUTTER_ON_ERROR,					// H
+// 	CCLINK_UV_LED_SHUTTER_OFF_ERROR,				// H
+//
+//	//CIM
+//	CIM_RV_SOCKET_CREATE_FAIL   = 5001,			// H
+//	CIM_RV_TIMEOUT,								// H
+////	CIM_RV_PPID_NG,								// H
+//	CIM_RV_LOTID_NG,							// H
+//	CIM_RV_GLASSID_NG,							// H
+//	CIM_RV_HANDSHAKE_FAIL,						// H
+//	
+//	//VISION
+//	VISION_INITIAL_FAIL			= 6001,			// H
+//	VISION_ALIGN_DETECTED_FAIL,					// H
+//	VISION_ALIGN_CENTERING_FAIL,				// H
+//	VISION_AF_FAIL,								// L
+//	VISION_PATTERN_DETECTED_FAIL,					// L
+//	VISION_PATTERN_CENTERING_FAIL,				// L
+//	VISION_PATTERN_READ_FAIL,					// L
+//	VISION_LENS_POWER_ZERO,						// L	// 507
+//	VISION_TIMEOUT,								// L
+//	VISION_MEAS_TIMEOUT_LTPS,					// L
+//	VISION_MEAS_TIMEOUT_EVEN,					// L
+//
+//	// LINE SCAN
+//	LINE_SCAN_INIT_ERROR		= 6101,
+//	LINE_SCAN_DONE_ALARM,
+//
+//	// LED
+//	LIGHT_NOT_CONNECTED		= 6201,
+//	LIGHT_WRITE_ERROR,
+//	LIGHT_CHANGE_ERROR,	
+//
+//	// ILLUMI
+//	ILLUMINATION_MEAS_FAIL,
+//	ILLUMINATION_MEAS_LOW,
+//
+//	//PCAN
+//	PCAN_MODULE_INIT_ERROR = 7001,				// H
+//	PCAN_MODULE_MOVE_DONE_FAIL,				// H
+//	PCAN_MODULE_HOMING_FAIL,					// H
+//	PCAN_MODULE_INIT_PARAM_FAIL,				// H
+//	PCAN_MODULE_INIT_PROFILE_FAIL,				// H
+//	PCAN_MODULE_SET_HOME_PARAM_FAIL,			// H
+//	PCAN_MODULE_MOVE_FAIL,						// H
+//	PCAN_MODULE_ON_FAIL,						// H
+//    PCAN_MODULE_OFF_FAIL,						// H	// 7008
+//	PCAN_MODULE_STATE_FAIL,
+//	PCAN_MODULE_STATE_FAIL_1,
+//	PCAN_MODULE_STATE_FAIL_2,
+//	PCAN_MODULE_STATE_FAIL_3,
+//	PCAN_MODULE_STATE_FAIL_4,
+//	PCAN_MODULE_STATE_FAIL_5,
+//	PCAN_MODULE_STATE_FAIL_6,					//7014
+//
+//	// PG
+//	PG_MODULE_NO_ERROR = 7100,
+//	PG_MODULE_PARAM_ERROR = 7105,
+//	PG_MODULE_ACK_TIMEOUT = 7190,
+//
+//	// 화질 Quality
+//	QUALITY_MODULE_GRAB_START_ERROR = 7201,
+//	QUALITY_MODULE_GRAB_END_ERROR,
+//	QUALITY_MODULE_CLASS_END_ERROR,
+//	QUALITY_MODULE_FILE_EXIST_ERROR,
+//	QUALITY_MODULE_DOWNLOAD_ERROR,
+//	QUALITY_MODULE_CHANGE_RCP_ERROR,
+//
+//	PIC1_MODEL_CHANGE_CMD_REQ_FAIL_ALARM = 7241,
+//	PIC2_MODEL_CHANGE_CMD_REQ_FAIL_ALARM,
+//	PIC_MODEL_CHANGE_CMD_REQ_TIME_OUT_ALARM,
+//
+//	// 시야각
+//	ANGLE_MODULE_GRAB_START_ERROR = 7301,
+//	ANGLE_MODULE_GRAB_END_ERROR,
+//	ANGLE_MODULE_CLASS_END_ERROR,
+//	ANGLE_MODULE_FILE_EXIST_ERROR,
+//	ANGLE_MODULE_DOWNLOAD_ERROR,
+//	ANGLE_MODULE_CHANGE_RCP_ERROR,
+//	ANGLE1_MODEL_CHANGE_CMD_REQ_FAIL_ALARM = 7341,
+//	ANGLE2_MODEL_CHANGE_CMD_REQ_FAIL_ALARM,
+//	ANGLE_MODEL_CHANGE_CMD_REQ_TIME_OUT_ALARM,
+//
+//	// 특성
+//	PROPERTY_MODULE_GRAB_START_ERROR = 7401,
+//	PROPERTY_MODULE_GRAB_END_ERROR,
+//	PROPERTY_MODULE_CLASS_END_ERROR,
+//	PROPERTY_MODULE_FILE_EXIST_ERROR,
+//	PROPERTY_MODULE_DOWNLOAD_ERROR,
+//	PROPERTY_MODULE_CHANGE_RCP_ERROR,
+//
+//	//jh.kang 20180423 change
+//// 	PROPERTY_MODULE_LV_EF_VALUE_ERROR_0DEGREE, //lhj 20180328 add 휘도와 효율이 연속에서 3셀 이상 0값이 나오면 중알람 처리, LV(휘도), EF(효율)
+//// 	PROPERTY_MODULE_LV_EF_VALUE_ERROR_45DEGREE,
+//	PROPERTY_MODULE_LV_EF_VALUE_ERROR_0DEGREE_HEAD1, 
+//	PROPERTY_MODULE_LV_EF_VALUE_ERROR_45DEGREE_HEAD1,
+//	PROPERTY_MODULE_LV_EF_VALUE_ERROR_0DEGREE_HEAD2, 
+//	PROPERTY_MODULE_LV_EF_VALUE_ERROR_45DEGREE_HEAD2,
+//	//
+//
+//	PROPERTY_MODULE_ACK_ERROR = 7400,		// 응답 받은 알람
+//
+//
+//	// PPA
+//	PPA_MODULE_GRAB_START_ERROR = 7501,		// 측정 시작
+//	PPA_MODULE_GRAB_END_ERROR,				
+//	PPA_MODULE_DOWNLOAD_ERROR,
+//	PPA_MODULE_CHANGE_RCP_ERROR,
+//	PPA_MODULE_TIMEOUT_ERROR,
+//	PPA_MODULE_ACK_ERROR,
+//
+//
+//	// Aligner
+//	ALIGNER_MODULE_COMM_FAIL = 7601,
+//	ALIGNER_MODULE_TARGET_REG_FAIL,
+//	ALIGNER_MODULE_OBJECT_REG_FAIL,
+//	ALIGNER_MODULE_TARGET_SEARCH_FAIL,
+//	ALIGNER_MODULE_OBJECT_SEARCH_FAIL,
+//	ALIGNER_MODULE_CALIBRATION_FAIL,
+//	ALIGNER_MODULE_ALIGN_FAIL,
+//	ALIGNER_MODULE_CHANGERCP_FAIL,
+//
+//	// SE
+//	SE_SOCKET_CREATE_FAIL		= 7701,			// H
+//	SE_CANNOT_FIND_COMPLETEEASE,				// H
+//	SE_LAMP_A_EXPIRED,							// H
+//	SE_LAMP_B_EXPIRED,							// H
+//	SE_HEADER_STATUS_ERROR,						// L
+//	SE_RUN_RECIPE_ERROR,						// L
+//	SE_LIST_RECIPE_ERROR,						// L
+//	SE_MODEL_STRUCT_ERROR,						// L
+//	SE_GET_RECIPE_INFO_ERROR,					// L
+//	SE_LOAD_RECIPE_ERROR,						// L
+//	SE_GET_ALIGN_ERROR,							// L
+//	SE_LAMP_ON_ERROR,							// L
+//	SE_LAMP_OFF_ERROR,							// L
+//	SE_YELLOW_FILTER_ON_ERROR,					// L
+//	SE_YELLOW_FILTER_OFF_ERROR,					// L	// 114
+//	SE_GET_INTENSITY_ERROR,
+//
+//
+//
+//
+//	AFS_HOME_FAIL_0					= 7801,	
+//	AFS_OVER_LIMIT_POS_0,						// H
+//	AFS_CMD_TIME_OUT_0,							// H
+//
+//	AFS_HOME_FAIL_1					= 7805,
+//	AFS_OVER_LIMIT_POS_1,						// H
+//	AFS_CMD_TIME_OUT_1,							// H
+//
+//	RS8_ACK_ALREADY_CREATED			= 7851,
+//	RS8_ACK_NOT_CREATED				,
+//	RS8_ACK_INVALID_COMM_PORT		,
+//	RS8_ACK_OPEN_FAIL_COMM_PORT		,
+//	RS8_ACK_CMD_TIMEOUT				,
+//	RS8_ACK_ERR_COMM_PARA			,
+//	RS8_ACK_ERR_REPLY_PO			,
+//	RS8_ACK_ERR_REPLY_PE			,
+//	RS8_ACK_ERR_REPLY_RO			,
+//	RS8_ACK_ERR_REPLY_RL			,
+//	RS8_ACK_ERR_REPLY_NODATA		,
+//	RS8_ACK_ERR_REPLY_UNKNOWN		,
+//
+//
+//	ZOOM_SCOPE_OPEN_FAIL = 7901,
+//	ZOOM_SCOPE_HOME_FOCUS_ERROR,
+//	ZOOM_SCOPE_HOME_FOCUS_TIMEOUT,
+//	ZOOM_SCOPE_HOME_ZOOM_ERROR,
+//	ZOOM_SCOPE_HOME_ZOOM_TIMEOUT,
+//	ZOOM_SCOPE_LIMIT_ERROR,
+//	ZOOM_SCOPE_MOVE_FAIL,
+//	ZOOM_SCOPE_MOVE_TIMEOUT,
+//	ZOOM_SCOPE_INVALID_RARAMETER,
+//	ZOOM_SCOPE_ERROR_END  = 7910,
+//
+//	ZOOM_SCOPE2_OPEN_FAIL = 7911,
+//
+//	ZOOM_SCOPE2_ERROR_END = 7920,
+//
+//	// SACC ALARM
+//	SACC_GATE_PULL_TIMEOUT_ALARM = 8001,
+//	SACC_GATE_PUSH_TIMEOUT_ALARM,
+//	SACC_GATE_DOWN_TIMEOUT_ALARM,
+//	SACC_GATE_UP_TIMEOUT_ALARM,
+//	SACC_NO_EMPTY_SLOT_ALARM,
+//	SACC_ENABLE_ALARM,
+//	SACC_NOT_EXIST_PROBE_IN,
+//	SACC_REAR_GATE_OPEN_STATE_ALARM,
+//	SACC_NOT_FIND_PROBE_ID_IN_ALARM,
+//	SACC_PROBE_TAG_DUPLICATION_ALARM,
+//	SACC_FRONT_GATE_VALVE_OPEN_ALARM,
+//
+//	//SACC ALARM lhj add 160905 
+//	SACC_GLASS_UNLOADING_SENSOR_X_ALARM = 8050,    //Read, Meas
+//	SACC_GLASS_UNLOADING_SENSOR_X4_X5_ALARM,
+//	SACC_UNIT_ROBOT_Z_AXIS_READY_MOVE_ALARM,
+//	SACC_UNIT_ROBOT_Z_AXIS_MEAS_MOVE_ALARM,
+//	SACC_TEACHING_ALARM, //lhj 161017 add
+//
+//	SACC_START_GET_INSIDE_ROBOT_PROBE_EXIST_ALARM = 8100, //Get Inside
+//	SACC_END_GET_INSIDE_ROBOT_PROBE_NO_EXIST_ALARM,
+//	SACC_START_GET_INSIDE_PROBE_NO_EXIST_ALARM,
+//	SACC_GET_INSIDE_ZERO_PCB_LOCK_ALARM,
+//	SACC_GET_INSIDE_MOVE_ALARM,
+//	SACC_GET_INSIDE_CMD_ZERO_UNLOCK_ALARM,
+//	SACC_GET_INSIDE_CMD_PCB_UNLOCK_ALARM,
+//
+//	SACC_START_PUT_INSIDE_ROBOT_PROBE_NO_EXIST_ALARM =8150, //Put Inside
+//	SACC_PUT_INSIDE_ZERO_PCB_LOCK_ALARM,
+//	SACC_PUT_INSIDE_MOVE_ALARM,
+//	SACC_START_PUT_INSIDE_PROBE_EXIST_ALARM,
+//	SACC_END_PUT_INSIDE_PROBE_NO_EXIST_ALARM,
+//	SACC_PUT_INSIDE_CMD_ZERO_LOCK_ALARM,
+//	SACC_PUT_INSIDE_CMD_PCB_LOCK_ALARM,
+//
+//	SACC_START_GET_SACC_ROBOT_PROBE_EXIST_ALARM = 8200, //Get SACC
+//	SACC_END_GET_SACC_ROBOT_PROBE_NO_EXIST_ALARM,
+//	SACC_START_GET_SACC_PROBE_NO_EXIST_ALARM,
+//	SACC_GET_SACC_GATE_CLOSE_ALARM,
+//	SACC_GET_SACC_MOVE_ALARM,
+//	SACC_END_GET_SACC_ROBOT_PROBE_EXIST_ALARM,
+//
+//	SACC_START_PUT_SACC_ROBOT_PROBE_NO_EXIST_ALARM = 8250, //Put SACC
+//	SACC_PUT_SACC_GATE_CLOSE_ALARM,
+//	SACC_PUT_SACC_MOVE_ALARM,
+//	SACC_START_PUT_SACC_PROBE_EXIST_ALARM,
+//	SACC_END_PUT_SACC_PROBE_NO_EXIST_ALARM,
+//	SACC_END_PUT_SACC_ROBOT_PROBE_EXIST_ALARM,
+//
+//	SACC_START_PLC_SACC_MANUAL_MODE_ALARM = 8300, //SACC Common Alarm
+//	SACC_START_PLC_SACC_ALARM_ALARM,
+//	SACC_START_PLC_SACC_STATUS_READY_ALARM,
+//	SACC_START_PLC_SACC_COMMAND_CHECK_ACK_ALARM,
+//	SACC_START_PLC_SACC_ENTRY_REQUEST_ALARM,
+//	SACC_START_SLOT_MATCHING_ALARM,
+//	SACC_START_SACC_SLOT_NO_SELECT_ALARM,
+//	SACC_END_PLC_SACC_STATUS_COMPLETE_ACK_ALARM,
+//	SACC_O2_LOW_ALARM,
+//	//
+//
+//	//FDC
+//	FDC_LIVE_CHECK_ERROR	= 8500,
+//
+//	ALARM_ID_END = 10000,
+//};
+//
+//const enum ALARM_ID_TYPE{
+//	ALARM_MODULE_ERROR =20000,
+//	ALARM_MODULE_TEST,
+//	ALARM_TIMEOUT_ERROR,
+//};
+//
+//const enum ALARM_FUNC_TYPE{
+//	ALARM_ID_INIT = 4000,
+//	ALARM_ID_HOME,
+//	ALARM_ID_ACTION,
+//	ALARM_ID_TEST,
+//	ALARM_ID_PROCESS,
+//};
+
+enum meas_se_result_col_t {		
+	MEAS_RESULT_SE_COL_NO = 1,
+	MEAS_RESULT_SE_CELL_ID,
+	MEAS_RESULT_SE_AXIS_X,
+	MEAS_RESULT_SE_AXIS_Y,
+	MEAS_RESULT_SE_AXIS_Z,
+	MEAS_RESULT_SE_MEAS_JOB,
+	MEAS_RESULT_SE_MEAS_MODEL,
+	MEAS_RESULT_SE_COL_BL1,
+	MEAS_RESULT_SE_COL_BL2,
+	MEAS_RESULT_SE_COL_MSE,
+	MEAS_RESULT_SE_COL_T_LAYER1,
+	MEAS_RESULT_SE_COL_N_LAYER1,
+	MEAS_RESULT_SE_COL_K_LAYER1,
+	MEAS_RESULT_SE_COL_T_LAYER2,	
+	MEAS_RESULT_SE_COL_N_LAYER2,
+	MEAS_RESULT_SE_COL_K_LAYER2,
+	MEAS_RESULT_SE_COL_T_LAYER3,
+	MEAS_RESULT_SE_COL_N_LAYER3,
+	MEAS_RESULT_SE_COL_K_LAYER3,
+	MEAS_RESULT_SE_COL_T_LAYER4,
+	MEAS_RESULT_SE_COL_N_LAYER4,
+	MEAS_RESULT_SE_COL_K_LAYER4,
+	MEAS_RESULT_SE_COL_T_LAYER5,
+	MEAS_RESULT_SE_COL_N_LAYER5,
+	MEAS_RESULT_SE_COL_K_LAYER5,
+// 	MEAS_RESULT_SE_COL_T_LAYER6,
+// 	MEAS_RESULT_SE_COL_N_LAYER6,
+// 	MEAS_RESULT_SE_COL_K_LAYER6,
+// 	MEAS_RESULT_SE_COL_T_LAYER7,	
+// 	MEAS_RESULT_SE_COL_N_LAYER7,
+// 	MEAS_RESULT_SE_COL_K_LAYER7,
+// 	MEAS_RESULT_SE_COL_T_LAYER8,
+// 	MEAS_RESULT_SE_COL_N_LAYER8,
+// 	MEAS_RESULT_SE_COL_K_LAYER8,
+// 	MEAS_RESULT_SE_COL_T_LAYER9,
+// 	MEAS_RESULT_SE_COL_N_LAYER9,
+// 	MEAS_RESULT_SE_COL_K_LAYER9,
+// 	MEAS_RESULT_SE_COL_T_LAYER10,
+// 	MEAS_RESULT_SE_COL_N_LAYER10,
+// 	MEAS_RESULT_SE_COL_K_LAYER10,
+	MEAS_RESULT_SE_COL_EMA = 27+MEAS_RESULT_SE_COL_T_LAYER1,	// 9Layer
+	MEAS_RESULT_SE_COL_RESULT,
+	MEAS_RESULT_SE_COL_IMAGE,
+	MEAS_RESULT_SE_MEAS_TIME,
+	MEAS_RESULT_SE_COL_END,
+};
+
+enum meas_rs_result_col_t {						 
+	MEAS_RESULT_RS_COL_NO = 1,
+	MEAS_RESULT_RS_CELL_ID,
+	MEAS_RESULT_RS_AXIS_X,
+	MEAS_RESULT_RS_AXIS_Y,
+	MEAS_RESULT_RS_AXIS_Z,
+	MEAS_RESULT_RS_COL_OHM,
+	MEAS_RESULT_RS_COL_RESULT,
+	MEAS_RESULT_RS_COL_IMAGE,
+	MEAS_RESULT_RS_MEAS_TIME,
+	MEAS_RESULT_RS_COL_END,
+};
+
+enum meas_review_result_col_t {						 
+	MEAS_RESULT_REVIEW_COL_NO = 0,
+	MEAS_RESULT_REVIEW_AXIS_X,
+	MEAS_RESULT_REVIEW_AXIS_Y,
+	MEAS_RESULT_REVIEW_AXIS_Z,
+	MEAS_RESULT_REVIEW_IMAGE_FILE,
+	MEAS_RESULT_REVIEW_COL_END,
+};
+
+#define MEAS_RESULT_COLWIDTH 9
+
+enum meas_cd_result_col_t {						 
+	MEAS_RESULT_CD_COL_NO = 1,
+	MEAS_RESULT_CD_CELL_ID,
+	MEAS_RESULT_CD_AXIS_X,
+	MEAS_RESULT_CD_AXIS_Y,
+	MEAS_RESULT_CD_AXIS_Z,
+	MEAS_RESULT_CD_PPA_NO,			// PPA No
+	MEAS_RESULT_CD_COL_CELL_COL,	// jsyoon 20150204 add
+	MEAS_RESULT_CD_COL_CELL_ROW,	// jsyoon 20150204 add
+	MEAS_RESULT_CD_PPA_INDEX,		// EVEN No
+	MEAS_RESULT_CD_PPA_NAME,		// RGBR1G1
+	MEAS_RESULT_CD_PPA_X,
+	MEAS_RESULT_CD_PPA_Y,
+	MEAS_RESULT_CD_GLASS_CD_X,
+	MEAS_RESULT_CD_GLASS_CD_Y,
+	MEAS_RESULT_CD_DEPO_CD_X,
+	MEAS_RESULT_CD_DEPO_CD_Y,
+
+	MEAS_RESULT_CD_OVERLAY_RESULT,
+	MEAS_RESULT_CD_COL_FOCUS,
+	MEAS_RESULT_CD_COL_MEAN,
+	MEAS_RESULT_CD_COL_ANGLE,
+	MEAS_RESULT_CD_COL_ALGORITHM,
+	MEAS_RESULT_CD_COL_METHOD,
+	MEAS_RESULT_CD_IMAGE_FILE,
+	MEAS_RESULT_CD_MEAS_TIME,
+	MEAS_RESULT_CD_COL_MEAS_HEAD,			// pwk 20141213 add
+	MEAS_RESULT_CD_COL_RECIPE_NAME,			// pwk 20141213 add
+	MEAS_RESULT_CD_COL_EDGESTRENGTH,		// pwk 20141213 add
+	MEAS_RESULT_CD_COL_INTENSITY,			// pwk 20141213 add
+	MEAS_RESULT_CD_COL_GAIN,				// pwk 20141213 add
+	MEAS_RESULT_CD_COL_EXPOSURE_TIME,		// pwk 20141213 add
+
+	MEAS_RESULT_CD_COL_ROI_L,				// jsyoon 20141216 add ROI Edge
+	MEAS_RESULT_CD_COL_ROI_R,				// jsyoon 20141216 add
+	MEAS_RESULT_CD_COL_ROI_T,				// jsyoon 20141216 add
+	MEAS_RESULT_CD_COL_ROI_B,				// jsyoon 20141216 add
+
+	MEAS_RESULT_CD_COL_END,
+//	MEAS_RESULT_COLWIDTH = 9,
+};
+
+enum meas_ICE_result_col_t {						 
+	MEAS_RESULT_ICE_COL_NO = 1,
+	MEAS_RESULT_ICE_CELL_ID,
+	MEAS_RESULT_ICE_AXIS_X,
+	MEAS_RESULT_ICE_AXIS_Y,
+	MEAS_RESULT_ICE_AXIS_Z,
+	MEAS_RESULT_ICE_COL_RESULT = 100,
+	MEAS_RESULT_ICE_COL_IMAGE,
+	MEAS_RESULT_ICE_MEAS_TIME,
+
+	MEAS_RESULT_ICE_COL_END,
+};
+
+enum meas_ICP_result_col_t {						 
+	MEAS_RESULT_ICP_COL_NO = 1,
+	MEAS_RESULT_ICP_CELL_ID,
+	MEAS_RESULT_ICP_AXIS_X,
+	MEAS_RESULT_ICP_AXIS_Y,
+	MEAS_RESULT_ICP_AXIS_Z,
+	MEAS_RESULT_ICP_EL_PTP = MEAS_RESULT_ICP_AXIS_Z,		// jsyoon 20161214 add	// hjlee 20161214 change
+	MEAS_RESULT_ICP_REPEAT,	//jh.kang 20180223 add Using for AgingTest
+
+//	MEAS_RESULT_ICP_CELL_COL,
+//	MEAS_RESULT_ICP_CELL_ROW,
+
+	MEAS_RESULT_ICP_COL_END,
+
+// 	// 특성	//////////////////////////////////////////////////////////////////////////
+// 	MEAS_RESULT_ICP_INNERID,
+// 	MEAS_RESULT_ICP_STARTTIME,
+// 	MEAS_RESULT_ICP_ENDTIME,
+// 	MEAS_RESULT_ICP_JUDGE_CELL,
+// 	MEAS_RESULT_ICP_JUDGE_PIN,
+// 	MEAS_RESULT_ICP_JUDGE_SPC,
+// 	MEAS_RESULT_ICP_CRAC_DATA_1,		// 특성
+// 
+// 	MEAS_RESULT_ICP_JUDGE_MTP_W = MEAS_RESULT_ICP_CRAC_DATA_1+56, // lhj chagne 161115 MEAS_RESULT_ICP_CRAC_DATA_1+48
+// 	MEAS_RESULT_ICP_JUDGE_MTP_WG,
+// 
+// 	//lhj add 161110
+// 	MEAS_RESULT_ICP_WG_x_AFT,
+// 	MEAS_RESULT_ICP_WG_y_AFT,
+// 	MEAS_RESULT_ICP_WG_LV_AFT,
+// 	MEAS_RESULT_ICP_WG_CU_AFT,
+// 	MEAS_RESULT_ICP_WG_EF_AFT,
+// 	//
+// 
+// 	//lhj add 161115
+// 	MEAS_RESULT_ICP_CRAC_DATA_2, 
+// 	MEAS_RESULT_ICP_JUDGE_MTP_W_WAD = MEAS_RESULT_ICP_CRAC_DATA_2+56, // lhj add 161115 
+// 
+// 	//20161216 lhj add
+// 	MEAS_RESULT_ICP_WG_x_AFT_WAD,
+// 	MEAS_RESULT_ICP_WG_y_AFT_WAD,
+// 	MEAS_RESULT_ICP_WG_LV_AFT_WAD,
+// 	MEAS_RESULT_ICP_WG_CU_AFT_WAD,
+// 	MEAS_RESULT_ICP_WG_EF_AFT_WAD,
+// 	//
+// 
+// 	MEAS_RESULT_ICP_CRAC_DATA_END ,		
+
+// 	// 화질 //////////////////////////////////////////////////////////////////////////
+// 	MEAS_RESULT_ICP_REJECT_TIME,
+// 	MEAS_RESULT_ICP_REJECT_NAME,
+// 
+// 	//lhj add 161110 
+// 	MEAS_RESULT_ICP_VIS_DEFECT0,
+// 	MEAS_RESULT_ICP_VIS_DEFECT1,
+// 	MEAS_RESULT_ICP_VIS_DEFECT2,
+// 	MEAS_RESULT_ICP_VIS_DEFECT3,
+// 	MEAS_RESULT_ICP_VIS_DEFECT4,
+// 	MEAS_RESULT_ICP_VIS_DEFECT5,
+// 	//
+// 
+// 	//lhj change 161115 ////////////////////////////
+// 	MEAS_RESULT_ICP_REJECT_COUNT,
+// 	MEAS_RESULT_ICP_REJECT_DATA_NAME_1,
+// 	MEAS_RESULT_ICP_REJECT_DATA_RGB_1,
+// 	//MEAS_RESULT_ICP_REJECT_DATA_XY_1,      
+// 	MEAS_RESULT_ICP_REJECT_DATA_X_1,
+// 	MEAS_RESULT_ICP_REJECT_DATA_Y_1,
+// 	//MEAS_RESULT_ICP_REJECT_DATA_IMG_XY_1, 
+// 	//MEAS_RESULT_ICP_REJECT_DATA_IMAGGE_1, 
+// 	//////////////////////////////////////////////
+// 
+// 	MEAS_RESULT_ICP_REJECT_DATA_END = MEAS_RESULT_ICP_REJECT_COUNT + 5000, //lhj change 161201
+	//MEAS_RESULT_ICP_REJECT_DATA_END = MEAS_RESULT_ICP_REJECT_COUNT + 1000,
+
+	// 시야각
+
+// 	MEAS_RESULT_ICP_RGB,
+// 
+// 	MEAS_RESULT_ICP_DEF_CODE,
+// 	MEAS_RESULT_ICP_DEF_NAME,
+// 	MEAS_RESULT_ICP_DEF_TYPE,
+// 
+// 	MEAS_RESULT_ICP_IMG_NAME,		// Cell 이미지
+// 	MEAS_RESULT_ICP_IMG_NAME2,		// 원장이미지
+// 	MEAS_RESULT_ICP_MEAS_TIME,
+
+//	MEAS_RESULT_ICP_COL_END,
+};
+
+
+
+// 특성
+enum meas_ICP_result_CRAC_col_t {	
+	// 특성	//////////////////////////////////////////////////////////////////////////
+	MEAS_RESULT_ICP_CRAC_NO = 1,
+	MEAS_RESULT_ICP_INNERID = 7,
+	MEAS_RESULT_ICP_STARTTIME,
+	MEAS_RESULT_ICP_ENDTIME,
+	MEAS_RESULT_ICP_JUDGE_CELL,
+	MEAS_RESULT_ICP_JUDGE_PIN,
+	MEAS_RESULT_ICP_JUDGE_SPC,
+	MEAS_RESULT_ICP_CRAC_DATA_1,		// 특성
+
+	MEAS_RESULT_ICP_JUDGE_MTP_W = MEAS_RESULT_ICP_CRAC_DATA_1+56, // lhj chagne 161115 MEAS_RESULT_ICP_CRAC_DATA_1+48
+	MEAS_RESULT_ICP_JUDGE_MTP_WG,
+
+	//lhj add 161110
+	MEAS_RESULT_ICP_WG_x_AFT,
+	MEAS_RESULT_ICP_WG_y_AFT,
+	MEAS_RESULT_ICP_WG_LV_AFT,
+	MEAS_RESULT_ICP_WG_CU_AFT,
+	MEAS_RESULT_ICP_WG_EF_AFT,
+	//
+
+	//lhj add 161115
+	MEAS_RESULT_ICP_CRAC_DATA_2, 
+	MEAS_RESULT_ICP_JUDGE_MTP_W_WAD = MEAS_RESULT_ICP_CRAC_DATA_2+56, // lhj add 161115 
+
+	//20161216 lhj add
+	MEAS_RESULT_ICP_WG_x_AFT_WAD = MEAS_RESULT_ICP_JUDGE_MTP_W_WAD,		// jsyoon 20170104 change
+	MEAS_RESULT_ICP_WG_y_AFT_WAD,
+	MEAS_RESULT_ICP_WG_LV_AFT_WAD,
+	MEAS_RESULT_ICP_WG_CU_AFT_WAD,
+	MEAS_RESULT_ICP_WG_EF_AFT_WAD,
+	//
+
+	//jh.kang 20180505 add
+	MEAS_RESULT_ICP_L_DATA_BEGIN,
+	MEAS_RESULT_ICP_L_DATA_END = MEAS_RESULT_ICP_L_DATA_BEGIN + 14,
+	//
+
+	//jh.kang 20180411 add
+	//20180327 add by Hee (특성 30도 데이터 추가)		
+	MEAS_RESULT_ICP_SUB_WAD_DATA_BEGIN,
+	MEAS_RESULT_ICP_SUB_WAD_DATA_END = MEAS_RESULT_ICP_SUB_WAD_DATA_BEGIN + 4,
+	//
+
+	//20180419 add by Hee (특성 30도 단색 데이터 추가)
+	MEAS_RESULT_ICP_SUB_RGB_DATA_BEGIN,
+	MEAS_RESULT_ICP_SUB_RGB_DATA_END = MEAS_RESULT_ICP_SUB_RGB_DATA_BEGIN + 20,
+
+	//20180423 add by Hee (특성 데이터 추가)
+	MEAS_RESULT_ICP_MTP_JUDGE,
+	MEAS_RESULT_ICP_INTERATION,
+
+	//20200525 add by Hee (특성 데이터 추가)
+	MEAS_RESULT_ICP_STAGE,
+
+	MEAS_RESULT_ICP_ELVSS_BEGIN,
+	//MEAS_RESULT_ICP_ELVSS_END = MEAS_RESULT_ICP_ELVSS_BEGIN + 27,
+	MEAS_RESULT_ICP_ELVSS_END = MEAS_RESULT_ICP_ELVSS_BEGIN + 34, //20200615 add
+
+	MEAS_RESULT_ICP_OFFSET_BEGIN,
+	MEAS_RESULT_ICP_OFFSET_END = MEAS_RESULT_ICP_OFFSET_BEGIN + 11,
+
+	MEAS_RESULT_ICP_EFF_OFFSET_BEGIN,
+	MEAS_RESULT_ICP_EFF_OFFSET_END = MEAS_RESULT_ICP_EFF_OFFSET_BEGIN + 2,
+
+	////20210518 add by Hee (특성 60도 데이터 추가)
+	MEAS_RESULT_ICP_SUB2_WAD_DATA_BEGIN,
+	MEAS_RESULT_ICP_SUB2_WAD_DATA_END = MEAS_RESULT_ICP_SUB2_WAD_DATA_BEGIN + 4,
+
+	//특성 60도 단색 데이터 추
+	MEAS_RESULT_ICP_SUB2_RGB_DATA_BEGIN,
+	MEAS_RESULT_ICP_SUB2_RGB_DATA_END = MEAS_RESULT_ICP_SUB2_RGB_DATA_BEGIN + 20,
+
+	//특성 60도 Offset 추가
+	MEAS_RESULT_ICP_SUB2_OFFSET_BEGIN,
+	MEAS_RESULT_ICP_SUB2_OFFSET_END = MEAS_RESULT_ICP_SUB2_OFFSET_BEGIN + 1,
+	////
+
+	MEAS_RESULT_ICP_CRAC_DATA_END ,	
+};
+
+// 화질
+enum meas_ICP_result_REJECT_col_t {		
+	// 화질 //////////////////////////////////////////////////////////////////////////
+	MEAS_RESULT_ICP_REJECT_NO = 1,
+	// INNERID
+	MEAS_RESULT_ICP_REJECT_TIME = 3,
+	MEAS_RESULT_ICP_REJECT_NAME,
+
+	//lhj add 161110 
+	MEAS_RESULT_ICP_VIS_DEFECT0,
+	MEAS_RESULT_ICP_VIS_DEFECT1,
+	MEAS_RESULT_ICP_VIS_DEFECT2,
+	MEAS_RESULT_ICP_VIS_DEFECT3,
+	MEAS_RESULT_ICP_VIS_DEFECT4,
+	MEAS_RESULT_ICP_VIS_DEFECT5,
+	//
+
+	//lhj change 161115 ////////////////////////////
+	MEAS_RESULT_ICP_REJECT_COUNT,
+	MEAS_RESULT_ICP_REJECT_DATA_NAME_1,
+	MEAS_RESULT_ICP_REJECT_DATA_RGB_1,
+	//MEAS_RESULT_ICP_REJECT_DATA_XY_1,      
+	MEAS_RESULT_ICP_REJECT_DATA_X_1,
+	MEAS_RESULT_ICP_REJECT_DATA_Y_1,
+	//MEAS_RESULT_ICP_REJECT_DATA_IMG_XY_1, 
+	//MEAS_RESULT_ICP_REJECT_DATA_IMAGGE_1, 
+	//////////////////////////////////////////////
+
+	MEAS_RESULT_ICP_REJECT_DATA_END = MEAS_RESULT_ICP_REJECT_COUNT + 5000, //lhj change 161201
+};
+
+// 색이상
+enum meas_ICP_result_Vision_col_t {	
+	MEAS_RESULT_ICP_VISION_NO = 1,
+	// INNERID
+	MEAS_RESULT_ICP_VISION_MCR = 3,
+	MEAS_RESULT_ICP_VISION_GRAB,
+	MEAS_RESULT_ICP_VISION_CLASS,
+	MEAS_RESULT_ICP_VISION_TIME,
+	MEAS_RESULT_ICP_VISION_REJECT_TIME,
+	MEAS_RESULT_ICP_VISION_REJECT_NAME,
+	MEAS_RESULT_ICP_VISION_REJECT_BIN_CLASS,
+	MEAS_RESULT_ICP_VISION_REJECT_BIN_CODE,
+
+	MEAS_RESULT_ICP_VISION_DATA_1,
+
+	MEAS_RESULT_ICP_VISION_DATA_END = MEAS_RESULT_ICP_VISION_DATA_1 + 20,
+};
+
+enum meas_ICP_result_Angle_col_t {
+	MEAS_RESULT_ICP_ANGLE_NO = 1,
+	// INNERID
+	MEAS_RESULT_ICP_ANGLE_MCR = 3,
+	MEAS_RESULT_ICP_ANGLE_GRAB,
+	MEAS_RESULT_ICP_ANGLE_CLASS,
+	MEAS_RESULT_ICP_ANGLE_TIME,
+	MEAS_RESULT_ICP_ANGLE_REJECT_TIME,
+	MEAS_RESULT_ICP_ANGLE_REJECT_NAME,
+
+	MEAS_RESULT_ICP_ANGLE_DATA_1,
+
+	MEAS_RESULT_ICP_ANGLE_DATA_END = MEAS_RESULT_ICP_ANGLE_DATA_1 + 20,
+};
+
+#if !defined( IMAGE_TYPE_T_DEFINED )
+#define IMAGE_TYPE_T_DEFINED
+enum image_type_t {	
+		IMAGE_TYPE_SPL = 0,
+		IMAGE_TYPE_OVERALL,
+		IMAGE_TYPE_END
+};
+#endif // IMAGE_TYPE_T_DEFINED
+
+enum sw_joy_button_xyz_t {
+	SW_JOY_XAXIS =0,
+	SW_JOY_YAXIS,
+	SW_JOY_ZAXIS,
+	SW_JOY_END
+};
+
+enum joystick_type {
+	TYPE_JOY_HW = 0,
+	TYPE_JOY_SW,
+	TYPE_JOY_END
+};
+
+enum SqStatus_type {
+	df_STATUS_NONE = 0,
+		df_STATUS_LOAD,
+		df_STATUS_ALIGN,
+		df_STATUS_MEAS,
+		df_STATUS_UNLOAD,
+		df_STATUS_END
+};
+
+//yhjoo 20191106 add for Result data struct
+typedef struct _RESULTSTRUCT
+{
+	int				nTotalGroupCount;
+	int				nSelectGroup;
+	int				nProbe;
+	double			dX;
+	double			dY;
+	double			dZ;
+	TCHAR			szMachineID[256];
+	TCHAR			szLotID[256];
+	TCHAR			szGlassID[256];
+	TCHAR			szRecipeID[256];
+	TCHAR			szMeasRecipe[256];
+	TCHAR			szMode[256];
+	unsigned int	nLayer;
+	double			dValue[100];		// Meas Mode
+	double			dMSE;
+	TCHAR			szJudge[32];
+	TCHAR			szImageName[256];
+	TCHAR			szDate[256];
+	TCHAR			szTime[256];
+}RESULTSTRUCT;
+
+typedef struct _RESULTALLSTRUCT
+{
+	char			szMode[8];
+	RESULTSTRUCT	stResult;
+}RESULTALLSTRUCT;
+
+const enum MEAS_RESULT {
+	MEAS_RESULT_NONE = 0,
+	MEAS_RESULT_MEASSKIP,
+	MEAS_RESULT_SUCCESS,
+	MEAS_RESULT_BA,				// Heights range in Roi				//	MEAS_RESULT_BASEJUMP_DIFFIN		// BER
+	MEAS_RESULT_BMM,			// Height Difference between Base	//	MEAS_RESULT_BASEJUMP_DIFF		// BIR
+	MEAS_RESULT_RANGE_OVER,		// OOC
+	MEAS_RESULT_RANGE_OVER_OOS,
+	MEAS_RESULT_FILTER_OVER,
+	MEAS_RESULT_FAIL,
+	MEAS_RESULT_FILE_NG,
+	MEAS_RESULT_RVP,			// Ratio of valid Pixels
+	MEAS_RESULT_GFT,			// Goodness of Fit for Top
+	MEAS_RESULT_CD,				//
+	MEAS_RESULT_RE_4,
+	MEAS_RESULT_RE_5,
+	MEAS_RESULT_RE_10 = 15,
+
+	MEAS_RESULT_END
+};
+
+typedef struct {
+	double			m_dX;		//X좌표
+	double			m_dS;		//X좌표
+	double			m_dY;		//X좌표
+	double			m_dZ;		//X좌표	
+	int				m_iGroup;	//Selected Group
+	int				m_nGroup;	//Total Group
+	int				m_iProbe;	//Probe Num
+	int				m_nStep;	//Step Num
+	int				m_nPanelNo;	//Panel No
+	int				m_nAreaNo;	//Area No
+
+	BOOL			m_bUse;
+	TCHAR			m_szCellID[2048/*32*/];	//jsyoon 20150623 add Cell Name
+	TCHAR			m_szGlassID[2048];
+	int				m_iRetryCnt;			//jsyoon 20190925 add Retry Count
+	int				m_iRetryReason;
+	int				m_nMeasCnt;				//CStringArray 의 크기
+	CStringArray	m_stArrayResult;		//값 배열 (NAME + VALUE)
+}MEASRESULT, * PMEASRESULT;
+
+const enum REASON_NO {
+	_REASON_MEAS_READY = 0,
+	_REASON_OK = 1,
+	_REASON_AF_FAIL = 21,
+	_REASON_PTRN_FAIL,
+	_REASON_MEAS_FAIL,
+	_REASON_COMPUTE_FAIL,
+};
+
+enum MEAS_NAME_3D_TYPE {
+	df_MEAS_SPI_CS_MAIN = 0,
+	df_MEAS_SPI_CS_SUB1,
+	df_MEAS_SPI_CS_SUB2,
+	df_MEAS_SPI_CS_R,
+	df_MEAS_SPI_CS_G,
+	df_MEAS_SPI_CS_B,
+	df_MEAS_SPI_CS_DLT1,	// M-S1
+	df_MEAS_SPI_CS_DLT2,	// M-S2
+	df_MEAS_SPI_CS_DLT3,	// RGB
+
+	df_MEAS_SPI_CD_W,
+	df_MEAS_SPI_CD_X,
+	df_MEAS_SPI_CD_Y,
+	df_MEAS_SPI_OL_X1,
+	df_MEAS_SPI_OL_X2,
+	df_MEAS_SPI_OL_Y1,
+	df_MEAS_SPI_OL_Y2,
+	df_MEAS_SPI_OL_DLT1,	// OL X
+	df_MEAS_SPI_OL_DLT2,    // OL Y
+
+
+	df_MEAS_SPI_HT,
+	df_MEAS_SPI_END,
+};
+
+////////////////////////////////////////////////////////////////////////////////////////////
+// Color
+#define dfCOLOR_WHITE				COLORREF(RGB(255,255,255))
+#define dfCOLOR_BLACK				COLORREF(RGB(0,0,0))
+#define dfCOLOR_BLUE				COLORREF(RGB(0,0,255))
+#define dfCOLOR_GRAY				COLORREF(RGB(192,192,192))	
+#define dfCOLOR_RED					COLORREF(RGB(255,0,0))	
+#define dfCOLOR_GREEN				COLORREF(RGB(0,255,0))	
+#define dfCOLOR_YELLOW				COLORREF(RGB(255,255,0))	
+#define dfCOLOR_VIOLET				COLORREF(RGB(186,157,187))	
+#define dfCOLOR_LIGHTYELLOW			COLORREF(RGB(244,240,166))	
+#define dfCOLOR_LIGHTGREEN			COLORREF(RGB(181,255,181))
+#define dfCOLOR_NAVY_BLUE			COLORREF(RGB(0, 0, 128))
+#define dfCOLOR_STEEL_BLUE			COLORREF(RGB(99, 184, 255))
+#define dfCOLOR_LIGHT_GREY			COLORREF(RGB(211, 211, 211))
+#define dfCOLOR_ORANGE_RED			COLORREF(RGB(255, 69, 0))
+#define dfCOLOR_DARK_GREEN			COLORREF(RGB(0, 100, 0))
+#define dfCOLORREF_RESERVE_SOUR		COLORREF(RGB(128,0,255))
+#define dfCOLORREF_RESERVE_DEST		COLORREF(RGB(148,255,40))
+#define dfCOLORREF_RESERVE_SELECT	COLORREF(RGB(255,128,192))
+#define dfCOLOR_NONE				COLORREF(RGB(238,238,255))
+
+
+#define	RGB_KMAC_BLUE				COLORREF(RGB(0, 112, 178))
+#define	RGB_KMAC_BLUE_2				COLORREF(RGB(0, 160, 233))
+#define RGB_MAIN4					COLORREF(RGB(128, 128, 192))
+#define RGB_MAIN3					COLORREF(RGB(225, 231, 253)) 
+#define dfCOLOR_BACKCOLOR_DARK	 	COLORREF(RGB(57,57,57))
+#define dfCOLOR_FONTCOLOR_YELLOW	COLORREF(RGB(255,255,128))
+
+									
+
+////////////////////////////////////////////////////////////////////////////////////////////
+
+#define BTN_ENABLE(btn, bEn)	{ if ((btn).IsWindowEnabled() != (bEn))		(btn).EnableWindow(bEn); }
+
+#define BTN_SHOW(btn, bEn)	{ if ((btn).IsWindowEnabled() != (bEn))		(btn).ShowWindow(bEn); }	//jh.kang 20180122 add
+
+#define STR_AFM_EXE_NAME		"AFModule.exe" 
+#define STR_SEMODULE_EXE_NAME	"C:\\CompleteEASE\\CompleteEASE.exe" 
+
+#define RGB_WHITE			RGB(255, 255, 255)
+#define RGB_BLACK			RGB(0, 0, 0)
+#define RGB_RED				RGB(255, 0, 0)
+#define RGB_GREEN			RGB(0, 255, 0)
+#define RGB_BLUE			RGB(0, 0, 255)
+#define RGB_CYAN			RGB(0, 255, 255)
+#define RGB_MAGENTA			RGB(255, 0, 255)
+#define RGB_YELLOW			RGB(255, 255, 0)
+#define RGB_DEEP_GREEN		RGB(, 128, 0)
+#define	RGB_LIGHT_GRAY		RGB(192, 192, 192)
+#define	RGB_DARK_GRAY		RGB(70, 70, 70)
+#define	RGB_ORANGE			RGB(255, 128, 0)
+
+// custom color
+#define RGB_MAIN			RGB(225, 231, 253)	// main back.	  (흐린파랑부분)
+#define RGB_MAIN2			RGB(119, 161, 224)	// 테두리 프레임. (진한파랑부분)
+#define RGB_CHILD			RGB(240, 219, 251)	// light-pink : Child Dialog
+
+#define RGB_LIGHT_BLUE1		RGB(190, 210, 240)	// grid header
+#define RGB_LIGHT_BLUE2		RGB(218, 230, 248)
+#define RGB_LIGHT_BLUE3		RGB(239, 242, 254)	// grid back
+#define RGB_DARK_BLUE1		RGB(24, 44, 123)	// text
+#define RGB_DARK_BLUE2		RGB(25, 65, 139)
+#define RGB_DARK_BLUE3		RGB(60, 101, 193)
+#define RGB_LIGHT_PINK		RGB(226, 197, 245)	// grid Sel.
+#define RGB_DARK_PINK		RGB(116, 16, 158)	// btn text0
+
+#define STR_COMPANY_NAME			"K-MAC"
+#define STR_APP_NAME				"MetroSys"
+#define REG_SETTINGS				"Settings"
+#define REG_LAMP_USED				"LampTime_Used"
+#define	REG_LAMP_LIMIT				"LampTime_Limit"
+#define	REG_LAMP_WARRING			"LampTime_Warring"
+#define REG_QTHLAMP_USED			"QTHLampTime_Used"
+#define REG_QTHLAMP_LIMIT			"QTHLampTime_Limit"
+#define REG_D2LAMP_USED				"D2LampTime_Used"
+#define REG_D2LAMP_LIMIT			"D2LampTime_Limit" 
+#define REG_MAIN_WHITE_LAMP_USED	"Main_White_LampTime_Used"
+#define REG_MAIN_WHITE_LIMIT		"Main_White_LampTime_Limit" 
+#define REG_MAIN_WHITE_ALRAM		"Main_White_LampTime_ALRAM" 
+#define REG_MAIN_UV_USED			"Main_Uv_LampTime_Used"
+#define REG_MAIN_UV_LIMIT			"Main_Uv_LampTime_Limit" 
+#define REG_MAIN_UV_ALRAM			"Main_Uv_LampTime_ALRAM" 
+#define REG_ALIGN1_USED				"Align1_LampTime_Used"
+#define REG_ALIGN1_LIMIT			"Align1_LampTime_Limit" 
+#define REG_ALIGN1_ALRAM			"Align1_LampTime_ALARM" 
+#define REG_ALIGN2_USED				"Align2_LampTime_Used"
+#define REG_ALIGN2_LIMIT			"Align2_LampTime_Limit" 
+#define REG_ALIGN2_ALRAM			"Align2_LampTime_ALARM" 
+#define INT_DEF_QTHLAMP_LIMIT			2500
+#define INT_DEF_D2LAMP_LIMIT			2500
+#define INT_DEF_MAIN_WHITE_LAMP_LIMIT	15000
+#define INT_DEF_MAIN_UV_LAMP_LIMIT		15000
+#define INT_DEF_ALIGN1_LAMP_LIMIT		15000
+#define INT_DEF_ALIGN2_LAMP_LIMIT		15000
+#define INT_LAMP_LIMIT_MAX				5000
+#define INT_LED_LAMP_LIMIT_MAX			30000
+#define INT_SE_LAMP_LIMIT_MAX			3000	//jh.kang 20180409 add
+#define INT_WHITE_LAMP_LIMIT_MAX		10000	//jh.kang 20180409 add
+#define INT_UV_LAMP_LIMIT_MAX			15000	//jh.kang 20180409 add
+
+//20200131 add by HEE
+#define AUTO_CT_READY			0
+#define AUTO_CT_FLIMIT			1
+#define AUTO_CT_FGAP			2
+#define AUTO_CT_SGAP			3
+#define AUTO_CT_OD_MAX			4
+#define AUTO_CT_PERCENT			5 //20 40 60 80 100
+#define AUTO_CT_PORT_FAIL		6
+#define AUTO_CT_ADD_OD			7
+#define AUTO_CONTACT_ITEM_MAX	8
+#define RTEST_MAX 30
+
+//20190725
+#define PROPERTY_HEAD1			0
+#define PROPERTY_HEAD2			1
+#define PROPERTY_HEAD_MAX		2
+
+#define PROPERTY_DEG_0			0
+#define PROPERTY_DEG_30			1
+#define PROPERTY_DEG_45			2
+#define PROPERTY_DEG_60			3
+#define PROPERTY_DEG_MAX		4
+
+struct S_AgingTest {
+	BOOL m_bUseAging;		//Aging 사용유무
+	int	 m_nPtnRGB;			//패턴 서치
+	int	 m_nPtnSec;			//점등 유지 시간
+	BOOL m_bUseProperty;	//특성측정 유무
+	BOOL m_bUseQuality;		//화질측정 유무
+
+	S_AgingTest() {
+		Clear();
+	}
+
+	void Clear() {
+		m_bUseAging = FALSE;
+		m_nPtnRGB = 0;
+		m_nPtnSec = 0;
+		m_bUseProperty = FALSE;
+		m_bUseQuality = FALSE;
+	}
+};
+
+//20210113 add by Hee (Aging 결과에 대한 알람)
+struct S_AgingTargetAlarm {
+	BOOL	m_bUseAlarm;	//Aging 사용유무
+	int		m_nPtnRGB;		//패턴
+	double	m_fPtnBase;		//기준값
+	double	m_fPtnUp;		//상한값
+	double	m_fPtnLo;		//하한값
+
+	S_AgingTargetAlarm() {
+		Clear();
+	}
+
+	void Clear() {
+		m_bUseAlarm = FALSE;
+		m_nPtnRGB = 0;
+		m_fPtnBase = 0.0;
+		m_fPtnUp = 0.0;
+		m_fPtnLo = 0.0;
+	}
+};
+
+
+#endif // !defined(AFX_COMMONFUNC_H__DC9B0DF0_E4E0_4AF9_A684_CC908535BB39__INCLUDED_)

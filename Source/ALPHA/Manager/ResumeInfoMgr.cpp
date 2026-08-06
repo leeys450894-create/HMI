@@ -25,7 +25,7 @@ CResumeInfoMgr::CResumeInfoMgr(CString strConfigPath)
 
 	CString strLog;
 	strLog.Format(_T("ResumeInfoMgr initialized, file=%s, Running=%d, Completed=%d, LastStick=%d/%d"),
-		m_strFilePath, m_bRunning ? 1 : 0, m_bCompleted ? 1 : 0, m_nLastStick, m_nTotalStick);
+		m_strFilePath, m_bRunning ? 1 : 0, m_bCompleted ? 1 : 0, m_nLastStick + 1, m_nTotalStick);
 	CLogWrapper::GetInstance()->KMLOG(SYST, strLog);
 }
 
@@ -93,7 +93,7 @@ bool CResumeInfoMgr::LoadResumeInfo()
 
 	CString strLog;
 	strLog.Format(_T("Resume Load: Glass=%s, Recipe=%s, Lot=%s, Stick=%d/%d, Running=%d, Completed=%d, Date=%s"),
-		m_strGlassID, m_strRecipeID, m_strLotID, m_nLastStick, m_nTotalStick,
+		m_strGlassID, m_strRecipeID, m_strLotID, m_nLastStick + 1, m_nTotalStick,
 		m_bRunning ? 1 : 0, m_bCompleted ? 1 : 0, m_strInspDate);
 	CLogWrapper::GetInstance()->KMLOG(SYST, strLog);
 
@@ -148,7 +148,7 @@ bool CResumeInfoMgr::SaveResumeInfo(CString strGlassID, CString strRecipeID, int
 
 	CString strLog;
 	strLog.Format(_T("Resume Save: Glass=%s, Recipe=%s, Stick=%d/%d, Running=%d, OK=%d"),
-		m_strGlassID, m_strRecipeID, m_nLastStick, m_nTotalStick, m_bRunning ? 1 : 0, bRet ? 1 : 0);
+		m_strGlassID, m_strRecipeID, m_nLastStick + 1, m_nTotalStick, m_bRunning ? 1 : 0, bRet ? 1 : 0);
 	CLogWrapper::GetInstance()->KMLOG(SYST, strLog);
 
 	return bRet;
@@ -178,7 +178,7 @@ bool CResumeInfoMgr::UpdateStickProgress(int nLastStick)
 	}
 
 	CString strLog;
-	strLog.Format(_T("Resume Update: Stick=%d/%d, OK=%d"), m_nLastStick, m_nTotalStick, bRet ? 1 : 0);
+	strLog.Format(_T("Resume Update: Stick=%d/%d, OK=%d"), m_nLastStick + 1, m_nTotalStick, bRet ? 1 : 0);
 	CLogWrapper::GetInstance()->KMLOG(SYST, strLog);
 
 	return bRet;
