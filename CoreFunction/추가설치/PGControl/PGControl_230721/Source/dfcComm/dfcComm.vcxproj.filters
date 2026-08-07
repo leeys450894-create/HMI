@@ -1,0 +1,214 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Project ToolsVersion="4.0" xmlns="http://schemas.microsoft.com/developer/msbuild/2003">
+  <ItemGroup>
+    <Filter Include="소스 파일">
+      <UniqueIdentifier>{4FC737F1-C7A5-4376-A066-2A32D752A2FF}</UniqueIdentifier>
+      <Extensions>cpp;c;cc;cxx;def;odl;idl;hpj;bat;asm;asmx</Extensions>
+    </Filter>
+    <Filter Include="헤더 파일">
+      <UniqueIdentifier>{93995380-89BD-4b04-88EB-625FBE52EBFB}</UniqueIdentifier>
+      <Extensions>h;hh;hpp;hxx;hm;inl;inc;ipp;xsd</Extensions>
+    </Filter>
+    <Filter Include="리소스 파일">
+      <UniqueIdentifier>{67DA6AB6-F800-4c08-8B7A-83BB121AAD01}</UniqueIdentifier>
+      <Extensions>rc;ico;cur;bmp;dlg;rc2;rct;bin;rgs;gif;jpg;jpeg;jpe;resx;tiff;tif;png;wav;mfcribbon-ms</Extensions>
+    </Filter>
+    <Filter Include="소스 파일\Default">
+      <UniqueIdentifier>{b995577b-ca81-496f-abed-174a504dad70}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="헤더 파일\Default">
+      <UniqueIdentifier>{06d17549-bb71-4094-a3eb-315e8ecf457b}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="소스 파일\Basic">
+      <UniqueIdentifier>{23f0b66d-5bbc-4eb4-8566-f4c4a4817a43}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="헤더 파일\Basic">
+      <UniqueIdentifier>{d788f3e2-5904-48a8-8c4f-dc0c525c84f4}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="소스 파일\PGComm">
+      <UniqueIdentifier>{13063b78-b894-40a7-a6a4-6e4dd445157f}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="헤더 파일\PGComm">
+      <UniqueIdentifier>{8177bd57-ede7-4f5e-9e9a-64f2b484c43a}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="소스 파일\LightComm">
+      <UniqueIdentifier>{d08967dc-acfd-49da-a45d-e6fb5ccbfdc6}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="헤더 파일\LightComm">
+      <UniqueIdentifier>{da6dadff-8320-48f2-bff1-e8b910fe491b}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="헤더 파일\PLC">
+      <UniqueIdentifier>{b66f9c1e-504b-4df5-9fd6-10ef1f59fa59}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="소스 파일\PLC">
+      <UniqueIdentifier>{bbb9519a-9083-4afc-8aa6-e6d84bfdfe03}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="소스 파일\PGControl">
+      <UniqueIdentifier>{f32737fe-531c-4bdf-9374-6c2834f3b938}</UniqueIdentifier>
+    </Filter>
+    <Filter Include="헤더 파일\PGControl">
+      <UniqueIdentifier>{4c61f9d3-eaf8-4ae3-afa7-1920dcb4151e}</UniqueIdentifier>
+    </Filter>
+  </ItemGroup>
+  <ItemGroup>
+    <ClCompile Include="dfcComm.cpp">
+      <Filter>소스 파일\Default</Filter>
+    </ClCompile>
+    <ClCompile Include="dllmain.cpp">
+      <Filter>소스 파일\Default</Filter>
+    </ClCompile>
+    <ClCompile Include="pch.cpp">
+      <Filter>소스 파일\Default</Filter>
+    </ClCompile>
+    <ClCompile Include="ClientSocket.cpp">
+      <Filter>소스 파일\Basic</Filter>
+    </ClCompile>
+    <ClCompile Include="ServerSocket.cpp">
+      <Filter>소스 파일\Basic</Filter>
+    </ClCompile>
+    <ClCompile Include="QualityComm.cpp">
+      <Filter>소스 파일</Filter>
+    </ClCompile>
+    <ClCompile Include="SerialComm.cpp">
+      <Filter>소스 파일\Basic</Filter>
+    </ClCompile>
+    <ClCompile Include="SyncSerialComm.cpp">
+      <Filter>소스 파일\Basic</Filter>
+    </ClCompile>
+    <ClCompile Include="ElpPGComm.cpp">
+      <Filter>소스 파일\PGComm</Filter>
+    </ClCompile>
+    <ClCompile Include="EnsisPGComm.cpp">
+      <Filter>소스 파일\PGComm</Filter>
+    </ClCompile>
+    <ClCompile Include="CASLightComm.cpp">
+      <Filter>소스 파일\LightComm</Filter>
+    </ClCompile>
+    <ClCompile Include="SPOLightComm.cpp">
+      <Filter>소스 파일\LightComm</Filter>
+    </ClCompile>
+    <ClCompile Include="PlcAddressMComm.cpp">
+      <Filter>소스 파일\PLC</Filter>
+    </ClCompile>
+    <ClCompile Include="PlcCommMgr.cpp">
+      <Filter>소스 파일\PLC</Filter>
+    </ClCompile>
+    <ClCompile Include="PlcAddressFComm.cpp">
+      <Filter>소스 파일\PLC</Filter>
+    </ClCompile>
+    <ClCompile Include="CIMComm.cpp">
+      <Filter>소스 파일</Filter>
+    </ClCompile>
+    <ClCompile Include="QualityPGComm.cpp">
+      <Filter>소스 파일\PGControl</Filter>
+    </ClCompile>
+    <ClCompile Include="SendElpPGComm.cpp">
+      <Filter>소스 파일\PGControl</Filter>
+    </ClCompile>
+    <ClCompile Include="ColorPGServerComm.cpp">
+      <Filter>소스 파일\PGControl</Filter>
+    </ClCompile>
+    <ClCompile Include="MainPGClientComm.cpp">
+      <Filter>소스 파일\PGControl</Filter>
+    </ClCompile>
+    <ClCompile Include="crc16.cpp">
+      <Filter>소스 파일</Filter>
+    </ClCompile>
+  </ItemGroup>
+  <ItemGroup>
+    <None Include="res\dfcComm.rc2">
+      <Filter>리소스 파일</Filter>
+    </None>
+    <None Include="dfcComm.def">
+      <Filter>소스 파일\Default</Filter>
+    </None>
+  </ItemGroup>
+  <ItemGroup>
+    <ClInclude Include="framework.h">
+      <Filter>헤더 파일\Default</Filter>
+    </ClInclude>
+    <ClInclude Include="pch.h">
+      <Filter>헤더 파일\Default</Filter>
+    </ClInclude>
+    <ClInclude Include="Resource.h">
+      <Filter>헤더 파일\Default</Filter>
+    </ClInclude>
+    <ClInclude Include="targetver.h">
+      <Filter>헤더 파일\Default</Filter>
+    </ClInclude>
+    <ClInclude Include="ClientSocket.h">
+      <Filter>헤더 파일\Basic</Filter>
+    </ClInclude>
+    <ClInclude Include="ServerSocket.h">
+      <Filter>헤더 파일\Basic</Filter>
+    </ClInclude>
+    <ClInclude Include="QualityComm.h">
+      <Filter>헤더 파일</Filter>
+    </ClInclude>
+    <ClInclude Include="dfcComm.h">
+      <Filter>헤더 파일\Default</Filter>
+    </ClInclude>
+    <ClInclude Include="PGComm.h">
+      <Filter>헤더 파일\PGComm</Filter>
+    </ClInclude>
+    <ClInclude Include="preCommDefine.h">
+      <Filter>헤더 파일</Filter>
+    </ClInclude>
+    <ClInclude Include="SerialComm.h">
+      <Filter>헤더 파일\Basic</Filter>
+    </ClInclude>
+    <ClInclude Include="SyncSerialComm.h">
+      <Filter>헤더 파일\Basic</Filter>
+    </ClInclude>
+    <ClInclude Include="EnsisPGComm.h">
+      <Filter>헤더 파일\PGComm</Filter>
+    </ClInclude>
+    <ClInclude Include="ElpPGComm.h">
+      <Filter>헤더 파일\PGComm</Filter>
+    </ClInclude>
+    <ClInclude Include="SPOLightComm.h">
+      <Filter>헤더 파일\LightComm</Filter>
+    </ClInclude>
+    <ClInclude Include="CASLightComm.h">
+      <Filter>헤더 파일\LightComm</Filter>
+    </ClInclude>
+    <ClInclude Include="PlcAddressMComm.h">
+      <Filter>헤더 파일\PLC</Filter>
+    </ClInclude>
+    <ClInclude Include="PlcAddressMDefine.h">
+      <Filter>헤더 파일\PLC</Filter>
+    </ClInclude>
+    <ClInclude Include="PlcCommMgr.h">
+      <Filter>헤더 파일\PLC</Filter>
+    </ClInclude>
+    <ClInclude Include="PlcAddressFDefine.h">
+      <Filter>헤더 파일\PLC</Filter>
+    </ClInclude>
+    <ClInclude Include="PlcAddressFComm.h">
+      <Filter>헤더 파일\PLC</Filter>
+    </ClInclude>
+    <ClInclude Include="CIMComm.h">
+      <Filter>헤더 파일</Filter>
+    </ClInclude>
+    <ClInclude Include="QualityPGComm.h">
+      <Filter>헤더 파일\PGControl</Filter>
+    </ClInclude>
+    <ClInclude Include="SendElpPGComm.h">
+      <Filter>헤더 파일\PGControl</Filter>
+    </ClInclude>
+    <ClInclude Include="ColorPGServerComm.h">
+      <Filter>헤더 파일\PGControl</Filter>
+    </ClInclude>
+    <ClInclude Include="MainPGClientComm.h">
+      <Filter>헤더 파일\PGControl</Filter>
+    </ClInclude>
+    <ClInclude Include="crc16.h">
+      <Filter>헤더 파일</Filter>
+    </ClInclude>
+  </ItemGroup>
+  <ItemGroup>
+    <ResourceCompile Include="dfcComm.rc">
+      <Filter>리소스 파일</Filter>
+    </ResourceCompile>
+  </ItemGroup>
+</Project>

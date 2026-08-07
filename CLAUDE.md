@@ -300,3 +300,4 @@ Allows resuming an interrupted Glass inspection from where it stopped (e.g., aft
 | [AgingSet_Porting_Plan.md](docs/AgingSet_Porting_Plan.md) | OCP AgingSet 다이얼로그(Aging 목표값 알람) 기능 완성 이식 계획 |
 | [AgingTest_Porting_Plan.md](docs/AgingTest_Porting_Plan.md) | OCP AgingTest 다이얼로그(Aging 시퀀스 레시피/셀맵/Cycle Test) 완성 이식 계획 |
 | [AgingCycleEngine_Design_Plan.md](docs/AgingCycleEngine_Design_Plan.md) | OCP DoWorkStartMeasOCP_A(6,743줄) 대응 에이징 리스트 측정 엔진 설계 |
+| [Glass_Rotation_Change_Plan.md](docs/Glass_Rotation_Change_Plan.md) | Glass 방향(Stage Rotate 각도 체계 -90°) 변경 플랜 |

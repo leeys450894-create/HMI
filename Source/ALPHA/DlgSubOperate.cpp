@@ -524,7 +524,7 @@ BOOL CDlgSubOperate::OnInitDialog()
 	m_pParentCellMeasDlg->SetAxisShow(FALSE);
 
 	RotateMeasPath(m_nOldAngle);
-	RotateGlassPath(1);
+	RotateGlassPath(0);	// LYS 2026-08-07 rotation-change: default view 0-deg (load posture, was 90)
 
 	m_pdCardSize[0] = 30;
 	m_pdCardSize[1] = 0;
@@ -532,7 +532,7 @@ BOOL CDlgSubOperate::OnInitDialog()
 	m_pdCardSize[3] = m_pdGlassSize[_MIN_SIZE_X];
 	m_pParentMeasPathDlg->SetCardSize(m_pdCardSize[0], m_pdCardSize[1], m_pdCardSize[2], m_pdCardSize[3]);
 
-	m_pParentMeasPathDlg->SetLoaderSize(m_pdGlassSize[_MAX_SIZE_Y], m_pdGlassSize[_MIN_SIZE_Y], m_pdGlassSize[_MAX_SIZE_X], m_pdGlassSize[_MIN_SIZE_X], 1);
+	m_pParentMeasPathDlg->SetLoaderSize(m_pdGlassSize[_MAX_SIZE_X], m_pdGlassSize[_MIN_SIZE_X], m_pdGlassSize[_MAX_SIZE_Y], m_pdGlassSize[_MIN_SIZE_Y], m_pnGlassEdgeCut[0]);	// LYS 2026-08-07 rotation-change: loader at 0-deg load posture (was 90-deg swap)
 
 //	SetTimer(MAIN_STATE_TIMER_ID, 5*1000, NULL);	// 45 sec
 
@@ -2839,13 +2839,11 @@ void CDlgSubOperate::GenGlassPath()
 	}
 
 	pstInfo = m_pAuroraMgr->GetRecipeEditMgrPtr()->GetRecipeInfo();
-	if (pstInfo->m_sOptionItem.m_nGlsRotate == 0)
+	// LYS 2026-08-07 rotation-change: follow full 0/90/180/270 glass rotate view (was binary 0/1)
 	{
-		RotateGlassPath(0);
-	}
-	else
-	{
-		RotateGlassPath(1);
+		int nRotView = pstInfo->m_sOptionItem.m_nGlsRotate;
+		if (nRotView < 0 || nRotView > 3) nRotView = 0;
+		RotateGlassPath(nRotView);
 	}
 
 	//int iBlock = 0, iNumX = 0, iNumY = 0, iSumX = 0, iStick = 0;

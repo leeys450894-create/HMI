@@ -1234,7 +1234,16 @@ long CMaintControlMgr::DoWork_RotateMove(double dPos, int nType)
 		GetIOMapControlMgrPtr()->SetMemoryBitToDevice(PLC_R_MOTION_LOADER_DEGREE_2, false);
 		GetIOMapControlMgrPtr()->SetMemoryBitToDevice(PLC_R_MOTION_LOADER_DEGREE_3, false);
 
-		switch (nType)
+		// LYS 2026-08-07 rotation-change: select degree bit by commanded angle (was caller type index)
+		int nDegSel = -1;
+		{
+			int nDeg = ((int)(fabs(dPos) + 0.5)) % 360;
+			if (nDeg == 0) nDegSel = 0;
+			else if (nDeg == 90) nDegSel = 1;
+			else if (nDeg == 180) nDegSel = 2;
+			else if (nDeg == 270) nDegSel = 3;
+		}
+		switch (nDegSel)
 		{
 		case 0:	// 0
 			GetIOMapControlMgrPtr()->SetMemoryBitToDevice(PLC_R_MOTION_LOADER_DEGREE_0, true);
@@ -7545,17 +7554,17 @@ long CMaintControlMgr::MoveCmd_SafetyAll(bool bInit)
 				// jsyoon 2022.08.26 change
 				// LYS 2026-07-20 change
 				// LYS 2026-07-29 Rollback
-				// nRet = MoveOrgPosA(AXIS_LOADER_R, 0.0, false, SPEED_HIGH, 0, 0);
-				double dCurRotate = 0.;
-				dCurRotate = GetCurPos(AXIS_LOADER_R);
-				if ( fabs(dCurRotate) > 5.0 )
-				{
-					nRet = MoveOrgPosA(AXIS_LOADER_R, 90.0, false, SPEED_HIGH, 0, 0);
-				}
-				else
-				{
-					nRet = MoveOrgPosA(AXIS_LOADER_R, 0.0, false, SPEED_HIGH, 0, 0);
-				}
+				nRet = MoveOrgPosA(AXIS_LOADER_R, 0.0, false, SPEED_HIGH, 0, 0);
+				//double dCurRotate = 0.;
+				//dCurRotate = GetCurPos(AXIS_LOADER_R);
+				//if ( fabs(dCurRotate) > 89.0 )
+				//{
+				//	nRet = MoveOrgPosA(AXIS_LOADER_R, 90.0, false, SPEED_HIGH, 0, 0);
+				//}
+				//else
+				//{
+				//	nRet = MoveOrgPosA(AXIS_LOADER_R, 0.0, false, SPEED_HIGH, 0, 0);
+				//}
 				
 				if (nRet == df_MOTION_RV_SUCCESSED)
 				{

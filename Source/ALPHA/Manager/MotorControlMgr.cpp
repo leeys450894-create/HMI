@@ -233,7 +233,7 @@ long CMotorControlMgr::MoveCmdPosA_Sub(int iAxis, double dPos, bool bBlockMode, 
 			double dCurPos = 0;
 			dCurPos = GetOrgPos(AXIS_LOADER_R);
 			//	if ((fabs(dCurPos - 0) < 2 || fabs(dCurPos - 180) < 2) || fabs(dCurPos-90) < 2 || fabs(dCurPos-270) < 1)
-			if ((fabs(dCurPos) < 2 || fabs(dCurPos) - 90 < 2) || fabs(dCurPos) - 180 < 2)
+			if (fabs(dCurPos) < 2 || fabs(dCurPos - 90) < 2 || fabs(dCurPos - 180) < 2 || fabs(dCurPos - 270) < 2)	// LYS 2026-08-07 rotation-change: station angles {0,90,180,270}
 			{
 				;
 			}
@@ -1131,7 +1131,7 @@ long CMotorControlMgr::MoveCmdPosR_Sub(int iAxis, double dPos, bool bBlockMode, 
 		{
 			double dCurPos = 0;
 			dCurPos = GetOrgPos(AXIS_LOADER_R);
-			if ((fabs(dCurPos) < 2 || fabs(dCurPos) - 90 < 2) || fabs(dCurPos) - 180 < 2)
+			if (fabs(dCurPos) < 2 || fabs(dCurPos - 90) < 2 || fabs(dCurPos - 180) < 2 || fabs(dCurPos - 270) < 2)	// LYS 2026-08-07 rotation-change: station angles {0,90,180,270}
 			{
 				;
 			}
@@ -1157,7 +1157,7 @@ long CMotorControlMgr::MoveCmdPosR_Sub(int iAxis, double dPos, bool bBlockMode, 
 		{
 			double dCurPos = 0;
 			dCurPos = GetOrgPos(AXIS_LOADER_R);
-			if ((fabs(dCurPos) < 2 || fabs(dCurPos) - 90 < 2) || fabs(dCurPos) - 180 < 2)
+			if (fabs(dCurPos) < 2 || fabs(dCurPos - 90) < 2 || fabs(dCurPos - 180) < 2 || fabs(dCurPos - 270) < 2)	// LYS 2026-08-07 rotation-change: station angles {0,90,180,270}
 			{
 				;
 			}
@@ -1964,7 +1964,7 @@ long CMotorControlMgr::MoveCmdPosMulti_Sub(stMotorPosition *pPos, int iAxis, int
 			// R 위치 확인후 0 혹은 180 도 근처일때만 이동
 			double dCurPos = 0;
 			dCurPos = GetOrgPos(AXIS_LOADER_R);
-			if ((fabs(dCurPos) < 1 || fabs(dCurPos) - 90 < 1) || fabs(dCurPos) - 180 < 1)
+			if (!(fabs(dCurPos) < 1 || fabs(dCurPos - 90) < 1 || fabs(dCurPos - 180) < 1 || fabs(dCurPos - 270) < 1))	// LYS 2026-08-07 rotation-change: error unless at station angle (old cond was inverted)
 				//	if ((dCurPos > 0.1 && dCurPos < 179.9) || dCurPos < -0.1 || dCurPos > 180.1)
 			{
 				nRet = MOTION_ROTATE_POS_ERROR;

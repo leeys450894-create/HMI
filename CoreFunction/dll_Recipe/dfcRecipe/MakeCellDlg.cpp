@@ -642,7 +642,7 @@ void	C_MakeCellDlg::OnRecipeUpdate ()
 		}
 		
 	//	sCell.m_fCellX = rcp->m_sMap.m_fGlobalMark.x + rcp->m_sMap.m_fCellCenter.x + fCellOffset + fBlockOffset;
-		sCell.m_fCellX = rcp->m_sMap.m_fAlignKey.x + rcp->m_sMap.m_fCellCenter.x + fCellOffset + fBlockOffset;	// jsyoon 2022.08.25 change
+		sCell.m_fCellX = rcp->m_sMap.m_fAlignKey.x + rcp->m_sMap.m_fCellCenter.x - fCellOffset - fBlockOffset;	// jsyoon 2022.08.25 change	// LYS 2026-08-07 rotation-change: cells advance toward -Y from A01 anchor (mirrored arrangement)
 
 		for (int i = 0; i < g_inRcpInfo.GetStickCount (); i++) {
 			g_inRcpInfo.AddCell (i, sCell);

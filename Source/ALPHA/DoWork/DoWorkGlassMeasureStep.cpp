@@ -5789,7 +5789,8 @@ bool CDoWorkGlassMeasureStep_AGING::Run()
 			int iAgingStick = GetMeasureStick();
 				S_RecipeInfo* pAgingRcpInfo = m_pShareItem->GetRecipeEditMgrPtr()->GetRecipeInfo();
 				// LYS 2026-07-16 rotate=0: convert iStick to match MakeCellID nMeasStick
-				if (pAgingRcpInfo != nullptr && pAgingRcpInfo->m_sOptionItem.m_nGlsRotate == 0)
+				// LYS 2026-08-07 rotation-change: MakeCellID inverts for every rotate except 1 -> match (fixes short-side AGING S/E mirrored)
+				if (pAgingRcpInfo != nullptr && pAgingRcpInfo->m_sOptionItem.m_nGlsRotate != 1)
 				{
 					S_RecipeData* pAgingRcpData = m_pShareItem->GetRecipeEditMgrPtr()->GetRecipeData();
 					iAgingStick = (int)pAgingRcpData->m_vecStick.size() - iAgingStick - 1;

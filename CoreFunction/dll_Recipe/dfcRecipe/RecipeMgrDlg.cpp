@@ -762,8 +762,8 @@ void	C_RecipeMgrDlg::InitInspectOption ()
 	for (int i = 0; i < 5; i++) {
 		m_gridInspectOptionData.SetCellType (i, 1, RUNTIME_CLASS(CGridCellCombo));
 		
-		if (i == 4) m_gridInspectOptionData.SetItemState (i, 1, m_gridInspectOptionData.GetItemState (i, 1) | GVIS_READONLY);
-		else		m_gridInspectOptionData.SetItemState (i, 1, m_gridInspectOptionData.GetItemState (i, 1) & GVIS_READONLY);
+		// LYS 2026-08-07 rotation-change: GLASS ROTATE combo editable (was readonly)
+		m_gridInspectOptionData.SetItemState (i, 1, m_gridInspectOptionData.GetItemState (i, 1) & GVIS_READONLY);
 	}
 
 	m_gridInspectOptionData.SetItemState (7, 1, m_gridInspectOptionData.GetItemState (7, 1) | GVIS_READONLY);
@@ -774,6 +774,8 @@ void	C_RecipeMgrDlg::InitInspectOption ()
 	use.Add (_T("╗ч┐ы"));
 	ang.Add (_T("0вк"));
 	ang.Add (_T("90вк"));
+	ang.Add (_T("180вк"));	// LYS 2026-08-07 rotation-change: m_nGlsRotate=2
+	ang.Add (_T("270вк"));	// LYS 2026-08-07 rotation-change: m_nGlsRotate=3
 
 	CGridCellCombo* pCell = NULL;
 	for (int i = 0; i < 5; i++) {
