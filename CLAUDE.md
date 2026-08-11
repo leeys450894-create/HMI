@@ -57,6 +57,7 @@ HMI는 Unicode 프로젝트이며 파일은 대부분 **BOM 없는 ANSI/UTF-8** 
 4. **손상 복구:** 백업 `D:\OCP\0.SW_Matching\HMI_20260716\HMI\` 에서 원본 복사 후 Perl로 변경사항 재적용.
 5. **새 코드 주석은 영문 권장.** 기존 한글 주석/문자열은 절대 삭제·변경하지 말 것.
 6. **수정 주석 형식:** `// LYS yyyy-mm-dd brief description` — 모든 소스코드 수정 시 반드시 추가.
+7. **신규 사용자 메시지는 영어로 작성.** 일부 파일(`DlgSubManual_AgingTest.cpp` 등)은 한글이 BOM 없는 UTF-8인데 vcxproj에 `/utf-8`이 없어 CP949로 컴파일됨 → 해당 파일의 한글 리터럴은 런타임 표시가 깨짐. 파일별 인코딩 확인: 한글 리터럴 헥사 덤프(EC/EB 시작=UTF-8, B0~C8 대역=CP949, A2AA=EUC-KR 도 기호 °).
 
 ## OCP Option Branching (Runtime Equipment Type)
 
@@ -87,6 +88,24 @@ bool bIsOCP = m_pMotorControlMgr->IsOCP();
 | AGING | P1~P4 수행 | 강제 비활성화 |
 
 상세: [docs/OCP_Option_ChangeHistory.md](docs/OCP_Option_ChangeHistory.md)
+
+## Glass 방향/좌표 체계 (2026-08-07 확정 — 수정 시 반드시 준수)
+
+Stage Rotate H/W 축 = `AXIS_LOADER_R`. 도면: `Doc/07_설계문서/HMI 설비 Contact 방향.pdf`, 상세: [docs/Glass_Rotation_Change_Plan.md](docs/Glass_Rotation_Change_Plan.md)
+
+| 자세 | 각도 | 비고 |
+|------|------|------|
+| Load / Unload / Align | 0° | Position.ini LOAD_R/UNLOAD_R, Align 레시피(.alg) StageRotate |
+| 장변 측정 | 90° | `m_nGlsRotate=1`, 레시피 스틱별 `m_fStageR` |
+| 단변 측정 | 180° | `m_nGlsRotate=2` (신규값 — 기존 분기는 0/1만 처리, ==1 여부로 판정됨) |
+| MEASURE 전환(흡착) | 270° | Position.ini MEAS_R |
+
+- **측정 회전각 = 스틱 `m_fStageR` + USER OFFSET `m_fStageRotate` 합산** — 각도 이상 시 두 곳 모두 확인
+- **스틱 인덱스 규약**: `MakeCellID` 기준 — rotate==1만 직행, **그 외 전부 `nMaxStick-iStick-1` 반전**. nCellStatus/AGING 스틱 슬롯(`m_nAgingStartStick`) 등 셀 상태 인덱싱은 모두 이 규약을 따라야 함
+- **셀 좌표 = 헤드 Y1~Y4 목표 직결** (변환 없음). 셀 분배는 A01(첫 셀) 앵커 = **+Y측**에서 −Y 방향 (MakeCellDlg). 셀 라벨(A01..)은 제품 도면 기준 고정 — 방향 문제는 좌표를 고칠 것, 라벨을 뒤집지 말 것
+- R축 DEGREE 센서: `PLC_R_MOTION_LOADER_DEGREE_0~3` = M4400~4403 (0/90/180/270)
+- 경로 UI 컷 코너: Config.ini `[GLASS EDGECUT]` = {0°:4, 90°:3, 180°:2, 270°:1} (1=우상/2=좌상/3=좌하/4=우하, 회전 표현은 화면상 시계 방향)
+- X 이동 인터록: R이 스테이션 각 {0,90,180,270}±2 이내일 때만 허용 (MotorControlMgr)
 
 ## Architecture
 
@@ -301,3 +320,5 @@ Allows resuming an interrupted Glass inspection from where it stopped (e.g., aft
 | [AgingTest_Porting_Plan.md](docs/AgingTest_Porting_Plan.md) | OCP AgingTest 다이얼로그(Aging 시퀀스 레시피/셀맵/Cycle Test) 완성 이식 계획 |
 | [AgingCycleEngine_Design_Plan.md](docs/AgingCycleEngine_Design_Plan.md) | OCP DoWorkStartMeasOCP_A(6,743줄) 대응 에이징 리스트 측정 엔진 설계 |
 | [Glass_Rotation_Change_Plan.md](docs/Glass_Rotation_Change_Plan.md) | Glass 방향(Stage Rotate 각도 체계 -90°) 변경 플랜 |
+| [Angle_Porting_Plan.md](docs/Angle_Porting_Plan.md) | OCP ANGLE 다이얼로그(특성 각도 스케줄러) 이식 플랜 — **보류** (Angle 조작 통신 사양서 부재) |
+| [AutoContact_Porting_Plan.md](docs/AutoContact_Porting_Plan.md) | OCP↔HMI AutoContact(프로브 자동 컨택) 비교 및 스텁 완성 이식 플랜 |

@@ -505,6 +505,7 @@ copy $(OutDir)$(TargetName).pdb "$(ProjectDir)..\Bin\"
     <ClInclude Include="DoWork\DoWorkGlassMeasureStep.h" />
     <ClInclude Include="DoWork\AgingAlarmCheck.h" />
     <ClInclude Include="DoWork\AgingCycleInfo.h" />
+    <ClInclude Include="DoWork\AutoContactInfo.h" />
     <ClInclude Include="DoWork\DoWorkGlassPreMeas.h" />
     <ClInclude Include="DoWork\DoWorkGlassPreMeasStep.h" />
     <ClInclude Include="DoWork\DoWorkGlassReady.h" />
@@ -760,6 +761,7 @@ copy $(OutDir)$(TargetName).pdb "$(ProjectDir)..\Bin\"
     <ClCompile Include="DoWork\DoWorkGlassMeasureStep.cpp" />
     <ClCompile Include="DoWork\AgingAlarmCheck.cpp" />
     <ClCompile Include="DoWork\AgingCycleInfo.cpp" />
+    <ClCompile Include="DoWork\AutoContactInfo.cpp" />
     <ClCompile Include="DoWork\DoWorkGlassPreMeas.cpp" />
     <ClCompile Include="DoWork\DoWorkGlassPreMeasStep.cpp" />
     <ClCompile Include="DoWork\DoWorkGlassReady.cpp" />

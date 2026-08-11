@@ -185,6 +185,8 @@
 #define IDC_TITLE_STATE_SUB10           1028
 #define IDC_BUTTON_MANUAL_IONIZER       1028
 #define IDC_FS_AUTO_CONTACT             1028
+#define IDC_COMBO_AC_STICK              21001
+#define IDC_STATIC_AC_PROG              21002
 #define IDC_GRID_LIST_MAINT_MOTION4     1028
 #define IDC_BUTTON_SEND_APD_TO_FTP      1028
 #define IDC_BUTTON6                     1028
