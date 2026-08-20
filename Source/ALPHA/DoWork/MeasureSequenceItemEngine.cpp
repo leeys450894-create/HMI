@@ -1,6 +1,10 @@
 #include "pch.h"
 #include "MeasureSequenceItemEngine.h"
 
+// LYS 2026-08-12 InnerID uniqueness: rolling window of recently issued ids.
+#define DEFINE_INNERID_KEEP_MAX	512
+
+
 #include "..\Recipe\RecipeEditMgr.h"
 #include "..\Manager\CommTcpIPMgr.h"
 #include "MeasureSequenceItemFactory.h"
@@ -31,6 +35,8 @@ CMeasureSequenceItemEngine::CMeasureSequenceItemEngine(stAuroraMgrPool &MgrPool)
 	, m_bAgingCycleActive(false)	// LYS 2026-08-06 AgingCycle E3
 	, m_nAgingCurItem(-1)			// LYS 2026-08-06 AgingCycle E3
 {
+	ZeroMemory(m_nAgingRepeat, sizeof(m_nAgingRepeat));	// LYS 2026-08-12 AgingCycle R1
+
     const CString strFolderPath	= MgrPool.strLogPath + _T("\\LogFile\\");
     const CString strLogFile	= strFolderPath + _T("measure_seq_item_engine.log");
     MakeDir(strFolderPath);
@@ -706,6 +712,73 @@ void CMeasureSequenceItemEngine::SetMeasureArea(int nMeasureArea)
     m_nMeasureArea = nMeasureArea;
 }
 
+//=========================================================================
+// LYS 2026-08-12 InnerID uniqueness.
+// gf_GetCurTimeString(3) is HHMMSS, so measurements landing in the same second
+// get an identical id -> identical device raw file name -> silent overwrite.
+// Length must stay as-is (the id sits in a fixed-width device packet field), so a
+// duplicate only gets its trailing 2 digits remapped. 60..99 is tried first because
+// those never occur as real seconds; the issued list still decides, so uniqueness
+// holds even if a later real timestamp would have produced the same string.
+//=========================================================================
+void CMeasureSequenceItemEngine::PushIssuedInnerID(const CString& strID)
+{
+	m_vecIssuedInnerID.push_back(strID);
+
+	// rolling window: ids carry HHMMSS, so anything older than the recent window can
+	// no longer collide. Bounding here avoids tying the list to a glass/stick lifecycle.
+	if (m_vecIssuedInnerID.size() > DEFINE_INNERID_KEEP_MAX)
+	{
+		m_vecIssuedInnerID.erase(m_vecIssuedInnerID.begin(),
+			m_vecIssuedInnerID.begin() + (m_vecIssuedInnerID.size() - DEFINE_INNERID_KEEP_MAX));
+	}
+}
+
+CString CMeasureSequenceItemEngine::MakeUniqueInnerID(const CString& strID)
+{
+	if (strID.GetLength() < 3) return strID;
+
+	bool bUsed = false;
+	for (size_t i = 0; i < m_vecIssuedInnerID.size(); i++)
+	{
+		if (m_vecIssuedInnerID[i] == strID) { bUsed = true; break; }
+	}
+
+	if (bUsed == false)
+	{
+		PushIssuedInnerID(strID);
+		return strID;
+	}
+
+	CString strHead = strID.Left(strID.GetLength() - 2);
+	CString strTry;
+	for (int nSeq = 60; nSeq < 160; nSeq++)
+	{
+		strTry.Format(_T("%s%02d"), (LPCTSTR)strHead, nSeq % 100);
+
+		bUsed = false;
+		for (size_t i = 0; i < m_vecIssuedInnerID.size(); i++)
+		{
+			if (m_vecIssuedInnerID[i] == strTry) { bUsed = true; break; }
+		}
+
+		if (bUsed == false)
+		{
+			PushIssuedInnerID(strTry);
+
+			CString strLog;
+			strLog.Format(_T("InnerID duplicate remapped: %s -> %s"), (LPCTSTR)strID, (LPCTSTR)strTry);
+			m_pLogFileAccessor->KMLOG(WARN, strLog);
+
+			return strTry;
+		}
+	}
+
+	m_pLogFileAccessor->KMLOG(WARN, _T("InnerID duplicate could not be remapped - reusing"));
+
+	return strID;
+}
+
 int CMeasureSequenceItemEngine::GetMeasureArea()
 {
     return m_nMeasureArea;
@@ -717,12 +790,15 @@ bool CMeasureSequenceItemEngine::AgingCycleBegin()
 {
 	m_bAgingCycleActive = false;
 	m_nAgingCurItem = -1;
+	ZeroMemory(m_nAgingRepeat, sizeof(m_nAgingRepeat));	// LYS 2026-08-12 AgingCycle R1
 
 	if (m_MgrPool_link.pSystemConfigMgr == nullptr || m_MgrPool_link.pSystemConfigMgr->IsOCP() == false)
 		return false;
 
 	S_RecipeInfo* pRecipeInfo = GetRecipeEditMgrPtr()->GetRecipeInfo();
-	if (pRecipeInfo == nullptr || pRecipeInfo->m_sInspectItem.m_bUseAgingTest_2 == FALSE)
+	// LYS 2026-08-12 gate uses the dedicated recipe flag m_bUseAging_Test.
+	// m_bUseAgingTest_2 is the AGING measurement item and must not drive the aging cycle.
+	if (pRecipeInfo == nullptr || pRecipeInfo->m_sInspectItem.m_bUseAging_Test == FALSE)
 		return false;
 
 	if (m_AgingCycleInfo.Load(GetRecipeEditMgrPtr()->GetRecipeID()) == false)
@@ -755,6 +831,38 @@ bool CMeasureSequenceItemEngine::AgingCycleNextItem()
 	return false;
 }
 
+//=========================================================================
+// LYS 2026-08-12 AgingCycle R1: per-kind repeat index (result row block).
+// OCP counterpart = nPropertyRepeat / nQualityRepeat / nLCRRepeat
+// (JOB_Proc.cpp:12676-12683, reset per stick, advanced only when measured).
+// Dense on purpose: a sparse index would leave empty result rows, and the HMI
+// APD writer has no empty-row skip (CDlgResult.cpp:2019) so blanks reach MES.
+//=========================================================================
+int CMeasureSequenceItemEngine::GetAgingRepeat(int iKind) const
+{
+	if (m_bAgingCycleActive == false) return 0;
+	if (iKind < 0 || iKind >= enumAgingMeasKind_MAX) return 0;
+
+	return m_nAgingRepeat[iKind];
+}
+
+void CMeasureSequenceItemEngine::AgingRepeatNext(int iKind)
+{
+	if (m_bAgingCycleActive == false) return;
+	if (iKind < 0 || iKind >= enumAgingMeasKind_MAX) return;
+
+	m_nAgingRepeat[iKind]++;
+}
+
+int CMeasureSequenceItemEngine::GetAgingKindMax(int iKind) const
+{
+	if (m_bAgingCycleActive == false) return 1;
+
+	int nMax = m_AgingCycleInfo.GetKindUseCount(iKind);
+
+	return (nMax > 0) ? nMax : 1;
+}
+
 void CMeasureSequenceItemEngine::AgingCycleEnd()
 {
 	if (m_bAgingCycleActive)
@@ -762,6 +870,7 @@ void CMeasureSequenceItemEngine::AgingCycleEnd()
 
 	m_bAgingCycleActive = false;
 	m_nAgingCurItem = -1;
+	ZeroMemory(m_nAgingRepeat, sizeof(m_nAgingRepeat));	// LYS 2026-08-12 AgingCycle R1
 
 	if (m_MgrPool_link.pShareMemoryMgr != nullptr && m_MgrPool_link.pShareMemoryMgr->GetSharedMemory() != nullptr)
 	{

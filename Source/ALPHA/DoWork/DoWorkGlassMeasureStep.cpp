@@ -240,6 +240,9 @@ void CDoWorkGlassMeasureStep::GenInnerID(int* pnCellNum, bool* pbMeasProbe)
 				if (strInnerID.GetLength() < 5)
 				{
 					strInnerID.Format(_T("%d%s"), nProbe + 1, gf_GetCurTimeString(3));
+					// LYS 2026-08-12 HHMMSS ids collide inside one second - keep them unique
+					// (same length, so the device packet field is unaffected)
+					strInnerID = m_pMeasSeqItemEngine->MakeUniqueInnerID(strInnerID);
 
 					_tcscpy_s(m_pMeasSeqItemEngine->m_pStInnerID[pnCellNum[nProbe]], 32, strInnerID);
 				}
@@ -247,12 +250,74 @@ void CDoWorkGlassMeasureStep::GenInnerID(int* pnCellNum, bool* pbMeasProbe)
 			else
 			{
 				strInnerID.Format(_T("%d%s"), nProbe + 1, gf_GetCurTimeString(3));
+				strInnerID = m_pMeasSeqItemEngine->MakeUniqueInnerID(strInnerID);	// LYS 2026-08-12
 			}
 		}
 		
 		TRACE(_T("GenInnerID:%d,%d:%s\n"), pnCellNum[nProbe] + 1, nProbe + 1, strInnerID);
 		_tcscpy_s(m_pMeasSeqItemEngine->GetShareMemoryMgrPtr()->GetSharedMemory()->stLotInfo.m_szInnerID[nProbe], 32, strInnerID);
 	}
+}
+
+//=========================================================================
+// LYS 2026-08-12 AgingCycle R2: force a new InnerID per aging repeat.
+// GenInnerID caches one ID per cell index, so an aging list that measures the
+// same cell N times reused the same ID -> same device raw file name -> the
+// CopyFile(..., FALSE) in TossResultFile overwrote the previous repeat.
+// OCP has no such cache (JOB_Proc.cpp:14116 builds a fresh ID every measurement).
+// Same clear idiom as the bOneCell case: zeroing the leading bytes makes
+// GenInnerID see length < 5 and regenerate.
+//=========================================================================
+void CDoWorkGlassMeasureStep::ClearInnerIDForAging(int* pnCellNum)
+{
+	if (m_pMeasSeqItemEngine == NULL) return;
+	if (m_pMeasSeqItemEngine->IsAgingCycleActive() == false) return;
+	if (m_pMeasSeqItemEngine->m_pStInnerID == NULL) return;
+
+	for (int nProbe = 0; nProbe < df_MAX_PROBE; nProbe++)
+	{
+		if (pnCellNum[nProbe] < 0) continue;
+		if (pnCellNum[nProbe] >= m_pMeasSeqItemEngine->GetMeasureArea()) continue;
+
+		memset(m_pMeasSeqItemEngine->m_pStInnerID[pnCellNum[nProbe]], 0x00,
+			sizeof(m_pMeasSeqItemEngine->m_pStInnerID[pnCellNum[nProbe]]));
+	}
+}
+
+//=========================================================================
+// LYS 2026-08-18 AgingCycle: per-cell measurement filter.
+// The aging cell map was previously applied at stick granularity (IsStickUse), so a
+// map selecting only some cells still measured the whole stick. OCP evaluates the
+// mask per cell, so do the same here.
+// Fail-open by design: no aging cycle, no map, or a map row shorter than the recipe
+// all return false (measure), so the standard path and older aging rcps are unchanged.
+//=========================================================================
+bool CDoWorkGlassMeasureStep::IsAgingCellSkip(int iKind, int iCell)
+{
+	if (m_pMeasSeqItemEngine == NULL) return false;
+	if (m_pMeasSeqItemEngine->IsAgingCycleActive() == false) return false;
+
+	CAgingCycleInfo* pInfo = m_pMeasSeqItemEngine->GetAgingCycleInfo();
+	if (pInfo == NULL) return false;
+	if (pInfo->GetStickCount() <= 0) return false;
+
+	int iStick = GetMeasureStick();
+	if (iCell < 0 || iCell >= pInfo->GetCellCount(iStick)) return false;
+
+	return (pInfo->IsCellUse(iStick, iCell, iKind) == false);
+}
+
+void CDoWorkGlassMeasureStep::LogAgingRow(int iKind, const TCHAR* szTag, int* pnAreaNum)
+{
+	if (m_pMeasSeqItemEngine == NULL) return;
+	if (m_pMeasSeqItemEngine->IsAgingCycleActive() == false) return;
+
+	CString strLog;
+	strLog.Format(_T("AgingCycle row: %s item(%d) repeat(%d) stick(%d) row(%d,%d)"),
+		szTag, m_pMeasSeqItemEngine->GetAgingCurItem() + 1,
+		m_pMeasSeqItemEngine->GetAgingRepeat(iKind), GetMeasureStick(),
+		pnAreaNum[0], pnAreaNum[1]);
+	m_pShareItem->GetLogFileAccessorPtr()->KMLOG(SYST, strLog);
 }
 
 bool CDoWorkGlassMeasureStep_None::Run()
@@ -1935,6 +2000,14 @@ bool CDoWorkGlassMeasureStep_Measure_WAD::Run()
 				{
 					cellFirst = pRecipeData->m_vecStick[iStick].m_vecCell[iGroup];
 
+					// LYS 2026-08-18 AgingCycle: per-cell filter from AgingRcp [MASECELL].
+					// pbSet marking also removes the cell from the leftover single-head pass below.
+					if (IsAgingCellSkip(enumAgingMeasKind_WAD, iGroup))
+					{
+						pbSet[iGroup] = true;
+						continue;
+					}
+
 					if (bUseSampling == true)	// jsyoon 2022.07.19 add
 					{
 						//	if (cellFirst.m_nSelectCell[M_SPEC] != true)
@@ -1951,6 +2024,13 @@ bool CDoWorkGlassMeasureStep_Measure_WAD::Run()
 						if (pbSet[iSearch] != true)
 						{
 							cellSecond = pRecipeData->m_vecStick[iStick].m_vecCell[iSearch];
+
+							// LYS 2026-08-18 AgingCycle: per-cell filter from AgingRcp [MASECELL]
+							if (IsAgingCellSkip(enumAgingMeasKind_WAD, iSearch))
+							{
+								pbSet[iSearch] = true;
+								continue;
+							}
 
 							if (bUseSampling == true)	// jsyoon 2022.07.19 add
 							{
@@ -2075,9 +2155,13 @@ bool CDoWorkGlassMeasureStep_Measure_WAD::Run()
 			//2023.05.22 자동 시퀀스 특성 1Cell 3점
 			BOOL bOneCell = FALSE;
 			int nOneCellCnt = 1;
+			// LYS 2026-08-18 bOneCell (hardcoded 1-group x 5-point WAD sweep) is retired -
+			// WAD Multi Point replaces it. Keeping the branch but forcing a single pass makes
+			// this reversible with one constant; full removal is a later cleanup step.
+			// Note: nMeasArea is the 2Head GROUP count, not the cell count.
 			if (nMeasArea == 1) {
 				bOneCell = TRUE;
-				nOneCellCnt = 5;
+				nOneCellCnt = 1;
 			}
 
 			// LYS 2026-07-23 WAD Multi Point (Phase 4): recipe-driven multi points.
@@ -2220,6 +2304,7 @@ bool CDoWorkGlassMeasureStep_Measure_WAD::Run()
 						//2023.02.23 InnerID 초기화 (1 HEAD 만, 3점 측정시)
 						if (bOneCell) memset(m_pMeasSeqItemEngine->m_pStInnerID[nUseCELLID[0]], 0x00, sizeof(m_pMeasSeqItemEngine->m_pStInnerID[nUseCELLID[0]]));
 
+						ClearInnerIDForAging(nUseCELLID);	// LYS 2026-08-12 AgingCycle R2
 						GenMeasID(nUseCELLID, bMeasProbe, *cCellID);
 
 						stMotorPosition stPosition[10];
@@ -2419,9 +2504,22 @@ bool CDoWorkGlassMeasureStep_Measure_WAD::Run()
 						nAreaNum[1] = cellSecond.m_nArea + (nArea * iStick);*/
 
 						BOOL bOneCellWadRight = FALSE;
+
+						// LYS 2026-08-12 AgingCycle R1: reserve one result row block per aging repeat
+						// (OCP nAreaNum + nMaxArea * nPropertyRepeat, JOB_Proc.cpp:13934).
+						// Repeat is 0 while the aging cycle is inactive -> standard rows unchanged.
+						int nAgingRep = 0;
+						if (m_pMeasSeqItemEngine != NULL && m_pMeasSeqItemEngine->IsAgingCycleActive())
+							nAgingRep = m_pMeasSeqItemEngine->GetAgingRepeat(enumAgingMeasKind_WAD);
+						int nAgingRow = nArea * nMaxStick * nAgingRep;
+
 						if (bOneCell) {
-							nAreaNum[0] = nUseCELLID[0] + (nArea * nMeasStick) + 1 + (nMaxStick * k);
-							nAreaNum[1] = nUseCELLID[0] + (nArea * nMeasStick) + 1 + (nMaxStick * k);
+							// LYS 2026-08-18 nOneCellCnt is fixed at 1 (bOneCell retired), so k is always 0
+							// and the aging offset is the same block unit as the normal branch below.
+							// (The earlier note here said nMeasArea == 1 means one cell - it is the 2Head
+							//  GROUP count, so that wording was wrong.)
+							nAreaNum[0] = nUseCELLID[0] + (nArea * nMeasStick) + 1 + (nMaxStick * k) + nAgingRow;
+							nAreaNum[1] = nUseCELLID[0] + (nArea * nMeasStick) + 1 + (nMaxStick * k) + nAgingRow;
 							//nAreaNum[1] = nUseCELLID[1] + (nArea * nMeasStick) + 1;
 
 							if (k >= 3) {
@@ -2430,10 +2528,11 @@ bool CDoWorkGlassMeasureStep_Measure_WAD::Run()
 							}
 						}
 						else {
-							nAreaNum[0] = nUseCELLID[0] + (nArea * nMeasStick) + 1;
-							nAreaNum[1] = nUseCELLID[1] + (nArea * nMeasStick) + 1;
+							nAreaNum[0] = nUseCELLID[0] + (nArea * nMeasStick) + 1 + nAgingRow;
+							nAreaNum[1] = nUseCELLID[1] + (nArea * nMeasStick) + 1 + nAgingRow;
 						}
 						m_pShareItem->GetCommTcpIpFactoryMgr()->SetMeasUseInfo(bMeasProbe, nAreaNum, nTimeOut);
+						LogAgingRow(enumAgingMeasKind_WAD, _T("WAD"), nAreaNum);	// LYS 2026-08-12 AgingCycle R1
 						//
 
 						//nRet = m_pShareItem->GetCommTcpIpFactoryMgr()->DoWorkInspectStart(enumTCPIpFactorytID_WAD, iMeasMode);
@@ -2445,6 +2544,19 @@ bool CDoWorkGlassMeasureStep_Measure_WAD::Run()
 								bool bAct = bMeasProbe[p] && pMultiMgr->IsMultiCell(iStick, nUseCELLID[p]);
 								pMultiMgr->SetRunActive(p, bAct);
 								pMultiMgr->SetRunCurrent(p, 1);
+								pMultiMgr->SetRunPointIdx(p, 0);	// LYS 2026-08-18 base point = index 0
+
+								// LYS 2026-08-18 MultiPoint trace. TossResultFile (where the point number lands in
+								// the result) is not reached in OOS, so log the value here where it is set.
+								if (bAct)
+								{
+									CString strMPLog;
+									// LYS 2026-08-18 list row 0 is the base placeholder, so it is not counted in the
+									// n/N labels (same convention as the "WAD Multi Point" display log below).
+									strMPLog.Format(_T("WAD MultiPoint: probe(%d) point(base) stick(%d) cell(%d) row(%d)"),
+										p, GetMeasureStick(), nUseCELLID[p], nAreaNum[p]);
+									m_pShareItem->GetLogFileAccessorPtr()->KMLOG(SYST, strMPLog);
+								}
 							}
 						}
 
@@ -2515,29 +2627,32 @@ bool CDoWorkGlassMeasureStep_Measure_WAD::Run()
 
 								nRunCnt++;
 								for (int p = 0; p < df_MAX_PROBE; p++)
+								{
 									pMultiMgr->SetRunCurrent(p, nRunCnt);
+									pMultiMgr->SetRunPointIdx(p, ip);	// LYS 2026-08-18 actual loop index
+								}
 
 								// new InnerID per point (separate result file per point)
 								GenMeasID(nUseCELLID, bMeasProbe, *cCellID);
 
 								if (bHeadMulti[0] == true && bHeadMulti[1] == true)
 								{
-									strMLog.Format(_T("WAD Multi Point %d/%d (X=%.4f, Y=%.4f) %s, %s"), nRunCnt, pMultiMgr->GetUseSize(), ptMulti.dPosX, ptMulti.dPosY, cCellID[0], cCellID[1]);
+									strMLog.Format(_T("WAD Multi Point %d/%d (X=%.4f, Y=%.4f) %s, %s"), nRunCnt - 1, pMultiMgr->GetUseSize() -1, ptMulti.dPosX, ptMulti.dPosY, cCellID[0], cCellID[1]);
 									m_pShareItem->GetLogFileAccessorPtr()->KMLOG(SYST, strMLog);
 								}
 								else if (bHeadMulti[0] == true && bHeadMulti[1] == false)
 								{
-									strMLog.Format(_T("WAD Multi Point %d/%d (X=%.4f, Y=%.4f) %s"), nRunCnt, pMultiMgr->GetUseSize(), ptMulti.dPosX, ptMulti.dPosY, cCellID[0]);
+									strMLog.Format(_T("WAD Multi Point %d/%d (X=%.4f, Y=%.4f) %s"), nRunCnt - 1, pMultiMgr->GetUseSize() - 1, ptMulti.dPosX, ptMulti.dPosY, cCellID[0]);
 									m_pShareItem->GetLogFileAccessorPtr()->KMLOG(SYST, strMLog);
 								}
 								else if (bHeadMulti[0] == false && bHeadMulti[1] == true)
 								{
-									strMLog.Format(_T("WAD Multi Point %d/%d (X=%.4f, Y=%.4f) %s"), nRunCnt, pMultiMgr->GetUseSize(), ptMulti.dPosX, ptMulti.dPosY, cCellID[1]);
+									strMLog.Format(_T("WAD Multi Point %d/%d (X=%.4f, Y=%.4f) %s"), nRunCnt - 1, pMultiMgr->GetUseSize() - 1, ptMulti.dPosX, ptMulti.dPosY, cCellID[1]);
 									m_pShareItem->GetLogFileAccessorPtr()->KMLOG(SYST, strMLog);
 								}
 								else
 								{
-									strMLog.Format(_T("WAD Single Point %d/%d (X=%.4f, Y=%.4f) %s, %s"), nRunCnt, pMultiMgr->GetUseSize(), ptMulti.dPosX, ptMulti.dPosY, cCellID[0], cCellID[1]);
+									strMLog.Format(_T("WAD Single Point %d/%d (X=%.4f, Y=%.4f) %s, %s"), nRunCnt - 1, pMultiMgr->GetUseSize() - 1, ptMulti.dPosX, ptMulti.dPosY, cCellID[0], cCellID[1]);
 									m_pShareItem->GetLogFileAccessorPtr()->KMLOG(SYST, strMLog);
 								}
 
@@ -2583,9 +2698,34 @@ bool CDoWorkGlassMeasureStep_Measure_WAD::Run()
 
 								// result row block per point
 								int nAreaNumM[DF_MAX_HEAD] = { 0, };
+								if (m_pMeasSeqItemEngine != NULL && m_pMeasSeqItemEngine->IsAgingCycleActive())
+								{
+									// LYS 2026-08-12 AgingCycle R1: multi-point blocks live AFTER the aging repeat
+									// blocks so the two never collide (OCP JOB_Proc.cpp:14530 layout).
+									// The standard path below is left byte-identical on purpose.
+									int nBlock = m_pMeasSeqItemEngine->GetAgingKindMax(enumAgingMeasKind_WAD)
+										+ m_pMeasSeqItemEngine->GetAgingRepeat(enumAgingMeasKind_WAD) * (nPtTotal - 1)
+										+ (ip - 1);
+									nAreaNumM[0] = nUseCELLID[0] + (nArea * nMeasStick) + 1 + (nArea * nMaxStick * nBlock);
+									nAreaNumM[1] = nUseCELLID[1] + (nArea * nMeasStick) + 1 + (nArea * nMaxStick * nBlock);
+								}
+								else
+								{
 								nAreaNumM[0] = nUseCELLID[0] + (nArea * nMeasStick) + 1 + (nArea * nMaxStick * ip);
 								nAreaNumM[1] = nUseCELLID[1] + (nArea * nMeasStick) + 1 + (nArea * nMaxStick * ip);
+								}
 								m_pShareItem->GetCommTcpIpFactoryMgr()->SetMeasUseInfo(bMeasProbe, nAreaNumM, nTimeOut);
+								LogAgingRow(enumAgingMeasKind_WAD, _T("WAD-MP"), nAreaNumM);	// LYS 2026-08-12 AgingCycle R1
+
+								// LYS 2026-08-18 MultiPoint trace (see the base-point log above)
+								for (int pl = 0; pl < df_MAX_PROBE; pl++)
+								{
+									if (bMeasProbe[pl] != true) continue;
+									CString strMPLog;
+									strMPLog.Format(_T("WAD MultiPoint: probe(%d) point(%d/%d) idx(%d) stick(%d) cell(%d) row(%d)"),
+										pl, nRunCnt - 1, pMultiMgr->GetUseSize() - 1, ip, GetMeasureStick(), nUseCELLID[pl], nAreaNumM[pl]);
+									m_pShareItem->GetLogFileAccessorPtr()->KMLOG(SYST, strMPLog);
+								}
 
 								nRet = m_pShareItem->GetCommTcpIpFactoryMgr()->DoWorkInspectStart(enumTCPIpFactorytID_WAD, iMeasMode, 0, true, false);
 
@@ -2618,6 +2758,10 @@ bool CDoWorkGlassMeasureStep_Measure_WAD::Run()
 			if (bUseMTP == true) { m_pShareItem->GetCommTcpIpFactoryMgr()->DoWorkInspectStart(enumTCPIpFactorytID_WAD, enumTCPIpFactoryt_Event_WAD_4); }
 		}
 	}
+
+	// LYS 2026-08-12 AgingCycle R1: advance the WAD repeat once per step run (not per cell)
+	if (bUseMeas == true && m_pMeasSeqItemEngine != NULL)
+		m_pMeasSeqItemEngine->AgingRepeatNext(enumAgingMeasKind_WAD);
 
 	m_pShareItem->GetLogFileAccessorPtr()->KMLOG(SYST, _T("CDoWorkGlassMeasureStep_Measure_WAD End. TEST"));
 
@@ -2740,6 +2884,14 @@ bool CDoWorkGlassMeasureStep_Measure_VISION::Run()
 				{
 					cellFirst = pRecipeData->m_vecStick[iStick].m_vecCell[iGroup];
 
+					// LYS 2026-08-18 AgingCycle: per-cell filter from AgingRcp [MASECELL].
+					// pbSet marking also removes the cell from the leftover single-head pass below.
+					if (IsAgingCellSkip(enumAgingMeasKind_VISION, iGroup))
+					{
+						pbSet[iGroup] = true;
+						continue;
+					}
+
 					if (bUseSampling == true)	// jsyoon 2022.07.19 add
 					{
 						//	if (cellFirst.m_nSelectCell[M_QUALITY] != true)
@@ -2756,6 +2908,13 @@ bool CDoWorkGlassMeasureStep_Measure_VISION::Run()
 						if (pbSet[iSearch] != true)
 						{
 							cellSecond = pRecipeData->m_vecStick[iStick].m_vecCell[iSearch];
+
+							// LYS 2026-08-18 AgingCycle: per-cell filter from AgingRcp [MASECELL]
+							if (IsAgingCellSkip(enumAgingMeasKind_VISION, iSearch))
+							{
+								pbSet[iSearch] = true;
+								continue;
+							}
 
 							if (bUseSampling == true)	// jsyoon 2022.07.19 add
 							{
@@ -3079,10 +3238,12 @@ bool CDoWorkGlassMeasureStep_Measure_VISION::Run()
 						bUseProbe[0] = true;
 						bUseProbe[1] = true;
 
+						ClearInnerIDForAging(nUseHead);	// LYS 2026-08-12 AgingCycle R2
 						GenMeasID(nUseHead, bUseProbe, *cCellID);
 					}
 					else
 					{
+						ClearInnerIDForAging(nUseCELLID);	// LYS 2026-08-12 AgingCycle R2
 						GenMeasID(nUseCELLID, bMeasProbe, *cCellID);
 					}
 					
@@ -3328,6 +3489,12 @@ bool CDoWorkGlassMeasureStep_Measure_VISION::Run()
 					if (m_pShareItem->GetCommTcpIpFactoryMgr()->IsOutOfService(enumTCPIpFactorytID_PG) == true) Sleep(500);
 					//Area 정보, 측정 진행 유무
 					int nAreaNum[DF_MAX_HEAD] = { -1, -1};
+
+					// LYS 2026-08-12 AgingCycle R1: one result row block per aging repeat
+					// (OCP nAreaNum + nMaxArea * nQualityRepeat, JOB_Proc.cpp:17133).
+					int nAgingRow = 0;
+					if (m_pMeasSeqItemEngine != NULL && m_pMeasSeqItemEngine->IsAgingCycleActive())
+						nAgingRow = nArea * nMaxStick * m_pMeasSeqItemEngine->GetAgingRepeat(enumAgingMeasKind_VISION);
 					//nAreaNum[0] = cellFirst.m_nArea + (nArea * iStick);
 					//nAreaNum[1] = cellSecond.m_nArea + (nArea * iStick);
 
@@ -3335,7 +3502,7 @@ bool CDoWorkGlassMeasureStep_Measure_VISION::Run()
 					{
 						//nAreaNum[0] = -1;
 						//nAreaNum[1] = nUseCELLID[0] + (nArea * nMeasStick) + 1;  // Head 2 is Master
-						nAreaNum[0] = nUseCELLID[0] + (nArea * nMeasStick) + 1;  // Head 1 is Master
+						nAreaNum[0] = nUseCELLID[0] + (nArea * nMeasStick) + 1 + nAgingRow;  // Head 1 is Master
 						nAreaNum[1] = -1;
 						bMeasProbe[0] = true;
 						bMeasProbe[1] = true;
@@ -3344,7 +3511,7 @@ bool CDoWorkGlassMeasureStep_Measure_VISION::Run()
 					{
 						for (size_t iProbe = 0; iProbe < df_MAX_PROBE; iProbe++)
 						{
-							if(nUseCELLID[iProbe] >= 0) nAreaNum[iProbe] = nUseCELLID[iProbe] + (nArea * nMeasStick) + 1;
+							if(nUseCELLID[iProbe] >= 0) nAreaNum[iProbe] = nUseCELLID[iProbe] + (nArea * nMeasStick) + 1 + nAgingRow;
 						}
 						
 					/*	nAreaNum[0] = nUseCELLID[0] + (nArea * nMeasStick) + 1;
@@ -3352,6 +3519,7 @@ bool CDoWorkGlassMeasureStep_Measure_VISION::Run()
 					}
 					
 					m_pShareItem->GetCommTcpIpFactoryMgr()->SetMeasUseInfo(bMeasProbe, nAreaNum, nTimeOut);
+					LogAgingRow(enumAgingMeasKind_VISION, _T("VISION"), nAreaNum);	// LYS 2026-08-12 AgingCycle R1
 					//
 					if (nRet == VTM_RV_SUCCESSED)
 					{
@@ -3425,6 +3593,10 @@ bool CDoWorkGlassMeasureStep_Measure_VISION::Run()
 	//		bRet = false;
 	//	}
 	//}
+
+	// LYS 2026-08-12 AgingCycle R1: advance the VISION repeat once per step run
+	if (bUseMeas == true && m_pMeasSeqItemEngine != NULL)
+		m_pMeasSeqItemEngine->AgingRepeatNext(enumAgingMeasKind_VISION);
 
 	m_pShareItem->GetLogFileAccessorPtr()->KMLOG(SYST, _T("CDoWorkGlassMeasureStep_Measure_VISION End. TEST"));
 
@@ -4136,6 +4308,14 @@ bool CDoWorkGlassMeasureStep_Measure_ANGLE::Run()
 				{
 					cellFirst = pRecipeData->m_vecStick[iStick].m_vecCell[iGroup];
 
+					// LYS 2026-08-18 AgingCycle: per-cell filter from AgingRcp [MASECELL].
+					// pbSet marking also removes the cell from the leftover single-head pass below.
+					if (IsAgingCellSkip(enumAgingMeasKind_ANGLE, iGroup))
+					{
+						pbSet[iGroup] = true;
+						continue;
+					}
+
 					if (bUseSampling == true)	// jsyoon 2022.07.19 add
 					{
 						//	if (cellFirst.m_nSelectCell[M_ANGLE] != true)
@@ -4152,6 +4332,13 @@ bool CDoWorkGlassMeasureStep_Measure_ANGLE::Run()
 						if (pbSet[iSearch] != true)
 						{
 							cellSecond = pRecipeData->m_vecStick[iStick].m_vecCell[iSearch];
+
+							// LYS 2026-08-18 AgingCycle: per-cell filter from AgingRcp [MASECELL]
+							if (IsAgingCellSkip(enumAgingMeasKind_ANGLE, iSearch))
+							{
+								pbSet[iSearch] = true;
+								continue;
+							}
 
 							if (bUseSampling == true)	// jsyoon 2022.07.19 add
 							{
@@ -4413,9 +4600,10 @@ bool CDoWorkGlassMeasureStep_Measure_ANGLE::Run()
 
 				if (nRet == VTM_RV_SUCCESSED && iMeasMode != -1)
 				{
+					ClearInnerIDForAging(nUseCELLID);	// LYS 2026-08-12 AgingCycle R2
 					GenMeasID(nUseCELLID, bMeasProbe, *cCellID);
 
-					stMotorPosition stPosition[10];
+					stMotorPosition stPosition[20];	// LYS 2026-08-19 7 head + 10 angle module axes
 					ZeroMemory(&stPosition, sizeof(stPosition));
 					int nAxis = 0;
 
@@ -4501,6 +4689,34 @@ bool CDoWorkGlassMeasureStep_Measure_ANGLE::Run()
 						stPosition[5].dPosition = vecMeasGroup[i].dHeadFrontZ;
 						stPosition[6].axis = AXIS_Z2;   nAxis++;
 						stPosition[6].dPosition = vecMeasGroup[i].dHeadBackZ;
+
+						// LYS 2026-08-19 Angle module optics follow the recipe. The recipe holds one
+						// value set per module, so the condition cannot vary per cell - applying it on
+						// this first full move covers the whole ANGLE step and costs no extra tact
+						// (MoveCmdPosAngle issues these before the head move and waits at the end).
+						if (pReciepInfo != nullptr)
+						{
+							stPosition[7].axis = AXIS_ANGLE_SF1;	nAxis++;
+							stPosition[7].dPosition = pReciepInfo->m_sMotionAngle.m_fAngleScheimpflug1;
+							stPosition[8].axis = AXIS_ANGLE_ROTATE1;	nAxis++;
+							stPosition[8].dPosition = pReciepInfo->m_sMotionAngle.m_fAngleRotate1;
+							stPosition[9].axis = AXIS_ANGLE_ZOOM1;	nAxis++;
+							stPosition[9].dPosition = pReciepInfo->m_sMotionAngle.m_fAngleZoom1;
+							stPosition[10].axis = AXIS_ANGLE_TILT1;	nAxis++;
+							stPosition[10].dPosition = pReciepInfo->m_sMotionAngle.m_fAngleTilt1;
+							stPosition[11].axis = AXIS_ANGLE_AZM1;	nAxis++;
+							stPosition[11].dPosition = pReciepInfo->m_sMotionAngle.m_fAngleAzimuth1;
+							stPosition[12].axis = AXIS_ANGLE_SF2;	nAxis++;
+							stPosition[12].dPosition = pReciepInfo->m_sMotionAngle.m_fAngleScheimpflug2;
+							stPosition[13].axis = AXIS_ANGLE_ROTATE2;	nAxis++;
+							stPosition[13].dPosition = pReciepInfo->m_sMotionAngle.m_fAngleRotate2;
+							stPosition[14].axis = AXIS_ANGLE_ZOOM2;	nAxis++;
+							stPosition[14].dPosition = pReciepInfo->m_sMotionAngle.m_fAngleZoom2;
+							stPosition[15].axis = AXIS_ANGLE_TILT2;	nAxis++;
+							stPosition[15].dPosition = pReciepInfo->m_sMotionAngle.m_fAngleTilt2;
+							stPosition[16].axis = AXIS_ANGLE_AZM2;	nAxis++;
+							stPosition[16].dPosition = pReciepInfo->m_sMotionAngle.m_fAngleAzimuth2;
+						}
 					}
 
 					/*!
@@ -4587,11 +4803,18 @@ bool CDoWorkGlassMeasureStep_Measure_ANGLE::Run()
 
 					//Area 정보, 측정 진행 유무
 					int nAreaNum[DF_MAX_HEAD] = { 0, };
+
+					// LYS 2026-08-12 AgingCycle R1: one result row block per aging repeat
+					// (OCP layout, JOB_Proc.cpp:13934 family). 0 when the cycle is inactive.
+					int nAgingRow = 0;
+					if (m_pMeasSeqItemEngine != NULL && m_pMeasSeqItemEngine->IsAgingCycleActive())
+						nAgingRow = nArea * nMaxStick * m_pMeasSeqItemEngine->GetAgingRepeat(enumAgingMeasKind_ANGLE);
 					//nAreaNum[0] = cellFirst.m_nArea + (nArea * iStick);
 					//nAreaNum[1] = cellSecond.m_nArea + (nArea * iStick);
-					nAreaNum[0] = nUseCELLID[0] + (nArea * nMeasStick) + 1;
-					nAreaNum[1] = nUseCELLID[1] + (nArea * nMeasStick) + 1;
+					nAreaNum[0] = nUseCELLID[0] + (nArea * nMeasStick) + 1 + nAgingRow;
+					nAreaNum[1] = nUseCELLID[1] + (nArea * nMeasStick) + 1 + nAgingRow;
 					m_pShareItem->GetCommTcpIpFactoryMgr()->SetMeasUseInfo(bMeasProbe, nAreaNum, nTimeOut);
+					LogAgingRow(enumAgingMeasKind_ANGLE, _T("ANGLE"), nAreaNum);	// LYS 2026-08-12 AgingCycle R1
 					//
 
 					nRet = m_pShareItem->GetCommTcpIpFactoryMgr()->DoWorkInspectStart(enumTCPIpFactorytID_ANGLE, iMeasMode, nTimeOut);
@@ -4651,6 +4874,10 @@ bool CDoWorkGlassMeasureStep_Measure_ANGLE::Run()
 			}
 		}
 	}
+
+	// LYS 2026-08-12 AgingCycle R1: advance the ANGLE repeat once per step run
+	if (bUseMeas == true && m_pMeasSeqItemEngine != NULL)
+		m_pMeasSeqItemEngine->AgingRepeatNext(enumAgingMeasKind_ANGLE);
 
 	m_pShareItem->GetLogFileAccessorPtr()->KMLOG(SYST, _T("CDoWorkGlassMeasureStep_Measure_ANGLE End. TEST"));
 

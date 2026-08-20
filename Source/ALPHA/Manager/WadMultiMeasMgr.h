@@ -91,6 +91,12 @@ public:
 	bool	IsRunActive(int iProbe);
 	void	SetRunCurrent(int iProbe, int nCurrent);	// 1 = base point, 2.. = multi points
 	int		GetRunCurrent(int iProbe);
+	// LYS 2026-08-18 explicit point index of the running point (0 = base point).
+	// GetCheckNumData() maps an ENABLED-ordinal to an index, which drifts from the
+	// sequence loop index when the base point itself is disabled. Carrying the index
+	// the loop actually used removes that ambiguity.
+	void	SetRunPointIdx(int iProbe, int nIdx);
+	int		GetRunPointIdx(int iProbe);
 
 	//---------------------------------------------------------------
 	// Setters (UI side, Phase 3)
@@ -127,4 +133,5 @@ private:
 	// runtime state (max 2 heads)
 	bool							m_bRunActive[2];
 	int								m_nRunCurrent[2];
+	int								m_nRunPointIdx[2];	// LYS 2026-08-18 point index in m_vecPoint
 };

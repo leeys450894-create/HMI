@@ -27,6 +27,8 @@ BEGIN_MESSAGE_MAP (C_SelectCellDlg, CDialogEx)
 	ON_WM_ERASEBKGND ()
 	ON_WM_DESTROY ()
 	ON_COMMAND (IDC_BUTTON_1, OnUpdateCell)
+	ON_COMMAND (IDC_BUTTON_2, OnSelectAllCell)	// LYS 2026-08-18
+	ON_COMMAND (IDC_BUTTON_3, OnClearAllCell)	// LYS 2026-08-18
 	ON_NOTIFY (NM_CLICK,  IDC_GRID_1, OnSelItem)
 	ON_COMMAND_RANGE (IDC_RADIO_1, IDC_RADIO_4, OnSelMode)
 
@@ -138,7 +140,11 @@ void	C_SelectCellDlg::SetViewSelectCell (/*m_nMode*/)
 	nCell  = g_inRcpInfo.GetCellCount (0);
 
 	// LYS 2026-07-20 Support both 0 and 90 degree glass rotation
-	if (g_inRcpInfo.GetGlsRotate () == RCP_CELL_ANG_0) {
+	// LYS 2026-08-18 rotate 180 reuses the 0-degree layout: the glass footprint has
+	// the same aspect at 0 and 180 (only 90/270 swap it). Without this the grid kept
+	// whatever rectangle was set last, so a 180 recipe opened after a 90 one drew the
+	// cells in a landscape box. Selection data was unaffected - display only.
+	if (g_inRcpInfo.GetGlsRotate () == RCP_CELL_ANG_0 || g_inRcpInfo.GetGlsRotate () == RCP_CELL_ANG_180) {
 		double fRatio0 = min(550.0 / RCP_GLASS_SIZE_X, 380.0 / RCP_GLASS_SIZE_Y);
 		m_gridSelSpec.MoveWindow (30, 20, (int)(RCP_GLASS_SIZE_Y * fRatio0), (int)(RCP_GLASS_SIZE_X * fRatio0));
 	}
@@ -172,6 +178,41 @@ void	C_SelectCellDlg::OnSelMode (UINT nID)
 	}
 
 	if (nID >= IDC_RADIO_1 && nID <= IDC_RADIO_4) SetViewSelectCell ();
+}
+
+//=========================================================================
+// LYS 2026-08-18 Select All / Clear All for the current mode.
+// Only the grid colour changes - UpdateSelectCell (Cell Update button) is still
+// what writes into the recipe, so these behave exactly like clicking every cell.
+// Bounds come from the recipe, not from the grid, to match SetViewSelectCell.
+//=========================================================================
+void	C_SelectCellDlg::SetAllCell (BOOL bSelect)
+{
+	int nStick = 0, nCell = 0;
+
+	nStick = g_inRcpInfo.GetStickCount ();
+	if (nStick <= 0) return;
+
+	nCell = g_inRcpInfo.GetCellCount (0);
+	if (nCell <= 0) return;
+
+	for (int i = 0; i < nStick; i++) {
+		for (int j = 0; j < nCell; j++) {
+			m_gridSelSpec.SetItemBkColour (i, j, bSelect ? COLOR_SKYBLUE_BRIGHT : COLOR_WHITE);
+		}
+	}
+
+	Invalidate (FALSE);
+}
+
+void	C_SelectCellDlg::OnSelectAllCell ()
+{
+	SetAllCell (TRUE);
+}
+
+void	C_SelectCellDlg::OnClearAllCell ()
+{
+	SetAllCell (FALSE);
 }
 
 void	C_SelectCellDlg::UpdateSelectCell ()

@@ -68,6 +68,12 @@ class C_RecipeMgrDlg : public C_BaseDialog
 		C_GridCtrl	m_gridSubZHead;
 		C_GridCtrl	m_gridSubZData;
 
+		C_GridCtrl	m_gridAxisAngleHead1;
+		C_GridCtrl	m_gridAxisAngleData1;
+
+		C_GridCtrl	m_gridAxisAngleHead2;
+		C_GridCtrl	m_gridAxisAngleData2;
+
 		C_MakeCellDlg	*m_pMakeCellDlg;
 		C_SelectCellDlg	*m_pSelectCellDlg;
 		C_AlignRcpDlg	*m_pAlignRcpDlg;
@@ -125,6 +131,11 @@ class C_RecipeMgrDlg : public C_BaseDialog
 		void InitSubZ();
 		void SetSubZ();
 		BOOL GetSubZ();
+
+		// LYS 2026-08-19 Angle axis recipe parameters
+		void InitAngleAxis();
+		void SetAngleAxis();
+		BOOL GetAngleAxis();
 
 		void InitStageMove (int nStick = 6);
 		void SetStageMoveData ();

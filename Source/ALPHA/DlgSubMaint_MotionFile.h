@@ -36,7 +36,7 @@ private:
 	CLabel		m_LabelInfo[4];
 	CGridCtrl   m_gridList[4];
 
-	stMotorInfo m_stMoterInfo[90];
+	stMotorInfo m_stMoterInfo[100];		// LYS 2026-08-19 Axis 90 -> df_USE_MAX_AXIS
 
 	CMFCButton m_chkProbe[DF_PROBE_USE_MAX];
 

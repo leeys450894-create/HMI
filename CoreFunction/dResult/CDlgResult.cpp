@@ -1941,7 +1941,11 @@ int CDlgResult::ExportAsAPDICP(CString strResultPath, CString strTime)
 	strBody.Format(_T("%-20s,%-20d,\n"), _T("AREA_CNT"), iAreaCnt);
 	File.WriteString(strBody);
 
-	int iArea = 1000;
+	// LYS 2026-08-18 AREA_MAX_CNT 1000 -> 2500.
+	// Max row = agingItems x multiPoints x cellsPerGlass. The long recipe at
+	// 3 items x 7 points x 108 cells = 2268 overflowed the old ceiling as soon as
+	// the aging cycle and multi point features were combined.
+	int iArea = 2500;
 	strBody.Format(_T("%-20s,%-20d,\n"), _T("AREA_MAX_CNT"), iArea);
 	File.WriteString(strBody);
 
@@ -2226,7 +2230,8 @@ void CDlgResult::ExportAsAPDHead(CArchive& ar)
 	strBody.Format(_T("%-20s,%-20d,\r\n"), _T("AREA_CNT"), iAreaCnt);
 	ar.WriteString(strBody);
 
-	int iArea = 1000;	
+	// LYS 2026-08-18 AREA_MAX_CNT 1000 -> 2500.
+	int iArea = 2500;	
 	strBody.Format(_T("%-20s,%-20d,\r\n"), _T("AREA_MAX_CNT"), iArea);
 	ar.WriteString(strBody);
 

@@ -1293,7 +1293,10 @@ bool CCommTcpIpObjectWAD::TossResultFile(CString strInnerID, int nArea, int iPro
 		_tcscpy(resultData.szResultPath, strNewPath);
 
 		// LYS 2026-07-24 WAD Multi Point (Phase 6): pass current point offsets to result layer
-		resultData.nMultiPoint = 0;
+		// LYS 2026-08-18 base point now reports 1 (was 0) so the point number is uniform
+		// across base and multi points. Offsets stay gated on > 1, and the API_Result.h
+		// contract already documents 0/1 as "no offset", so consumers are unaffected.
+		int nPointNo = 1;
 		resultData.dOffsetRX = 0.0;
 		resultData.dOffsetGX = 0.0;
 		resultData.dOffsetBY = 0.0;
@@ -1302,10 +1305,18 @@ bool CCommTcpIpObjectWAD::TossResultFile(CString strInnerID, int nArea, int iPro
 			int nCurPoint = m_pWadMultiMeasMgr->GetRunCurrent(iProbe);
 			if (nCurPoint > 1)
 			{
+				// LYS 2026-08-18 the point number must not depend on the offset lookup - a failed
+				// lookup should only cost the offsets, not the identity of the row.
+				nPointNo = nCurPoint;
+
+				// prefer the index the sequence actually used; GetCheckNumData maps an
+				// ENABLED-ordinal and drifts from it when the base point is disabled.
+				int nPtIdx = m_pWadMultiMeasMgr->GetRunPointIdx(iProbe);
+				if (nPtIdx < 0) nPtIdx = m_pWadMultiMeasMgr->GetCheckNumData(nCurPoint);
+
 				S_WadMultiPoint ptOffset;
-				if (m_pWadMultiMeasMgr->GetPoint(m_pWadMultiMeasMgr->GetCheckNumData(nCurPoint), ptOffset))
+				if (m_pWadMultiMeasMgr->GetPoint(nPtIdx, ptOffset))
 				{
-					resultData.nMultiPoint = nCurPoint;
 					resultData.dOffsetRX = ptOffset.fOffsetRX;
 					resultData.dOffsetGX = ptOffset.fOffsetGX;
 					resultData.dOffsetBY = ptOffset.fOffsetBY;
@@ -1313,6 +1324,8 @@ bool CCommTcpIpObjectWAD::TossResultFile(CString strInnerID, int nArea, int iPro
 			}
 		}
 
+
+		resultData.nMultiPoint = nPointNo;
 
 		CString strPos;
 		resultData.nCntData = 6;
@@ -1335,7 +1348,11 @@ bool CCommTcpIpObjectWAD::TossResultFile(CString strInnerID, int nArea, int iPro
 		_tcscpy(resultData.stData[5].szData, strPos);
 
 	
-		resultData.m_iRetryCnt = nRetry;// 1;
+		// LYS 2026-08-18 result sheet column 6 (header "REPEAT") = measurement point number.
+		// It used to carry the bOneCell sub-point index (k+1) routed through the nRetry
+		// argument; bOneCell is retired, so the value now comes from the Multi Point run
+		// state. The field name is part of the dResult DLL contract and is left unchanged.
+		resultData.m_iRetryCnt = nPointNo;
 		_tcscpy(resultData.szCellData, m_pShareMemory->GetSharedMemory()->stLotInfo.m_szCellID[iProbe]);
 		
 

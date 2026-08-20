@@ -406,7 +406,8 @@ void	C_MakeCellDlg::OnRecipeUpdate ()
 	rcp->m_sInfo.m_sProbeInfo.m_fProbeH		= _wtof (m_gridCoordData.GetItemText (CELL_ROW_14, 1));
 	rcp->m_sInfo.m_sProbeInfo.m_fProbeW		= _wtof (m_gridCoordData.GetItemText (CELL_ROW_15, 1));
 	
-	if (g_inRcpInfo.GetGlsRotate() == RCP_CELL_ANG_0) {
+	// LYS 2026-08-18 rotate 180 shares the 0-degree basis (same physical aspect)
+	if (g_inRcpInfo.GetGlsRotate() == RCP_CELL_ANG_0 || g_inRcpInfo.GetGlsRotate() == RCP_CELL_ANG_180) {
 		wcscpy_s (rcp->m_sMap.m_chCellCount,	m_gridCoordData.GetItemText(CELL_ROW_05, 1));
 	}
 	else if (g_inRcpInfo.GetGlsRotate() == RCP_CELL_ANG_90) {
@@ -430,7 +431,10 @@ void	C_MakeCellDlg::OnRecipeUpdate ()
 	rcp->m_sMap.m_fAlignKey.x = rcp->m_sMap.m_fGlobalMark.x;
 	rcp->m_sMap.m_fAlignKey.y = rcp->m_sMap.m_fGlobalMark.y;
 
-	if (g_inRcpInfo.GetGlsRotate () == RCP_CELL_ANG_0) { 
+	// LYS 2026-08-18 rotate 180 shares the 0-degree basis (same physical aspect).
+	// NOTE: left/right review offsets are mirrored at 180 vs 0 - sign needs a check
+	// against the mechanical drawing before real-machine use.
+	if (g_inRcpInfo.GetGlsRotate () == RCP_CELL_ANG_0 || g_inRcpInfo.GetGlsRotate () == RCP_CELL_ANG_180) { 
 		// 2023.02.03 change
 		//rcp->m_sMap.m_fContactOffset = fX1 - fE - fI + fM;
 		//fReviewOffseet = fX2 - fF - fJ + fN;
@@ -453,10 +457,19 @@ void	C_MakeCellDlg::OnRecipeUpdate ()
 	// jsyoon 2022.08.25 add
 	fReviewOffseet2 = rcp->m_sMap.m_fContactOffset;
 
+	// LYS 2026-08-18 rotate 180 needs its OWN value - it must NOT share the 0-degree
+	// branch. Under the 2026-08-07 scheme the measurement angle comes from the stick
+	// m_fStageR itself, so the USER OFFSET is 0. Before this branch existed, rotate=2
+	// fell through with no assignment and kept a stale 90 from a previously edited
+	// recipe - the root cause of the short-side 270-degree misposition fixed by hand
+	// on 2026-08-07 (it would have come back on the next MakeCell run).
 	if (g_inRcpInfo.GetGlsRotate() == RCP_CELL_ANG_0) {
 		g_inRcpInfo.m_recipeMgr.m_sInfo.m_sMotionOffsetPos.m_fStageRotate = 90.;
 	}
 	else if (g_inRcpInfo.GetGlsRotate() == RCP_CELL_ANG_90) {
+		g_inRcpInfo.m_recipeMgr.m_sInfo.m_sMotionOffsetPos.m_fStageRotate = 0;
+	}
+	else if (g_inRcpInfo.GetGlsRotate() == RCP_CELL_ANG_180) {
 		g_inRcpInfo.m_recipeMgr.m_sInfo.m_sMotionOffsetPos.m_fStageRotate = 0;
 	}
 
@@ -696,7 +709,8 @@ void	C_MakeCellDlg::OnCalcUpdate ()
 	m_gridCoordData.SetItemText (CELL_ROW_06,  1, _T(""));
 	m_gridCoordData.SetItemText (CELL_ROW_07,  1, _T(""));
 
-	if (nAngle == RCP_CELL_ANG_0) {
+	// LYS 2026-08-18 rotate 180 shares the 0-degree basis (same physical aspect)
+	if (nAngle == RCP_CELL_ANG_0 || nAngle == RCP_CELL_ANG_180) {
 
 		strTemp.Format(_T("%.4lf"), RCP_GLASS_SIZE_Y); 
 		m_gridCoordData.SetItemText(CELL_ROW_01, 1, strTemp);

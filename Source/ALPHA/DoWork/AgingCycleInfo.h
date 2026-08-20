@@ -35,6 +35,10 @@ public:
 	int		GetItemCount() const					{ return (int)m_vecItem.size(); }
 	const S_AgingTest*	GetItem(int iItem) const;
 
+	// LYS 2026-08-12 AgingCycle R1: number of enabled items that use the kind.
+	// Used to size the result row block reserved for a measurement kind.
+	int		GetKindUseCount(int iKind) const;
+
 	int		GetStickCount() const					{ return (int)m_vecCellMask.size(); }
 	int		GetCellCount(int iStick) const;
 

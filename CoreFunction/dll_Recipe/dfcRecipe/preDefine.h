@@ -35,6 +35,11 @@ using namespace std;
 
 #define RCP_CELL_ANG_0		0
 #define RCP_CELL_ANG_90	    1
+// LYS 2026-08-18 Glass rotate 180 (short-side measurement, m_nGlsRotate=2).
+// Added with the 2026-08-07 rotation scheme; the 0/90 pair predates it and left
+// every "else if (== RCP_CELL_ANG_90)" chain with no branch for 2, so those
+// assignments were silently skipped and stale values survived.
+#define RCP_CELL_ANG_180	2
 
 #define PIX_UNIFORMITY		1
 #define PIX_NON_UNIFORMITY  2
@@ -91,6 +96,7 @@ const enum RCP_VERSION{
 	RECIPE_FILE_V1004,
 	RECIPE_FILE_V1005,		// LYS 2026-07-08 Add
 	RECIPE_FILE_V1006,		// LYS 2026-08-06 Add
+	RECIPE_FILE_V1007,		// LYS 2026-08-19 Add
 	RECIPE_FILE_END,
 };
 
@@ -275,6 +281,38 @@ struct S_MotionSubZ {
 
 		//m_fAngleSubzRight = 0.0;
 		//m_fAngleSubzLeft = 0.0;
+	}
+};
+
+// LYS 2026-08-19 Angle axis recipe parameters
+struct S_MotionAngle {
+	double m_fAngleScheimpflug1;
+	double m_fAngleRotate1;
+	double m_fAngleZoom1;
+	double m_fAngleTilt1;
+	double m_fAngleAzimuth1;
+
+	double m_fAngleScheimpflug2;
+	double m_fAngleRotate2;
+	double m_fAngleZoom2;
+	double m_fAngleTilt2;
+	double m_fAngleAzimuth2;
+
+	S_MotionAngle() {
+		Clear();
+	}
+	void Clear() {
+		m_fAngleScheimpflug1 = 0.0;
+		m_fAngleRotate1 = 0.0;
+		m_fAngleZoom1 = 0.0;
+		m_fAngleTilt1 = 0.0;
+		m_fAngleAzimuth1 = 0.0;
+
+		m_fAngleScheimpflug2 = 0.0;
+		m_fAngleRotate2 = 0.0;
+		m_fAngleZoom2 = 0.0;
+		m_fAngleTilt2 = 0.0;
+		m_fAngleAzimuth2 = 0.0;
 	}
 };
 
@@ -635,6 +673,7 @@ struct S_RecipeInfo {
 	S_MotionOffsetPos	m_sMotionOffsetPos;
 	S_ProbeInfo			m_sProbeInfo;
 	S_MotionSubZ		m_sMotionSubZ;
+	S_MotionAngle		m_sMotionAngle;
 
 	S_RecipeInfo () {
 		Clear ();
@@ -648,6 +687,7 @@ struct S_RecipeInfo {
 		m_sMotionOffsetPos.Clear ();
 		m_sProbeInfo.Clear ();
 		m_sMotionSubZ.Clear();
+		m_sMotionAngle.Clear();
 	}
 };
 

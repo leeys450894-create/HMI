@@ -233,6 +233,9 @@ Recipe Save/Load uses sequential `ReadString`/`ReadDouble`/`ReadInt` — **order
 - **RECIPE_FILE_END** doubles as the current version number written during Save
 - **Backward compat:** Old files without new fields hit the `else` branch which calls `.Clear()` on the new struct
 - **Three-file sync rule:** Any Save/Load field addition must be updated in all 3 files simultaneously with identical ordering
+- **Gate direction is `>`, not `>=`.** Since Save writes `RECIPE_FILE_END`, adding a field means adding `RECIPE_FILE_V100n` (END becomes n+1) and gating with `if (nVersion > RECIPE_FILE_V100n)`. `>=` would make already-saved files parse data they do not contain.
+- **The two `preDefine.h` copies are an ABI contract, not just a convention.** `CRecipeEditMgr::GetRecipeInfo()` (`Recipe/RecipeEditMgr.cpp`) returns `&m_pRecipeFunc->m_recipeMgr.m_sInfo` — a raw pointer into the dfcRecipe DLL's own struct. A struct present in only one copy compiles fine and reads past the DLL's allocation at runtime. Diff both files after any `S_RecipeInfo` change; only comments should differ.
+- **UI grids:** `InitGridUI(grid, id, nRow, nCol, bSmall, bHeader, PIX_UNIFORMITY)` pins every column to **61px** regardless of the control's width, leaving any excess as a blank strip that reads as one extra cell. `.rc` widths run ≈1.48px per dialog unit, so N columns need ≥ N×61/1.48 units — or re-spread the widths after `InitGridUI`.
 
 ## Resume Inspection
 

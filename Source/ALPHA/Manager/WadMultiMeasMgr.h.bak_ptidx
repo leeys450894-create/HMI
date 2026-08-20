@@ -1,0 +1,130 @@
+#pragma once
+
+// LYS 2026-07-23 WAD Multi Point measurement data manager (Phase 2)
+// Ported from OCP CDlgNaviManualMultiMeas data layer with fixes:
+//  - std::vector instead of fixed array (OCP: S_MultiMeas aData[20] overflow)
+//  - 4096 char INI buffer (OCP: MAX_PATH truncation at ~26 points)
+//  - cell-use map kept here, recipe struct untouched (OCP: m_iUsedMeas += 16 corruption)
+//  - CCriticalSection for UI thread vs sequence thread access
+//
+// File format is 100% compatible with OCP multi recipe INI:
+//   {RcpFolder}\{RecipeID}.rcp
+//   [DATA]     CLASS,SUB_CLASS,X,Y,ENABLE,RX,GX,BY,WX,WY (comma-joined lists)
+//              INSP_MODE (0=Single/1=Multi), CELL_X, CELL_Y
+//   [MASECELL] STICK_n = comma list of 0/1 per cell
+
+#include <vector>
+#include <afxmt.h>
+
+struct S_WadMultiPoint
+{
+	CString	strMainClass;
+	CString	strSubClass;
+
+	double	dPosX;			// cell-relative X (mm) -> head Y axis offset
+	double	dPosY;			// cell-relative Y (mm) -> gantry axis offset (sign inverted)
+
+	bool	bEnable;
+
+	double	fOffsetRX;		// R_X color coordinate offset (applied to result)
+	double	fOffsetGX;		// G_X color coordinate offset (applied to result)
+	double	fOffsetBY;		// B_Y color coordinate offset (applied to result)
+	double	fOffsetWX;		// reserved (not applied, kept for OCP file compat)
+	double	fOffsetWY;		// reserved (not applied, kept for OCP file compat)
+
+	S_WadMultiPoint() { Clear(); }
+
+	void Clear()
+	{
+		strMainClass.Empty();
+		strSubClass.Empty();
+		dPosX = 0.0;
+		dPosY = 0.0;
+		bEnable = false;
+		fOffsetRX = fOffsetGX = fOffsetBY = fOffsetWX = fOffsetWY = 0.0;
+	}
+};
+
+class CWadMultiMeasMgr
+{
+public:
+	CWadMultiMeasMgr(CString strRcpFolderPath);
+	~CWadMultiMeasMgr();
+
+	//---------------------------------------------------------------
+	// File IO (INI, OCP compatible)
+	//---------------------------------------------------------------
+	bool	LoadMeasData(CString strRecipeID);		// load [DATA] + [MASECELL]; false if file missing
+	bool	SaveMeasData(CString strRecipeID);		// save all from memory
+
+	void	Clear();
+
+	//---------------------------------------------------------------
+	// Path
+	//---------------------------------------------------------------
+	void	SetRcpFolderPath(CString strPath);
+	CString	GetRcpFolderPath();
+	CString	GetRcpFilePath(CString strRecipeID);
+
+	//---------------------------------------------------------------
+	// Getters (sequence side)
+	//---------------------------------------------------------------
+	bool	IsLoaded();
+	CString	GetLoadedRecipeID();
+	bool	IsMultiMode();							// INSP_MODE == 1
+	int		GetPointCount();						// all points (incl. disabled)
+	bool	GetPoint(int nIndex, S_WadMultiPoint& outPoint);
+	int		GetUseSize();							// enabled point count (OCP GetUseSize)
+	int		GetCheckNumData(int nCheckNum);			// index of nCheckNum-th enabled point (OCP GetCheckNumData)
+	double	GetCellX();
+	double	GetCellY();
+	bool	IsMultiCell(int iStick, int iCell);		// [MASECELL] flag (out of range = false)
+	int		GetCellUseStickCount();
+	int		GetCellUseCellCount(int iStick);
+
+	//---------------------------------------------------------------
+	// runtime state (Phase 4) - written by measure sequence,
+	// read by WAD protocol (Phase 5) and result offset (Phase 6)
+	//---------------------------------------------------------------
+	void	ResetRunState();
+	void	SetRunActive(int iProbe, bool bActive);
+	bool	IsRunActive(int iProbe);
+	void	SetRunCurrent(int iProbe, int nCurrent);	// 1 = base point, 2.. = multi points
+	int		GetRunCurrent(int iProbe);
+
+	//---------------------------------------------------------------
+	// Setters (UI side, Phase 3)
+	//---------------------------------------------------------------
+	void	SetInspMode(bool bMulti);
+	void	SetCellSize(double dCellX, double dCellY);
+	void	SetPoints(const std::vector<S_WadMultiPoint>& vecPoints);
+	void	GetPoints(std::vector<S_WadMultiPoint>& outPoints);
+	void	SetCellUseMap(const std::vector<std::vector<int>>& vecCellUse);
+	void	GetCellUseMap(std::vector<std::vector<int>>& outCellUse);
+
+	// validation: every enabled point must be inside +-CellX/2, +-CellY/2
+	// returns true if valid; outNgIndex = first invalid point index (-1 if valid)
+	bool	IsCellRangeValid(int& outNgIndex);
+
+private:
+	// helpers (no lock inside; callers hold m_cs)
+	CString	BuildJoinedList(int nField);
+	void	ParseJoinedList(int nField, LPCTSTR szData);
+
+	CCriticalSection				m_cs;
+
+	CString							m_strRcpFolderPath;
+	CString							m_strLoadedRecipeID;
+	bool							m_bLoaded;
+
+	bool							m_bInspMode;	// INSP_MODE (0=Single, 1=Multi)
+	double							m_dCellX;
+	double							m_dCellY;
+
+	std::vector<S_WadMultiPoint>	m_vecPoint;
+	std::vector<std::vector<int>>	m_vecCellUse;	// [stick][cell] 0/1
+
+	// runtime state (max 2 heads)
+	bool							m_bRunActive[2];
+	int								m_nRunCurrent[2];
+};

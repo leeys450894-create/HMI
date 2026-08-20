@@ -6,6 +6,8 @@
 #include "Recipe\RecipeEditMgr.h"		// LYS 2026-08-06 Phase 1
 #include "SystemParamShare.h"			// LYS 2026-08-06 Phase 4
 #include "Manager\SequenceManager.h"	// LYS 2026-08-06 Phase 4
+#include "Manager\SystemConfigMgr.h"	// LYS 2026-08-18 START pre-check (IsOCP)
+#include "DoWork\AgingCycleInfo.h"		// LYS 2026-08-18 START pre-check (engine loader)
 #include "afxdialogex.h"
 
 #include <iostream>
@@ -373,6 +375,51 @@ void CDlgSubManual_AgingTest::OnAgingProcStrart()
 	if (strRcp.IsEmpty() || strRcp == _T("UNKNOWN"))
 	{
 		AfxMessageBox(_T("No recipe information.\nOpen a recipe first."), MB_ICONWARNING);
+		return;
+	}
+
+	//=====================================================================
+	// LYS 2026-08-18 START pre-check.
+	// The engine never looks at m_bAutoAgingMode - the aging cycle turns on only when
+	// CMeasureSequenceItemEngine::AgingCycleBegin() passes (IsOCP + recipe m_bUseAging_Test
+	// + a loadable aging rcp holding at least one USE_AGING item). Without these checks
+	// START silently ran the plain measure sequence with no pattern lighting.
+	// Evaluate the same conditions here so the operator gets a reason instead.
+	//=====================================================================
+	if (m_pAuroraMgr->GetSystemConfigMgrPtr() == NULL ||
+		m_pAuroraMgr->GetSystemConfigMgrPtr()->IsOCP() == false)
+	{
+		AfxMessageBox(_T("Aging cycle runs in OCP mode only.\nCheck SystemConfig.ini [EQUIP_TYPE] MACHINE_TYPE."), MB_ICONWARNING);
+		return;
+	}
+
+	S_RecipeInfo* pRecipeInfo = m_pAuroraMgr->GetRecipeEditMgrPtr()->GetRecipeInfo();
+	if (pRecipeInfo == NULL || pRecipeInfo->m_sInspectItem.m_bUseAging_Test == FALSE)
+	{
+		AfxMessageBox(_T("AGING TEST is not enabled in the current recipe.\nTurn it on in RECIPE - Inspection Item, then retry."), MB_ICONWARNING);
+		return;
+	}
+
+	// same loader the sequence uses, so this cannot drift from the engine gate
+	CAgingCycleInfo cycleInfo;
+	if (cycleInfo.Load(strRcp) == false)
+	{
+		CString strChkMsg;
+		strChkMsg.Format(_T("Aging recipe not found.\n%s%s.rcp\n\nSave the list first."), (LPCTSTR)m_strAgingRcpPath, (LPCTSTR)strRcp);
+		AfxMessageBox(strChkMsg, MB_ICONWARNING);
+		return;
+	}
+
+	int nUseItem = 0;
+	for (int iChk = 0; iChk < cycleInfo.GetItemCount(); iChk++)
+	{
+		const S_AgingTest* pChk = cycleInfo.GetItem(iChk);
+		if (pChk != NULL && pChk->m_bUseAging) nUseItem++;
+	}
+
+	if (nUseItem < 1)
+	{
+		AfxMessageBox(_T("The saved aging list has no item with Aging checked.\nCheck at least one item and save."), MB_ICONWARNING);
 		return;
 	}
 

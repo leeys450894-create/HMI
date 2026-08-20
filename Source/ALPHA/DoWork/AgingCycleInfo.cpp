@@ -102,6 +102,33 @@ const S_AgingTest* CAgingCycleInfo::GetItem(int iItem) const
 	return &m_vecItem[iItem];
 }
 
+// LYS 2026-08-12 AgingCycle R1: enabled items using the kind (OCP nMaxProperty/
+// nMaxeQuality/nMaxLCR counterpart, JOB_Proc.cpp:12562-12570).
+int CAgingCycleInfo::GetKindUseCount(int iKind) const
+{
+	int nCount = 0;
+
+	for (size_t i = 0; i < m_vecItem.size(); i++)
+	{
+		if (m_vecItem[i].m_bUseAging == FALSE) continue;
+
+		if (iKind == enumAgingMeasKind_WAD)
+		{
+			if (m_vecItem[i].m_bUseProperty) nCount++;
+		}
+		else if (iKind == enumAgingMeasKind_VISION)
+		{
+			if (m_vecItem[i].m_bUseQuality) nCount++;
+		}
+		else if (iKind == enumAgingMeasKind_ANGLE)
+		{
+			if (m_vecItem[i].m_bUseAngle) nCount++;
+		}
+	}
+
+	return nCount;
+}
+
 int CAgingCycleInfo::GetCellCount(int iStick) const
 {
 	if (iStick < 0 || iStick >= (int)m_vecCellMask.size()) return 0;

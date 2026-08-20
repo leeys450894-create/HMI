@@ -330,6 +330,23 @@ BOOL	C_OutRecipeFunc::LoadRcpFile (CString strRcpName)
 		m_recipeMgr.m_sInfo.m_sMotionSubZ.Clear();
 	}
 
+	// LYS 2026-08-19 Angle Axis Load (V1007+)
+	if (nVersion > RECIPE_FILE_V1007) {
+		ReadString(&File);	//Angle Axis Header
+		m_recipeMgr.m_sInfo.m_sMotionAngle.m_fAngleScheimpflug1 = ReadDouble(&File);
+		m_recipeMgr.m_sInfo.m_sMotionAngle.m_fAngleRotate1 = ReadDouble(&File);
+		m_recipeMgr.m_sInfo.m_sMotionAngle.m_fAngleZoom1 = ReadDouble(&File);
+		m_recipeMgr.m_sInfo.m_sMotionAngle.m_fAngleTilt1 = ReadDouble(&File);
+		m_recipeMgr.m_sInfo.m_sMotionAngle.m_fAngleAzimuth1 = ReadDouble(&File);
+		m_recipeMgr.m_sInfo.m_sMotionAngle.m_fAngleScheimpflug2 = ReadDouble(&File);
+		m_recipeMgr.m_sInfo.m_sMotionAngle.m_fAngleRotate2 = ReadDouble(&File);
+		m_recipeMgr.m_sInfo.m_sMotionAngle.m_fAngleZoom2 = ReadDouble(&File);
+		m_recipeMgr.m_sInfo.m_sMotionAngle.m_fAngleTilt2 = ReadDouble(&File);
+		m_recipeMgr.m_sInfo.m_sMotionAngle.m_fAngleAzimuth2 = ReadDouble(&File);
+	} else {
+		m_recipeMgr.m_sInfo.m_sMotionAngle.Clear();
+	}
+
 	File.Close ();
 
 	return TRUE;

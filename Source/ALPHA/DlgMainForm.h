@@ -4,6 +4,7 @@
 #include "common\MFCGridControl\GridCtrl_src\GridCtrl.h"
 #include "common\Label.h"
 #include "afxwin.h"
+#include "MotorFunction/AxisType.h"	// LYS 2026-08-19 df_USE_MAX_AXIS for m_stMoterInfo
 // CDlgMainForm 대화 상자입니다.
 
 struct stMotorInfo
@@ -65,7 +66,7 @@ private:
 	void BeginThread_WorkProc();
 	int WaitTerminateWorkerThread();
 
-	stMotorInfo m_stMoterInfo[90];
+	stMotorInfo m_stMoterInfo[df_USE_MAX_AXIS];		// LYS 2026-08-19 Axis 90 -> df_USE_MAX_AXIS
 	stTriggerInfo m_stTriggerInfo[2];
 	bool	    m_bMccSignal[100];
 

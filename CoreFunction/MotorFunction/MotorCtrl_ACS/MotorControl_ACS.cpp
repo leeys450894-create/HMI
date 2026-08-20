@@ -161,6 +161,20 @@ BOOL CMotorControl_ACS::LinkDatFile(bool bSave)
     g_iMapAxis.SetAt(_T("PBZ3-AXIS")/*"SE Z1"*/, AXIS_PROBE_Z3);
     g_iMapAxis.SetAt(_T("PBZ4-AXIS")/*"SE Z1"*/, AXIS_PROBE_Z4);
     g_iMapAxis.SetAt(_T("PBZ5-AXIS")/*"SE Z1"*/, AXIS_PROBE_Z5);
+
+    // LYS 2026-08-19 ADD ANGLE AXIS
+    g_iMapAxis.SetAt(_T("ACS1-AXIS"), AXIS_ANGLE_SF1);
+    g_iMapAxis.SetAt(_T("ACR1-AXIS"), AXIS_ANGLE_ROTATE1);
+    g_iMapAxis.SetAt(_T("ACZ1-AXIS"), AXIS_ANGLE_ZOOM1);
+    g_iMapAxis.SetAt(_T("AMT1-AXIS"), AXIS_ANGLE_TILT1);
+    g_iMapAxis.SetAt(_T("AMA1-AXIS"), AXIS_ANGLE_AZM1);
+    g_iMapAxis.SetAt(_T("ACS2-AXIS"), AXIS_ANGLE_SF2);
+    g_iMapAxis.SetAt(_T("ACR2-AXIS"), AXIS_ANGLE_ROTATE2);
+    g_iMapAxis.SetAt(_T("ACZ2-AXIS"), AXIS_ANGLE_ZOOM2);
+    g_iMapAxis.SetAt(_T("AMT2-AXIS"), AXIS_ANGLE_TILT2);
+    g_iMapAxis.SetAt(_T("AMA2-AXIS"), AXIS_ANGLE_AZM2);
+
+
 	//////////////////////////////////////////////////////////////////////////
 
 	if (bSave == true)

@@ -548,7 +548,8 @@ void CD_PopUp_Motion_Move::__RefreshListData3()
 			iAxis != AXIS_X4 && iAxis != AXIS_Z9 && iAxis != AXIS_UNIT_Z &&
 			iAxis != AXIS_Y1 && iAxis != AXIS_Y2 && iAxis != AXIS_Y5 && iAxis != AXIS_Y6 && iAxis != AXIS_Z2 && iAxis != AXIS_Z3 && iAxis != AXIS_Z4 &&
 			iAxis != AXIS_ROTATE1 && iAxis != AXIS_FOCUS1 && iAxis != AXIS_COLOR_DEGREE1 && iAxis != AXIS_SPECTO_DEGREE1 && iAxis != AXIS_ROTATE2 && iAxis != AXIS_FOCUS2 && iAxis != AXIS_COLOR_DEGREE2 && iAxis != AXIS_SPECTO_DEGREE2 &&
-			iAxis < AXIS_PROBE_X1)
+			// LYS 2026-08-19 ADD ANGLE AXIS
+			(iAxis < AXIS_PROBE_X1 || (AXIS_ANGLE_SF1 <= iAxis && iAxis <= AXIS_ANGLE_AZM2)))
 		{
 			if (pImpl->GetAxisProperty(iAxis)->bUse == FALSE)
 				continue;

@@ -47,6 +47,18 @@ public:
 	void GenMeasID(int* pnCellNum, bool* pbMeasProbe, TCHAR* ppcCellID);
 	void GenCellID(int* pnCellNum, bool* pbMeasProbe, TCHAR* ppcCellID);
 	void GenInnerID(int* pnCellNum, bool* pbMeasProbe);
+	// LYS 2026-08-12 AgingCycle R2: drop the cached InnerID so each aging repeat gets
+	// a fresh ID (GenInnerID reuses the per-cell cache, which made every repeat write
+	// the same device raw file name and overwrite the previous one).
+	void ClearInnerIDForAging(int* pnCellNum);
+	// LYS 2026-08-12 AgingCycle R1: trace the result row block. Emits only while the
+	// aging cycle is active - nAreaNum is not logged anywhere else, so the repeat
+	// block layout is otherwise unobservable (dResult writes nothing in OOS).
+	void LogAgingRow(int iKind, const TCHAR* szTag, int* pnAreaNum);
+	// LYS 2026-08-18 AgingCycle: per-cell measurement filter from AgingRcp [MASECELL].
+	// OCP counterpart = GetMeasUse(bit, stProbe[0].m_iUsedMeas) evaluated per cell
+	// (JOB_Proc.cpp:13775 / 17012 / 17546). Returns true when the cell must be skipped.
+	bool IsAgingCellSkip(int iKind, int iCell);
 	
 
 	void ResetGlassMeasAreaInfo();

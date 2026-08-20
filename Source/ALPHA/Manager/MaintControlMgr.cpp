@@ -2698,6 +2698,35 @@ long CMaintControlMgr::MoveCmdPosAngle(stMotorPosition* pPos, int nAxis, int iSp
 		}
 	}
 
+	// LYS 2026-08-19 Angle module optics (Scheimpflug / Rotate / Zoom / Tilt / Azimuth x2).
+	// Recipe driven, so the caller just appends them to pPos. Issued here - before the X/Y/Z
+	// head moves below - so they travel in parallel; the wait is deferred to the end.
+	stMotorPosition stPositionAngle[10];
+	ZeroMemory(&stPositionAngle, sizeof(stPositionAngle));
+	int nMoveAngle = 0;
+
+	for (int i = 0; i < nAxis; i++)
+	{
+		if (pPos[i].axis < AXIS_ANGLE_SF1 || pPos[i].axis > AXIS_ANGLE_AZM2) continue;
+		if (nMoveAngle >= _countof(stPositionAngle)) break;
+
+		// machine may not carry the angle module - skip axes the config disabled
+		axis_data_type* pAxisInfo = m_pMotorControlMgr->GetAxisProperty(pPos[i].axis);
+		if (pAxisInfo == nullptr || pAxisInfo->bUse == FALSE) continue;
+
+		// 입력 값 0일 때 가드(추후 적용)
+		//if (fabs(pPos[i].dPosition) < 0.0001) continue;
+
+		stPositionAngle[nMoveAngle].axis = pPos[i].axis;
+		stPositionAngle[nMoveAngle].dPosition = pPos[i].dPosition;
+		nMoveAngle++;
+	}
+
+	if (nRet == df_MOTION_RV_SUCCESSED && nMoveAngle > 0)
+	{
+		nRet = MoveCmdPosMulti(stPositionAngle, nMoveAngle, SPEED_HIGH, false, false);
+	}
+
 	//stMotorPosition stPosition[10];
 	//ZeroMemory(&stPosition, sizeof(stPosition));
 	//int nMove = 0;
@@ -2839,6 +2868,20 @@ long CMaintControlMgr::MoveCmdPosAngle(stMotorPosition* pPos, int nAxis, int iSp
 						break;
 				}
 			}
+		}
+	}
+
+	// LYS 2026-08-19 The angle axes were issued up front, so by now the X / Z2 waits above
+	// have usually covered their travel. Wait regardless of bDoneCheck: the measure step's
+	// own wait loop only covers pPos[0..1], and the optics must be settled before the
+	// measurement is triggered.
+	if (nRet == df_MOTION_RV_SUCCESSED)
+	{
+		for (int i = 0; i < nMoveAngle; i++)
+		{
+			nRet = DoWork_MotionDone(stPositionAngle[i].axis);
+			if (nRet != df_MOTION_RV_SUCCESSED)
+				break;
 		}
 	}
 

@@ -24,6 +24,10 @@ class C_SelectCellDlg : public C_BaseDialog
 		void OnSelItem (NMHDR *pNMHDR, LRESULT *pResult);
 		void SetViewSelectCell (/*int nMode*/);
 		void UpdateSelectCell ();
+		// LYS 2026-08-18 bulk select helpers. View-only: the grid colour is the working
+		// state and nothing reaches the recipe until Cell Update is pressed, same as a
+		// manual cell click.
+		void SetAllCell (BOOL bSelect);
 		BOOL ShowWindow (int nCmdShow);
 
 	protected:
@@ -32,6 +36,8 @@ class C_SelectCellDlg : public C_BaseDialog
 		afx_msg void OnDestroy ();
 		afx_msg void OnSelMode (UINT nID);
 		afx_msg void OnUpdateCell ();
+		afx_msg void OnSelectAllCell ();	// LYS 2026-08-18
+		afx_msg void OnClearAllCell ();		// LYS 2026-08-18
 
 
 	DECLARE_MESSAGE_MAP()

@@ -1121,6 +1121,26 @@ int CSystemInitializeStep::MotionHome(int iStep)
 
 		CMCCLogMgr::GetInstance()->SetMCC_Action(MCC_A_MOT_HOME_HEAD_Z, true);
 
+		// LYS 2026-08-19 Z3~Z6 Sub Z homing 
+		for (int iAxis = AXIS_Z3; iAxis <= AXIS_Z6; iAxis++)
+		{
+			if (m_pShareItem->GetStopUser() == true)
+				continue;
+
+			nRet &= m_pShareItem->GetMaintControlMgrPtr()->MoveHome(iAxis);
+		}
+
+		for (int iAxis = AXIS_Z3; iAxis <= AXIS_Z6; iAxis++)
+		{
+			if (m_pShareItem->GetStopUser() == true)
+				continue;
+
+			nRet &= m_pShareItem->GetMaintControlMgrPtr()->CheckHomeDone(iAxis, df_HOMINGDONE_TIME);
+		}
+
+		if (nRet != VTM_RV_SUCCESSED)
+			return nRet;
+
 		// 2. Head AXIS
 		// 2.1 Z AXIS
 		for (int iAxis = AXIS_Z1; iAxis < AXIS_TYPE_END; iAxis++)
@@ -1150,7 +1170,10 @@ int CSystemInitializeStep::MotionHome(int iStep)
 			else if (
 				iAxis == AXIS_ZOOM1 || iAxis == AXIS_THETA1 || iAxis == AXIS_ZOOM2 || iAxis == AXIS_THETA2 || iAxis == AXIS_FILTER1 || iAxis == AXIS_FILTER2 || iAxis == AXIS_VLENS1 || iAxis == AXIS_VLENS2 ||
 				iAxis == AXIS_ROTATE1 || iAxis == AXIS_FOCUS1 || iAxis == AXIS_ROTATE2 || iAxis == AXIS_FOCUS2 || iAxis == AXIS_COLOR_DEGREE1 || iAxis == AXIS_COLOR_DEGREE2 ||
-				iAxis == AXIS_ROTATE3 || iAxis == AXIS_FOCUS3 || iAxis == AXIS_ROTATE4 || iAxis == AXIS_FOCUS4 || iAxis == AXIS_SPECTO_DEGREE1 || iAxis == AXIS_SPECTO_DEGREE2)
+				iAxis == AXIS_ROTATE3 || iAxis == AXIS_FOCUS3 || iAxis == AXIS_ROTATE4 || iAxis == AXIS_FOCUS4 || iAxis == AXIS_SPECTO_DEGREE1 || iAxis == AXIS_SPECTO_DEGREE2 ||
+				// LYS 2026-08-19 ADD ANGLE AXIS - homed with the head optics group
+				iAxis == AXIS_ANGLE_SF1 || iAxis == AXIS_ANGLE_ROTATE1 || iAxis == AXIS_ANGLE_ZOOM1 || iAxis == AXIS_ANGLE_TILT1 || iAxis == AXIS_ANGLE_AZM1 ||
+				iAxis == AXIS_ANGLE_SF2 || iAxis == AXIS_ANGLE_ROTATE2 || iAxis == AXIS_ANGLE_ZOOM2 || iAxis == AXIS_ANGLE_TILT2 || iAxis == AXIS_ANGLE_AZM2)
 			{
 				nRet &= m_pShareItem->GetMaintControlMgrPtr()->MoveHome(iAxis);
 			}
@@ -1189,7 +1212,10 @@ int CSystemInitializeStep::MotionHome(int iStep)
 				else if (
 					iAxis == AXIS_ZOOM1 || iAxis == AXIS_THETA1 || iAxis == AXIS_ZOOM2 || iAxis == AXIS_THETA2 || iAxis == AXIS_FILTER1 || iAxis == AXIS_FILTER2 || iAxis == AXIS_VLENS1 || iAxis == AXIS_VLENS2 ||
 					iAxis == AXIS_ROTATE1 || iAxis == AXIS_FOCUS1 || iAxis == AXIS_ROTATE2 || iAxis == AXIS_FOCUS2 || iAxis == AXIS_COLOR_DEGREE1 || iAxis == AXIS_COLOR_DEGREE2 ||
-					iAxis == AXIS_ROTATE3 || iAxis == AXIS_FOCUS3 || iAxis == AXIS_ROTATE4 || iAxis == AXIS_FOCUS4 || iAxis == AXIS_SPECTO_DEGREE1 || iAxis == AXIS_SPECTO_DEGREE2)
+					iAxis == AXIS_ROTATE3 || iAxis == AXIS_FOCUS3 || iAxis == AXIS_ROTATE4 || iAxis == AXIS_FOCUS4 || iAxis == AXIS_SPECTO_DEGREE1 || iAxis == AXIS_SPECTO_DEGREE2 ||
+					// LYS 2026-08-19 ADD ANGLE AXIS - homed with the head optics group
+					iAxis == AXIS_ANGLE_SF1 || iAxis == AXIS_ANGLE_ROTATE1 || iAxis == AXIS_ANGLE_ZOOM1 || iAxis == AXIS_ANGLE_TILT1 || iAxis == AXIS_ANGLE_AZM1 ||
+					iAxis == AXIS_ANGLE_SF2 || iAxis == AXIS_ANGLE_ROTATE2 || iAxis == AXIS_ANGLE_ZOOM2 || iAxis == AXIS_ANGLE_TILT2 || iAxis == AXIS_ANGLE_AZM2)
 				{
 					nRet &= m_pShareItem->GetMaintControlMgrPtr()->CheckHomeDone(iAxis, df_HOMINGDONE_TIME);
 				}
