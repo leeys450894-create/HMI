@@ -880,8 +880,8 @@ bool CCommTcpIpObjectPG::WaitInspectionComplete(DWORD dwTimeOut, int iMeasType)
 	}
 	else if (iMeasType == 7)	// RTEST
 	{
-		// LYS 2026-08-10 AutoContact Phase 3: keep raw per-cell digit + 20
-		// (OCP CalcPGResult(2,-1) convention: 21=PASS, 28=port fail)
+		// LYS 2026-08-10 AutoContact Phase 3: 셀별 raw 값 + 20 유지
+		// (OCP CalcPGResult(2,-1) 규약: 21=PASS, 28=포트 실패)
 		{
 			CAutoContactInfo* pAutoCnt = CAutoContactInfo::GetInstance();
 			pAutoCnt->ClearCellStatus();

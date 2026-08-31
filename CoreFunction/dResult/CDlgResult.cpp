@@ -1942,9 +1942,7 @@ int CDlgResult::ExportAsAPDICP(CString strResultPath, CString strTime)
 	File.WriteString(strBody);
 
 	// LYS 2026-08-18 AREA_MAX_CNT 1000 -> 2500.
-	// Max row = agingItems x multiPoints x cellsPerGlass. The long recipe at
-	// 3 items x 7 points x 108 cells = 2268 overflowed the old ceiling as soon as
-	// the aging cycle and multi point features were combined.
+	// 최대 행 = 에이징 항목 x 멀티포인트 x 글라스당 셀. 3 x 7 x 108 = 2268로 기존 한계를 넘었다.
 	int iArea = 2500;
 	strBody.Format(_T("%-20s,%-20d,\n"), _T("AREA_MAX_CNT"), iArea);
 	File.WriteString(strBody);

@@ -36,6 +36,7 @@ public:
 	void UpdateCurCoordA(int nProbe, double* px, double* py);
 	void SetGlassSize(double dXMax, double dXMin, double dYMax, double dYMin, int iGlsCCut);
 	void SetCardSize(double dXMax, double dXMin, double dYMax, double dYMin);
+	void SetProbeCardUse(int nProbeID, BOOL bUse);	// LYS 2026-08-26
 	void SetLoaderSize(double dXMax, double dXMin, double dYMax, double dYMin, int iLoaderCCut);
 	void DrawChart(CWnd *pWnd);
 	void SetParentWnd(CWnd *pWnd);

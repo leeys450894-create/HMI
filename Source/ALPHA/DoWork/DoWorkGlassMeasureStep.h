@@ -47,17 +47,15 @@ public:
 	void GenMeasID(int* pnCellNum, bool* pbMeasProbe, TCHAR* ppcCellID);
 	void GenCellID(int* pnCellNum, bool* pbMeasProbe, TCHAR* ppcCellID);
 	void GenInnerID(int* pnCellNum, bool* pbMeasProbe);
-	// LYS 2026-08-12 AgingCycle R2: drop the cached InnerID so each aging repeat gets
-	// a fresh ID (GenInnerID reuses the per-cell cache, which made every repeat write
-	// the same device raw file name and overwrite the previous one).
+	// LYS 2026-08-12 AgingCycle R2: 캐시된 InnerID를 버려 에이징 반복마다 새 id를 받는다
+	// (GenInnerID의 셀별 캐시 때문에 매 회차가 같은 raw 파일명을 써 이전 것을 덮어썼다).
 	void ClearInnerIDForAging(int* pnCellNum);
-	// LYS 2026-08-12 AgingCycle R1: trace the result row block. Emits only while the
-	// aging cycle is active - nAreaNum is not logged anywhere else, so the repeat
-	// block layout is otherwise unobservable (dResult writes nothing in OOS).
+	// LYS 2026-08-12 AgingCycle R1: 결과 행 블록 추적. 에이징 사이클 중에만 출력한다 -
+	// nAreaNum은 다른 곳에 로그가 없어 블록 배치를 관찰할 방법이 없다(OOS에선 dResult 미기록).
 	void LogAgingRow(int iKind, const TCHAR* szTag, int* pnAreaNum);
-	// LYS 2026-08-18 AgingCycle: per-cell measurement filter from AgingRcp [MASECELL].
-	// OCP counterpart = GetMeasUse(bit, stProbe[0].m_iUsedMeas) evaluated per cell
-	// (JOB_Proc.cpp:13775 / 17012 / 17546). Returns true when the cell must be skipped.
+	// LYS 2026-08-18 AgingCycle: AgingRcp [MASECELL] 기반 셀 단위 측정 필터.
+	// OCP 대응 = GetMeasUse(bit, stProbe[0].m_iUsedMeas)를 셀마다 평가
+	// (JOB_Proc.cpp:13775 / 17012 / 17546). true면 해당 셀을 건너뛴다.
 	bool IsAgingCellSkip(int iKind, int iCell);
 	
 

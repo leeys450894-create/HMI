@@ -1513,9 +1513,8 @@ BOOL	C_RecipeMgrDlg::GetSubZ()
 	return TRUE;
 }
 
-// LYS 2026-08-19 PIX_UNIFORMITY pins every column to 61px, so any control wider than
-// nCol*61 leaves a blank strip on the right that reads as one extra cell.
-// Re-spread the columns over the real control width so exactly nCol cells are shown.
+// LYS 2026-08-19 PIX_UNIFORMITY가 열 폭을 61px로 고정해, 컨트롤이 더 넓으면
+// 오른쪽 여백이 셀 하나처럼 보인다. 실제 컨트롤 폭에 맞춰 열을 재분배한다.
 static void	AngleFitColumns(C_GridCtrl &Grid, int nCol)
 {
 	if (nCol <= 0) return;
@@ -1531,8 +1530,8 @@ static void	AngleFitColumns(C_GridCtrl &Grid, int nCol)
 	Grid.SetColumnWidth(nCol - 1, nWidth - nColWidth * (nCol - 1));
 }
 
-// LYS 2026-08-19 Angle axis recipe parameters.
-// One S_MotionAngle holds both modules: grid 1 maps to the *1 fields, grid 2 to the *2 fields.
+// LYS 2026-08-19 Angle 축 레시피 파라미터.
+// S_MotionAngle 하나가 두 모듈을 담는다: 그리드1 = *1 필드, 그리드2 = *2 필드.
 void	C_RecipeMgrDlg::InitAngleAxis()
 {
 	InitGridUI(m_gridAxisAngleHead1, IDC_GRID_ANGLE_HEAD1, 1, 5, TRUE, TRUE, PIX_UNIFORMITY);

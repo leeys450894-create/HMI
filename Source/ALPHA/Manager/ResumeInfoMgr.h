@@ -1,7 +1,7 @@
 #pragma once
 
-// LYS 2026-07-03 Resume Inspection manager
-// Manages resume state INI file for resuming inspection after abnormal exit
+// LYS 2026-07-03 Resume Inspection 관리자.
+// 비정상 종료 후 검사를 재개하기 위한 상태 INI 파일을 관리한다.
 
 class CResumeInfoMgr
 {

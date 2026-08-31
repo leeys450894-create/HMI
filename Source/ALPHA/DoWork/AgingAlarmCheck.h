@@ -1,8 +1,7 @@
 // AgingAlarmCheck.h
-// LYS 2026-08-05 AgingSet Phase 4: non-UI aging target-current alarm checker.
-// Port of CDlgSubManual_AgingSet file logic (LoadAgingInfo / FindAgingAlarm)
-// for use from the sequence thread (CDoWorkGlassMeasureStep_AGING).
-// Settings come from the app registry profile shared with the dialog:
+// LYS 2026-08-05 AgingSet Phase 4: 비UI 에이징 목표전류 알람 체커.
+// 시퀀스 스레드(CDoWorkGlassMeasureStep_AGING)에서 쓰려고 다이얼로그 로직을 이식.
+// 설정은 다이얼로그와 공유하는 앱 레지스트리 프로파일에서 읽는다:
 //   DIR\AGING_TARGET_RCP, DIR\AGING_FILE, CONFIG\AGING_ALARM_USE
 #pragma once
 

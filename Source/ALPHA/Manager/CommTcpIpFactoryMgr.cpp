@@ -93,6 +93,40 @@ void CCommTcpIpFactoryMgr::Finalize()
 	}
 }
 
+
+// LYS 2026-08-25 Network.ini의 TCPIP_DEVICEID가 타입별 객체 슬롯 배열의 인덱스로 쓰인다.
+// 배열이 작고(Vision/Color/Angle 2개, TSP 6개) 연달아 선언돼 있어 범위를 벗어나면
+// 이웃 포인터 멤버를 읽거나 덮어쓴다(Vision에 "2"면 Color[0], "6"이면 WAD 포인터).
+// 빌드/로드 시 경고가 없고 한참 뒤 엉뚱한 장비 객체가 응답하는 형태로 드러나므로,
+// 배열 직접 접근 전에 항상 검증한다.
+static bool IsDeviceSlotValid(long lMeasType, long lDeviceIndex)
+{
+	long lSlotCount = 0;
+
+	switch (lMeasType)
+	{
+	case enumTCPIpFactorytID_VISION:	lSlotCount = 2;	break;	// m_pCommTcpIpObj_Vision[2]
+	case enumTCPIpFactorytID_COLOR:		lSlotCount = 2;	break;	// m_pCommTcpIpObj_Color[2]
+	case enumTCPIpFactorytID_ANGLE:		lSlotCount = 2;	break;	// m_pCommTcpIpObj_Angle[2]
+	case enumTCPIpFactorytID_TSP:		lSlotCount = 6;	break;	// m_pCommTcpIpObj_TSP[6]
+
+	default:
+		// scalar member (WAD, PG, AGING, LCR, CIM, TIME, MOTION, PG_MON) - DEVICEID is
+		// carried for identification only and never used as an index, so leave it alone.
+		return true;
+	}
+
+	if (0 <= lDeviceIndex && lDeviceIndex < lSlotCount)
+		return true;
+
+	CString strLog;
+	strLog.Format(_T("Network.ini TCPIP_DEVICEID out of range : MEAS_TYPE=%ld, DEVICEID=%ld (max %ld) - entry skipped"),
+		lMeasType, lDeviceIndex, lSlotCount - 1);
+	CLogWrapper::GetInstance()->KMLOG(ERRO, strLog);
+
+	return false;
+}
+
 void CCommTcpIpFactoryMgr::DisConnect()
 {
 	for (long i = 0; i < m_MgrPool_link.pNetworkConfigMgr->GetCount(); i++)
@@ -100,6 +134,9 @@ void CCommTcpIpFactoryMgr::DisConnect()
 		//		DeleteComm(i);
 		long lDeviceIndex = m_MgrPool_link.pNetworkConfigMgr->GetParam_DeviceIndex(i);
 		long lMeasType = m_MgrPool_link.pNetworkConfigMgr->GetParam_MeasType(i);
+
+		if (IsDeviceSlotValid(lMeasType, lDeviceIndex) != true)	// LYS 2026-08-25
+			continue;
 
 
 		switch (lMeasType)
@@ -217,6 +254,9 @@ void CCommTcpIpFactoryMgr::CreateComm(long nID)
 {
 	long lDeviceIndex = m_MgrPool_link.pNetworkConfigMgr->GetParam_DeviceIndex(nID);
 	long lMeasType = m_MgrPool_link.pNetworkConfigMgr->GetParam_MeasType(nID);
+
+	if (IsDeviceSlotValid(lMeasType, lDeviceIndex) != true)	// LYS 2026-08-25
+		return;
 	
 	//switch (nID)
 	switch (lMeasType)
@@ -277,9 +317,9 @@ void CCommTcpIpFactoryMgr::CreateComm(long nID)
 		break;
 		case enumTCPIpFactorytID_AGING: // AGING PG
 		{
-			// LYS 2026-06-26 OCP: skip AgingPG (no AGING probes)
-			if (m_MgrPool_link.pSystemConfigMgr && m_MgrPool_link.pSystemConfigMgr->IsOCP())
-				break;
+			// LYS 2026-08-25 OCP도 P5로 에이징을 돌리므로 AgingPG를 여기서 생성한다.
+			// CCommTcpIpObjectAgingPG가 내부적으로 OCP용 PG 번호 5를 처리하며, 객체가 없으면
+			// 하류의 GetCommTcpIpObjectAGING() 널 체크가 에이징 프로토콜 전체를 삼켰다.
 			if (m_pCommTcpIpObj_AgingPG == nullptr)
 				m_pCommTcpIpObj_AgingPG = new CCommTcpIpObjectAgingPG(nID, m_MgrPool_link);
 		}
@@ -317,6 +357,9 @@ void CCommTcpIpFactoryMgr::DeleteComm(long nID)
 {
 	long lDeviceIndex = m_MgrPool_link.pNetworkConfigMgr->GetParam_DeviceIndex(nID);
 	long lMeasType = m_MgrPool_link.pNetworkConfigMgr->GetParam_MeasType(nID);
+
+	if (IsDeviceSlotValid(lMeasType, lDeviceIndex) != true)	// LYS 2026-08-25
+		return;
 
 	switch (lMeasType)
 	{

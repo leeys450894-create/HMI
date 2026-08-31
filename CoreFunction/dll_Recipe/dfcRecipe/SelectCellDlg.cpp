@@ -140,10 +140,8 @@ void	C_SelectCellDlg::SetViewSelectCell (/*m_nMode*/)
 	nCell  = g_inRcpInfo.GetCellCount (0);
 
 	// LYS 2026-07-20 Support both 0 and 90 degree glass rotation
-	// LYS 2026-08-18 rotate 180 reuses the 0-degree layout: the glass footprint has
-	// the same aspect at 0 and 180 (only 90/270 swap it). Without this the grid kept
-	// whatever rectangle was set last, so a 180 recipe opened after a 90 one drew the
-	// cells in a landscape box. Selection data was unaffected - display only.
+	// LYS 2026-08-18 rotate 180은 0도 레이아웃을 재사용한다(0/180 종횡비 동일, 90/270만 뒤바뀜).
+	// 없으면 90 레시피 뒤 180을 열 때 가로 박스로 그려진다. 표시 전용이라 선택 데이터는 무관.
 	if (g_inRcpInfo.GetGlsRotate () == RCP_CELL_ANG_0 || g_inRcpInfo.GetGlsRotate () == RCP_CELL_ANG_180) {
 		double fRatio0 = min(550.0 / RCP_GLASS_SIZE_X, 380.0 / RCP_GLASS_SIZE_Y);
 		m_gridSelSpec.MoveWindow (30, 20, (int)(RCP_GLASS_SIZE_Y * fRatio0), (int)(RCP_GLASS_SIZE_X * fRatio0));
@@ -181,10 +179,9 @@ void	C_SelectCellDlg::OnSelMode (UINT nID)
 }
 
 //=========================================================================
-// LYS 2026-08-18 Select All / Clear All for the current mode.
-// Only the grid colour changes - UpdateSelectCell (Cell Update button) is still
-// what writes into the recipe, so these behave exactly like clicking every cell.
-// Bounds come from the recipe, not from the grid, to match SetViewSelectCell.
+// LYS 2026-08-18 현재 모드의 전체 선택 / 전체 해제.
+// 그리드 색만 바뀌고 레시피 반영은 Cell Update 버튼(UpdateSelectCell)이 담당한다.
+// 범위는 그리드가 아니라 레시피에서 가져온다(SetViewSelectCell와 동일).
 //=========================================================================
 void	C_SelectCellDlg::SetAllCell (BOOL bSelect)
 {

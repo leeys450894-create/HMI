@@ -17,7 +17,7 @@ CDoWorkGlassSWAlign::CDoWorkGlassSWAlign(stAuroraMgrPool &MgrPool)
 {
 	m_strSeqType = _T("SEQUENCE_ITEM_DWGLASS_SEQ_GLASS_SW_ALIGN");
 	m_strSeqComm = _T("TCPIP");
-	m_strSeqCorp = _T("KMAC");
+	m_strSeqCorp = _T("HBS");
 	m_strSeqName = _T("GLASS 3_GLASS_ALIGN");
 	m_strSeqGUID = _T("7538403D-9121-442D-82BE-540A5BF40633");
 	m_strSeqDesc = _T("GLASS SW ALIGN");

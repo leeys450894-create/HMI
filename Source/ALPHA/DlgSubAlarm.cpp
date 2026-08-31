@@ -128,8 +128,8 @@ LRESULT CDlgSubAlarm::OnAlarmOccured(WPARAM wp, LPARAM lp)
 		}
 
 		//GetParent()->SendMessage(WM_MSG_UPDATE_CHANGE_VIEW_STATE, (WPARAM)enumNavigateID_ALARM, NULL);
-		// LYS 2026-07-31 keep MCC T-Log consistent even in CIM not-report mode:
-		// OnAlarmCleared() always reports RESET, so skipping SET here left unpaired rows.
+		// LYS 2026-07-31 CIM 미보고 모드에서도 MCC T-Log 정합을 유지한다.
+		// OnAlarmCleared()는 항상 RESET을 보고하므로 여기서 SET을 빼면 짝 없는 행이 남는다.
 		CMCCLogMgr::GetInstance()->SetMCC_Alarm(id, TRUE);
 		return 0;
 	}

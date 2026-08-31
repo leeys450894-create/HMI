@@ -23,6 +23,8 @@ CMotorControlMgr::CMotorControlMgr(CString strAppPath, CString strConfigPath, CS
 	, m_dInterlockHeadGapB(100)
 	, m_dInterlockProbeGap(200)
 	, m_dInterlockLifePinPos(575)
+	, m_dInterlockProbeSizeX(300)
+	, m_dInterlockProbeZSafety(-600)
 {
     SetName(_T("MOTOR_CONTROL_MGR"));
 
@@ -65,6 +67,8 @@ bool CMotorControlMgr::LinkIniFile(bool bSave)
 	m_pIniHelper->Link(bSave, GetName(), _T("INTERLOCKHEADGAPB"),   &m_dInterlockHeadGapB, 710.000);
 	m_pIniHelper->Link(bSave, GetName(), _T("INTERLOCKPROBEGAP"),   &m_dInterlockProbeGap, 200.000);
 	m_pIniHelper->Link(bSave, GetName(), _T("INTERLOCKLIFTPIN"),    &m_dInterlockLifePinPos, 575.000);
+	m_pIniHelper->Link(bSave, GetName(), _T("INTERLOCKPROBESIZEX"), &m_dInterlockProbeSizeX, 300.000);	// LYS 2026-08-25
+	m_pIniHelper->Link(bSave, GetName(), _T("INTERLOCKPROBEZSAFETY"), &m_dInterlockProbeZSafety, -600.000);	// LYS 2026-08-26
 
 	CString strLog;
 	strLog.Format(_T("USE:%d, OUT_OF_SERVICE:%d, DEVICE_TYPE:%s, INTERLOCKPOS:%.3f, INTERLOCKGANGAP:%.3f, INTERLOCKHEADGAP:%.3f, INTERLOCKHEADGAPB:%.3f, INTERLOCKPROBEGAP:%.3f"), m_bUse, m_bOutOfService, m_strControlType, m_dInterlockPos, m_dInterlockGantryGap, m_dInterlockHeadGap, m_dInterlockHeadGapB, m_dInterlockProbeGap);
@@ -73,7 +77,8 @@ bool CMotorControlMgr::LinkIniFile(bool bSave)
     return m_pIniHelper->IsReadEnable();
 }
 
-// LYS 2026-06-26 OCP mode: disable P1-P4 all axes + P5 X/Y axes
+// LYS 2026-06-26 OCP mode: disable P1-P4 all axes
+// LYS 2026-08-25 P5 gantry X is no longer disabled - see the list below.
 void CMotorControlMgr::DisableAxesForOCP()
 {
 	m_bIsOCP = true;
@@ -86,8 +91,10 @@ void CMotorControlMgr::DisableAxesForOCP()
 		AXIS_PROBE_X5, AXIS_PROBE_X6, AXIS_PROBE_X7, AXIS_PROBE_X8,
 		AXIS_PROBE_Y1, AXIS_PROBE_Y2, AXIS_PROBE_Y3, AXIS_PROBE_Y4,
 		AXIS_PROBE_Z1, AXIS_PROBE_Z2, AXIS_PROBE_Z3, AXIS_PROBE_Z4,
-		// P5 X/Y axes (OCP has no Probe X axis, Y not used)
-		AXIS_PROBE_X9, AXIS_PROBE_X10, AXIS_PROBE_Y5
+		// LYS 2026-08-25 X9/X10을 목록에서 제외 - HW 컨셉 변경으로 P5 갠트리 X가 움직여야 한다.
+		// Config_Motion_ACS.dat은 이미 PBX9/PBX10을 USE[1]로 두는데 이 함수가 기동 시 덮어쓰고 있었다.
+		// PBY5도 USE[1]이지만 프로브 크로스 활성화는 별도 HW 판단이라 Y5는 계속 비활성으로 둔다.
+		AXIS_PROBE_Y5
 	};
 
 	for (int i = 0; i < _countof(nDisableAxes); i++)
@@ -98,7 +105,7 @@ void CMotorControlMgr::DisableAxesForOCP()
 	}
 
 	CString strLog;
-	strLog.Format(_T("OCP Mode: Disabled %d probe axes (P1-P4 all + P5 X/Y)"), _countof(nDisableAxes));
+	strLog.Format(_T("OCP Mode: Disabled %d probe axes (P1-P4 all + P5 Y)"), _countof(nDisableAxes));
 	m_pLogFileAccessor->KMLOG(SYST, strLog);
 }
 
@@ -213,6 +220,67 @@ long CMotorControlMgr::MoveCmdPosA_Move(int iAxis, double dPos, bool bBlockMode,
 	else
 	{
 		nRet = MOTION_CMDPOS_ERROR; // MOTION_MOVE_ALARM + iAxis;
+	}
+
+	return nRet;
+}
+
+// LYS 2026-08-25 P5 프로브 유닛은 INTERLOCKPROBESIZEX(기본 300mm) 폭의 블록이다.
+// Back Gantry X2가 그 블록 안으로 들어가면 안 되므로 요청 X2 위치와의 겹침을 검사한다.
+bool CMotorControlMgr::IsProbeUnitOverlapX(double dHeadX)
+{
+	double dProbeX = 0.;
+	dProbeX = GetOrgPos(AXIS_PROBE_X9);
+
+	double dLow = dProbeX - 1.0;			// absorb the +-1mm park tolerance
+	double dHigh = dProbeX + m_dInterlockProbeSizeX;
+
+	if (dLow <= dHeadX && dHeadX <= dHigh)
+		return true;
+
+	return false;
+}
+
+
+// LYS 2026-08-26 X2 (BACK GANTRY) 가 Probe 지나갈 때 Unit Z축 무조건 상승 시켜야함
+long CMotorControlMgr::RetractHeadZForProbeUnit(double dTargetX2, LPCTSTR pszFrom)
+{
+	// P5 밴드 [X9-1 .. X9+SIZE] 와 겹치는지로 판정한다.
+	double dCurX2 = 0.;
+	dCurX2 = GetOrgPos(AXIS_X2);
+
+	double dPathMin = (dCurX2 < dTargetX2) ? dCurX2 : dTargetX2;
+	double dPathMax = (dCurX2 < dTargetX2) ? dTargetX2 : dCurX2;
+
+	double dProbeX = 0.;
+	dProbeX = GetOrgPos(AXIS_PROBE_X9);
+
+	// 경로 전체가 밴드 한쪽 밖에 있을 때만 통과
+	if (dPathMax < dProbeX - 1.0 || dProbeX + m_dInterlockProbeSizeX < dPathMin)
+		return df_MOTION_RV_SUCCESSED;
+
+	double dCurZ1 = 0.;
+	dCurZ1 = GetOrgPos(AXIS_Z1);
+
+	if (dCurZ1 <= m_dInterlockProbeZSafety)
+		return df_MOTION_RV_SUCCESSED;
+
+	CString strLog;
+	strLog.Format(_T("%s X2 path crosses PROBE UNIT band(X9:%.3f, SIZE:%.1f), X2 %.3f -> %.3f - retract Z1 %.3f -> %.3f"),
+		pszFrom, dProbeX, m_dInterlockProbeSizeX, dCurX2, dTargetX2,
+		dCurZ1, m_dInterlockProbeZSafety);
+	m_pLogFileAccessor->KMLOG(SYST, strLog, true);
+
+	long nRet = df_MOTION_RV_SUCCESSED;
+
+	nRet = MoveCmdPosA(AXIS_Z1, m_dInterlockProbeZSafety, true, SPEED_HIGH, -1, -1);
+	if (nRet == df_MOTION_RV_SUCCESSED)
+		nRet = DoWork_MotionDone(AXIS_Z1);
+
+	if (nRet != df_MOTION_RV_SUCCESSED)
+	{
+		strLog.Format(_T("%s Z1 retract FAIL(RET:%d) - X2 move abandoned"), pszFrom, nRet);
+		m_pLogFileAccessor->KMLOG(WARN, strLog, true);
 	}
 
 	return nRet;
@@ -337,6 +405,12 @@ long CMotorControlMgr::MoveCmdPosA_Sub(int iAxis, double dPos, bool bBlockMode, 
 					nRet = MOTION_INTERLOCK_8;
 				}
 			}
+		}
+
+		// LYS 2026-08-26 X2 (BACK GANTRY) 가 Probe 지나갈 때 Unit Z축 무조건 상승 시켜야함
+		if (nRet == df_MOTION_RV_SUCCESSED)
+		{
+			nRet = RetractHeadZForProbeUnit(dPos, _T("MoveCmdPosA_Sub"));
 		}
 	}
 	else if (iAxis == AXIS_X3)  // Vision
@@ -678,7 +752,9 @@ long CMotorControlMgr::MoveCmdPosA_Sub(int iAxis, double dPos, bool bBlockMode, 
 	{
 		// Probe 간 충돌 방지
 		double dCur = 0, dMoveGap = 0;
-		if (nRet == df_MOTION_RV_SUCCESSED)
+		// LYS 2026-08-25 OCP엔 P4 갠트리가 없어 GetOrgPos(AXIS_PROBE_X7)이 0을 반환하고,
+		// 이 INTERLOCKPROBEGAP(173mm) 검사가 X9의 SW 리밋 안 모든 목표를 거부한다. OCP는 스킵.
+		if (nRet == df_MOTION_RV_SUCCESSED && !m_bIsOCP)
 		{
 			dCur = GetOrgPos(AXIS_PROBE_X7);
 			if (bDir)
@@ -711,6 +787,23 @@ long CMotorControlMgr::MoveCmdPosA_Sub(int iAxis, double dPos, bool bBlockMode, 
 	}
 	else if (iAxis == AXIS_Z1)	// jsyoon 2022.09.30 add
 	{
+		double dMoveZ1 = dPos;
+
+		// LYS 2026-08-26 Z1은 +방향이 하강(안전 -600, 측정 0)이라 목표 > 현재 = 하강, 상승은 항상 허용.
+		if (nRet == df_MOTION_RV_SUCCESSED && dMoveZ1 > GetOrgPos(AXIS_Z1))
+		{
+			if (IsProbeUnitOverlapX(GetOrgPos(AXIS_X2)) == true)
+			{
+				nRet = MOTION_INTERLOCK_CHECK_ALARM + AXIS_Z1;
+
+				CString strLog;
+				strLog.Format(_T("MoveCmdPosA_Sub Z1 DOWN NG - PROBE UNIT(X9:%.3f, SIZE:%.1f) vs BACK GANTRY(X2:%.3f), Z1 %.3f -> %.3f"),
+					GetOrgPos(AXIS_PROBE_X9), m_dInterlockProbeSizeX, GetOrgPos(AXIS_X2),
+					GetOrgPos(AXIS_Z1), dMoveZ1);
+				m_pLogFileAccessor->KMLOG(WARN, strLog, true);
+			}
+		}
+
 		if (dPos > 1)
 		{
 			// Head Z 이동 시 Probe Unit 충돌 인터락
@@ -726,23 +819,6 @@ long CMotorControlMgr::MoveCmdPosA_Sub(int iAxis, double dPos, bool bBlockMode, 
 				}
 			}
 			
-			// Head Z 이동 시 Head Gantry 위치로 Probe Unit 충돌 방지
-			if (nRet == VTM_RV_SUCCESSED)
-			{
-				double dCurProbe = 0, dCur = 0;
-				dCur = GetOrgPos(AXIS_X3);	// Vision
-
-				// LYS 2026-06-26 OCP: skip Head-Probe X9 collision
-				if (!m_bIsOCP)
-				{
-					dCurProbe = GetOrgPos(AXIS_PROBE_X9);
-
-					if (dCur < dCurProbe + 20) // 20 is Revivew Lens 반지름 +
-				{
-					nRet = MOTION_INTERLOCK_CHECK_ALARM + AXIS_PROBE_X9;
-				}
-				}
-			}
 		}
 	}
 	else if (iAxis == AXIS_Z2)		// jsyoon 2022.04.18 add Interlock
@@ -775,23 +851,8 @@ long CMotorControlMgr::MoveCmdPosA_Sub(int iAxis, double dPos, bool bBlockMode, 
 				}
 			}
 
-			// Head Z 이동 시 Head Gantry 위치로 Probe Unit 충돌 방지
-			if (nRet == VTM_RV_SUCCESSED)
-			{
-				double dCurProbe = 0.;
-				dCur = GetOrgPos(AXIS_X2);	// WAD
-			
-				// LYS 2026-06-26 OCP: skip Head-Probe X9 collision
-				if (!m_bIsOCP)
-				{
-					dCurProbe = GetOrgPos(AXIS_PROBE_X9);
-
-					if (dCur < dCurProbe + 20) // 20 is Revivew Lens 반지름 +
-				{
-					nRet = MOTION_INTERLOCK_CHECK_ALARM + AXIS_PROBE_X9;
-				}
-				}
-			}
+			// LYS 2026-08-25 FRONT Z(Z2)는 FRONT 갠트리(X3)에 실리고 그 스트로크는 P5에 닿지 않아
+			// Head/Probe 인터락이 필요 없다. 여기 있던 검사는 BACK 갠트리 X2를 보고 있어 짝이 틀렸다.
 		}
 	}
 	else if (iAxis == AXIS_LOADER_Z)	// 2023.04.10 add Life Pin, Prebe Unit Interlock
@@ -811,8 +872,7 @@ long CMotorControlMgr::MoveCmdPosA_Sub(int iAxis, double dPos, bool bBlockMode, 
 		// Loader Z 이동시 Probe Unit이 Loader 에 있을 경우 충동 방지
 		if (nRet == df_MOTION_RV_SUCCESSED)
 		{
-			// LYS 2026-06-26 OCP: no Probe X9, skip Loader-Probe interlock
-			if (!m_bIsOCP)
+			// LYS 2026-08-25 복구 - OCP 갠트리 X가 움직이므로 Loader Z 인터락이 그 위치를 다시 봐야 한다.
 			{
 				double dCur = 0;
 				dCur = GetOrgPos(AXIS_PROBE_X9);
@@ -1236,6 +1296,12 @@ long CMotorControlMgr::MoveCmdPosR_Sub(int iAxis, double dPos, bool bBlockMode, 
 				}
 			}
 		}
+
+		// LYS 2026-08-26 X2 (BACK GANTRY) 가 Probe 지나갈 때 Unit Z축 무조건 상승 시켜야함
+		if (nRet == df_MOTION_RV_SUCCESSED)
+		{
+			nRet = RetractHeadZForProbeUnit(GetOrgPos(AXIS_X2) + dPos, _T("MoveCmdPosR_Sub"));
+		}
 	}
 	else if (iAxis == AXIS_X3)
 	{
@@ -1530,7 +1596,8 @@ long CMotorControlMgr::MoveCmdPosR_Sub(int iAxis, double dPos, bool bBlockMode, 
 	{
 		double dCur = 0, dMove = 0, dMoveGap = 0;
 		// Probe 간 충동 방지
-		if (nRet == VTM_RV_SUCCESSED)
+		// LYS 2026-08-25 same P4-less reasoning as MoveCmdPosA_Sub.
+		if (nRet == VTM_RV_SUCCESSED && !m_bIsOCP)
 		{
 			dMove = GetOrgPos(iAxis) + dPos;
 			dCur = GetOrgPos(AXIS_PROBE_X7);
@@ -1566,8 +1633,7 @@ long CMotorControlMgr::MoveCmdPosR_Sub(int iAxis, double dPos, bool bBlockMode, 
 		// Loader Z 이동시 Probe Unit이 Loader 에 있을 경우 충동 방지
 		if (nRet == df_MOTION_RV_SUCCESSED)
 		{
-			// LYS 2026-06-26 OCP: no Probe X9, skip Loader-Probe interlock
-			if (!m_bIsOCP)
+			// LYS 2026-08-25 복구 - OCP 갠트리 X가 움직이므로 Loader Z 인터락이 그 위치를 다시 봐야 한다.
 			{
 				double dCur = 0;
 				dCur = GetOrgPos(AXIS_PROBE_X9);
@@ -1584,6 +1650,24 @@ long CMotorControlMgr::MoveCmdPosR_Sub(int iAxis, double dPos, bool bBlockMode, 
 	{
 		double dCur = 0, dMove = 0, dMoveGap = 0;
 		dMove = GetOrgPos(AXIS_Z1) + dPos;
+
+		double dMoveZ1 = dMove;
+
+		// LYS 2026-08-26 Z1은 +방향이 하강(안전 -600, 측정 0)이라 목표 > 현재 = 하강, 상승은 항상 허용.
+		if (nRet == df_MOTION_RV_SUCCESSED && dPos > 0.)
+		{
+			if (IsProbeUnitOverlapX(GetOrgPos(AXIS_X2)) == true)
+			{
+				nRet = MOTION_INTERLOCK_CHECK_ALARM + AXIS_Z1;
+
+				CString strLog;
+				strLog.Format(_T("MoveCmdPosR_Sub Z1 DOWN NG - PROBE UNIT(X9:%.3f, SIZE:%.1f) vs BACK GANTRY(X2:%.3f), Z1 %.3f -> %.3f"),
+					GetOrgPos(AXIS_PROBE_X9), m_dInterlockProbeSizeX, GetOrgPos(AXIS_X2),
+					GetOrgPos(AXIS_Z1), dMoveZ1);
+				m_pLogFileAccessor->KMLOG(WARN, strLog, true);
+			}
+		}
+
 		if (dMove > 1)
 		{
 			// Head Z 이동 시 Probe Unit 충돌 인터락
@@ -1599,19 +1683,6 @@ long CMotorControlMgr::MoveCmdPosR_Sub(int iAxis, double dPos, bool bBlockMode, 
 				}
 			}
 			
-			// Head Z 이동 시 Head Gantry 위치로 Probe Unit 충돌 방지
-			if (nRet == VTM_RV_SUCCESSED)
-			{
-				double dCurX2 = 0;
-				dCurX2 = GetOrgPos(AXIS_X3);	// Vision
-
-				dCur = GetOrgPos(AXIS_PROBE_X9);
-
-				if (dCurX2 < dCur + 20) // 20 is Revivew Lens 반지름 +
-				{
-					nRet = MOTION_INTERLOCK_CHECK_ALARM + AXIS_PROBE_X9;
-				}
-			}
 		}
 	}
 	else if (iAxis == AXIS_Z2)		// jsyoon 2022.04.18 add Interlock
@@ -1645,22 +1716,8 @@ long CMotorControlMgr::MoveCmdPosR_Sub(int iAxis, double dPos, bool bBlockMode, 
 				}
 			}
 
-			// Head Z 이동 시 Head Gantry 위치로 Probe Unit 충돌 방지
-			if (nRet == VTM_RV_SUCCESSED)
-			{
-				double  dCurProbe = 0;
-
-				// LYS 2026-06-26 OCP: skip Head-Probe X9 collision
-				if (!m_bIsOCP)
-				{
-					dCurProbe = GetOrgPos(AXIS_PROBE_X9);
-
-					if (dCur < dCurProbe + 20) // 20 is Revivew Lens 반지름 +
-				{
-					nRet = MOTION_INTERLOCK_CHECK_ALARM + AXIS_PROBE_X9;
-				}
-				}
-			}
+			// LYS 2026-08-25 FRONT Z(Z2)는 FRONT 갠트리(X3)에 실리고 그 스트로크는 P5에 닿지 않아
+			// Head/Probe 인터락이 필요 없다. 여기 있던 검사는 BACK 갠트리 X2를 보고 있어 짝이 틀렸다.
 		}
 	}
 	else
@@ -2117,6 +2174,15 @@ long CMotorControlMgr::MoveCmdPosMulti_Sub(stMotorPosition *pPos, int iAxis, int
 			//		}
 			//	}
 			//}
+
+			// LYS 2026-08-26 X2 (BACK GANTRY) 가 Probe 지나갈 때 Unit Z축 무조건 상승 시켜야함
+			if (nRet == df_MOTION_RV_SUCCESSED)
+			{
+				nRet = RetractHeadZForProbeUnit(pPos[i].dPosition, _T("MoveCmdPosMulti_Sub"));
+			}
+
+			if (nRet != df_MOTION_RV_SUCCESSED)
+				break;
 		}
 		else if (pPos[i].axis == AXIS_Z1)	// jsyoon 2022.09.30 add
 		{
@@ -2131,6 +2197,23 @@ long CMotorControlMgr::MoveCmdPosMulti_Sub(stMotorPosition *pPos, int iAxis, int
 					nRet = MOTION_INTERLOCK_7;
 					break;
 				}		
+			}
+
+			// LYS 2026-08-26 A_Sub와 같은 이유로 `> 10` 게이트 밖에 배치. 목표 > 현재 = 하강 판정.
+			if (pPos[i].dPosition > GetOrgPos(AXIS_Z1))
+			{
+				if (IsProbeUnitOverlapX(GetOrgPos(AXIS_X2)) == true)
+				{
+					nRet = MOTION_INTERLOCK_CHECK_ALARM + AXIS_Z1;
+
+					CString strLog;
+					strLog.Format(_T("MoveCmdPosMulti_Sub Z1 DOWN NG - PROBE UNIT(X9:%.3f, SIZE:%.1f) vs BACK GANTRY(X2:%.3f), Z1 %.3f -> %.3f"),
+						GetOrgPos(AXIS_PROBE_X9), m_dInterlockProbeSizeX, GetOrgPos(AXIS_X2),
+						GetOrgPos(AXIS_Z1), pPos[i].dPosition);
+					m_pLogFileAccessor->KMLOG(WARN, strLog, true);
+
+					break;
+				}
 			}
 		}
 		else if (pPos[i].axis == AXIS_PROBE_X9)
@@ -2276,6 +2359,9 @@ long CMotorControlMgr::MoveCmdPosMulti_Sub(stMotorPosition *pPos, int iAxis, int
 				if (GetMinSWLimit(axis) > Pos || GetMaxSWLimit(axis) < Pos)
 				{
 					CString strLog;
+
+					int min = GetMinSWLimit(axis);
+					int max = GetMaxSWLimit(axis);
 					
 					strLog.Format(_T("MoveCmdPosM Move(AXIS:%s, POS:%.3f, NG)"), GetAxisMapProperty(axis)->m_strAxisName, Pos);
 					m_pLogFileAccessor->KMLOG(WARN, strLog, true);

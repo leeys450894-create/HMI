@@ -65,8 +65,8 @@ CMCCLogMgr::~CMCCLogMgr()
 
 void CMCCLogMgr::Initialize(HWND hParentWnd, CRect rtROI, CString strAppName, CString strAppPath, CString strConfigPath, CString strLogPath, CString strVersion)
 {
-	// LYS 2026-07-31 was Bin\CoreFunction\CoreFunction.ini (file does not exist -> keys never read)
-	// Read Config\Config_MCC.ini like GMI. MCCLog.exe reads its own keys from the same file.
+	// LYS 2026-07-31 종전에는 존재하지 않는 Bin\CoreFunction\CoreFunction.ini를 읽어 키가 무효였다.
+	// GMI와 동일하게 Config\Config_MCC.ini를 읽는다(MCCLog.exe도 같은 파일을 본다).
 	const CString strFilePath = strConfigPath + _T("\\Config\\Config_MCC.ini");
 	m_pIniHelper->SetFilePath(strFilePath);
 
@@ -268,11 +268,10 @@ void CMCCLogMgr::UpdateSensor()
 		//////////////////////////////////////////////////////////////////////////
 		// MCC
 		// Update FDC Data
-		// LYS 2026-07-31 fixed-slot I-Log dData mapped 1:1 to Config\MCC\MCCNAME.csv analog rows
-		// (GMI parity: GMI fills TEMP 3 + power meter 12 = 15 fixed slots, nCntILog=15).
-		// Replaces the old compress-loop that packed nonzero temps from slot 0 (columns drifted vs header).
-		// Temp sources per FDC_LIST.xls: stFDCWData[1]=Temp_EBOX_F, [2]=Temp_EBOX_B, [3]=Temp_PCBOX.
-		// TODO: MCC_CONFIRM - PC_RACK/EB_RACK_1/EB_RACK_2 <-> PCBOX/EBOX_F/EBOX_B naming to be confirmed.
+		// LYS 2026-07-31 I-Log dData 고정 슬롯 - Config\MCC\MCCNAME.csv 아날로그 행과 1:1 대응
+		// (GMI 동일: 온도 3 + 전력계 12 = 15슬롯, nCntILog=15).
+		// 온도 출처(FDC_LIST.xls): stFDCWData[1]=Temp_EBOX_F, [2]=Temp_EBOX_B, [3]=Temp_PCBOX.
+		// TODO: MCC_CONFIRM - PC_RACK/EB_RACK_1/EB_RACK_2 <-> PCBOX/EBOX_F/EBOX_B 명칭 확인 필요.
 		// TEST
 		if (m_pSharedMCC != nullptr) 
 		{
@@ -448,8 +447,8 @@ void CMCCLogMgr::UpdateSensor()
 
 	
 
-		// LYS 2026-07-29 ELP ElecBox monitor data (doc 2026-07-28) -> fixed slots MAIN_WDATA_ELP_START+
-		// FDC_LIST reads these by 'SOURCE ADDRESS' direct indexing, so nMainDataCount stays as-is.
+		// LYS 2026-07-29 ELP ElecBox 모니터 데이터(사양서 2026-07-28) -> MAIN_WDATA_ELP_START+ 고정 슬롯.
+		// FDC_LIST가 SOURCE ADDRESS로 직접 인덱싱하므로 nMainDataCount는 그대로 둔다.
 		{
 			static const char* szElpItem[MAIN_WDATA_ELP_ITEM_CNT] =
 				{ "TEMP", "SMOKE", "VOLT", "HARM_VOLT", "CURR", "HARM_CURR", "LEAK_CURR", "INST_PW", "ACCUM_PW" };

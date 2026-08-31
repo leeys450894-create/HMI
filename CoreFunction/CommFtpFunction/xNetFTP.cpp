@@ -10,8 +10,8 @@ CxNetFTP::CxNetFTP()
     , m_pFtpConnection(nullptr)
 {
     m_ftpInfo.host		= _T("127.0.0.1");
-    m_ftpInfo.username	= _T("kmac");
-    m_ftpInfo.password	= _T("kmac");
+    m_ftpInfo.username	= _T("HBS");
+    m_ftpInfo.password	= _T("HBS");
     m_ftpInfo.port		= 21;
     m_ftpInfo.bPassive	= TRUE;
 }

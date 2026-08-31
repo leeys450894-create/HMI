@@ -1,6 +1,6 @@
 // DlgTestMode.cpp
-// LYS 2026-07-02 Test Mode dialog (ported from GMI IDD_TEST_MODE_DLG)
-// Same pattern as C_SelectCellDlg - uses g_inRcpInfo for cell data
+// LYS 2026-07-02 Test Mode 다이얼로그(GMI IDD_TEST_MODE_DLG 이식).
+// C_SelectCellDlg와 동일 패턴 - 셀 데이터는 g_inRcpInfo를 사용한다.
 
 #include "pch.h"
 #include "DlgTestMode.h"

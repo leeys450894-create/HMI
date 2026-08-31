@@ -1,10 +1,9 @@
 // AutoContactInfo.h
-// LYS 2026-08-10 AutoContact Phase 2: non-UI store for probe auto-contact
-// params / state / flags. Persist contract = Config.ini [PROBE_AUTO_CONTACT]
-// (same keys as OCP CDlgNaviManualAutoContact; written by CDlgSubManual_AutoContact).
-// The sequence must NOT touch the dialog (OCP JOB_Proc read the dialog directly
-// - HMI forbids). Singleton: dialog UI + Recipe step + PreMeas Contact step
-// share one in-memory copy; INI file is the single source of truth on disk.
+// LYS 2026-08-10 AutoContact Phase 2: 프로브 오토 컨택 파라미터/상태/플래그의 비UI 저장소.
+// 영속 계약 = Config.ini [PROBE_AUTO_CONTACT] (OCP와 동일 키, 다이얼로그가 기록).
+// 시퀀스는 다이얼로그를 건드리면 안 된다(OCP JOB_Proc는 직접 읽었으나 HMI는 금지).
+// 싱글톤: 다이얼로그 UI + Recipe 스텝 + PreMeas Contact 스텝이 메모리 사본 하나를
+// 공유하고, 디스크상의 단일 진실은 INI 파일이다.
 #pragma once
 
 #include "common\CommonFunc.h"		// AUTO_CT_*, AUTO_CONTACT_ITEM_MAX, RTEST_MAX
@@ -61,11 +60,10 @@ public:
 	void	SetCellStatus(int iCell, int nStatus);
 	int		GetCellStatus(int iCell) const;
 
-	// LYS 2026-08-10 Phase 4: contact routines shared by the sequence Contact
-	// step and the dialog START worker (OCP DoWorkAutoContact / DataMove port).
-	// Return: VTM_RV_SUCCESSED / PROBE_AUTO_CNT_* alarm id / motion error /
-	// VTM_RV_STOP_BY_USER. fnStopCheck() returning true aborts (sequence
-	// pause/stop hook); the dialog STOP button uses RequestStop() instead.
+	// LYS 2026-08-10 Phase 4: 시퀀스 Contact 스텝과 다이얼로그 START 워커가 공유하는
+	// 컨택 루틴(OCP DoWorkAutoContact / DataMove 이식).
+	// 반환: VTM_RV_SUCCESSED / PROBE_AUTO_CNT_* 알람 id / 모션 에러 / VTM_RV_STOP_BY_USER.
+	// fnStopCheck()가 true면 중단(시퀀스 일시정지/정지 훅). 다이얼로그 STOP은 RequestStop() 사용.
 	int		DoSearch(CMaintControlMgr* pMaint, CCommTcpIpFactoryMgr* pComm,
 					 int nCellCount, std::function<bool()> fnStopCheck = nullptr);
 	int		DoDataMove(CMaintControlMgr* pMaint);

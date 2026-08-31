@@ -34,12 +34,10 @@ public:
 	int m_nMeasureArea;
 	TCHAR** m_pStInnerID;
 
-	// LYS 2026-08-12 InnerID uniqueness: gf_GetCurTimeString(3) is HHMMSS (1 second
-	// resolution), so two measurements inside the same second produced the SAME id ->
-	// same device raw file name -> the later result overwrote the earlier one.
-	// Observed 16/315 (5%) on a 3-repeat aging run. Kept at the original length so the
-	// device packet layout is untouched: only the trailing 2 digits are remapped, and
-	// the issued list guarantees uniqueness for the glass.
+	// LYS 2026-08-12 InnerID 유일성: gf_GetCurTimeString(3)이 HHMMSS(1초 해상도)라
+	// 같은 초의 측정 두 건이 같은 id -> 같은 raw 파일명 -> 나중 결과가 앞을 덮어썼다.
+	// 3회 반복 에이징 실행에서 16/315(5%) 관측. 장비 패킷 배치를 건드리지 않도록
+	// 원래 길이를 유지하고 끝 2자리만 재배정하며, 발급 목록이 글라스 단위 유일성을 보장한다.
 	std::vector<CString>	m_vecIssuedInnerID;
 public:
 	CString MakeUniqueInnerID(const CString& strID);
@@ -97,8 +95,8 @@ public:
 	bool IsThreadStopState();
 
 //=========================================================================
-// LYS 2026-08-06 AgingCycle E3: aging-list cycle context (OCP DoWorkStartMeasOCP_A)
-// driven by CDoWorkGlassMeasure::ThreadRun on the measure thread (single-thread use)
+// LYS 2026-08-06 AgingCycle E3: 에이징 리스트 사이클 컨텍스트(OCP DoWorkStartMeasOCP_A).
+// CDoWorkGlassMeasure::ThreadRun이 측정 스레드에서 구동한다(단일 스레드 사용).
 //=========================================================================
 public:
 	bool				AgingCycleBegin();		// gate(bIsOCP + recipe m_bUseAging_Test) + aging rcp load
@@ -107,8 +105,8 @@ public:
 	bool				IsAgingCycleActive() const	{ return m_bAgingCycleActive; }
 	int					GetAgingCurItem() const		{ return m_nAgingCurItem; }
 
-	// LYS 2026-08-12 AgingCycle R1: dense per-kind repeat index for the result row block.
-	// Capture at step entry, use for nAreaNum, advance once after the kind actually measured.
+	// LYS 2026-08-12 AgingCycle R1: 결과 행 블록용 조밀 종류별 반복 인덱스.
+	// 스텝 진입 시 캡처해 nAreaNum에 쓰고, 해당 종류를 실제 측정한 뒤 1회 증가.
 	int					GetAgingRepeat(int iKind) const;
 	void				AgingRepeatNext(int iKind);
 	int					GetAgingKindMax(int iKind) const;	// reserved blocks for the kind (>= 1)

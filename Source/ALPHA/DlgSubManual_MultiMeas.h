@@ -1,9 +1,7 @@
-// LYS 2026-07-23 WAD Multi Point measurement setting dialog (ported from OCP CDlgNaviManualMultiMeas)
-// Phase 3: CMySpreadDll grids + CWadMultiMeasMgr binding.
-//  - Point list grid  : CLASS/SUB_CLASS/X/Y/USE/RX/GX/BY/WX/WY (10 cols, row header = No)
-//  - Insp mode grid   : Single(0)/Multi(1)
-//  - Cell size grid   : CELL X / CELL Y (range interlock base)
-//  - Cell map grid    : stick x cell checkbox map (header dbl-click = bulk toggle)
+// LYS 2026-07-23 WAD 다점 측정 설정 다이얼로그(OCP CDlgNaviManualMultiMeas 이식, Phase 3).
+// 그리드 4종 - 점 리스트(CLASS/SUB_CLASS/X/Y/USE/RX/GX/BY/WX/WY 10열, 행 헤더=No),
+// 검사모드(Single 0 / Multi 1), 셀 크기(범위 인터락 기준),
+// 셀 맵(스틱x셀 체크박스, 헤더 더블클릭 = 일괄 토글).
 #pragma once
 
 #include "afxwin.h"

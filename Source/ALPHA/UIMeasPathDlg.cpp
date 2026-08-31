@@ -239,6 +239,12 @@ void CUIMeasPathDlg::UpdateMarkCoord(double x, double y)
 	m_chartOrbit.SetGlobalMakrPos(x, y);
 }
 
+// LYS 2026-08-26 미장착 프로브 카드 숨김 패스스루(OCP: P5만 표시).
+void CUIMeasPathDlg::SetProbeCardUse(int nProbeID, BOOL bUse)
+{
+	m_chartOrbit.SetProbeCardUse(nProbeID, bUse);
+}
+
 void CUIMeasPathDlg::UpdateCurCoord(int iProbe, double x, double y, double z, double s)
 {
 	m_chartOrbit.SetCurPos(iProbe, TRUE, x, y);

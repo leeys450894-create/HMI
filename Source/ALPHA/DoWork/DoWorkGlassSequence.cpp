@@ -17,7 +17,7 @@ CDoWorkGlassSequence::CDoWorkGlassSequence(stAuroraMgrPool &MgrPool)
 {
     m_strSeqType = _T("SEQUENCE_ITEM_DWGLASS_SEQ");
     m_strSeqComm = _T("TCPIP");
-    m_strSeqCorp = _T("KMAC");
+    m_strSeqCorp = _T("HBS");
     m_strSeqName = _T("REQ_GLASS_SEQUENCE");
     m_strSeqGUID = _T("609AA557-3AD1-4886-B616-0C3F8637D39B");
     m_strSeqDesc = _T("Request Glass Sequence");

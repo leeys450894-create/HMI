@@ -2,8 +2,8 @@
 #pragma once
 #endif // _MSC_VER > 1000
 
-// LYS 2026-07-30 Canonical copy - shared by ALPHA and FDCSense (EX_FDC\Include\FDCSheardDefine.h redirects here).
-// Do not fork: any FDC-side change must land here so both builds stay byte-identical.
+// LYS 2026-07-30 정본 사본 - ALPHA와 FDCSense가 공유(EX_FDC\Include\FDCSheardDefine.h가 이리로 리다이렉트).
+// 포크 금지 - FDC 쪽 변경도 반드시 여기에 반영해야 양쪽 빌드가 바이트 동일하게 유지된다.
 
 //#include "stdafx.h"
 
@@ -99,12 +99,11 @@ const enum NUM_FDC_WDATA{
 
 
 
-	// LYS 2026-07-30 ELP ElecBox monitor -> stFDCWData band.
-	// Used as the FDC_LIST.xls 'NUM_FDC_WDATA' column for the SHARE rows that read
-	// stMainWData[MAIN_WDATA_ELP_START + ...] published by the Main SW.
-	// slot = FDC_WDATA_ELP_START + box(0..1) * FDC_WDATA_ELP_BOX_STRIDE + item
-	// item order follows NUM_MAIN_WDATA_ELP (TEMP, SMOKE, VOLT, HARM_VOLT, CURR,
-	// HARM_CURR, LEAK_CURR, INST_PW, ACCUM_PW).
+	// LYS 2026-07-30 ELP ElecBox 모니터 -> stFDCWData 대역.
+	// Main SW가 발행한 stMainWData[MAIN_WDATA_ELP_START + ...]를 읽는 SHARE 행의
+	// FDC_LIST.xls NUM_FDC_WDATA 열 값으로 쓰인다.
+	// 슬롯 = FDC_WDATA_ELP_START + box(0..1) * FDC_WDATA_ELP_BOX_STRIDE + item.
+	// 항목 순서는 NUM_MAIN_WDATA_ELP(TEMP, SMOKE, VOLT, HARM_VOLT, CURR, HARM_CURR, LEAK_CURR, INST_PW, ACCUM_PW)와 동일.
 	FDC_WDATA_ELP_START = 250,
 	FDC_WDATA_ELP_BOX_STRIDE = 20,
 	FDC_WDATA_ELP_END = FDC_WDATA_ELP_START + 40,
@@ -112,9 +111,9 @@ const enum NUM_FDC_WDATA{
 	FDC_WDATA_END = 1000,
 };
 
-// LYS 2026-07-29 ELP ElecBox monitor data (Main SW -> FDC), protocol doc 2026-07-28
-// stMainWData slot = MAIN_WDATA_ELP_START + box(0..1) * MAIN_WDATA_ELP_BOX_STRIDE + item
-// FDC reads stMainWData by FDC_LIST 'SOURCE ADDRESS' direct indexing (nMainDataCount not used)
+// LYS 2026-07-29 ELP ElecBox 모니터 데이터(Main SW -> FDC, 사양서 2026-07-28).
+// 슬롯 = MAIN_WDATA_ELP_START + box(0..1) * MAIN_WDATA_ELP_BOX_STRIDE + item.
+// FDC는 FDC_LIST의 SOURCE ADDRESS로 직접 인덱싱한다(nMainDataCount 미사용).
 const enum NUM_MAIN_WDATA_ELP{
 	MAIN_WDATA_ELP_START = 400,
 	MAIN_WDATA_ELP_BOX_STRIDE = 20,

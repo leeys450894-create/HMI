@@ -24,9 +24,7 @@ class C_SelectCellDlg : public C_BaseDialog
 		void OnSelItem (NMHDR *pNMHDR, LRESULT *pResult);
 		void SetViewSelectCell (/*int nMode*/);
 		void UpdateSelectCell ();
-		// LYS 2026-08-18 bulk select helpers. View-only: the grid colour is the working
-		// state and nothing reaches the recipe until Cell Update is pressed, same as a
-		// manual cell click.
+		// LYS 2026-08-18 일괄 선택 헬퍼. 표시 전용이며 Cell Update 전에는 레시피에 반영되지 않는다.
 		void SetAllCell (BOOL bSelect);
 		BOOL ShowWindow (int nCmdShow);
 

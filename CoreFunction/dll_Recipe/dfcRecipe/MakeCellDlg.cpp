@@ -431,9 +431,8 @@ void	C_MakeCellDlg::OnRecipeUpdate ()
 	rcp->m_sMap.m_fAlignKey.x = rcp->m_sMap.m_fGlobalMark.x;
 	rcp->m_sMap.m_fAlignKey.y = rcp->m_sMap.m_fGlobalMark.y;
 
-	// LYS 2026-08-18 rotate 180 shares the 0-degree basis (same physical aspect).
-	// NOTE: left/right review offsets are mirrored at 180 vs 0 - sign needs a check
-	// against the mechanical drawing before real-machine use.
+	// LYS 2026-08-18 rotate 180은 0도와 같은 기준을 쓴다(물리적 종횡비 동일).
+	// 주의: 좌/우 리뷰 오프셋은 180에서 반전되므로 실기 전 기구도 대조 필요.
 	if (g_inRcpInfo.GetGlsRotate () == RCP_CELL_ANG_0 || g_inRcpInfo.GetGlsRotate () == RCP_CELL_ANG_180) { 
 		// 2023.02.03 change
 		//rcp->m_sMap.m_fContactOffset = fX1 - fE - fI + fM;
@@ -457,12 +456,9 @@ void	C_MakeCellDlg::OnRecipeUpdate ()
 	// jsyoon 2022.08.25 add
 	fReviewOffseet2 = rcp->m_sMap.m_fContactOffset;
 
-	// LYS 2026-08-18 rotate 180 needs its OWN value - it must NOT share the 0-degree
-	// branch. Under the 2026-08-07 scheme the measurement angle comes from the stick
-	// m_fStageR itself, so the USER OFFSET is 0. Before this branch existed, rotate=2
-	// fell through with no assignment and kept a stale 90 from a previously edited
-	// recipe - the root cause of the short-side 270-degree misposition fixed by hand
-	// on 2026-08-07 (it would have come back on the next MakeCell run).
+	// LYS 2026-08-18 rotate 180은 0도 분기를 공유하면 안 되고 자체 값이 필요하다.
+	// 2026-08-07 체계에서 측정 각도는 stick m_fStageR에서 오므로 USER OFFSET은 0.
+	// 이 분기가 없어 rotate=2가 대입 없이 통과, 이전 90 값이 남던 것이 단변 270도 오위치의 원인.
 	if (g_inRcpInfo.GetGlsRotate() == RCP_CELL_ANG_0) {
 		g_inRcpInfo.m_recipeMgr.m_sInfo.m_sMotionOffsetPos.m_fStageRotate = 90.;
 	}

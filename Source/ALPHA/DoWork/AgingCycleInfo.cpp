@@ -1,9 +1,9 @@
 // AgingCycleInfo.cpp
-// LYS 2026-08-06 AgingCycle E2: aging cycle recipe loader (list + [MASECELL] map).
-// File format is what CDlgSubManual_AgingTest saves:
+// LYS 2026-08-06 AgingCycle E2: 에이징 사이클 레시피 로더(목록 + [MASECELL] 맵).
+// 파일 형식은 CDlgSubManual_AgingTest가 저장하는 그대로:
 //   [COUNT] MaxCount=N
 //   [ITEM_n] USE_AGING / PTN_RGB / PTN_SEC / USE_PROPERTY / USE_QUALITY / USE_ANGLE
-//   [MASECELL] STICK_n = "m,m,..."  (3bit mask per cell, bit0..2 = WAD/VISION/ANGLE)
+//   [MASECELL] STICK_n = "m,m,..."  (셀당 3bit 마스크, bit0..2 = WAD/VISION/ANGLE)
 //   LYS 2026-08-06: HMI has no COLOR mode (OCP 4 kinds -> HMI 3 kinds)
 #include "pch.h"
 #include "AgingCycleInfo.h"
@@ -102,8 +102,8 @@ const S_AgingTest* CAgingCycleInfo::GetItem(int iItem) const
 	return &m_vecItem[iItem];
 }
 
-// LYS 2026-08-12 AgingCycle R1: enabled items using the kind (OCP nMaxProperty/
-// nMaxeQuality/nMaxLCR counterpart, JOB_Proc.cpp:12562-12570).
+// LYS 2026-08-12 AgingCycle R1: 해당 종류를 쓰는 활성 항목 수
+// (OCP nMaxProperty/nMaxeQuality/nMaxLCR 대응, JOB_Proc.cpp:12562-12570).
 int CAgingCycleInfo::GetKindUseCount(int iKind) const
 {
 	int nCount = 0;

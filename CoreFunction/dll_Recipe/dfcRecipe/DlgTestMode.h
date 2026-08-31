@@ -1,6 +1,6 @@
 // DlgTestMode.h
-// LYS 2026-07-02 Test Mode dialog (ported from GMI IDD_TEST_MODE_DLG)
-// C_RecipeMgrDlg::OnRecipeAlign pattern - modeless dialog in dfcRecipe DLL
+// LYS 2026-07-02 Test Mode 다이얼로그(GMI IDD_TEST_MODE_DLG 이식).
+// dfcRecipe DLL 안의 모델리스 다이얼로그 - C_RecipeMgrDlg::OnRecipeAlign 패턴.
 #pragma once
 
 #include "BaseDialog.h"

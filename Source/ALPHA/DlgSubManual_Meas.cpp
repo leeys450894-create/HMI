@@ -204,6 +204,7 @@ BEGIN_MESSAGE_MAP(CDlgSubManual_Meas, CDialogEx)
 	ON_BN_CLICKED(IDC_BTN_MANUAL_MEAS_RECIPE_OPEN7, &CDlgSubManual_Meas::OnBnClickedBtnManualMeasRecipeOpen7)
 	ON_BN_CLICKED(IDC_BTN_MANUAL_MEAS_RECIPE_OPEN8, &CDlgSubManual_Meas::OnBnClickedBtnManualMeasRecipeOpen8)
 	ON_BN_CLICKED(IDC_BTN_MANUAL_PLC_RESET, &CDlgSubManual_Meas::OnBnClickedBtnManualPlcReset)
+	ON_MESSAGE(WM_MSG_UPDATE_CUR_STICK, &CDlgSubManual_Meas::OnUpdateCurStick)	// LYS 2026-08-24
 END_MESSAGE_MAP()
 
 
@@ -233,6 +234,8 @@ BOOL CDlgSubManual_Meas::OnInitDialog()
 	m_LabelInfo.SetBkColor(RGB(0, 32, 0));
 	m_LabelInfo.SetTextColor(RGB(255, 255, 192));
 	m_LabelInfo.SetFontBold(TRUE);
+
+	UpdateCurStickUI();	// LYS 2026-08-24 seed the current stick readout
 
 
 	//if (m_pSystem->stEquip.m_nEQType == EQU_TYPE_ICE || m_pSystem->stEquip.m_nEQType == EQU_TYPE_ICM)
@@ -1669,74 +1672,164 @@ void CDlgSubManual_Meas::OnBnClickedBtnManualMeasNextStickMove3()
 }
 
 
+// LYS 2026-08-24 Current / Total stick Count
+void	CDlgSubManual_Meas::UpdateCurStickUI()
+{
+	int nTotalStick = 0;
+	S_RecipeData* pRecipeData = NULL;
+	if (m_pAuroraMgr != NULL && m_pAuroraMgr->GetRecipeEditMgrPtr() != NULL)
+	{
+		pRecipeData = m_pAuroraMgr->GetRecipeEditMgrPtr()->GetRecipeData();
+	}
+	if (pRecipeData != NULL)
+	{
+		nTotalStick = (int)pRecipeData->m_vecStick.size();
+	}
+
+	if (::IsWindow(GetSafeHwnd()))
+	{
+		::PostMessage(GetSafeHwnd(), WM_MSG_UPDATE_CUR_STICK,
+			(WPARAM)m_iNumStick, (LPARAM)nTotalStick);
+	}
+}
+
+LRESULT CDlgSubManual_Meas::OnUpdateCurStick(WPARAM wParam, LPARAM lParam)
+{
+	int nCur = (int)wParam;
+	int nTotal = (int)lParam;
+
+	CString strStick;
+
+	if (nTotal > 0)
+	{
+		strStick.Format(_T("%d"), nCur + 1);
+	}
+	SetDlgItemText(IDC_EDIT_MANUAL_CUR_STICK, strStick);
+
+	strStick.Format(_T("%d"), nTotal);
+	SetDlgItemText(IDC_EDIT_MANUAL_TOTAL_STICK, strStick);
+
+	return 0;
+}
+
 int CDlgSubManual_Meas::ManualMoveStick(int iStick)
 {
 	int nRet = VTM_RV_SUCCESSED;
+
 	S_RecipeData* pRecipeData;
 	pRecipeData = m_pAuroraMgr->GetRecipeEditMgrPtr()->GetRecipeData();
-	if (pRecipeData != nullptr)
-	{
-		if (pRecipeData->m_vecStick.size() < 1)
-			return VTM_RV_FAILED;
-	}
-	else
+	if (pRecipeData == nullptr || pRecipeData->m_vecStick.size() < 1)
 	{
 		return VTM_RV_FAILED;
 	}
 
 	S_RecipeMap* pRecipeMap;
 	pRecipeMap = m_pAuroraMgr->GetRecipeEditMgrPtr()->GetRecipeMap();
-	if (pRecipeData == nullptr)
+	if (pRecipeMap == nullptr)
 	{
 		return VTM_RV_FAILED;
+	}
+
+	S_RecipeInfo* pRecipeInfo;
+	pRecipeInfo = m_pAuroraMgr->GetRecipeEditMgrPtr()->GetRecipeInfo();
+	if (pRecipeInfo == nullptr)
+	{
+		return VTM_RV_FAILED;
+	}
+
+	// LYS 2026-08-24 Stick index guard. The Next/Pre buttons walk m_iNumStick on their
+	if (iStick < 0 || iStick >= (int)pRecipeData->m_vecStick.size())
+	{
+		return VTM_RV_FAILED;
+	}
+
+	bool bOCP = (m_pAuroraMgr->GetSystemConfigMgrPtr() != nullptr
+		&& m_pAuroraMgr->GetSystemConfigMgrPtr()->IsOCP());
+
+	// LYS 2026-08-24 Target stage pose
+	double dOffsetX = 0., dOffsetR = 0.;
+	dOffsetX = pRecipeInfo->m_sMotionOffsetPos.m_fStageY;
+	dOffsetR = pRecipeInfo->m_sMotionOffsetPos.m_fStageRotate;
+
+	double dStageY = 0., dStageR = 0.;
+	if (bOCP)
+	{
+		// LYS 2026-08-24 uses stick position
+		dStageY = pRecipeData->m_vecStick[iStick].m_fStageY + dOffsetX;
+	}
+	else if (iStick > 0)
+	{
+		dStageY = pRecipeData->m_vecStick[0].m_fStageY - pRecipeData->m_vecStick[iStick].m_fStageY + dOffsetX;
+	}
+	else
+	{
+		dStageY = pRecipeMap->m_fCellDistance.y * iStick + dOffsetX;
+	}
+
+	dStageR = pRecipeData->m_vecStick[iStick].m_fStageR + dOffsetR;
+
+	// LYS 2026-08-24 Already on target - do not un-contact or move anything.
+	double dCurY = 0., dCurR = 0.;
+	dCurY = m_pAuroraMgr->GetMaintControlMgr()->GetCurPos(AXIS_X);
+	dCurR = m_pAuroraMgr->GetMaintControlMgr()->GetCurPos(AXIS_LOADER_R);
+	if (fabs(dStageY - dCurY) < 0.0001 && fabs(dStageR - dCurR) < 0.0001)
+	{
+		return VTM_RV_SUCCESSED;
 	}
 
 	// Probe UnContact
 	if (nRet == VTM_RV_SUCCESSED)
 	{
-		stMotorPosition stPositionZ[5];
-		ZeroMemory(&stPositionZ, sizeof(stPositionZ));
-		stPositionZ[0].axis = AXIS_PROBE_Z1;
-		stPositionZ[1].axis = AXIS_PROBE_Z2;
-		stPositionZ[2].axis = AXIS_PROBE_Z3;
-		stPositionZ[3].axis = AXIS_PROBE_Z4;
-		stPositionZ[4].axis = AXIS_PROBE_Z5;
-		nRet = m_pAuroraMgr->GetMaintControlMgr()->MoveCmdPosMulti(stPositionZ, 5, SPEED_HIGH, true);
+		bool bMove = false;
 
-		Sleep(1000);
+		// LYS 2026-08-24 carries P5 only
+		if (bOCP != true)
+		{
+			for (int i = AXIS_PROBE_Z1; i < AXIS_PROBE_Z5; i++)
+			{
+				if (m_pAuroraMgr->GetMaintControlMgr()->GetCurPos(i) > 0.1)
+				{
+					bMove = true;
+					break;
+				}
+			}
+		}
+
+		double dfMove = 0.;
+		dfMove = pRecipeInfo->m_sContactPos.m_fPreContactPos;
+
+		if (bMove == true)
+		{
+			nRet = m_pAuroraMgr->GetMaintControlMgr()->MoveCmdPos_ProbeUnContact(AXIS_ALL_Z, dfMove);
+		}
+		else
+		{
+			if (m_pAuroraMgr->GetMaintControlMgr()->GetCurPos(AXIS_PROBE_Z5) > 0.1)
+			nRet = m_pAuroraMgr->GetMaintControlMgr()->MoveCmdPos_ProbeUnContact(AXIS_PROBE_Z5, dfMove);
+		}
+	}
+
+	// LYS 2026-08-24 Retract the back head before the stage turns.
+	if (nRet == VTM_RV_SUCCESSED)
+	{
+		if (m_pAuroraMgr->GetMaintControlMgr()->GetCurPos(AXIS_Z2) > 0)
+		{
+			nRet = m_pAuroraMgr->GetMaintControlMgr()->MoveCmdPosA(AXIS_Z2, 0, false, SPEED_HIGH);
+		}
+	}
+
+	// LYS 2026-08-24 Rotate first
+	if (nRet == VTM_RV_SUCCESSED)
+	{
+		if (fabs(dStageR - dCurR) > 0.0001)
+		{
+			nRet = m_pAuroraMgr->GetMaintControlMgr()->MoveCmdPosA(AXIS_LOADER_R, dStageR, true, SPEED_HIGH);
+		}
 	}
 
 	if (nRet == VTM_RV_SUCCESSED)
 	{
-		double dStageY = 0, dStageR = 0;
-
-		// jsyoon 2022.09.27 change
-		// OLD
-		//	dStageY = (pRecipeMap->m_fCellDistance.y * iStick) * 1;
-		//	dStageR = pRecipeData->m_vecStick[iStick].m_fStageR;
-		// NEW
-		double dOffsetX = 0., dOffsetR = 0.;
-		S_RecipeInfo* pRecipeInfo;
-		pRecipeInfo = m_pAuroraMgr->GetRecipeEditMgrPtr()->GetRecipeInfo();
-		dOffsetX = pRecipeInfo->m_sMotionOffsetPos.m_fStageY;
-		dOffsetR = pRecipeInfo->m_sMotionOffsetPos.m_fStageRotate;
-		if (iStick > 0)
-		{
-			dStageY = pRecipeData->m_vecStick[0].m_fStageY - pRecipeData->m_vecStick[iStick].m_fStageY + dOffsetX;
-		}
-		else
-		{
-			dStageY = (pRecipeMap->m_fCellDistance.y * iStick) * 1 + dOffsetX;
-		}
-
-		dStageR = pRecipeData->m_vecStick[iStick].m_fStageR + dOffsetR;
-		//////////////
-
-		nRet = m_pAuroraMgr->GetMaintControlMgr()->MoveCmdPosA(AXIS_LOADER_R, dStageR, false, SPEED_HIGH);
-		if (nRet == VTM_RV_SUCCESSED)
-		{
-			nRet = m_pAuroraMgr->GetMaintControlMgr()->MoveCmdPosA(AXIS_X, dStageY, false, SPEED_HIGH);
-		}
+		nRet = m_pAuroraMgr->GetMaintControlMgr()->MoveCmdPosA(AXIS_X, dStageY, true, SPEED_HIGH);
 	}
 
 	return nRet;
@@ -3744,6 +3837,7 @@ UINT CDlgSubManual_Meas::ThreadFunc()
 
 		// 이동
 		nRet = ManualMoveStick(0);
+		UpdateCurStickUI();	// LYS 2026-08-24
 	}
 	break;
 	case enumStepID_MOVE_STICK_NEXT:
@@ -3758,6 +3852,19 @@ UINT CDlgSubManual_Meas::ThreadFunc()
 
 		// 이동
 		nRet = ManualMoveStick(m_iNumStick);
+		UpdateCurStickUI();	// LYS 2026-08-24
+	}
+	break;
+	case enumStepID_MOVE_STICK_PRE:
+	{
+		// LYS 2026-08-24 Pre Stick Move 버튼이 m_iStep만 세팅하고 DoWorkManual()에
+		// 대응 case가 없어 무동작이었다. MOVE_STICK_NEXT의 대칭 처리이며
+		// ManualMoveStick()이 iStick 범위를 자체 검사한다.
+		if (m_iNumStick > 0)
+			m_iNumStick--;
+
+		nRet = ManualMoveStick(m_iNumStick);
+		UpdateCurStickUI();	// LYS 2026-08-24
 	}
 	break;
 	case enumStepID_MOVE_PROBE:

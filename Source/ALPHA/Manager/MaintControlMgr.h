@@ -55,6 +55,10 @@ public:
 	CPositionConfigMgr* GetPositionConfigMgr() const { return m_pPositionConfigMgr; }
 	CLightControlMgr* GetLightControlMgrPtr() const { return m_pMgrLightControl; }
 
+	// LYS 2026-08-25 stMotorPosition 배열을 채우기 전에 비운다(정의는 MaintControlMgr.cpp).
+	// ZeroMemory 대신 이것을 쓸 것 - AXIS_X가 0이라 0으로 채운 슬롯은 스테이지 갠트리 이동 지령이 된다.
+	static void ClearMotorPos(stMotorPosition* pPos, int nCount);
+
 	long SetAmpEnable(int iAxis, bool bOn);
 	long MoveHome(int iAxis);
 	long MoveCmdPosA(int iAxis, double dPos, bool bBlockMode, int iSpeed = 0, bool bUseOffset = false, int iLens = -1, int iTube = -1);

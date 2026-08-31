@@ -1,5 +1,5 @@
-// LYS 2026-07-23 WAD Multi Point measurement data manager (Phase 2)
-// See WadMultiMeasMgr.h for design notes and OCP file compatibility.
+// LYS 2026-07-23 WAD 다점 측정 데이터 관리자(Phase 2).
+// 설계 노트와 OCP 파일 호환성은 WadMultiMeasMgr.h 참조.
 
 #include "pch.h"
 #include "WadMultiMeasMgr.h"

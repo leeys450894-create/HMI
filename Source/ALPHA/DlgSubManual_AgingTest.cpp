@@ -190,9 +190,9 @@ void CDlgSubManual_AgingTest::UpdateStatus(BOOL bEnable)
 
 void CDlgSubManual_AgingTest::OnTimer(UINT_PTR nIDEvent)
 {
-	// LYS 2026-08-06 E4: aging cycle progress highlight.
-	// Engine writes m_nAgingListRow(1-base item row) / m_nAgingListCol
-	// (1=Aging 2=PTN 3=SEC 4=WAD 5=VISION 6=ANGLE), 0/0 when idle.
+	// LYS 2026-08-06 E4: 에이징 사이클 진행 하이라이트.
+	// 엔진이 m_nAgingListRow(1기준 항목 행) / m_nAgingListCol
+	// (1=Aging 2=PTN 3=SEC 4=WAD 5=VISION 6=ANGLE)을 쓰고 유휴 시 0/0.
 	if (nIDEvent == 1)
 	{
 		do
@@ -253,8 +253,8 @@ void CDlgSubManual_AgingTest::OnStop()
 
 void CDlgSubManual_AgingTest::OnRcpOpen()
 {
-	// LYS 2026-08-06 Phase 3: pick .rcp -> RecipeChange (HMI equivalent of OCP LoadPPID2)
-	//                        -> rebuild cell map + load aging info for the new recipe
+	// LYS 2026-08-06 Phase 3: .rcp 선택 -> RecipeChange(OCP LoadPPID2 대응)
+	//                        -> 셀 맵 재구성 + 새 레시피의 aging 정보 로드
 	if (!IsOfflineStatus()) return;
 
 	if (m_pAuroraMgr == NULL || m_pAuroraMgr->GetRecipeEditMgrPtr() == NULL) return;
@@ -351,13 +351,12 @@ void CDlgSubManual_AgingTest::OnLoadAgingInfo()
 
 void CDlgSubManual_AgingTest::OnAgingProcStrart()
 {
-	// LYS 2026-08-06 Phase 4: start aging cycle test via the HMI cycle-inspection path
+	// LYS 2026-08-06 Phase 4: HMI 사이클 검사 경로로 에이징 사이클 테스트 시작
 	// (OCP: m_bAutoAgingMode + nJobCount + JOB_Proc::DoStartCycleTest).
-	// The HMI engine repeats the measure sequence CSystemParamShare::GetCycleCount() times
-	// (DoWorkGlassSequenceEngine/MeasureSequenceItemEngine consume IsCycleState/GetCycleCount).
-	// TODO: AGINGTEST_CONFIRM - aging-list driven measurement engine (OCP DoWorkStartMeasOCP_A,
-	//       6,743 lines: per-pattern lighting + per-cell WAD/VISION/Color/ANGLE) is NOT ported;
-	//       m_bAutoAgingMode has no consumer in the HMI engine yet, cycles run the standard sequence.
+	// 엔진이 측정 시퀀스를 CSystemParamShare::GetCycleCount()회 반복한다.
+	// TODO: AGINGTEST_CONFIRM - 에이징 리스트 기반 측정 엔진(OCP DoWorkStartMeasOCP_A,
+	//       6,743줄: 패턴별 점등 + 셀별 WAD/VISION/Color/ANGLE)은 미이식.
+	//       m_bAutoAgingMode 소비처가 없어 사이클은 표준 시퀀스로 돈다.
 	if (!IsOfflineStatus()) return;
 
 	if (m_pAuroraMgr == NULL || m_pAuroraMgr->GetShareMemoryMgrPtr() == NULL ||
@@ -379,12 +378,10 @@ void CDlgSubManual_AgingTest::OnAgingProcStrart()
 	}
 
 	//=====================================================================
-	// LYS 2026-08-18 START pre-check.
-	// The engine never looks at m_bAutoAgingMode - the aging cycle turns on only when
-	// CMeasureSequenceItemEngine::AgingCycleBegin() passes (IsOCP + recipe m_bUseAging_Test
-	// + a loadable aging rcp holding at least one USE_AGING item). Without these checks
-	// START silently ran the plain measure sequence with no pattern lighting.
-	// Evaluate the same conditions here so the operator gets a reason instead.
+	// LYS 2026-08-18 START 사전 검사.
+	// 엔진은 m_bAutoAgingMode를 보지 않는다. 에이징 사이클은 AgingCycleBegin()이 통과할
+	// 때만 켜진다(IsOCP + 레시피 m_bUseAging_Test + USE_AGING 항목이 있는 aging rcp).
+	// 검사가 없으면 패턴 점등 없는 일반 시퀀스가 조용히 돌아 이유를 알 수 없었다.
 	//=====================================================================
 	if (m_pAuroraMgr->GetSystemConfigMgrPtr() == NULL ||
 		m_pAuroraMgr->GetSystemConfigMgrPtr()->IsOCP() == false)
@@ -515,8 +512,8 @@ BOOL CDlgSubManual_AgingTest::IsOfflineStatus()
 
 BOOL CDlgSubManual_AgingTest::LoadAgingInfo()
 {
-	// LYS 2026-08-06 Phase 1: restore rcp path (current recipe) + fix grid indexing
-	// HMI grid coords: header = SS_HEADER row, data rows 1..MaxRows, cols 1..6
+	// LYS 2026-08-06 Phase 1: rcp 경로(현재 레시피) 복원 + 그리드 인덱싱 수정
+	// HMI 그리드 좌표: 헤더 = SS_HEADER 행, 데이터 1..MaxRows, 열 1..6
 	CString strRcpID = _T("");
 	if (m_pAuroraMgr != NULL && m_pAuroraMgr->GetRecipeEditMgrPtr() != NULL)
 		strRcpID = m_pAuroraMgr->GetRecipeEditMgrPtr()->GetRecipeID();
@@ -707,10 +704,9 @@ void CDlgSubManual_AgingTest::AgingItemAdd()
 
 void CDlgSubManual_AgingTest::UpdateAgingCell()
 {
-	// LYS 2026-08-06 Phase 3: rebuild 3-sheet cell-use map (WAD/VISION/ANGLE - no COLOR mode in HMI)
-	// HMI-native: rows = sticks, cols = cells from current RecipeData.
-	// Values live in [MASECELL] of the AgingRcp file only - recipe MEASGROUP is NOT
-	// touched (WadMultiMeasMgr precedent), unlike OCP which mirrored m_iUsedMeas.
+	// LYS 2026-08-06 Phase 3: 3시트 셀 사용 맵 재구성(WAD/VISION/ANGLE - HMI엔 COLOR 없음).
+	// 행 = stick, 열 = 현재 RecipeData의 셀. 값은 AgingRcp의 [MASECELL]에만 저장하고
+	// 레시피 MEASGROUP은 건드리지 않는다(OCP는 m_iUsedMeas에 미러링했음).
 	if (m_spreadAgingMeas == NULL || m_spreadAgingMeas->GetSafeHwnd() == NULL) return;
 
 	int nStick = 0, nCell = 0;
@@ -779,8 +775,8 @@ int CDlgSubManual_AgingTest::GetMeasUse(int iMeas, int nMeasUse)
 
 void CDlgSubManual_AgingTest::MeasCellSave()
 {
-	// LYS 2026-08-06 Phase 3: grid -> [MASECELL] STICK_n = CSV of 3bit masks
-	// bit0..2 = WAD / VISION / ANGLE (no COLOR mode in HMI; OCP was 4 kinds)
+	// LYS 2026-08-06 Phase 3: 그리드 -> [MASECELL] STICK_n = 3bit 마스크 CSV
+	// bit0..2 = WAD / VISION / ANGLE (HMI엔 COLOR 없음, OCP는 4종)
 	if (m_spreadAgingMeas == NULL || m_spreadAgingMeas->GetSafeHwnd() == NULL) return;
 
 	CString strRcpID = _T("");
@@ -912,6 +908,6 @@ void CDlgSubManual_AgingTest::DblClickFpspreadCellStatus(long Col, long Row)
 
 void CDlgSubManual_AgingTest::SheetChangedFsMeasArea(short OldSheet, short NewSheet)
 {
-	// LYS 2026-08-06 Phase 3: OCX-era event, never fires with CMySpreadDll (DLL spread
-	// updates its current sheet on tab click by itself; kept for EVENTSINK map).
+	// LYS 2026-08-06 Phase 3: OCX 시절 이벤트라 CMySpreadDll에서는 발생하지 않는다
+	// (DLL spread가 탭 클릭 시 스스로 시트를 갱신. EVENTSINK 맵 유지용).
 }

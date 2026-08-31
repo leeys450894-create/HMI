@@ -31,10 +31,15 @@ class CMotorControlMgr : public CAuroraSubMgr
 	double				m_dInterlockHeadGapB;
 	double				m_dInterlockProbeGap;
 	double				m_dInterlockLifePinPos;
+	double				m_dInterlockProbeSizeX;	// LYS 2026-08-25 P5 probe unit width in X
+	double				m_dInterlockProbeZSafety;	// LYS 2026-08-26 P5 유닛을 피하는 BACK Z 안전 높이
 
 	double				m_dMovePos[100];	// 가상테스트에서 사용
 	double				m_dMoveOffset[100];	// Head Offset
 //	CIOMapControlMgr	*m_pIOMapControlMgr;
+
+	// LYS 2026-08-26 X2가 P5 밴드에 들어가기 전 BACK Z를 안전 높이로 상승시키는 헬퍼
+	long		RetractHeadZForProbeUnit(double dTargetX2, LPCTSTR pszFrom);
 
 	long		SetSpeedDirect_Sub(int iAxis, double dVel, double dAcc, double dDec, int iSpeedMode);
 	long		MoveCmdPosA_Sub(int iAxis, double dPos, bool bBlockMode, int iSpeed, int iLens = -1, int iTube = -1);
@@ -53,6 +58,9 @@ public:
 	bool		IsUseDevice() const;
 	bool		IsOutOfService() const;
 	void		DisableAxesForOCP();
+	// LYS 2026-08-25 헤드 갠트리가 P5 프로브 유닛 영역 안이면 true
+	// LYS 2026-08-26 시퀀스 계층에서 Z1 하강 전 검사할 수 있게 이동
+	bool		IsProbeUnitOverlapX(double dHeadX);
 	bool		IsOCP() const						{ return m_bIsOCP; }	// LYS 2026-06-26	// LYS 2026-06-26 OCP mode: disable P1-P4 + P5 X/Y axes
 
 

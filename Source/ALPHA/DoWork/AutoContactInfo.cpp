@@ -1,6 +1,6 @@
 // AutoContactInfo.cpp
-// LYS 2026-08-10 AutoContact Phase 2: non-UI probe auto-contact store.
-// INI keys mirror OCP CDlgNaviManualAutoContact ([PROBE_AUTO_CONTACT]).
+// LYS 2026-08-10 AutoContact Phase 2: 비UI 프로브 오토 컨택 저장소.
+// INI 키는 OCP CDlgNaviManualAutoContact([PROBE_AUTO_CONTACT])와 동일.
 #include "pch.h"
 #include "AutoContactInfo.h"
 #include "..\SystemParamShare.h"
@@ -268,11 +268,11 @@ int CAutoContactInfo::GetCellStatus(int iCell) const
 	return m_nCellStatus[iCell];
 }
 
-// LYS 2026-08-10 Phase 4: two-step contact search (OCP CJOB_Proc::DoWorkAutoContact port).
-// Step1: descend by FirstMoveGap until any cell passes R-Test (limit: FirstLimitPos).
-// Step2: descend by SecondMoveGap until pass ratio >= Percent (limit: ODMax).
-// Final: move to PreContact + OD + AddOD. Persists deeper result only.
-// Axis = AXIS_PROBE_Z5 (C1: OCP mode P5 only; OCP original used AXIS_UNIT_Z).
+// LYS 2026-08-10 Phase 4: 2단계 컨택 탐색(OCP CJOB_Proc::DoWorkAutoContact 이식).
+// 1단계: FirstMoveGap씩 하강, 셀 하나라도 R-Test 통과까지(한계 FirstLimitPos).
+// 2단계: SecondMoveGap씩 하강, 통과율 >= Percent까지(한계 ODMax).
+// 종료: PreContact + OD + AddOD로 이동. 더 깊은 결과만 저장.
+// 축 = AXIS_PROBE_Z5 (C1: OCP 모드 P5 전용. OCP 원본은 AXIS_UNIT_Z).
 int CAutoContactInfo::DoSearch(CMaintControlMgr* pMaint, CCommTcpIpFactoryMgr* pComm,
 							   int nCellCount, std::function<bool()> fnStopCheck /*= nullptr*/)
 {
@@ -402,8 +402,8 @@ int CAutoContactInfo::DoSearch(CMaintControlMgr* pMaint, CCommTcpIpFactoryMgr* p
 	return VTM_RV_SUCCESSED;
 }
 
-// LYS 2026-08-10 Phase 4: contact using the saved search result
-// (OCP CJOB_Proc::DoWorkAutoContactDataMove port; probe-use bookkeeping not ported - C6)
+// LYS 2026-08-10 Phase 4: 저장된 탐색 결과로 컨택
+// (OCP CJOB_Proc::DoWorkAutoContactDataMove 이식. 프로브 사용 기록은 미이식 - C6)
 int CAutoContactInfo::DoDataMove(CMaintControlMgr* pMaint)
 {
 	if (pMaint == NULL) return VTM_RV_FAILED;

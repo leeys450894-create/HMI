@@ -1,9 +1,9 @@
 // AgingCycleInfo.h
-// LYS 2026-08-06 AgingCycle E2: non-UI loader for the aging cycle recipe
-// ({DIR\AGING_RCP}\{RecipeID}.rcp - written by CDlgSubManual_AgingTest).
-// Used by the measure sequence engine (OCP DoWorkStartMeasOCP_A counterpart);
-// the engine must NOT touch the dialog (OCP read m_vecAginList directly - HMI forbids).
-// Single-thread use: one instance owned by the sequence engine, loaded per run.
+// LYS 2026-08-06 AgingCycle E2: 에이징 사이클 레시피의 비UI 로더
+// ({DIR\AGING_RCP}\{RecipeID}.rcp - CDlgSubManual_AgingTest가 기록).
+// 측정 시퀀스 엔진이 사용한다(OCP DoWorkStartMeasOCP_A 대응).
+// 엔진은 다이얼로그를 건드리면 안 된다(OCP는 m_vecAginList를 직접 읽었으나 HMI는 금지).
+// 단일 스레드 사용: 시퀀스 엔진이 인스턴스 하나를 소유하고 실행마다 로드한다.
 #pragma once
 
 #include <vector>
@@ -35,8 +35,8 @@ public:
 	int		GetItemCount() const					{ return (int)m_vecItem.size(); }
 	const S_AgingTest*	GetItem(int iItem) const;
 
-	// LYS 2026-08-12 AgingCycle R1: number of enabled items that use the kind.
-	// Used to size the result row block reserved for a measurement kind.
+	// LYS 2026-08-12 AgingCycle R1: 해당 종류를 쓰는 활성 항목 수.
+	// 측정 종류별로 예약할 결과 행 블록 크기를 정하는 데 쓴다.
 	int		GetKindUseCount(int iKind) const;
 
 	int		GetStickCount() const					{ return (int)m_vecCellMask.size(); }

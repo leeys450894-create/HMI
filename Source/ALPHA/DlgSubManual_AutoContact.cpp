@@ -268,9 +268,9 @@ void CDlgSubManual_AutoContact::UpdateStatus(BOOL bEnable)
 
 	CString strPos;
 	//strPos.Format(_T("%.4lf"), m_pSystem->stMotionStatus[AXIS_UNIT_Z].dAxisPos);
-	// LYS 2026-08-10 Phase 2: refresh search-result state from the INI contract
-	// (the sequence updates it via CAutoContactInfo; the UI timer reads the
-	//  file directly instead of mutating the shared singleton - thread safety)
+	// LYS 2026-08-10 Phase 2: INI 계약에서 탐색 결과 상태를 갱신
+	// (시퀀스는 CAutoContactInfo로 갱신하고, UI 타이머는 공유 싱글톤을 건드리지 않고
+	//  파일을 직접 읽는다 - 스레드 안전)
 	if (!m_strIniPath.IsEmpty())
 	{
 		TCHAR szValue[MAX_PATH];
@@ -452,8 +452,8 @@ void CDlgSubManual_AutoContact::OnAutoContactSave()
 
 void CDlgSubManual_AutoContact::OnAutoContactProcStrart()
 {
-	// LYS 2026-08-10 Phase 4: run the auto-contact search once
-	// (C5: same routine as the sequence Contact step, single-shot worker)
+	// LYS 2026-08-10 Phase 4: 오토 컨택 탐색 1회 실행
+	// (C5: 시퀀스 Contact 스텝과 동일 루틴, 단발 워커)
 	if (!IsOfflineStatus()) return;
 	if (m_pAuroraMgr == NULL) return;
 	if (m_bAutoCntRunning == TRUE) return;
@@ -727,9 +727,9 @@ void CDlgSubManual_AutoContact::SetAutoCntLog()
 	WritePrivateProfileString(m_strAutoCnttProbeID, _T("OD"), strTemp, m_strAutoLogPath);
 }
 
-// LYS 2026-08-11 manual-only: selected-stick (or ALL) move + auto-contact search.
-// Flow per stick: lift probe Z -> stage R/X to the stick (MoveMeasureArea OCP rule)
-// -> PG status stick slot -> DoSearch. Align chain NOT included (run aligned).
+// LYS 2026-08-11 수동 전용: 선택 stick(또는 ALL) 이동 + 오토 컨택 탐색.
+// stick별 흐름: 프로브 Z 상승 -> stage R/X 이동(MoveMeasureArea OCP 규칙)
+// -> PG 상태 stick 슬롯 -> DoSearch. 얼라인 체인은 미포함(정렬된 상태 전제).
 UINT CDlgSubManual_AutoContact::AutoContactSearchThread(LPVOID pParam)
 {
 	CDlgSubManual_AutoContact* pThis = (CDlgSubManual_AutoContact*)pParam;
@@ -827,7 +827,7 @@ UINT CDlgSubManual_AutoContact::AutoContactSearchThread(LPVOID pParam)
 	return 0;
 }
 
-// LYS 2026-08-10 Phase 4: PG recipe download worker
+// LYS 2026-08-10 Phase 4: PG 레시피 다운로드 워커
 // (OCP ExePGCtrl(5/6/2/0/1) -> HMI DoWorkRecipeOpen(PG), C4)
 UINT CDlgSubManual_AutoContact::PgDownloadThread(LPVOID pParam)
 {

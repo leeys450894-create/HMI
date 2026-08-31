@@ -2,8 +2,7 @@
 
 #include "..\MotorImpl.h"
 
-// LYS 2026-07-13 ACS controller count
-// OCP: dual controller (df_MAX_CTRL=2), HMI: single controller (df_MAX_CTRL=1)
+// LYS 2026-07-13 ACS 컨트롤러 수 - OCP는 2개(df_MAX_CTRL=2), HMI는 1개.
 #define df_OCP_DUAL_CTRL		// comment out for HMI single controller
 #ifdef df_OCP_DUAL_CTRL
 #define df_MAX_CTRL 2

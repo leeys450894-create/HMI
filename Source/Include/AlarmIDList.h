@@ -1374,11 +1374,9 @@ enum enumAlarmID
 	// SEM
 	SDC_SEM_CONTROLLER_HW_ERROR = 9998,
 
-	// LYS 2026-07-29 ELP ElecBox monitor alarms (doc 2026-07-28)
-	// alarm ID = ELP_ELECBOX_ALARM_START + received error code
-	// valid codes: box1 0~39, box2 100~139, socket 200~207, detail 300~303 / 400~403
-	// 8550+code: 8550~8589 / 8650~8689 / 8750~8757 / 8850~8853 / 8950~8953 (band 8503~8999 free)
-	// Alarm ID = Total 8550~8953
+	// LYS 2026-07-29 ELP ElecBox 모니터 알람 - 알람ID = ELP_ELECBOX_ALARM_START + 수신 에러코드.
+	// 유효 코드: box1 0~39, box2 100~139, socket 200~207, detail 300~303 / 400~403.
+	// 8550+code -> 8550~8589 / 8650~8689 / 8750~8757 / 8850~8853 / 8950~8953 (8503~8999 빈 대역).
 	ELP_ELECBOX_ALARM_START = 8550,
 	ELP_ELECBOX_ALARM_END = ELP_ELECBOX_ALARM_START + 403,
 

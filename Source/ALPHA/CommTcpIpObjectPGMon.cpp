@@ -13,10 +13,9 @@
 #define new DEBUG_NEW
 #endif
 
-// LYS 2026-07-29 ELP ElecBox monitor (doc 2026-07-28).
-// Passive receive-only channel: ELP(Server) pushes S10F01/S10F20, HMI(Client) replies ACK.
-// Known GAI defects fixed here: offset accumulation in multi-alarm parse,
-// unchecked alarm code range, delete instead of delete[], Len field validation.
+// LYS 2026-07-29 ELP ElecBox 모니터(사양서 2026-07-28) - ELP(서버)가 S10F01/S10F20을 밀어주고
+// HMI(클라이언트)는 ACK만 회신하는 수신 전용 채널.
+// 결함 교정: 다중 알람 파싱 오프셋 누적, 알람코드 무검증, delete[], Len 검증.
 
 CCommTcpIpObjectPGMon::CCommTcpIpObjectPGMon(int iSeqItemIndex, stAuroraMgrPool& MgrPool)
 	: m_pSystemConfigMgr(MgrPool.pSystemConfigMgr)
@@ -84,9 +83,9 @@ bool CCommTcpIpObjectPGMon::IsElpDataValid(int iBox)
 	return m_bDataValid[iBox];
 }
 
-// Alarm raiser thread: Heavy alarm SetAlarm() blocks until operator reset,
-// so each received error code is raised on its own short-lived thread and
-// never on the socket receive thread. Alarm DLL ignores already-listed IDs.
+// 알람 발생 스레드 - Heavy 알람의 SetAlarm()은 작업자가 리셋할 때까지 블로킹되므로,
+// 수신 스레드가 아니라 코드마다 단명 스레드를 띄워 발생시킨다.
+// (Alarm DLL은 이미 등록된 ID는 무시한다.)
 UINT CCommTcpIpObjectPGMon::ThreadRaiseAlarm(LPVOID pParam)
 {
 	int iAlarmID = (int)(INT_PTR)pParam;
@@ -110,9 +109,8 @@ bool CCommTcpIpObjectPGMon::IsValidAlarmCode(int iCode)
 
 // S20F01 / S20F20 (doc 2.2.2 / 2.2.4)
 // STX + "20" + Func(2) + Len(4, doc value 0) + Ack(2, 00:ACK 01:NAK) + Cause(4, 0000:Normal) + ETX
-// LYS 2026-07-30 Confirmed with ELP: Len is fixed "0000" and Cause is fixed "0000".
-// ELP validates neither field and never retransmits on NAK, so this ACK is purely
-// informational - do NOT restore the old GAI value 0006.
+// LYS 2026-07-30 ELP 확인 결과 Len/Cause 모두 0000 고정. ELP는 두 필드를 검증하지 않고
+// NAK 재전송도 하지 않으므로 이 ACK는 통보용이다
 void CCommTcpIpObjectPGMon::SendAck(int iFunc, int iAck, int iCause)
 {
 	CString strReturnCommand;
@@ -136,9 +134,8 @@ void CCommTcpIpObjectPGMon::ParseS10F01(const CString& strCmd)
 	const int iLen = _ttoi(strCmd.Mid(4, 4));
 	const int iBodyLen = strCmd.GetLength() - 8;
 
-	// LYS 2026-07-30 ELP confirmed: ELP never retransmits on NAK. Reject only when
-	// the body is genuinely too short to parse - a disagreeing Len field alone must
-	// not discard an otherwise complete 80-char body (the data would be lost for good).
+	// LYS 2026-07-30 ELP는 NAK 시 재전송하지 않는다. 본문이 파싱 불가할 만큼 짧을 때만 거부 -
+	// Len 불일치만으로 정상 80자 본문을 버리면 데이터가 영구 소실된다.
 	if (iBodyLen < DF_ELPMON_BODY_LEN)
 	{
 		strLog.Format(_T("[%s] : S10F01 body too short. LEN(%d), BODY(%d)"), GetName(), iLen, iBodyLen);
@@ -220,8 +217,8 @@ void CCommTcpIpObjectPGMon::ParseS10F01(const CString& strCmd)
 		m_bDataValid[iBox] = true;
 	}
 
-	// LYS 2026-07-29 U1: push to MCCLogMgr -> VTM_FOR_FDC stMainWData (slots MAIN_WDATA_ELP_START+)
-	// item order of enumElpMonData matches NUM_MAIN_WDATA_ELP item order.
+	// LYS 2026-07-29 U1 - MCCLogMgr을 거쳐 VTM_FOR_FDC stMainWData(MAIN_WDATA_ELP_START+ 슬롯)로 전달.
+	// enumElpMonData의 항목 순서는 NUM_MAIN_WDATA_ELP와 동일하다.
 	for (int i = 0; i < DF_ELPMON_DATA_CNT; i++)
 	{
 		CMCCLogMgr::GetInstance()->SetDataToELP(iBox, i, dData[i]);
@@ -248,10 +245,9 @@ void CCommTcpIpObjectPGMon::ParseS10F20(const CString& strCmd)
 	const int iLen = _ttoi(strCmd.Mid(4, 4));
 	const int iBodyLen = strCmd.GetLength() - 8;
 
-	// LYS 2026-07-30 ELP confirmed: the alarm report is the critical path and ELP never
-	// retransmits, so a suspect Len must not drop the codes the frame really carries.
-	// Fall back to the actual body length, still capped at DF_ELPMON_ALARM_MAX so we
-	// never read past what was received.
+	// LYS 2026-07-30 알람 보고는 크리티컬 경로이고 ELP는 재전송하지 않으므로, Len이 의심스러워도
+	// 프레임이 실제 담고 있는 코드를 버려서는 안 된다. 실제 본문 길이를 쓰되
+	// DF_ELPMON_ALARM_MAX로 상한을 두어 수신 범위를 넘어 읽지 않는다.
 	int nAvail = iBodyLen / 5;
 	if (nAvail > DF_ELPMON_ALARM_MAX)
 		nAvail = DF_ELPMON_ALARM_MAX;
@@ -360,7 +356,7 @@ void CCommTcpIpObjectPGMon::xNetCallbackRecieveData(LPVOID ud)
 			m_dwLastRecvTick = ::GetTickCount();
 
 			//---------------------------------------------------------------------------
-			// Split by STX/ETX: multiple frames can arrive in one recv event.
+			// STX/ETX 기준 분할 - 한 번의 recv에 프레임이 여러 개 올 수 있다.
 			//---------------------------------------------------------------------------
 			std::vector<CString> vecPacketCommandPool = GetExeHextoStr(strMessage);
 

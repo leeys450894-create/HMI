@@ -1,17 +1,16 @@
 #pragma once
 
-// LYS 2026-07-23 WAD Multi Point measurement data manager (Phase 2)
-// Ported from OCP CDlgNaviManualMultiMeas data layer with fixes:
-//  - std::vector instead of fixed array (OCP: S_MultiMeas aData[20] overflow)
-//  - 4096 char INI buffer (OCP: MAX_PATH truncation at ~26 points)
-//  - cell-use map kept here, recipe struct untouched (OCP: m_iUsedMeas += 16 corruption)
-//  - CCriticalSection for UI thread vs sequence thread access
+// LYS 2026-07-23 WAD 다점 측정 데이터 관리자(Phase 2). OCP 데이터 계층 이식 + 결함 교정:
+//  - 고정 배열 대신 std::vector (OCP는 S_MultiMeas aData[20] 오버플로)
+//  - INI 버퍼 4096자 (OCP는 MAX_PATH라 26점 부근에서 잘림)
+//  - 셀 사용 맵을 여기 보관해 레시피 구조체 무침습 (OCP는 m_iUsedMeas += 16 손상)
+//  - UI 스레드와 시퀀스 스레드 동시 접근에 CCriticalSection
 //
-// File format is 100% compatible with OCP multi recipe INI:
+// 파일 포맷은 OCP multi recipe INI와 100% 호환:
 //   {RcpFolder}\{RecipeID}.rcp
-//   [DATA]     CLASS,SUB_CLASS,X,Y,ENABLE,RX,GX,BY,WX,WY (comma-joined lists)
+//   [DATA]     CLASS,SUB_CLASS,X,Y,ENABLE,RX,GX,BY,WX,WY (필드별 콤마 병합 리스트)
 //              INSP_MODE (0=Single/1=Multi), CELL_X, CELL_Y
-//   [MASECELL] STICK_n = comma list of 0/1 per cell
+//   [MASECELL] STICK_n = 셀별 0/1 콤마 리스트
 
 #include <vector>
 #include <afxmt.h>
@@ -91,10 +90,9 @@ public:
 	bool	IsRunActive(int iProbe);
 	void	SetRunCurrent(int iProbe, int nCurrent);	// 1 = base point, 2.. = multi points
 	int		GetRunCurrent(int iProbe);
-	// LYS 2026-08-18 explicit point index of the running point (0 = base point).
-	// GetCheckNumData() maps an ENABLED-ordinal to an index, which drifts from the
-	// sequence loop index when the base point itself is disabled. Carrying the index
-	// the loop actually used removes that ambiguity.
+	// LYS 2026-08-18 실행 중인 포인트의 명시적 인덱스(0 = base point).
+	// GetCheckNumData()는 ENABLED 서수를 인덱스로 바꾸는데, base point가 비활성이면
+	// 시퀀스 루프 인덱스와 어긋난다. 루프가 실제로 쓴 인덱스를 들고 다녀 모호함을 없앤다.
 	void	SetRunPointIdx(int iProbe, int nIdx);
 	int		GetRunPointIdx(int iProbe);
 
@@ -108,8 +106,8 @@ public:
 	void	SetCellUseMap(const std::vector<std::vector<int>>& vecCellUse);
 	void	GetCellUseMap(std::vector<std::vector<int>>& outCellUse);
 
-	// validation: every enabled point must be inside +-CellX/2, +-CellY/2
-	// returns true if valid; outNgIndex = first invalid point index (-1 if valid)
+	// 검증 - 활성 점은 모두 +-CellX/2, +-CellY/2 안에 있어야 한다.
+	// 유효하면 true 반환, outNgIndex = 첫 위반 점 인덱스(유효 시 -1).
 	bool	IsCellRangeValid(int& outNgIndex);
 
 private:

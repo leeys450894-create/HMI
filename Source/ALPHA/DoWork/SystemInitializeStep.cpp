@@ -1580,16 +1580,17 @@ int CSystemInitializeStep::MotionHome(int iStep)
 	case 6:
 	{
 		// LYS 2026-06-26 OCP: skip Probe X homing, home Probe Rotate instead
-		if (m_pShareItem->GetSystemConfigMgrPtr() && m_pShareItem->GetSystemConfigMgrPtr()->IsOCP())
-		{
-			// Home Probe Rotate (AXIS_R1)
-			nRet = m_pShareItem->GetMaintControlMgrPtr()->MoveHome(AXIS_R1);
-			if (nRet == VTM_RV_SUCCESSED)
-			{
-				nRet = m_pShareItem->GetMaintControlMgrPtr()->CheckHomeDone(AXIS_R1, 30000);
-			}
-			break;
-		}
+		// LYS 2026-08-25 Probe Rotate Remove
+		//if (m_pShareItem->GetSystemConfigMgrPtr() && m_pShareItem->GetSystemConfigMgrPtr()->IsOCP())
+		//{
+		//	// Home Probe Rotate (AXIS_R1)
+		//	nRet = m_pShareItem->GetMaintControlMgrPtr()->MoveHome(AXIS_R1);
+		//	if (nRet == VTM_RV_SUCCESSED)
+		//	{
+		//		nRet = m_pShareItem->GetMaintControlMgrPtr()->CheckHomeDone(AXIS_R1, 30000);
+		//	}
+		//	break;
+		//}
 
 		// Probe
 		for (int iAxis = AXIS_X; iAxis < df_USE_MAX_AXIS; iAxis++)
@@ -1602,6 +1603,13 @@ int CSystemInitializeStep::MotionHome(int iStep)
 				}
 
 				if (nRet != VTM_RV_SUCCESSED)	// 2023.08.09 add
+				{
+					continue;
+				}
+
+				// LYS 2026-08-25 OCP는 P1~P4가 비활성이다. MoveCmdPosA()가 bUse == FALSE 축에
+				// 에러를 반환하고 루프가 첫 에러에서 중단되므로, 해당 갠트리는 건너뛴다.
+				if (m_pShareItem->GetMaintControlMgrPtr()->GetMotorControlMgrPtr()->GetAxisProperty(iAxis)->bUse != TRUE)
 				{
 					continue;
 				}
@@ -1647,6 +1655,13 @@ int CSystemInitializeStep::MotionHome(int iStep)
 
 				if (iAxis == AXIS_PROBE_X1 || iAxis == AXIS_PROBE_X3 || iAxis == AXIS_PROBE_X5 || iAxis == AXIS_PROBE_X7 || iAxis == AXIS_PROBE_X9)
 				{
+					// LYS 2026-08-25 위 호밍 루프와 같은 이유 - MoveCmdPosR()이 미장착 갠트리의
+					// 슬레이브 축에서 에러를 낸다.
+					if (m_pShareItem->GetMaintControlMgrPtr()->GetMotorControlMgrPtr()->GetAxisProperty(iAxis + 1)->bUse != TRUE)
+					{
+						continue;
+					}
+
 					double dPosGap = 0.;
 					dPosGap = m_pShareItem->GetMaintControlMgrPtr()->GetCurPos(iAxis) - m_pShareItem->GetMaintControlMgrPtr()->GetCurPos(iAxis + 1);
 					nRet = m_pShareItem->GetMaintControlMgrPtr()->MoveCmdPosR(iAxis + 1, dPosGap, true, SPEED_LOW);
@@ -1905,6 +1920,8 @@ bool CSystemInitializeStep_ProbeAlign::Run()
 
 		for (int iProbe = df_PROBE_AGING1; iProbe <= df_PROBE_MEAS; iProbe++)
 		{
+			if (m_pShareItem->GetSystemConfigMgrPtr()->IsOCP()) iProbe = df_PROBE_MEAS;		// LYS 2026-08-24 OCP ProbeAlign Init 1-4 Skip
+			
 			// Probe exist check
 			if (CSequenceManager::GetInstance()->GetFunctionModuleEQState()->IsProbeExistSensorOn(iProbe) == true)
 			{

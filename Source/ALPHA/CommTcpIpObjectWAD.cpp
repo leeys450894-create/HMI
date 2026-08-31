@@ -1293,9 +1293,8 @@ bool CCommTcpIpObjectWAD::TossResultFile(CString strInnerID, int nArea, int iPro
 		_tcscpy(resultData.szResultPath, strNewPath);
 
 		// LYS 2026-07-24 WAD Multi Point (Phase 6): pass current point offsets to result layer
-		// LYS 2026-08-18 base point now reports 1 (was 0) so the point number is uniform
-		// across base and multi points. Offsets stay gated on > 1, and the API_Result.h
-		// contract already documents 0/1 as "no offset", so consumers are unaffected.
+		// LYS 2026-08-18 base point가 0 대신 1을 보고해 base/multi 포인트 번호가 일관된다.
+		// 오프셋은 계속 > 1에서만 적용되고 API_Result.h가 0/1을 "오프셋 없음"으로 규정해 영향 없음.
 		int nPointNo = 1;
 		resultData.dOffsetRX = 0.0;
 		resultData.dOffsetGX = 0.0;
@@ -1305,8 +1304,8 @@ bool CCommTcpIpObjectWAD::TossResultFile(CString strInnerID, int nArea, int iPro
 			int nCurPoint = m_pWadMultiMeasMgr->GetRunCurrent(iProbe);
 			if (nCurPoint > 1)
 			{
-				// LYS 2026-08-18 the point number must not depend on the offset lookup - a failed
-				// lookup should only cost the offsets, not the identity of the row.
+				// LYS 2026-08-18 포인트 번호는 오프셋 조회 성패와 무관해야 한다
+				// (조회 실패는 오프셋만 잃을 뿐 행의 정체성까지 잃으면 안 됨).
 				nPointNo = nCurPoint;
 
 				// prefer the index the sequence actually used; GetCheckNumData maps an
@@ -1348,10 +1347,9 @@ bool CCommTcpIpObjectWAD::TossResultFile(CString strInnerID, int nArea, int iPro
 		_tcscpy(resultData.stData[5].szData, strPos);
 
 	
-		// LYS 2026-08-18 result sheet column 6 (header "REPEAT") = measurement point number.
-		// It used to carry the bOneCell sub-point index (k+1) routed through the nRetry
-		// argument; bOneCell is retired, so the value now comes from the Multi Point run
-		// state. The field name is part of the dResult DLL contract and is left unchanged.
+		// LYS 2026-08-18 결과 시트 6열(헤더 "REPEAT") = 측정 포인트 번호.
+		// 종전의 bOneCell 서브포인트 인덱스(k+1) 대신 Multi Point 실행 상태에서 가져온다.
+		// 필드명은 dResult DLL 계약이라 그대로 둔다.
 		resultData.m_iRetryCnt = nPointNo;
 		_tcscpy(resultData.szCellData, m_pShareMemory->GetSharedMemory()->stLotInfo.m_szCellID[iProbe]);
 		

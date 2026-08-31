@@ -1,5 +1,5 @@
 // ResumeInfoMgr.cpp
-// LYS 2026-07-03 Resume Inspection manager
+// LYS 2026-07-03 Resume Inspection 관리자 - 비정상 종료 후 검사 재개용 상태 INI 관리.
 
 #include "pch.h"
 #include "ResumeInfoMgr.h"

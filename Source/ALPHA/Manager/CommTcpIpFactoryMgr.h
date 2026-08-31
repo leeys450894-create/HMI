@@ -46,15 +46,17 @@ public:
 	CCommTcpIpObjectUTG		*GetCommTcpIpObjectUTG1()	{ return m_pCommTcpIpObjUTG1;	}
 	CCommTcpIpObjectUTG		*GetCommTcpIpObjectUTG2()	{ return m_pCommTcpIpObjUTG2;   }
 
-	CCommTcpIpObjectVision* GetCommTcpIpObjectVision(int i) { return m_pCommTcpIpObj_Vision[i]; }
-	CCommTcpIpObjectColor* GetCommTcpIpObjectColor(int i) { return m_pCommTcpIpObj_Color[i]; }
-	CCommTcpIpObjectAngle* GetCommTcpIpObjectAngle(int i) { return m_pCommTcpIpObj_Angle[i]; }
+	// LYS 2026-08-25 Network.ini의 DEVICEID가 배열 인덱스로 들어온다.
+	// 범위 밖이면 nullptr를 반환해 설정 오타가 배열 밖을 읽지 못하게 한다.
+	CCommTcpIpObjectVision* GetCommTcpIpObjectVision(int i) { return (0 <= i && i < (int)_countof(m_pCommTcpIpObj_Vision)) ? m_pCommTcpIpObj_Vision[i] : nullptr; }
+	CCommTcpIpObjectColor* GetCommTcpIpObjectColor(int i) { return (0 <= i && i < (int)_countof(m_pCommTcpIpObj_Color)) ? m_pCommTcpIpObj_Color[i] : nullptr; }
+	CCommTcpIpObjectAngle* GetCommTcpIpObjectAngle(int i) { return (0 <= i && i < (int)_countof(m_pCommTcpIpObj_Angle)) ? m_pCommTcpIpObj_Angle[i] : nullptr; }
 	CCommTcpIpObjectWAD* GetCommTcpIpObjectWAD() { return m_pCommTcpIpObj_WAD; }
 	CCommTcpIpObjectPG* GetCommTcpIpObjectPG() { return m_pCommTcpIpObj_PG; }
 	CCommTcpIpObjectAgingPG* GetCommTcpIpObjectAGING() { return m_pCommTcpIpObj_AgingPG; }
 	CCommTcpIpObjectLCR* GetCommTcpIpObjectLCR() { return m_pCommTcpIpObj_LCR; }
 //	CCommTcpIpObjectTSP* GetCommTcpIpObjectTSP() { return m_pCommTcpIpObj_TSP; }	// jsyoon 2022.10.19 change
-	CCommTcpIpObjectTSP* GetCommTcpIpObjectTSP(int i) { return m_pCommTcpIpObj_TSP[i]; }
+	CCommTcpIpObjectTSP* GetCommTcpIpObjectTSP(int i) { return (0 <= i && i < (int)_countof(m_pCommTcpIpObj_TSP)) ? m_pCommTcpIpObj_TSP[i] : nullptr; }
 	CCommTcpIpObjectCIM* GetCommTcpIpObjectCIM() { return m_pCommTcpIpObj_CIM; }
 	CCommTcpIpObjectSysTime* GetCommTcpIpObjectSystime() { return m_pCommTcpIpObj_SysTime; }
 	CCommTcpIpObjectMotion* GetCommTcpIpObjectVisMotion() { return m_pCommTcpIpObj_VisMotion; }

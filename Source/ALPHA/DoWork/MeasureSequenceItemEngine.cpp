@@ -713,13 +713,11 @@ void CMeasureSequenceItemEngine::SetMeasureArea(int nMeasureArea)
 }
 
 //=========================================================================
-// LYS 2026-08-12 InnerID uniqueness.
-// gf_GetCurTimeString(3) is HHMMSS, so measurements landing in the same second
-// get an identical id -> identical device raw file name -> silent overwrite.
-// Length must stay as-is (the id sits in a fixed-width device packet field), so a
-// duplicate only gets its trailing 2 digits remapped. 60..99 is tried first because
-// those never occur as real seconds; the issued list still decides, so uniqueness
-// holds even if a later real timestamp would have produced the same string.
+// LYS 2026-08-12 InnerID 유일성.
+// gf_GetCurTimeString(3)은 HHMMSS라 같은 초의 측정은 동일 id -> 동일 raw 파일명 -> 조용한 덮어쓰기.
+// 길이는 고정 폭 장비 패킷 필드라 유지해야 하므로, 중복 시 끝 2자리만 재배정한다.
+// 실제 초로는 나올 수 없는 60..99를 먼저 시도하고 발급 목록이 최종 판단하므로,
+// 나중에 진짜 타임스탬프가 같은 문자열을 만들어도 유일성은 유지된다.
 //=========================================================================
 void CMeasureSequenceItemEngine::PushIssuedInnerID(const CString& strID)
 {
@@ -784,7 +782,7 @@ int CMeasureSequenceItemEngine::GetMeasureArea()
     return m_nMeasureArea;
 }
 //=========================================================================
-// LYS 2026-08-06 AgingCycle E3: aging-list cycle context (OCP DoWorkStartMeasOCP_A)
+// LYS 2026-08-06 AgingCycle E3: 에이징 리스트 사이클 컨텍스트(OCP DoWorkStartMeasOCP_A)
 //=========================================================================
 bool CMeasureSequenceItemEngine::AgingCycleBegin()
 {
@@ -796,8 +794,8 @@ bool CMeasureSequenceItemEngine::AgingCycleBegin()
 		return false;
 
 	S_RecipeInfo* pRecipeInfo = GetRecipeEditMgrPtr()->GetRecipeInfo();
-	// LYS 2026-08-12 gate uses the dedicated recipe flag m_bUseAging_Test.
-	// m_bUseAgingTest_2 is the AGING measurement item and must not drive the aging cycle.
+	// LYS 2026-08-12 게이트는 전용 레시피 플래그 m_bUseAging_Test를 쓴다.
+	// m_bUseAgingTest_2는 AGING 측정 항목이라 에이징 사이클을 켜면 안 된다.
 	if (pRecipeInfo == nullptr || pRecipeInfo->m_sInspectItem.m_bUseAging_Test == FALSE)
 		return false;
 
@@ -832,11 +830,11 @@ bool CMeasureSequenceItemEngine::AgingCycleNextItem()
 }
 
 //=========================================================================
-// LYS 2026-08-12 AgingCycle R1: per-kind repeat index (result row block).
-// OCP counterpart = nPropertyRepeat / nQualityRepeat / nLCRRepeat
-// (JOB_Proc.cpp:12676-12683, reset per stick, advanced only when measured).
-// Dense on purpose: a sparse index would leave empty result rows, and the HMI
-// APD writer has no empty-row skip (CDlgResult.cpp:2019) so blanks reach MES.
+// LYS 2026-08-12 AgingCycle R1: 종류별 반복 인덱스(결과 행 블록).
+// OCP 대응 = nPropertyRepeat / nQualityRepeat / nLCRRepeat
+// (JOB_Proc.cpp:12676-12683, stick마다 리셋하고 측정했을 때만 증가).
+// 의도적으로 조밀하게 매긴다: 성기면 빈 결과 행이 생기는데 HMI APD writer에
+// 빈 행 스킵이 없어(CDlgResult.cpp:2019) 공백이 MES로 넘어간다.
 //=========================================================================
 int CMeasureSequenceItemEngine::GetAgingRepeat(int iKind) const
 {

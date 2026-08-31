@@ -308,8 +308,8 @@ BOOL CDlgSubManual_AgingSet::IsOfflineStatus()
 
 BOOL CDlgSubManual_AgingSet::LoadAgingInfo(CString strRcp)
 {
-	// LYS 2026-08-05 : restore rcp path + fix grid indexing
-	// HMI grid coords: header = SS_HEADER row, data rows 1..MaxRows, cols 1..5
+	// LYS 2026-08-05 : rcp 경로 복원 + 그리드 인덱싱 수정
+	// HMI 그리드 좌표: 헤더 = SS_HEADER 행, 데이터 1..MaxRows, 열 1..5
 	CString strAgingRcpPath;
 	strAgingRcpPath = dfcStr(_T("%s%s.rcp"), m_strAgingRcpPath, strRcp);
 
@@ -438,8 +438,8 @@ void CDlgSubManual_AgingSet::AgingItemClearAll()
 
 void CDlgSubManual_AgingSet::AgingItemAdd()
 {
-	// LYS 2026-08-05 : add one data row (cell types per column, AgingTest pattern)
-	// col 1 = Use (check), col 2 = lighting pattern (combo 0..20), col 3..5 = base/up/low (edit)
+	// LYS 2026-08-05 : 데이터 행 1개 추가(열별 셀 타입, AgingTest 패턴)
+	// 1열 Use(체크), 2열 점등 패턴(콤보 0..20), 3~5열 base/up/low(에디트)
 	int nMaxRow = m_spreadAgAlarmList->GetMaxRows();
 	if (nMaxRow < 0) return;
 

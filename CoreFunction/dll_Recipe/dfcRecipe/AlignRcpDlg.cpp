@@ -468,10 +468,16 @@ void	C_AlignRcpDlg::InitCcdSetMonitor ()
 	m_gridCcdSetMntHead.SetItemText (0, 4, _T("MAT. SCORE"));
 
 	InitAlignGridUI (m_gridCcdSetMntData, IDC_GRID_6, 5, 5, 3);
-	m_gridCcdSetMntData.SetItemText (0, 0, _T("FRONT LEFT"));
-	m_gridCcdSetMntData.SetItemText (1, 0, _T("FRONT RIGHT"));
-	m_gridCcdSetMntData.SetItemText (2, 0, _T("BACK LEFT"));
-	m_gridCcdSetMntData.SetItemText (3, 0, _T("BACK RIGHT"));
+	//m_gridCcdSetMntData.SetItemText (0, 0, _T("FRONT LEFT"));
+	//m_gridCcdSetMntData.SetItemText (1, 0, _T("FRONT RIGHT"));
+	//m_gridCcdSetMntData.SetItemText (2, 0, _T("BACK LEFT"));
+	//m_gridCcdSetMntData.SetItemText (3, 0, _T("BACK RIGHT"));
+
+	// LYS 2026-08-24 Align CCD Name 수정
+	m_gridCcdSetMntData.SetItemText(0, 0, _T("GLASS LEFT"));
+	m_gridCcdSetMntData.SetItemText(1, 0, _T("GLASS RIGHT"));
+	m_gridCcdSetMntData.SetItemText(2, 0, _T("PROBE LEFT"));
+	m_gridCcdSetMntData.SetItemText(3, 0, _T("PROBE RIGHT"));
 	m_gridCcdSetMntData.SetItemText (4, 0, _T("CURRENT"));
 
 	for (int i = 0; i < 4; i++) {
@@ -1060,10 +1066,16 @@ CString		C_AlignRcpDlg::GetCcdItemText (int m_nSelCcd)
 {
 	CString strCcd;
 
-	if		(m_nSelCcd == ALG_FRONT_LEFT)  strCcd = _T("Front Left");
-	else if (m_nSelCcd == ALG_FRONT_RIGHT) strCcd = _T("Front Right");
-	else if (m_nSelCcd == ALG_BACK_LEFT)   strCcd = _T("Back Left");
-	else if (m_nSelCcd == ALG_BACK_RIGHT)  strCcd = _T("Back Right");
+	//if		(m_nSelCcd == ALG_FRONT_LEFT)  strCcd = _T("Front Left");
+	//else if (m_nSelCcd == ALG_FRONT_RIGHT) strCcd = _T("Front Right");
+	//else if (m_nSelCcd == ALG_BACK_LEFT)   strCcd = _T("Back Left");
+	//else if (m_nSelCcd == ALG_BACK_RIGHT)  strCcd = _T("Back Right");
+
+	// LYS 2026-08-24 Align CCD Name 수정
+	if (m_nSelCcd == ALG_FRONT_LEFT)	   strCcd = _T("Glass Align Left");
+	else if (m_nSelCcd == ALG_FRONT_RIGHT) strCcd = _T("Glass Align Right");
+	else if (m_nSelCcd == ALG_BACK_LEFT)   strCcd = _T("Probe Align Left");
+	else if (m_nSelCcd == ALG_BACK_RIGHT)  strCcd = _T("Probe Align Right");
 
 	return strCcd;
 }

@@ -410,8 +410,59 @@ long CMaintControlMgr::MoveCmdPosR(int iAxis, double dPos, bool bBlockMode, int 
 }
 
 
+// LYS 2026-08-25 ACS 멀티 이동에는 bUse 검사가 없고 SetSpeed()가 비활성 축에도 성공을
+// 반환해, 미장착 축이 자기 HW 맵을 달고 컨트롤러까지 간다. 단순 낭비가 아니다 -
+// 비활성 슬롯 일부가 사용 중인 축과 HW 인덱스를 공유하고(PBY3/PBY4 = ACS0 30/31 = Z3/Z4),
+// 호출부는 갠트리 수와 무관하게 5슬롯 배열을 만든다. 그래서 미리 걸러낸다.
+static int PackUsedAxes(CMotorControlMgr* pMotor, const stMotorPosition* pSrc, int nAxis,
+	stMotorPosition* pDst, int nDstMax)
+{
+	int nUsed = 0;
+
+	for (int i = 0; i < nAxis && nUsed < nDstMax; i++)
+	{
+		// LYS 2026-08-26 enum 범위 밖 id도 제거. 미초기화 슬롯의 양수 쓰레기값이
+		// m_dAlignOffset[axis] 범위 밖 접근(크래시)으로 이어지는 것을 막는다.
+		if (pSrc[i].axis < 0 || pSrc[i].axis >= AXIS_TYPE_END)
+			continue;
+
+		axis_data_type* pAxisInfo = (pMotor != nullptr) ? pMotor->GetAxisProperty(pSrc[i].axis) : nullptr;
+		if (pMotor != nullptr && (pAxisInfo == nullptr || pAxisInfo->bUse == FALSE))
+			continue;
+
+		pDst[nUsed++] = pSrc[i];
+	}
+
+	return nUsed;
+}
+
+// LYS 2026-08-25 stMotorPosition 배열은 5갠트리 기준으로 잡고 필요한 만큼만 채운다.
+// ZeroMemory는 나머지를 axis 0 = AXIS_X, 즉 "스테이지 갠트리를 0으로" 라는 유효 지령으로
+// 남긴다. AXIS_NONE으로 채우면 PackUsedAxes()가 컨트롤러에 닿기 전에 버린다.
+void CMaintControlMgr::ClearMotorPos(stMotorPosition* pPos, int nCount)
+{
+	if (pPos == nullptr || nCount <= 0)
+		return;
+
+	ZeroMemory(pPos, sizeof(stMotorPosition) * nCount);
+
+	for (int i = 0; i < nCount; i++)
+	{
+		pPos[i].axis = AXIS_NONE;
+	}
+}
+
+
 long CMaintControlMgr::MoveCmdPosMulti(stMotorPosition* pPos, int iAxis, int iSpeed, bool bDoneCheck, bool bUseOffset)
 {
+	// LYS 2026-08-25 see PackUsedAxes above.
+	stMotorPosition stPackedPos[AXIS_TYPE_END];
+	int nPackedAxis = PackUsedAxes(m_pMotorControlMgr, pPos, iAxis, stPackedPos, _countof(stPackedPos));
+	if (nPackedAxis <= 0)
+		return df_MOTION_RV_SUCCESSED;
+	pPos = stPackedPos;
+	iAxis = nPackedAxis;
+
 	// TODO: 여기에 구현 코드 추가.
 	long nRet = df_MOTION_RV_ERROR;
 
@@ -1570,6 +1621,20 @@ long CMaintControlMgr::MoveCmdPosAging(stMotorPosition* pPos, int nAxis, int iSp
 				dPos = 0.;
 			}
 
+			// LYS 2026-08-26 WAD와 동일한 시퀀스 계층 Z1 하강 인터락.
+			// X2가 P5 위치 안이면 모션 시작 전에 인터락 (A_Sub 검사는 백스톱).
+			if (dPos > GetOrgPos(AXIS_Z1) && m_pMotorControlMgr != nullptr
+				&& m_pMotorControlMgr->IsProbeUnitOverlapX(GetOrgPos(AXIS_X2)) == true)
+			{
+				CString strLog;
+				strLog.Format(_T("MoveCmdPosAging Z1 DOWN NG - PROBE UNIT(X9:%.3f) vs BACK GANTRY(X2:%.3f), Z1 %.3f -> %.3f"),
+					GetOrgPos(AXIS_PROBE_X9), GetOrgPos(AXIS_X2), GetOrgPos(AXIS_Z1), dPos);
+				m_pMotorControlMgr->GetLogFileAccessorPtr()->KMLOG(WARN, strLog, true);
+
+				nRet = MOTION_INTERLOCK_CHECK_ALARM + AXIS_PROBE_X9;
+				break;
+			}
+
 			nRet = MoveCmdPosA(axis, dPos, true, SPEED_HIGH);
 			break;
 		}
@@ -1748,6 +1813,20 @@ long CMaintControlMgr::MoveCmdPosReview(int iStick, stMotorPosition* pPos, int n
 			if (dPos > 1.) // jsyoon 2022.09.30 add
 			{
 				dPos = 0.;
+			}
+
+			// LYS 2026-08-26 WAD와 동일한 시퀀스 계층 Z1 하강 인터락.
+			// X2가 P5 위치 안이면 모션 시작 전에 인터락
+			if (dPos > GetOrgPos(AXIS_Z1) && m_pMotorControlMgr != nullptr
+				&& m_pMotorControlMgr->IsProbeUnitOverlapX(GetOrgPos(AXIS_X2)) == true)
+			{
+				CString strLog;
+				strLog.Format(_T("MoveCmdPosReview Z1 DOWN NG - PROBE UNIT(X9:%.3f) vs BACK GANTRY(X2:%.3f), Z1 %.3f -> %.3f"),
+					GetOrgPos(AXIS_PROBE_X9), GetOrgPos(AXIS_X2), GetOrgPos(AXIS_Z1), dPos);
+				m_pMotorControlMgr->GetLogFileAccessorPtr()->KMLOG(WARN, strLog, true);
+
+				nRet = MOTION_INTERLOCK_CHECK_ALARM + AXIS_PROBE_X9;
+				break;
 			}
 
 			nRet = MoveCmdPosA(axis, dPos, true, SPEED_HIGH);
@@ -1951,6 +2030,20 @@ long CMaintControlMgr::MoveCmdPosWAD(stMotorPosition* pPos, int nAxis, int iSpee
 					dPos = 0.;
 				}
 
+				// LYS 2026-08-26 시퀀스 계층 Z1 하강 인터락. 안전높이(-600) 대비 하강이므로
+				// X2가 P5 위치 안이면 WAD 모션 시작 전에 인터락
+				if (dPos > GetOrgPos(AXIS_Z1) && m_pMotorControlMgr != nullptr
+					&& m_pMotorControlMgr->IsProbeUnitOverlapX(GetOrgPos(AXIS_X2)) == true)
+				{
+					CString strLog;
+					strLog.Format(_T("MoveCmdPosWAD Z1 DOWN NG - PROBE UNIT(X9:%.3f) vs BACK GANTRY(X2:%.3f), Z1 %.3f -> %.3f"),
+						GetOrgPos(AXIS_PROBE_X9), GetOrgPos(AXIS_X2), GetOrgPos(AXIS_Z1), dPos);
+					m_pMotorControlMgr->GetLogFileAccessorPtr()->KMLOG(WARN, strLog, true);
+
+					nRet = MOTION_INTERLOCK_CHECK_ALARM + AXIS_Z1;
+					break;
+				}
+
 				nRet = MoveCmdPosA(axis, dPos, true, SPEED_HIGH);
 				break;
 			}
@@ -2047,8 +2140,7 @@ long CMaintControlMgr::MoveCmdPosWAD(stMotorPosition* pPos, int nAxis, int iSpee
 
 		if (bSetMoveAxisX == true)
 		{
-			// LYS 2026-06-26 OCP: no Probe X9
-			if (!m_pMotorControlMgr->IsOCP())
+			// LYS 2026-08-25 restored - the OCP gantry X moves now.
 			if (GetCurPos(AXIS_PROBE_X9) > dMoveAxisX - 20)
 			{
 				nRet = MoveCmdPosA(AXIS_Z2, 0, true, SPEED_HIGH, -1, -1);
@@ -2079,6 +2171,27 @@ long CMaintControlMgr::MoveCmdPosWAD(stMotorPosition* pPos, int nAxis, int iSpee
 				}
 			}
 		} 
+
+		if (nRet == df_MOTION_RV_SUCCESSED)
+		{
+			// LYS 2026-08-28 Sub Z(Z3/Z4) - WAD(특성) 측정 전용, DoWork에서 넘어온 레시피 값 그대로 이동.
+			stMotorPosition stPositionSubZ[2];
+			ZeroMemory(&stPositionSubZ, sizeof(stPositionSubZ));
+			int nMoveSubZ = 0;
+			for (size_t i = 0; i < nAxis; i++)
+			{
+				if (pPos[i].axis == AXIS_Z3 || pPos[i].axis == AXIS_Z4)
+				{
+					stPositionSubZ[nMoveSubZ].axis = pPos[i].axis;
+					stPositionSubZ[nMoveSubZ].dPosition = pPos[i].dPosition;
+					nMoveSubZ++;
+				}
+			}
+			if (nMoveSubZ > 0)
+			{
+				nRet = MoveCmdPosMulti(stPositionSubZ, nMoveSubZ, SPEED_HIGH, true, false);
+			}
+		}
 
 		if (nRet == df_MOTION_RV_SUCCESSED)
 		{
@@ -2145,6 +2258,27 @@ long CMaintControlMgr::MoveCmdPosVision(stMotorPosition* pPos, int nAxis, int iS
 				nRet = MoveCmdPosA(axis, dPos, true, SPEED_HIGH);
 				break;
 			}
+		}
+	}
+
+	if (nRet == df_MOTION_RV_SUCCESSED)
+	{
+		// LYS 2026-08-28 Sub Z(Z5/Z6) - VISION/ANGLE(화질/시야각) 측정 공용, DoWork에서 넘어온 레시피 값 그대로 이동.
+		stMotorPosition stPositionSubZ[2];
+		ZeroMemory(&stPositionSubZ, sizeof(stPositionSubZ));
+		int nMoveSubZ = 0;
+		for (size_t i = 0; i < nAxis; i++)
+		{
+			if (pPos[i].axis == AXIS_Z5 || pPos[i].axis == AXIS_Z6)
+			{
+				stPositionSubZ[nMoveSubZ].axis = pPos[i].axis;
+				stPositionSubZ[nMoveSubZ].dPosition = pPos[i].dPosition;
+				nMoveSubZ++;
+			}
+		}
+		if (nMoveSubZ > 0)
+		{
+			nRet = MoveCmdPosMulti(stPositionSubZ, nMoveSubZ, SPEED_HIGH, true, false);
 		}
 	}
 
@@ -2373,20 +2507,7 @@ long CMaintControlMgr::MoveCmdPosVision(stMotorPosition* pPos, int nAxis, int iS
 			}
 		}
 
-		// Move Z
-		if (nRet == df_MOTION_RV_SUCCESSED)
-		{
-			for (size_t i = 0; i < nAxis; i++)
-			{
-				axis = pPos[i].axis;
-				if (axis == AXIS_Z1)
-				{
-					dPos = pPos[i].dPosition + dOffsetZ[0];
-					nRet = MoveCmdPosA(axis, dPos, true, SPEED_HIGH);
-					break;
-				}
-			}
-		}
+		// LYS 2026-08-26 Z1(BACK Z) 이동 제거. Vision은 FRONT 갠트리(X3) 기반이라 Z1 불필요.
 
 
 		if (nRet == df_MOTION_RV_SUCCESSED)
@@ -2681,26 +2802,11 @@ long CMaintControlMgr::MoveCmdPosAngle(stMotorPosition* pPos, int nAxis, int iSp
 	int axis = 0;
 	double dPos = 0.;
 
-	for (size_t i = 0; i < nAxis; i++)
-	{
-		axis = pPos[i].axis;
-		if (axis == AXIS_Z1)
-		{
-			dPos = pPos[i].dPosition;
-			if (dPos > 1.)		// jsyoon 2022.09.30 add
-			{
-				dPos = 0.;
-			}
+	// LYS 2026-08-26 선두의 Z1(BACK Z) 이동 제거. Angle은 FRONT 갠트리(X3/Z2) 기반이라 Z1 지령 불필요.
 
-			
-			nRet = MoveCmdPosA(axis, dPos, true, SPEED_HIGH);
-			break;
-		}
-	}
-
-	// LYS 2026-08-19 Angle module optics (Scheimpflug / Rotate / Zoom / Tilt / Azimuth x2).
-	// Recipe driven, so the caller just appends them to pPos. Issued here - before the X/Y/Z
-	// head moves below - so they travel in parallel; the wait is deferred to the end.
+	// LYS 2026-08-19 Angle 모듈 광학계(Scheimpflug / Rotate / Zoom / Tilt / Azimuth x2).
+	// 레시피 기반이라 호출부는 pPos에 덧붙이기만 한다. 아래 X/Y/Z 헤드 이동보다 먼저
+	// 지령해 병렬로 움직이게 하고, 대기는 끝으로 미룬다.
 	stMotorPosition stPositionAngle[10];
 	ZeroMemory(&stPositionAngle, sizeof(stPositionAngle));
 	int nMoveAngle = 0;
@@ -2821,8 +2927,7 @@ long CMaintControlMgr::MoveCmdPosAngle(stMotorPosition* pPos, int nAxis, int iSp
 
 		if (bSetMoveAxisX == true)
 		{
-			// LYS 2026-06-26 OCP: no Probe X9
-			if (!m_pMotorControlMgr->IsOCP())
+			// LYS 2026-08-25 restored - the OCP gantry X moves now.
 			if (GetCurPos(AXIS_PROBE_X9) > dMoveAxisX - 20)
 			{
 				nRet = MoveCmdPosA(AXIS_Z2, 0, true, SPEED_HIGH, -1, -1);
@@ -2858,6 +2963,27 @@ long CMaintControlMgr::MoveCmdPosAngle(stMotorPosition* pPos, int nAxis, int iSp
 
 		if (nRet == df_MOTION_RV_SUCCESSED)
 		{
+			// LYS 2026-08-28 Sub Z(Z5/Z6) - VISION/ANGLE(화질/시야각) 측정 공용, DoWork에서 넘어온 레시피 값 그대로 이동.
+			stMotorPosition stPositionSubZ[2];
+			ZeroMemory(&stPositionSubZ, sizeof(stPositionSubZ));
+			int nMoveSubZ = 0;
+			for (size_t i = 0; i < nAxis; i++)
+			{
+				if (pPos[i].axis == AXIS_Z5 || pPos[i].axis == AXIS_Z6)
+				{
+					stPositionSubZ[nMoveSubZ].axis = pPos[i].axis;
+					stPositionSubZ[nMoveSubZ].dPosition = pPos[i].dPosition;
+					nMoveSubZ++;
+				}
+			}
+			if (nMoveSubZ > 0)
+			{
+				nRet = MoveCmdPosMulti(stPositionSubZ, nMoveSubZ, SPEED_HIGH, true, false);
+			}
+		}
+
+		if (nRet == df_MOTION_RV_SUCCESSED)
+		{
 			if (bDoneCheck == true)
 			{
 				for (size_t i = 0; i < nAxis; i++)
@@ -2871,10 +2997,9 @@ long CMaintControlMgr::MoveCmdPosAngle(stMotorPosition* pPos, int nAxis, int iSp
 		}
 	}
 
-	// LYS 2026-08-19 The angle axes were issued up front, so by now the X / Z2 waits above
-	// have usually covered their travel. Wait regardless of bDoneCheck: the measure step's
-	// own wait loop only covers pPos[0..1], and the optics must be settled before the
-	// measurement is triggered.
+	// LYS 2026-08-19 Angle 축은 앞에서 지령했으므로 위의 X / Z2 대기로 대개 이동이 끝난다.
+	// bDoneCheck와 무관하게 대기한다 - 측정 스텝의 자체 대기 루프는 pPos[0..1]만 커버하고,
+	// 측정 트리거 전에 광학계가 안정돼 있어야 한다.
 	if (nRet == df_MOTION_RV_SUCCESSED)
 	{
 		for (int i = 0; i < nMoveAngle; i++)
@@ -3024,6 +3149,10 @@ int CMaintControlMgr::MoveCmdPos_ProbeOffset(int iProbe)
 
 int CMaintControlMgr::GetCmdPos_ProbeX(stMotorPosition* pPos, int iProbe, double dPos, double dGap, BOOL bOffset)
 {
+	// LYS 2026-08-25 아래 switch는 5슬롯을 쓰고 모든 호출부가 stMotorPosition[5]를 넘긴다.
+	// switch가 다루지 않는 프로브 id나 향후 덜 채우는 케이스가 AXIS_X 항목을 남기지 않도록 먼저 비운다.
+	ClearMotorPos(pPos, 5);
+
 	double dProbeGap = 0.;
 	double fOffsetGap = 2.;
 	if (bOffset == TRUE)
@@ -5593,8 +5722,8 @@ long CMaintControlMgr::MoveCmdAlignPos_Probe(double* pPos)
 					double dMoveProbeX[5];
 					ZeroMemory(dMoveProbeX, sizeof(dMoveProbeX));
 
-					// LYS 2026-07-01 Add Probe Align OCP Option 
-					if (!m_pMotorControlMgr->IsOCP())
+					// LYS 2026-08-25 복구 - OCP 갠트리 X가 움직이므로 프로브 얼라인도 이를 구동한다.
+					// dMoveProbeX[0]이 P5 목표이고, P1~P4 항목은 MoveCmdPosMulti()가 버린다.
 					{
 						for (size_t i = 0; i < 5; i++)
 						{
@@ -6371,7 +6500,10 @@ long CMaintControlMgr::MoveCmdPos_Probe(double* pPos)
 	{
 		double fProbeLimit = 0.;
 		// LYS 2026-06-26 OCP: no Probe X9, skip probe repositioning
-		if (!m_pMotorControlMgr->IsOCP())
+		// LYS 2026-08-25 HW 변경 후에도 계속 스킵 - 이유가 다르다.
+		// 여기 dMovePos는 stage 좌표인데(RecipeEditMgr이 stick stage Y로 채움) 신 갠트리 X는
+		// -51..0.1만 커버해 SW 리밋 검사에 걸린다. 프로브 1개 기종에서 5갠트리 분산은 무의미하다.
+		if (m_pMotorControlMgr->IsOCP() != true)
 		if (GetCurPos(AXIS_PROBE_X9) > dMovePos)
 		{
 			////_TEST (Probe 전체 위치 이동)
@@ -6928,6 +7060,14 @@ long CMaintControlMgr::MoveOrgPosR(int iAxis, double dPos, bool bBlockMode, int 
 
 long CMaintControlMgr::MoveOrgPosMulti(stMotorPosition* pPos, int iAxis, int iSpeed, bool bDoneCheck)
 {
+	// LYS 2026-08-25 see PackUsedAxes above.
+	stMotorPosition stPackedPos[AXIS_TYPE_END];
+	int nPackedAxis = PackUsedAxes(m_pMotorControlMgr, pPos, iAxis, stPackedPos, _countof(stPackedPos));
+	if (nPackedAxis <= 0)
+		return df_MOTION_RV_SUCCESSED;
+	pPos = stPackedPos;
+	iAxis = nPackedAxis;
+
 	// TODO: 여기에 구현 코드 추가.
 	long nRet = df_MOTION_RV_ERROR;
 
@@ -7086,8 +7226,11 @@ long CMaintControlMgr::MoveCmd_SafetyAll(bool bInit)
 			double dSafetyProbe[5];
 			ZeroMemory(dSafetyProbe, sizeof(dSafetyProbe));
 			//	GetPositionConfigMgr()->GetProbeSafetyPosition(&dSafetyProbe[0], &dSafetyProbe[1], &dSafetyProbe[2], &dSafetyProbe[3], &dSafetyProbe[4]);
-
-			//	stMotorPosition stPositionProbeX[5];
+			GetPositionConfigMgr()->GetProbeSafetyPosition(&dSafetyProbe[0], &dSafetyProbe[1], &dSafetyProbe[2], &dSafetyProbe[3], &dSafetyProbe[4]);
+				stMotorPosition stPositionProbeX[5];
+				// LYS 2026-08-26 P1~P4 채움이 주석 처리됐는데 카운트 5로 넘어가 쓰레기 슬롯이
+				// 전달되던 초기화 크래시 수정. 전 슬롯 AXIS_NONE 초기화 후 X9만 남는다.
+				ClearMotorPos(stPositionProbeX, 5);
 			//	stPositionProbeX[0].axis = AXIS_PROBE_X1;
 			//	stPositionProbeX[0].dPosition = dSafetyProbe[0];
 			//	stPositionProbeX[1].axis = AXIS_PROBE_X3;
@@ -7096,10 +7239,10 @@ long CMaintControlMgr::MoveCmd_SafetyAll(bool bInit)
 			//	stPositionProbeX[2].dPosition = dSafetyProbe[2];
 			//	stPositionProbeX[3].axis = AXIS_PROBE_X7;
 			//	stPositionProbeX[3].dPosition = dSafetyProbe[3];
-			//	stPositionProbeX[4].axis = AXIS_PROBE_X9;
-			//	stPositionProbeX[4].dPosition = dSafetyProbe[4];
+				stPositionProbeX[4].axis = AXIS_PROBE_X9;
+				stPositionProbeX[4].dPosition = dSafetyProbe[4];
 
-			//	nRet = MoveCmdPosMulti(stPositionProbeX, 5, 1);
+				nRet = MoveCmdPosMulti(stPositionProbeX, 5, 1);
 		}
 
 		// All Axis
@@ -7126,6 +7269,61 @@ long CMaintControlMgr::MoveCmd_SafetyAll(bool bInit)
 			nRet = MoveOrgPosMulti(stPositionZ, 2, SPEED_HIGH, true);
 
 			CMCCLogMgr::GetInstance()->SetMCC_Action(MCC_A_MOT_SAFETY_HEAD_Z, false);
+		}
+
+		if (nRet == df_MOTION_RV_SUCCESSED)
+		{
+			// LYS 2026-08-28 Sub Z Safety - Z3(WAD_RIGHT)/Z4(WAD_LEFT)/Z5(VISION_ANGLE_RIGHT)/Z6(VISION_ANGLE_LEFT)
+			double dSubZSafety[enumSUBZ_COUNT];
+			ZeroMemory(dSubZSafety, sizeof(dSubZSafety));
+			GetPositionConfigMgr()->GetSubZSafetyPosition(&dSubZSafety[enumSUBZ_WAD_RIGHT], &dSubZSafety[enumSUBZ_WAD_LEFT], &dSubZSafety[enumSUBZ_VISION_ANGLE_RIGHT], &dSubZSafety[enumSUBZ_VISION_ANGLE_LEFT]);
+
+			stMotorPosition stPositionSubZ[4];
+			ZeroMemory(&stPositionSubZ, sizeof(stPositionSubZ));
+			stPositionSubZ[0].axis = AXIS_Z3;
+			stPositionSubZ[0].dPosition = dSubZSafety[enumSUBZ_WAD_RIGHT];
+			stPositionSubZ[1].axis = AXIS_Z4;
+			stPositionSubZ[1].dPosition = dSubZSafety[enumSUBZ_WAD_LEFT];
+			stPositionSubZ[2].axis = AXIS_Z5;
+			stPositionSubZ[2].dPosition = dSubZSafety[enumSUBZ_VISION_ANGLE_RIGHT];
+			stPositionSubZ[3].axis = AXIS_Z6;
+			stPositionSubZ[3].dPosition = dSubZSafety[enumSUBZ_VISION_ANGLE_LEFT];
+
+			nRet = MoveOrgPosMulti(stPositionSubZ, 4, SPEED_HIGH, true);
+		}
+
+		if (nRet == df_MOTION_RV_SUCCESSED)
+		{
+			// LYS 2026-08-28 Angle Sub Safety - Scheimpflug/Rotate/Zoom/Tilt/Azimuth, head1(BACK)+head2(FRONT)
+			double dAngleSubSafety[enumANGLE_HEAD_COUNT][enumANGLESUB_COUNT];
+			ZeroMemory(dAngleSubSafety, sizeof(dAngleSubSafety));
+			GetPositionConfigMgr()->GetAngleSubSafetyPosition(enumANGLE_HEAD1, &dAngleSubSafety[enumANGLE_HEAD1][enumANGLESUB_SCHEIMPFLUG], &dAngleSubSafety[enumANGLE_HEAD1][enumANGLESUB_ROTATE], &dAngleSubSafety[enumANGLE_HEAD1][enumANGLESUB_ZOOM], &dAngleSubSafety[enumANGLE_HEAD1][enumANGLESUB_TILT], &dAngleSubSafety[enumANGLE_HEAD1][enumANGLESUB_AZIMUTH]);
+			GetPositionConfigMgr()->GetAngleSubSafetyPosition(enumANGLE_HEAD2, &dAngleSubSafety[enumANGLE_HEAD2][enumANGLESUB_SCHEIMPFLUG], &dAngleSubSafety[enumANGLE_HEAD2][enumANGLESUB_ROTATE], &dAngleSubSafety[enumANGLE_HEAD2][enumANGLESUB_ZOOM], &dAngleSubSafety[enumANGLE_HEAD2][enumANGLESUB_TILT], &dAngleSubSafety[enumANGLE_HEAD2][enumANGLESUB_AZIMUTH]);
+
+			stMotorPosition stPositionAngleSub[10];
+			ZeroMemory(&stPositionAngleSub, sizeof(stPositionAngleSub));
+			stPositionAngleSub[0].axis = AXIS_ANGLE_SF1;
+			stPositionAngleSub[0].dPosition = dAngleSubSafety[enumANGLE_HEAD1][enumANGLESUB_SCHEIMPFLUG];
+			stPositionAngleSub[1].axis = AXIS_ANGLE_ROTATE1;
+			stPositionAngleSub[1].dPosition = dAngleSubSafety[enumANGLE_HEAD1][enumANGLESUB_ROTATE];
+			stPositionAngleSub[2].axis = AXIS_ANGLE_ZOOM1;
+			stPositionAngleSub[2].dPosition = dAngleSubSafety[enumANGLE_HEAD1][enumANGLESUB_ZOOM];
+			stPositionAngleSub[3].axis = AXIS_ANGLE_TILT1;
+			stPositionAngleSub[3].dPosition = dAngleSubSafety[enumANGLE_HEAD1][enumANGLESUB_TILT];
+			stPositionAngleSub[4].axis = AXIS_ANGLE_AZM1;
+			stPositionAngleSub[4].dPosition = dAngleSubSafety[enumANGLE_HEAD1][enumANGLESUB_AZIMUTH];
+			stPositionAngleSub[5].axis = AXIS_ANGLE_SF2;
+			stPositionAngleSub[5].dPosition = dAngleSubSafety[enumANGLE_HEAD2][enumANGLESUB_SCHEIMPFLUG];
+			stPositionAngleSub[6].axis = AXIS_ANGLE_ROTATE2;
+			stPositionAngleSub[6].dPosition = dAngleSubSafety[enumANGLE_HEAD2][enumANGLESUB_ROTATE];
+			stPositionAngleSub[7].axis = AXIS_ANGLE_ZOOM2;
+			stPositionAngleSub[7].dPosition = dAngleSubSafety[enumANGLE_HEAD2][enumANGLESUB_ZOOM];
+			stPositionAngleSub[8].axis = AXIS_ANGLE_TILT2;
+			stPositionAngleSub[8].dPosition = dAngleSubSafety[enumANGLE_HEAD2][enumANGLESUB_TILT];
+			stPositionAngleSub[9].axis = AXIS_ANGLE_AZM2;
+			stPositionAngleSub[9].dPosition = dAngleSubSafety[enumANGLE_HEAD2][enumANGLESUB_AZIMUTH];
+
+			nRet = MoveOrgPosMulti(stPositionAngleSub, 10, SPEED_HIGH, true);
 		}
 
 		if (nRet == df_MOTION_RV_SUCCESSED)
@@ -7439,6 +7637,61 @@ long CMaintControlMgr::MoveCmd_SafetyAll(bool bInit)
 
 			if (nRet == df_MOTION_RV_SUCCESSED)
 			{
+				// LYS 2026-08-28 Sub Z Safety - Z3(WAD_RIGHT)/Z4(WAD_LEFT)/Z5(VISION_ANGLE_RIGHT)/Z6(VISION_ANGLE_LEFT)
+				double dSubZSafety[enumSUBZ_COUNT];
+				ZeroMemory(dSubZSafety, sizeof(dSubZSafety));
+				GetPositionConfigMgr()->GetSubZSafetyPosition(&dSubZSafety[enumSUBZ_WAD_RIGHT], &dSubZSafety[enumSUBZ_WAD_LEFT], &dSubZSafety[enumSUBZ_VISION_ANGLE_RIGHT], &dSubZSafety[enumSUBZ_VISION_ANGLE_LEFT]);
+
+				stMotorPosition stPositionSubZ[4];
+				ZeroMemory(&stPositionSubZ, sizeof(stPositionSubZ));
+				stPositionSubZ[0].axis = AXIS_Z3;
+				stPositionSubZ[0].dPosition = dSubZSafety[enumSUBZ_WAD_RIGHT];
+				stPositionSubZ[1].axis = AXIS_Z4;
+				stPositionSubZ[1].dPosition = dSubZSafety[enumSUBZ_WAD_LEFT];
+				stPositionSubZ[2].axis = AXIS_Z5;
+				stPositionSubZ[2].dPosition = dSubZSafety[enumSUBZ_VISION_ANGLE_RIGHT];
+				stPositionSubZ[3].axis = AXIS_Z6;
+				stPositionSubZ[3].dPosition = dSubZSafety[enumSUBZ_VISION_ANGLE_LEFT];
+
+				nRet = MoveOrgPosMulti(stPositionSubZ, 4, SPEED_HIGH, true);
+			}
+
+			if (nRet == df_MOTION_RV_SUCCESSED)
+			{
+				// LYS 2026-08-28 Angle Sub Safety - Scheimpflug/Rotate/Zoom/Tilt/Azimuth, head1(BACK)+head2(FRONT)
+				double dAngleSubSafety[enumANGLE_HEAD_COUNT][enumANGLESUB_COUNT];
+				ZeroMemory(dAngleSubSafety, sizeof(dAngleSubSafety));
+				GetPositionConfigMgr()->GetAngleSubSafetyPosition(enumANGLE_HEAD1, &dAngleSubSafety[enumANGLE_HEAD1][enumANGLESUB_SCHEIMPFLUG], &dAngleSubSafety[enumANGLE_HEAD1][enumANGLESUB_ROTATE], &dAngleSubSafety[enumANGLE_HEAD1][enumANGLESUB_ZOOM], &dAngleSubSafety[enumANGLE_HEAD1][enumANGLESUB_TILT], &dAngleSubSafety[enumANGLE_HEAD1][enumANGLESUB_AZIMUTH]);
+				GetPositionConfigMgr()->GetAngleSubSafetyPosition(enumANGLE_HEAD2, &dAngleSubSafety[enumANGLE_HEAD2][enumANGLESUB_SCHEIMPFLUG], &dAngleSubSafety[enumANGLE_HEAD2][enumANGLESUB_ROTATE], &dAngleSubSafety[enumANGLE_HEAD2][enumANGLESUB_ZOOM], &dAngleSubSafety[enumANGLE_HEAD2][enumANGLESUB_TILT], &dAngleSubSafety[enumANGLE_HEAD2][enumANGLESUB_AZIMUTH]);
+
+				stMotorPosition stPositionAngleSub[10];
+				ZeroMemory(&stPositionAngleSub, sizeof(stPositionAngleSub));
+				stPositionAngleSub[0].axis = AXIS_ANGLE_SF1;
+				stPositionAngleSub[0].dPosition = dAngleSubSafety[enumANGLE_HEAD1][enumANGLESUB_SCHEIMPFLUG];
+				stPositionAngleSub[1].axis = AXIS_ANGLE_ROTATE1;
+				stPositionAngleSub[1].dPosition = dAngleSubSafety[enumANGLE_HEAD1][enumANGLESUB_ROTATE];
+				stPositionAngleSub[2].axis = AXIS_ANGLE_ZOOM1;
+				stPositionAngleSub[2].dPosition = dAngleSubSafety[enumANGLE_HEAD1][enumANGLESUB_ZOOM];
+				stPositionAngleSub[3].axis = AXIS_ANGLE_TILT1;
+				stPositionAngleSub[3].dPosition = dAngleSubSafety[enumANGLE_HEAD1][enumANGLESUB_TILT];
+				stPositionAngleSub[4].axis = AXIS_ANGLE_AZM1;
+				stPositionAngleSub[4].dPosition = dAngleSubSafety[enumANGLE_HEAD1][enumANGLESUB_AZIMUTH];
+				stPositionAngleSub[5].axis = AXIS_ANGLE_SF2;
+				stPositionAngleSub[5].dPosition = dAngleSubSafety[enumANGLE_HEAD2][enumANGLESUB_SCHEIMPFLUG];
+				stPositionAngleSub[6].axis = AXIS_ANGLE_ROTATE2;
+				stPositionAngleSub[6].dPosition = dAngleSubSafety[enumANGLE_HEAD2][enumANGLESUB_ROTATE];
+				stPositionAngleSub[7].axis = AXIS_ANGLE_ZOOM2;
+				stPositionAngleSub[7].dPosition = dAngleSubSafety[enumANGLE_HEAD2][enumANGLESUB_ZOOM];
+				stPositionAngleSub[8].axis = AXIS_ANGLE_TILT2;
+				stPositionAngleSub[8].dPosition = dAngleSubSafety[enumANGLE_HEAD2][enumANGLESUB_TILT];
+				stPositionAngleSub[9].axis = AXIS_ANGLE_AZM2;
+				stPositionAngleSub[9].dPosition = dAngleSubSafety[enumANGLE_HEAD2][enumANGLESUB_AZIMUTH];
+
+				nRet = MoveOrgPosMulti(stPositionAngleSub, 10, SPEED_HIGH, true);
+			}
+
+			if (nRet == df_MOTION_RV_SUCCESSED)
+			{
 				if (nRet == df_MOTION_RV_SUCCESSED)
 				{
 					stMotorPosition stPositionCross[4];
@@ -7477,8 +7730,7 @@ long CMaintControlMgr::MoveCmd_SafetyAll(bool bInit)
 				double dInterlock = 0, dProbeGap = 0, dPosProbe5 = 0;
 				GetMotorControlMgrPtr()->GetInterlockPos(nullptr, nullptr, &dProbeGap, nullptr, &dInterlock);
 
-				// LYS 2026-06-26 OCP: no Probe X9, skip lift pin interlock
-				if (!m_pMotorControlMgr->IsOCP())
+				// LYS 2026-08-25 복구 - OCP 갠트리 X가 움직이므로 lift pin 인터락이 그 위치를 다시 봐야 한다.
 				{
 					dPosProbe5= GetCurPos(AXIS_PROBE_X9);
 					if (dPosProbe5 > dInterlock)

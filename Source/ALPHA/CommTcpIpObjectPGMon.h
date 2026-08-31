@@ -3,9 +3,8 @@
 #include ".\Manager\CommTcpIpDefine.h"
 #include "AuroraMgrPool.h"
 
-// LYS 2026-07-29 ELP ElecBox monitor protocol
-// Doc: ElecBoxProtocol_SDC HMI(OCP) 2026-07-28 (based on A6 8.6G GAI 24.08.20)
-// ELP pushes S10F01(status) / S10F20(alarm), HMI replies S20F01 / S20F20 ACK.
+// LYS 2026-07-29 ELP ElecBox 모니터 프로토콜(사양서 2026-07-28).
+// ELP가 S10F01(상태)/S10F20(알람)을 보내면 HMI가 S20F01/S20F20 ACK로 회신한다.
 
 #define eMON_S10F1		_T("1001")		// ElecBox temp / smoke / power report
 #define eMON_S10F20		_T("1020")		// ElecBox alarm report (max 10ea)

@@ -1,7 +1,7 @@
 // AgingAlarmCheck.cpp
-// LYS 2026-08-05 AgingSet Phase 4: non-UI aging target-current alarm checker.
-// Parser kept byte-compatible with CDlgSubManual_AgingSet::FindAgingAlarm
-// (which itself is the port of OCP C_DlgNaviManualAgingSet, JOB_Proc 6924-6969).
+// LYS 2026-08-05 AgingSet Phase 4: 비UI 에이징 목표전류 알람 체커.
+// 파서는 CDlgSubManual_AgingSet::FindAgingAlarm과 바이트 호환을 유지한다
+// (그 자체가 OCP C_DlgNaviManualAgingSet, JOB_Proc 6924-6969의 이식본).
 #include "pch.h"
 #include "AgingAlarmCheck.h"
 

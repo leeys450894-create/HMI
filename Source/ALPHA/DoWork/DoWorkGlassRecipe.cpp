@@ -18,7 +18,7 @@ CDoWorkGlassRecipe::CDoWorkGlassRecipe(stAuroraMgrPool& MgrPool)
 {
 	m_strSeqType = _T("SEQUENCE_ITEM_DWGLASS_SEQ_GLASS_RECIPE_CHANGE");
 	m_strSeqComm = _T("TCPIP");
-	m_strSeqCorp = _T("KMAC");
+	m_strSeqCorp = _T("HBS");
 	m_strSeqName = _T("GLASS 2_RECIPE_CHANGE");
 	m_strSeqGUID = _T("EFCB7C47-9A68-41D7-BB50-B8BA5D7CFFC9");
 	m_strSeqDesc = _T("GLASS RECIPE CHANGE");

@@ -35,10 +35,9 @@ using namespace std;
 
 #define RCP_CELL_ANG_0		0
 #define RCP_CELL_ANG_90	    1
-// LYS 2026-08-18 Glass rotate 180 (short-side measurement, m_nGlsRotate=2).
-// Added with the 2026-08-07 rotation scheme; the 0/90 pair predates it and left
-// every "else if (== RCP_CELL_ANG_90)" chain with no branch for 2, so those
-// assignments were silently skipped and stale values survived.
+// LYS 2026-08-18 Glass rotate 180 (단변 측정, m_nGlsRotate=2).
+// 2026-08-07 회전 체계와 함께 추가. 기존 0/90 분기에 2가 없어 대입이 통째로 스킵되고
+// 이전 값이 그대로 남아 있었다.
 #define RCP_CELL_ANG_180	2
 
 #define PIX_UNIFORMITY		1
