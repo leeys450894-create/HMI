@@ -366,7 +366,7 @@ BOOL CDlgMainForm::OnInitDialog()
 	GetDlgItem(IDC_STATIC_POSITION_CCD3)->GetWindowRect(&rtROI3);
 	ScreenToClient(&rtROI3);
 	m_pMainAlignCCD[2]->Create(IDD_DLG_SUB_CCD, this);
-	m_pMainAlignCCD[2]->ShowWindow(SW_SHOW);
+	m_pMainAlignCCD[2]->ShowWindow(SW_HIDE);		// LYS 2026-08-24 CCD 3,4 Hide
 	m_pMainAlignCCD[2]->MoveWindow(rtROI3);
 	m_pMainAlignCCD[2]->DoWorkStartGrab();
 	m_pMainAlignCCD[2]->CCDDisplayDlg(this, rtROI3);
@@ -374,7 +374,7 @@ BOOL CDlgMainForm::OnInitDialog()
 	GetDlgItem(IDC_STATIC_POSITION_CCD4)->GetWindowRect(&rtROI3);
 	ScreenToClient(&rtROI3);
 	m_pMainAlignCCD[3]->Create(IDD_DLG_SUB_CCD, this);
-	m_pMainAlignCCD[3]->ShowWindow(SW_SHOW);
+	m_pMainAlignCCD[3]->ShowWindow(SW_HIDE);		// LYS 2026-08-24 CCD 3,4 Hide
 	m_pMainAlignCCD[3]->MoveWindow(rtROI3);
 	m_pMainAlignCCD[3]->DoWorkStartGrab();
 	m_pMainAlignCCD[3]->CCDDisplayDlg(this, rtROI3);

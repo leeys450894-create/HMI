@@ -162,6 +162,15 @@ BOOL	C_InRecipeFunc::LoadRcpFile (CString strRcpName)
 	m_recipeMgr.m_sInfo.m_sInspectItem.m_bUseAngle_6	 = ReadInt (&File); 
 	m_recipeMgr.m_sInfo.m_sInspectItem.m_bUseEFA		 = ReadInt (&File);
 	m_recipeMgr.m_sInfo.m_sInspectItem.m_bUseSpec_Multi  = ReadInt (&File);
+
+	// LYS 2026-08-06 강화검사
+	if (nVersion >= RECIPE_FILE_V1006) {
+		m_recipeMgr.m_sInfo.m_sInspectItem.m_bUseAging_Test = ReadInt(&File);
+	}
+	else {
+		m_recipeMgr.m_sInfo.m_sInspectItem.m_bUseAging_Test = 0; // 기본값
+	}
+
 	strTemp = ReadString (&File);
 	dfcArryParsing (&strArr, strTemp);
 	for (int i = 0; i < M_RCP_INS_ITEM; i++) {
@@ -339,6 +348,24 @@ BOOL	C_InRecipeFunc::LoadRcpFile (CString strRcpName)
 	}
 	else {
 		m_recipeMgr.m_sInfo.m_sMotionSubZ.Clear();
+	}
+
+	// LYS 2026-08-19 Angle Axis Load (V1007+)
+	if (nVersion > RECIPE_FILE_V1007) {
+		ReadString(&File);	//Angle Axis Header
+		m_recipeMgr.m_sInfo.m_sMotionAngle.m_fAngleScheimpflug1 = ReadDouble(&File);
+		m_recipeMgr.m_sInfo.m_sMotionAngle.m_fAngleRotate1 = ReadDouble(&File);
+		m_recipeMgr.m_sInfo.m_sMotionAngle.m_fAngleZoom1 = ReadDouble(&File);
+		m_recipeMgr.m_sInfo.m_sMotionAngle.m_fAngleTilt1 = ReadDouble(&File);
+		m_recipeMgr.m_sInfo.m_sMotionAngle.m_fAngleAzimuth1 = ReadDouble(&File);
+		m_recipeMgr.m_sInfo.m_sMotionAngle.m_fAngleScheimpflug2 = ReadDouble(&File);
+		m_recipeMgr.m_sInfo.m_sMotionAngle.m_fAngleRotate2 = ReadDouble(&File);
+		m_recipeMgr.m_sInfo.m_sMotionAngle.m_fAngleZoom2 = ReadDouble(&File);
+		m_recipeMgr.m_sInfo.m_sMotionAngle.m_fAngleTilt2 = ReadDouble(&File);
+		m_recipeMgr.m_sInfo.m_sMotionAngle.m_fAngleAzimuth2 = ReadDouble(&File);
+	}
+	else {
+		m_recipeMgr.m_sInfo.m_sMotionAngle.Clear();
 	}
 
 	File.Close ();

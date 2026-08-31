@@ -35,6 +35,10 @@ using namespace std;
 
 #define RCP_CELL_ANG_0		0
 #define RCP_CELL_ANG_90	    1
+// LYS 2026-08-18 Glass rotate 180 (단변 측정, m_nGlsRotate=2).
+// 2026-08-07 회전 체계와 함께 추가. 기존 0/90 분기에 2가 없어 대입이 통째로 스킵되고
+// 이전 값이 그대로 남아 있었다.
+#define RCP_CELL_ANG_180	2
 
 #define PIX_UNIFORMITY		1
 #define PIX_NON_UNIFORMITY  2
@@ -90,12 +94,14 @@ const enum RCP_VERSION{
 	RECIPE_FILE_V1003,
 	RECIPE_FILE_V1004,
 	RECIPE_FILE_V1005,		// LYS 2026-07-08 Add
+	RECIPE_FILE_V1006,		// LYS 2026-08-06 Add
+	RECIPE_FILE_V1007,		// LYS 2026-08-19 Add
 	RECIPE_FILE_END,
 };
 
 ///////////////////////레시피 구조체
 #define M_RCP_PROBE_MAX 5	//메인 프로브 ID 개수
-#define M_RCP_INS_ITEM	9	//레시피 검사 항목 수
+#define M_RCP_INS_ITEM	10	//레시피 검사 항목 수
 
 //검사 항목 구조체
 struct S_InspectItem {
@@ -113,6 +119,9 @@ struct S_InspectItem {
 	// LYS 2026-07-14 추가 기능
 	BOOL m_bUseEFA;
 	BOOL m_bUseSpec_Multi;
+
+	// LYS 2026-08-06 강화 검사
+	BOOL m_bUseAging_Test;
 
 	int  m_nTimeOut[M_RCP_INS_ITEM];
 
@@ -133,6 +142,7 @@ struct S_InspectItem {
 		m_bUseLCR_8		  = FALSE;
 		m_bUseEFA		  = FALSE;
 		m_bUseSpec_Multi  = FALSE;
+		m_bUseAging_Test  = FALSE;
 
 		ZeroMemory (&m_nTimeOut, sizeof (m_nTimeOut));
 	}
@@ -270,6 +280,38 @@ struct S_MotionSubZ {
 
 		//m_fAngleSubzRight = 0.0;
 		//m_fAngleSubzLeft = 0.0;
+	}
+};
+
+// LYS 2026-08-19 Angle axis recipe parameters
+struct S_MotionAngle {
+	double m_fAngleScheimpflug1;
+	double m_fAngleRotate1;
+	double m_fAngleZoom1;
+	double m_fAngleTilt1;
+	double m_fAngleAzimuth1;
+
+	double m_fAngleScheimpflug2;
+	double m_fAngleRotate2;
+	double m_fAngleZoom2;
+	double m_fAngleTilt2;
+	double m_fAngleAzimuth2;
+
+	S_MotionAngle() {
+		Clear();
+	}
+	void Clear() {
+		m_fAngleScheimpflug1 = 0.0;
+		m_fAngleRotate1 = 0.0;
+		m_fAngleZoom1 = 0.0;
+		m_fAngleTilt1 = 0.0;
+		m_fAngleAzimuth1 = 0.0;
+
+		m_fAngleScheimpflug2 = 0.0;
+		m_fAngleRotate2 = 0.0;
+		m_fAngleZoom2 = 0.0;
+		m_fAngleTilt2 = 0.0;
+		m_fAngleAzimuth2 = 0.0;
 	}
 };
 
@@ -630,6 +672,7 @@ struct S_RecipeInfo {
 	S_MotionOffsetPos	m_sMotionOffsetPos;
 	S_ProbeInfo			m_sProbeInfo;
 	S_MotionSubZ		m_sMotionSubZ;
+	S_MotionAngle		m_sMotionAngle;
 
 	S_RecipeInfo () {
 		Clear ();
@@ -643,6 +686,7 @@ struct S_RecipeInfo {
 		m_sMotionOffsetPos.Clear ();
 		m_sProbeInfo.Clear ();
 		m_sMotionSubZ.Clear();
+		m_sMotionAngle.Clear();
 	}
 };
 

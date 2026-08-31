@@ -36,6 +36,25 @@ bool CPositionConfigMgr::LinkIniFile(bool bSave)
 	m_pIniHelper->Link(bSave, _T("SAFETY"), _T("SafetyZ"),			&m_stPositionParam.dSafetyZ, 0.0);
 	m_pIniHelper->Link(bSave, _T("SAFETY"), _T("SafetyZ2"),			&m_stPositionParam.dSafetyZ2, -600.0);
 
+	// LYS 2026-08-28 Sub Z Safety (Z3/Z4/Z5/Z6 park position)
+	m_pIniHelper->Link(bSave, _T("SUBZ_SAFETY"), _T("Safety_SubZ_WAD_RIGHT"),          &m_stPositionParam.dSubZSafety[enumSUBZ_WAD_RIGHT], 0.0);
+	m_pIniHelper->Link(bSave, _T("SUBZ_SAFETY"), _T("Safety_SubZ_WAD_LEFT"),           &m_stPositionParam.dSubZSafety[enumSUBZ_WAD_LEFT], 0.0);
+	m_pIniHelper->Link(bSave, _T("SUBZ_SAFETY"), _T("Safety_SubZ_VISION_ANGLE_RIGHT"), &m_stPositionParam.dSubZSafety[enumSUBZ_VISION_ANGLE_RIGHT], 0.0);
+	m_pIniHelper->Link(bSave, _T("SUBZ_SAFETY"), _T("Safety_SubZ_VISION_ANGLE_LEFT"),  &m_stPositionParam.dSubZSafety[enumSUBZ_VISION_ANGLE_LEFT], 0.0);
+
+	// LYS 2026-08-28 Angle Sub Safety (Scheimpflug/Rotate/Zoom/Tilt/Azimuth park position, per head)
+	m_pIniHelper->Link(bSave, _T("ANGLE_SUB_SAFETY"), _T("Safety_Angle1_Scheimpflug"), &m_stPositionParam.dAngleSubSafety[enumANGLE_HEAD1][enumANGLESUB_SCHEIMPFLUG], 35.0);
+	m_pIniHelper->Link(bSave, _T("ANGLE_SUB_SAFETY"), _T("Safety_Angle1_ROTATE"),      &m_stPositionParam.dAngleSubSafety[enumANGLE_HEAD1][enumANGLESUB_ROTATE], 0.0);
+	m_pIniHelper->Link(bSave, _T("ANGLE_SUB_SAFETY"), _T("Safety_Angle1_ZOOM"),        &m_stPositionParam.dAngleSubSafety[enumANGLE_HEAD1][enumANGLESUB_ZOOM], 0.0);
+	m_pIniHelper->Link(bSave, _T("ANGLE_SUB_SAFETY"), _T("Safety_Angle1_TILT"),        &m_stPositionParam.dAngleSubSafety[enumANGLE_HEAD1][enumANGLESUB_TILT], 0.0);
+	m_pIniHelper->Link(bSave, _T("ANGLE_SUB_SAFETY"), _T("Safety_Angle1_AZIMUTH"),     &m_stPositionParam.dAngleSubSafety[enumANGLE_HEAD1][enumANGLESUB_AZIMUTH], 0.0);
+
+	m_pIniHelper->Link(bSave, _T("ANGLE_SUB_SAFETY"), _T("Safety_Angle2_Scheimpflug"), &m_stPositionParam.dAngleSubSafety[enumANGLE_HEAD2][enumANGLESUB_SCHEIMPFLUG], 35.0);
+	m_pIniHelper->Link(bSave, _T("ANGLE_SUB_SAFETY"), _T("Safety_Angle2_ROTATE"),      &m_stPositionParam.dAngleSubSafety[enumANGLE_HEAD2][enumANGLESUB_ROTATE], 0.0);
+	m_pIniHelper->Link(bSave, _T("ANGLE_SUB_SAFETY"), _T("Safety_Angle2_ZOOM"),        &m_stPositionParam.dAngleSubSafety[enumANGLE_HEAD2][enumANGLESUB_ZOOM], 0.0);
+	m_pIniHelper->Link(bSave, _T("ANGLE_SUB_SAFETY"), _T("Safety_Angle2_TILT"),        &m_stPositionParam.dAngleSubSafety[enumANGLE_HEAD2][enumANGLESUB_TILT], 0.0);
+	m_pIniHelper->Link(bSave, _T("ANGLE_SUB_SAFETY"), _T("Safety_Angle2_AZIMUTH"),     &m_stPositionParam.dAngleSubSafety[enumANGLE_HEAD2][enumANGLESUB_AZIMUTH], 0.0);
+
 
 	m_pIniHelper->Link(bSave, _T("LOADER_Z"), _T("UP_POSITION"),	&m_stPositionParam.dLoaderZUp, 0.0);
 	m_pIniHelper->Link(bSave, _T("LOADER_Z"), _T("MIDDLE_POSITION"),&m_stPositionParam.dLoaderZMiddle, 0.0);
@@ -218,6 +237,46 @@ void CPositionConfigMgr::SetSafetyPosition(double dSafetyStageX, double dSafetyH
 	m_stPositionParam.dSafetyZ		= dSafetyZ;
 	m_stPositionParam.dSafetyZ2     = dSafetyZ2;
 }
+
+// LYS 2026-08-28 Sub Z, Angle 축 Safety Get/Set 구조 추가
+void CPositionConfigMgr::GetSubZSafetyPosition(double* dWadRight, double* dWadLeft, double* dVisionAngleRight, double* dVisionAngleLeft) const
+{
+	if (dWadRight != nullptr)			*dWadRight			= m_stPositionParam.dSubZSafety[enumSUBZ_WAD_RIGHT];
+	if (dWadLeft != nullptr)			*dWadLeft			= m_stPositionParam.dSubZSafety[enumSUBZ_WAD_LEFT];
+	if (dVisionAngleRight != nullptr)	*dVisionAngleRight	= m_stPositionParam.dSubZSafety[enumSUBZ_VISION_ANGLE_RIGHT];
+	if (dVisionAngleLeft != nullptr)	*dVisionAngleLeft	= m_stPositionParam.dSubZSafety[enumSUBZ_VISION_ANGLE_LEFT];
+}
+
+void CPositionConfigMgr::SetSubZSafetyPosition(double dWadRight, double dWadLeft, double dVisionAngleRight, double dVisionAngleLeft)
+{
+	m_stPositionParam.dSubZSafety[enumSUBZ_WAD_RIGHT]			= dWadRight;
+	m_stPositionParam.dSubZSafety[enumSUBZ_WAD_LEFT]			= dWadLeft;
+	m_stPositionParam.dSubZSafety[enumSUBZ_VISION_ANGLE_RIGHT]	= dVisionAngleRight;
+	m_stPositionParam.dSubZSafety[enumSUBZ_VISION_ANGLE_LEFT]	= dVisionAngleLeft;
+}
+
+void CPositionConfigMgr::GetAngleSubSafetyPosition(int iHead, double* dScheimpflug, double* dRotate, double* dZoom, double* dTilt, double* dAzimuth) const
+{
+	if (iHead < 0 || iHead >= enumANGLE_HEAD_COUNT) return;
+
+	if (dScheimpflug != nullptr)	*dScheimpflug	= m_stPositionParam.dAngleSubSafety[iHead][enumANGLESUB_SCHEIMPFLUG];
+	if (dRotate != nullptr)		*dRotate		= m_stPositionParam.dAngleSubSafety[iHead][enumANGLESUB_ROTATE];
+	if (dZoom != nullptr)			*dZoom			= m_stPositionParam.dAngleSubSafety[iHead][enumANGLESUB_ZOOM];
+	if (dTilt != nullptr)			*dTilt			= m_stPositionParam.dAngleSubSafety[iHead][enumANGLESUB_TILT];
+	if (dAzimuth != nullptr)		*dAzimuth		= m_stPositionParam.dAngleSubSafety[iHead][enumANGLESUB_AZIMUTH];
+}
+
+void CPositionConfigMgr::SetAngleSubSafetyPosition(int iHead, double dScheimpflug, double dRotate, double dZoom, double dTilt, double dAzimuth)
+{
+	if (iHead < 0 || iHead >= enumANGLE_HEAD_COUNT) return;
+
+	m_stPositionParam.dAngleSubSafety[iHead][enumANGLESUB_SCHEIMPFLUG]	= dScheimpflug;
+	m_stPositionParam.dAngleSubSafety[iHead][enumANGLESUB_ROTATE]		= dRotate;
+	m_stPositionParam.dAngleSubSafety[iHead][enumANGLESUB_ZOOM]		= dZoom;
+	m_stPositionParam.dAngleSubSafety[iHead][enumANGLESUB_TILT]		= dTilt;
+	m_stPositionParam.dAngleSubSafety[iHead][enumANGLESUB_AZIMUTH]		= dAzimuth;
+}
+// LYS 2026-08-28 Sub Z, Angle 축 Safety Get/Set 구조 추가 end
 
 void CPositionConfigMgr::GetLoaderZPossition(double *dLoaderZUp, double *dLoaderZMiddle, double* dLoaderZPre, double *dLoaderZDown) const
 {

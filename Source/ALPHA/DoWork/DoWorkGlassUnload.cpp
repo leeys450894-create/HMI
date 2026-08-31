@@ -18,7 +18,7 @@ CDoWorkGlassUnload::CDoWorkGlassUnload(stAuroraMgrPool &MgrPool)
 {
 	m_strSeqType = _T("SEQUENCE_ITEM_DWGLASS_SEQ_GLASS_UNLOAD");
 	m_strSeqComm = _T("TCPIP");
-	m_strSeqCorp = _T("KMAC");
+	m_strSeqCorp = _T("HBS");
 	m_strSeqName = _T("GLASS 8_UNLOAD");
 	m_strSeqGUID = _T("30D1D0A3-7C67-4DDF-AE8E-E510D25B7304");
 	m_strSeqDesc = _T("GLASS UNLOAD");

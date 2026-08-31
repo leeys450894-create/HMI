@@ -110,8 +110,8 @@ bool CDoWorkGlassRecipeStep_None::Run()
 						int nReload = min((int)arrFiles.GetSize(), nPrevCells);
 						for (int i = 0; i < nReload; i++)
 						{
-							// LYS 2026-07-21 Calculate iMeasArea matching normal measurement logic
-							// Files are in measurement order (stick 0,1,2... each with nCellsPerStick files)
+							// LYS 2026-07-21 일반 측정과 동일한 방식으로 iMeasArea를 계산한다.
+							// 파일은 측정 순서(스틱 0,1,2... 각 스틱당 nCellsPerStick개)로 정렬돼 있다.
 							int iStick = i / nCellsPerStick;
 							int iCell  = i % nCellsPerStick;
 							int nMeasStick;

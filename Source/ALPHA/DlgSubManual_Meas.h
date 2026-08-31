@@ -1,4 +1,7 @@
 ﻿#pragma once
+
+// LYS 2026-08-24 Current stick readout (worker thread -> UI thread).
+#define WM_MSG_UPDATE_CUR_STICK		(WM_USER + 3521)
 #include "afxwin.h"
 #include "DlgSubManual_STEP.h"
 #include "Recipe/RecipeData.h"
@@ -330,6 +333,11 @@ public:
 	int m_iNumCell;
 	int ManualMoveCell(int iMode, int iMove = 0);
 	int ManualMoveStick(int iStick);
+
+	// LYS 2026-08-24 Current stick 표기. step switch가 워커 스레드에서 돌아
+	// UI 스레드로 값을 post 한다.
+	void	UpdateCurStickUI();
+	afx_msg LRESULT OnUpdateCurStick(WPARAM wParam, LPARAM lParam);
 	int MoveLoaderXYR(int iLoader);
 	int MakeMeasGroup();
 	afx_msg void OnBnClickedBtnManualMeasContactMotion4();

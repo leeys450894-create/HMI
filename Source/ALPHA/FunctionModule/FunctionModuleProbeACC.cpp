@@ -19,7 +19,7 @@ CFunctionModuleProbeACC::CFunctionModuleProbeACC(stAuroraMgrPool &MgrPool)
 {
     m_strSeqType = _T("SEQUENCE_ITEM_FUNC_MODULE_PACC");
     m_strSeqComm = _T("TCPIP");
-    m_strSeqCorp = _T("KMAC");
+    m_strSeqCorp = _T("HBS");
     m_strSeqName = _T("SEQ SACC");
     m_strSeqGUID = _T("78A63144-7983-404A-A625-0AB62C655BCB");
     m_strSeqDesc = _T("Request Probe Auto Change");

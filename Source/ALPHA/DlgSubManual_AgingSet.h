@@ -14,6 +14,8 @@ using namespace std;
 #define AGING_NOT_FILE	 1
 #define AGING_FIND_ALARM 2
 
+class CAuroraMgr;	// LYS 2026-08-05 Phase 1
+
 class CDlgSubManual_AgingSet : public CDialogEx
 {
 	DECLARE_DYNAMIC(CDlgSubManual_AgingSet)
@@ -23,7 +25,7 @@ private:
 	CLabel		m_LabelInfo;
 
 public:
-	CDlgSubManual_AgingSet(CWnd* pParent = NULL);   // 표준 생성자입니다.
+	CDlgSubManual_AgingSet(CAuroraMgr* pAuroraMgr, CWnd* pParent = NULL);   // 표준 생성자입니다.
 	virtual ~CDlgSubManual_AgingSet();
 
 public:
@@ -34,6 +36,7 @@ public:
 	BOOL						m_bAgingAlarmUse;
 
 	CMySpreadDll*				m_spreadAgAlarmList;
+	CAuroraMgr*					m_pAuroraMgr;	// LYS 2026-08-05 Phase 1
 	HFONT						m_hfont;
 protected:
 	//CMFCButton		m_chkStop;

@@ -1,6 +1,10 @@
 #include "pch.h"
 #include "MeasureSequenceItemEngine.h"
 
+// LYS 2026-08-12 InnerID uniqueness: rolling window of recently issued ids.
+#define DEFINE_INNERID_KEEP_MAX	512
+
+
 #include "..\Recipe\RecipeEditMgr.h"
 #include "..\Manager\CommTcpIPMgr.h"
 #include "MeasureSequenceItemFactory.h"
@@ -15,6 +19,7 @@
 
 #include "common\IniHelper.h"
 #include "..\Manager\NetworkConfigMgr.h"
+#include "..\Manager\SystemConfigMgr.h"	// LYS 2026-08-06 AgingCycle E3
 
 #ifdef _DEBUG
 #define new DEBUG_NEW
@@ -27,7 +32,11 @@ CMeasureSequenceItemEngine::CMeasureSequenceItemEngine(stAuroraMgrPool &MgrPool)
 	, m_pLogFileAccessor(new CLogFileAccessor)
     , m_pStInnerID(nullptr)
     , m_nMeasureArea(0)
+	, m_bAgingCycleActive(false)	// LYS 2026-08-06 AgingCycle E3
+	, m_nAgingCurItem(-1)			// LYS 2026-08-06 AgingCycle E3
 {
+	ZeroMemory(m_nAgingRepeat, sizeof(m_nAgingRepeat));	// LYS 2026-08-12 AgingCycle R1
+
     const CString strFolderPath	= MgrPool.strLogPath + _T("\\LogFile\\");
     const CString strLogFile	= strFolderPath + _T("measure_seq_item_engine.log");
     MakeDir(strFolderPath);
@@ -703,7 +712,167 @@ void CMeasureSequenceItemEngine::SetMeasureArea(int nMeasureArea)
     m_nMeasureArea = nMeasureArea;
 }
 
+//=========================================================================
+// LYS 2026-08-12 InnerID 유일성.
+// gf_GetCurTimeString(3)은 HHMMSS라 같은 초의 측정은 동일 id -> 동일 raw 파일명 -> 조용한 덮어쓰기.
+// 길이는 고정 폭 장비 패킷 필드라 유지해야 하므로, 중복 시 끝 2자리만 재배정한다.
+// 실제 초로는 나올 수 없는 60..99를 먼저 시도하고 발급 목록이 최종 판단하므로,
+// 나중에 진짜 타임스탬프가 같은 문자열을 만들어도 유일성은 유지된다.
+//=========================================================================
+void CMeasureSequenceItemEngine::PushIssuedInnerID(const CString& strID)
+{
+	m_vecIssuedInnerID.push_back(strID);
+
+	// rolling window: ids carry HHMMSS, so anything older than the recent window can
+	// no longer collide. Bounding here avoids tying the list to a glass/stick lifecycle.
+	if (m_vecIssuedInnerID.size() > DEFINE_INNERID_KEEP_MAX)
+	{
+		m_vecIssuedInnerID.erase(m_vecIssuedInnerID.begin(),
+			m_vecIssuedInnerID.begin() + (m_vecIssuedInnerID.size() - DEFINE_INNERID_KEEP_MAX));
+	}
+}
+
+CString CMeasureSequenceItemEngine::MakeUniqueInnerID(const CString& strID)
+{
+	if (strID.GetLength() < 3) return strID;
+
+	bool bUsed = false;
+	for (size_t i = 0; i < m_vecIssuedInnerID.size(); i++)
+	{
+		if (m_vecIssuedInnerID[i] == strID) { bUsed = true; break; }
+	}
+
+	if (bUsed == false)
+	{
+		PushIssuedInnerID(strID);
+		return strID;
+	}
+
+	CString strHead = strID.Left(strID.GetLength() - 2);
+	CString strTry;
+	for (int nSeq = 60; nSeq < 160; nSeq++)
+	{
+		strTry.Format(_T("%s%02d"), (LPCTSTR)strHead, nSeq % 100);
+
+		bUsed = false;
+		for (size_t i = 0; i < m_vecIssuedInnerID.size(); i++)
+		{
+			if (m_vecIssuedInnerID[i] == strTry) { bUsed = true; break; }
+		}
+
+		if (bUsed == false)
+		{
+			PushIssuedInnerID(strTry);
+
+			CString strLog;
+			strLog.Format(_T("InnerID duplicate remapped: %s -> %s"), (LPCTSTR)strID, (LPCTSTR)strTry);
+			m_pLogFileAccessor->KMLOG(WARN, strLog);
+
+			return strTry;
+		}
+	}
+
+	m_pLogFileAccessor->KMLOG(WARN, _T("InnerID duplicate could not be remapped - reusing"));
+
+	return strID;
+}
+
 int CMeasureSequenceItemEngine::GetMeasureArea()
 {
     return m_nMeasureArea;
+}
+//=========================================================================
+// LYS 2026-08-06 AgingCycle E3: 에이징 리스트 사이클 컨텍스트(OCP DoWorkStartMeasOCP_A)
+//=========================================================================
+bool CMeasureSequenceItemEngine::AgingCycleBegin()
+{
+	m_bAgingCycleActive = false;
+	m_nAgingCurItem = -1;
+	ZeroMemory(m_nAgingRepeat, sizeof(m_nAgingRepeat));	// LYS 2026-08-12 AgingCycle R1
+
+	if (m_MgrPool_link.pSystemConfigMgr == nullptr || m_MgrPool_link.pSystemConfigMgr->IsOCP() == false)
+		return false;
+
+	S_RecipeInfo* pRecipeInfo = GetRecipeEditMgrPtr()->GetRecipeInfo();
+	// LYS 2026-08-12 게이트는 전용 레시피 플래그 m_bUseAging_Test를 쓴다.
+	// m_bUseAgingTest_2는 AGING 측정 항목이라 에이징 사이클을 켜면 안 된다.
+	if (pRecipeInfo == nullptr || pRecipeInfo->m_sInspectItem.m_bUseAging_Test == FALSE)
+		return false;
+
+	if (m_AgingCycleInfo.Load(GetRecipeEditMgrPtr()->GetRecipeID()) == false)
+	{
+		m_pLogFileAccessor->KMLOG(WARN, _T("AgingCycle: aging rcp not found - run standard sequence"));
+		return false;
+	}
+
+	m_bAgingCycleActive = AgingCycleNextItem();
+
+	CString strLog;
+	strLog.Format(_T("AgingCycle: begin, items(%d) active(%d)"), m_AgingCycleInfo.GetItemCount(), (int)m_bAgingCycleActive);
+	m_pLogFileAccessor->KMLOG(OPER, strLog);
+
+	return m_bAgingCycleActive;
+}
+
+bool CMeasureSequenceItemEngine::AgingCycleNextItem()
+{
+	for (int i = m_nAgingCurItem + 1; i < m_AgingCycleInfo.GetItemCount(); i++)
+	{
+		const S_AgingTest* pItem = m_AgingCycleInfo.GetItem(i);
+		if (pItem != nullptr && pItem->m_bUseAging)
+		{
+			m_nAgingCurItem = i;
+			return true;
+		}
+	}
+
+	return false;
+}
+
+//=========================================================================
+// LYS 2026-08-12 AgingCycle R1: 종류별 반복 인덱스(결과 행 블록).
+// OCP 대응 = nPropertyRepeat / nQualityRepeat / nLCRRepeat
+// (JOB_Proc.cpp:12676-12683, stick마다 리셋하고 측정했을 때만 증가).
+// 의도적으로 조밀하게 매긴다: 성기면 빈 결과 행이 생기는데 HMI APD writer에
+// 빈 행 스킵이 없어(CDlgResult.cpp:2019) 공백이 MES로 넘어간다.
+//=========================================================================
+int CMeasureSequenceItemEngine::GetAgingRepeat(int iKind) const
+{
+	if (m_bAgingCycleActive == false) return 0;
+	if (iKind < 0 || iKind >= enumAgingMeasKind_MAX) return 0;
+
+	return m_nAgingRepeat[iKind];
+}
+
+void CMeasureSequenceItemEngine::AgingRepeatNext(int iKind)
+{
+	if (m_bAgingCycleActive == false) return;
+	if (iKind < 0 || iKind >= enumAgingMeasKind_MAX) return;
+
+	m_nAgingRepeat[iKind]++;
+}
+
+int CMeasureSequenceItemEngine::GetAgingKindMax(int iKind) const
+{
+	if (m_bAgingCycleActive == false) return 1;
+
+	int nMax = m_AgingCycleInfo.GetKindUseCount(iKind);
+
+	return (nMax > 0) ? nMax : 1;
+}
+
+void CMeasureSequenceItemEngine::AgingCycleEnd()
+{
+	if (m_bAgingCycleActive)
+		m_pLogFileAccessor->KMLOG(OPER, _T("AgingCycle: end"));
+
+	m_bAgingCycleActive = false;
+	m_nAgingCurItem = -1;
+	ZeroMemory(m_nAgingRepeat, sizeof(m_nAgingRepeat));	// LYS 2026-08-12 AgingCycle R1
+
+	if (m_MgrPool_link.pShareMemoryMgr != nullptr && m_MgrPool_link.pShareMemoryMgr->GetSharedMemory() != nullptr)
+	{
+		m_MgrPool_link.pShareMemoryMgr->GetSharedMemory()->m_nAgingListRow = 0;
+		m_MgrPool_link.pShareMemoryMgr->GetSharedMemory()->m_nAgingListCol = 0;
+	}
 }

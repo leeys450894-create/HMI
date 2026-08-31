@@ -24,6 +24,8 @@ class C_SelectCellDlg : public C_BaseDialog
 		void OnSelItem (NMHDR *pNMHDR, LRESULT *pResult);
 		void SetViewSelectCell (/*int nMode*/);
 		void UpdateSelectCell ();
+		// LYS 2026-08-18 일괄 선택 헬퍼. 표시 전용이며 Cell Update 전에는 레시피에 반영되지 않는다.
+		void SetAllCell (BOOL bSelect);
 		BOOL ShowWindow (int nCmdShow);
 
 	protected:
@@ -32,6 +34,8 @@ class C_SelectCellDlg : public C_BaseDialog
 		afx_msg void OnDestroy ();
 		afx_msg void OnSelMode (UINT nID);
 		afx_msg void OnUpdateCell ();
+		afx_msg void OnSelectAllCell ();	// LYS 2026-08-18
+		afx_msg void OnClearAllCell ();		// LYS 2026-08-18
 
 
 	DECLARE_MESSAGE_MAP()

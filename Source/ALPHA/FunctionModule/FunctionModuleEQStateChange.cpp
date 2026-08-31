@@ -18,7 +18,7 @@ CFunctionModuleEQStateChange::CFunctionModuleEQStateChange(stAuroraMgrPool &MgrP
 {
 	m_strSeqType = _T("SEQUENCE_ITEM_FUNC_MODULE_EQ_STATE_CHANGE");
 	m_strSeqComm = _T("TCPIP");
-	m_strSeqCorp = _T("KMAC");
+	m_strSeqCorp = _T("HBS");
 	m_strSeqName = _T("SEQ EQSTATE_CHANGE");
 	m_strSeqGUID = _T("436C83A3-FD1F-4B35-BE5E-89B0FA2E1B7D");
 	m_strSeqDesc = _T("EQ State Change");

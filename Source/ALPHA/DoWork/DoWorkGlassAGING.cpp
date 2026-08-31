@@ -22,7 +22,7 @@ CDoWorkGlassAGING::CDoWorkGlassAGING(stAuroraMgrPool& MgrPool)
 {
 	m_strSeqType = _T("SEQUENCE_ITEM_DWGLASS_SEQ_GLASS_AGING");
 	m_strSeqComm = _T("TCPIP");
-	m_strSeqCorp = _T("KMAC");
+	m_strSeqCorp = _T("HBS");
 	m_strSeqName = _T("GLASS 5_AGING");
 	m_strSeqGUID = _T("FEF05587-4BC1-4F12-AE84-8C881B78D8D9");
 	m_strSeqDesc = _T("GLASS AGING");

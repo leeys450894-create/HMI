@@ -55,8 +55,9 @@ HMI는 Unicode 프로젝트이며 파일은 대부분 **BOM 없는 ANSI/UTF-8** 
    ```
 3. **수정 후 검증 (필수):** `perl -e 'open(F,"<:raw",$ARGV[0]);$d=do{local $/;<F>};$c=()=$d=~/\xef\xbf\xbd/g;print"damaged=$c\n"' file.cpp` — `damaged=0`이 아니면 백업에서 복원 후 재작업.
 4. **손상 복구:** 백업 `D:\OCP\0.SW_Matching\HMI_20260716\HMI\` 에서 원본 복사 후 Perl로 변경사항 재적용.
-5. **새 코드 주석은 영문 권장.** 기존 한글 주석/문자열은 절대 삭제·변경하지 말 것.
+5. **새 코드 주석은 한글 가능 — 단 CP949 바이트로만.** Perl 스크립트에 `use utf8;` + `Encode::encode("cp949", "한글...")` 조합으로 삽입할 것(2026-08-26 검증, 빌드 정상). Edit/Write 도구로 한글을 직접 넣으면 UTF-8 바이트가 들어가 깨진다. 기존 한글 주석/문자열은 절대 삭제·변경하지 말 것.
 6. **수정 주석 형식:** `// LYS yyyy-mm-dd brief description` — 모든 소스코드 수정 시 반드시 추가.
+7. **신규 사용자 메시지는 영어로 작성.** 일부 파일(`DlgSubManual_AgingTest.cpp` 등)은 한글이 BOM 없는 UTF-8인데 vcxproj에 `/utf-8`이 없어 CP949로 컴파일됨 → 해당 파일의 한글 리터럴은 런타임 표시가 깨짐. 파일별 인코딩 확인: 한글 리터럴 헥사 덤프(EC/EB 시작=UTF-8, B0~C8 대역=CP949, A2AA=EUC-KR 도 기호 °).
 
 ## OCP Option Branching (Runtime Equipment Type)
 
@@ -80,13 +81,33 @@ bool bIsOCP = m_pMotorControlMgr->IsOCP();
 | 항목 | HMI | OCP |
 |------|-----|-----|
 | Probe Gantry | 5개 (P1~P4 AGING + P5 MEAS) | 1개 (P5 MEAS only) |
-| Probe X축 | AXIS_PROBE_X9/X10 (Master/Slave) | 없음 → Probe Rotate(AXIS_R1) |
-| Probe Y축 | AXIS_PROBE_Y5 | 사용 안 함 |
+| Probe X축 | AXIS_PROBE_X9/X10 (Master/Slave) | **동일** — 2026-08-25 HW 컨셉 변경으로 가동. `AXIS_R1`은 미사용 |
+| Probe Y축 | AXIS_PROBE_Y5 | 사용 안 함 (config는 `USE[1]`이나 코드에서 비활성) |
 | 측정 이동 | Probe X 이동 → Contact → Head 측정 | Stage(AXIS_X) 이동 → Contact → Head 측정 |
 | ANGLE Head | X2 주 제어 → X3 종속 | X3 주 제어 → X2 종속 |
-| AGING | P1~P4 수행 | 강제 비활성화 |
+| AGING | P1~P4 수행 | **P5에서 ODD 라운드만 수행** (EVEN 미수행, 리뷰 스냅 1회) |
+
+**Stick 간 이송은 OCP에서도 계속 Stage Y가 담당한다** (2026-08-25 확정). Probe X(X9/X10)가 움직이게 된 것은 인터락·얼라인·Safety 경로 때문이며, stick 이송 주체가 바뀐 것이 아니다. 따라서 `DoWorkGlassMeasureStep`(stick 루프 / Probe X 이동 skip), `DoWorkGlassPreMeasStep`, `DlgSubManual_Meas::ManualMoveStick`의 OCP 분기는 **유지**한다.
 
 상세: [docs/OCP_Option_ChangeHistory.md](docs/OCP_Option_ChangeHistory.md)
+
+## Glass 방향/좌표 체계 (2026-08-07 확정 — 수정 시 반드시 준수)
+
+Stage Rotate H/W 축 = `AXIS_LOADER_R`. 도면: `Doc/07_설계문서/HMI 설비 Contact 방향.pdf`, 상세: [docs/Glass_Rotation_Change_Plan.md](docs/Glass_Rotation_Change_Plan.md)
+
+| 자세 | 각도 | 비고 |
+|------|------|------|
+| Load / Unload / Align | 0° | Position.ini LOAD_R/UNLOAD_R, Align 레시피(.alg) StageRotate |
+| 장변 측정 | 90° | `m_nGlsRotate=1`, 레시피 스틱별 `m_fStageR` |
+| 단변 측정 | 180° | `m_nGlsRotate=2` (신규값 — 기존 분기는 0/1만 처리, ==1 여부로 판정됨) |
+| MEASURE 전환(흡착) | 270° | Position.ini MEAS_R |
+
+- **측정 회전각 = 스틱 `m_fStageR` + USER OFFSET `m_fStageRotate` 합산** — 각도 이상 시 두 곳 모두 확인
+- **스틱 인덱스 규약**: `MakeCellID` 기준 — rotate==1만 직행, **그 외 전부 `nMaxStick-iStick-1` 반전**. nCellStatus/AGING 스틱 슬롯(`m_nAgingStartStick`) 등 셀 상태 인덱싱은 모두 이 규약을 따라야 함
+- **셀 좌표 = 헤드 Y1~Y4 목표 직결** (변환 없음). 셀 분배는 A01(첫 셀) 앵커 = **+Y측**에서 −Y 방향 (MakeCellDlg). 셀 라벨(A01..)은 제품 도면 기준 고정 — 방향 문제는 좌표를 고칠 것, 라벨을 뒤집지 말 것
+- R축 DEGREE 센서: `PLC_R_MOTION_LOADER_DEGREE_0~3` = M4400~4403 (0/90/180/270)
+- 경로 UI 컷 코너: Config.ini `[GLASS EDGECUT]` = {0°:4, 90°:3, 180°:2, 270°:1} (1=우상/2=좌상/3=좌하/4=우하, 회전 표현은 화면상 시계 방향)
+- X 이동 인터록: R이 스테이션 각 {0,90,180,270}±2 이내일 때만 허용 (MotorControlMgr)
 
 ## Architecture
 
@@ -133,7 +154,7 @@ CALPHAApp::InitInstance()                          [ALPHA.cpp]
 - **Axes:** 90 logical axes (`axis_type_t` enum in `CoreFunction/MotorFunction/AxisType.h`)
 - **Speed grades:** HIGH/MID/LOW/HOME/LATCH/MULTI (per-axis velocity, acceleration, S-curve)
 - **Probe Gantry:** 5개 (P1~P4 AGING, P5 MEAS), master/slave X-axis pairs
-- **Interlock:** `CMotorControlMgr::MoveCmdPosA_Sub()` — gantry/head/probe/loader collision 체크
+- **Interlock:** gantry/head/probe/loader collision 체크가 `MoveCmdPosA_Sub()`(절대) / `MoveCmdPosR_Sub()`(상대) / `MoveCmdPosMulti_Sub()`(멀티) **3벌로 복제**되어 있다. 한 곳만 고치면 나머지 경로로 빠져나가므로 인터락 수정은 항상 3벌을 함께 볼 것 (게이트 조건은 미묘하게 다르다 — 예: Z1 Down이 A/R_Sub는 `> 1`, Multi_Sub는 `> 10`). **게이트가 실동작 범위를 덮는지 호출부까지 추적할 것** — 시퀀스 계층(`MoveCmdPosWAD` 등)이 Z1 목표를 `>1 → 0`으로 클램프하는 바람에 모션 계층의 `dPos > 1` 게이트가 한 번도 열리지 않아 그 안의 인터락 전체가 죽은 코드였던 전례가 있다(2026-08-26 발견, Z1은 안전 -600 → 측정 0으로 상승하며 하강)
 - **Homing:** ACSPL+ buffer 프로그램 실행 (`acsc_RunBuffer`), HomeFlag 변수로 완료 확인
 - **Thread safety:** 5 critical sections (move/get/set/done/stop 분리)
 - **Simulation:** `OUT_OF_SERVICE` 플래그로 하드웨어 없이 소프트웨어 테스트 가능
@@ -142,6 +163,34 @@ CALPHAApp::InitInstance()                          [ALPHA.cpp]
 
 Layer: `CMaintControlMgr` → `CMotorControlMgr` → `CMotorFunction` → `CMotorControl_ACS`
 상세: [docs/04_Motion.md](docs/04_Motion.md), [docs/ACS_Dual_Controller_Plan.md](docs/ACS_Dual_Controller_Plan.md)
+
+#### 비활성 축(`bUse == FALSE`) 취급 — 래퍼마다 다름
+
+기종에 따라 장착되지 않은 축은 `Config_Motion_ACS.dat`의 `USE[0]`이나 `CMotorControlMgr::DisableAxesForOCP()`(런타임에 config를 덮어씀)로 꺼진다. **`CMaintControlMgr` 래퍼의 반환값이 함수마다 갈린다:**
+
+| 함수 | `bUse == FALSE`일 때 |
+|---|---|
+| `MoveHome`, `CheckHomeDone` | `df_MOTION_RV_SUCCESSED` |
+| `MoveCmdPosA/R`, `MoveOrgPosA/R` | **`df_MOTION_RV_ERROR`** |
+
+축을 순회하며 첫 에러에 `break`/`continue`하는 루프(`SystemInitializeStep` case 6의 프로브 호밍·M/S 정렬 루프가 대표)는 미장착 축 하나에서 통째로 중단된다. **순회 전에 `GetAxisProperty(iAxis)->bUse`로 거를 것.**
+
+**멀티 이동은 `bUse`를 보지 않는다.** ACS `MoveCmdPosMulti()`에 검사가 없고 `SetSpeed()`가 비활성 축에 0(성공)을 반환해 정상 취급되므로, 미장착 축이 자기 `HW[]` 번호를 달고 컨트롤러로 나간다. `CMaintControlMgr::MoveCmdPosMulti`/`MoveOrgPosMulti` 진입부의 `PackUsedAxes()`가 이를 걸러내니 **새 멀티 이동은 반드시 이 두 함수를 경유**할 것 (`CMotorControlMgr`을 직접 호출하지 말 것).
+
+#### 헤드 갠트리 ↔ Z축 짝
+
+| 갠트리 | Z축 | P5 프로브 유닛 간섭 |
+|---|---|---|
+| `AXIS_X2` BACK GANTRY | `AXIS_Z1` BACK Z(특성) | **있음** → `CMotorControlMgr::IsProbeUnitOverlapX()` 인터락 |
+| `AXIS_X3` FRONT GANTRY | `AXIS_Z2` FRONT Z(화질+시야각) | 없음 (인터락 불필요) |
+
+기존 인터락 코드에 이 짝이 **교차된 사례가 4곳 있었다**(2026-08-25 정리). 헤드 Z 관련 인터락을 손대기 전에 짝부터 확인할 것. Z2 분기에 남은 이동 범위 체크(`X2 < GetMinSWLimit(AXIS_X2) + 35`)도 X2를 보고 있어 교차 의심이 있으나 미확인.
+
+**P5 프로브 유닛 인터락 체계 (2026-08-26 구축).** P5 유닛은 X9 위치에서 X방향 `INTERLOCKPROBESIZEX`(300mm) 폭을 차지하는 구조물이며, 보호는 두 겹이다:
+- **Z1 하강 거부** — `IsProbeUnitOverlapX(X2)` 점 판정. 모션 계층 3벌(A/R/Multi_Sub, 하강 = 목표 > 현재) + 시퀀스 계층 `MoveCmdPosWAD/Review/Aging`이 모션 시작 전에 조기 거부. `MoveCmdPosAngle/Vision`은 FRONT 갠트리 기반이라 **Z1 지령 자체를 제거**했다(pPos의 Z1 항목은 무시됨).
+- **X2 이동 시 Z1 선상승** — `RetractHeadZForProbeUnit()`. 목표점이 아니라 **[현재..목표] 경로**가 밴드와 겹치면 Z1을 `INTERLOCKPROBEZSAFETY`(-600)로 먼저 올리고, 상승 실패 시 X2 이동을 포기한다. 각 X2 분기의 말미(기존 인터락 전부 통과 후)에서 호출.
+
+인터락 임계값은 `Bin/Config/CoreFunction/CoreFunction.ini`의 `[MOTOR_CONTROL_MGR]` 섹션에 있다 — `INTERLOCKPOS` / `GANGAP` / `HEADGAP` / `HEADGAPB` / `PROBEGAP` / `LIFTPIN` / `PROBESIZEX` / `PROBEZSAFETY`. **키가 없으면 `CMotorControlMgr::LinkIniFile()`의 기본값이 조용히 적용**되므로(`LIFTPIN`=575, `PROBESIZEX`=300, `PROBEZSAFETY`=-600 등 ini에 없는 키가 실제로 있다), 값을 확인할 때 ini만 보지 말 것.
 
 ### PLC (Mitsubishi MELSEC MC Protocol)
 
@@ -214,6 +263,9 @@ Recipe Save/Load uses sequential `ReadString`/`ReadDouble`/`ReadInt` — **order
 - **RECIPE_FILE_END** doubles as the current version number written during Save
 - **Backward compat:** Old files without new fields hit the `else` branch which calls `.Clear()` on the new struct
 - **Three-file sync rule:** Any Save/Load field addition must be updated in all 3 files simultaneously with identical ordering
+- **Gate direction is `>`, not `>=`.** Since Save writes `RECIPE_FILE_END`, adding a field means adding `RECIPE_FILE_V100n` (END becomes n+1) and gating with `if (nVersion > RECIPE_FILE_V100n)`. `>=` would make already-saved files parse data they do not contain.
+- **The two `preDefine.h` copies are an ABI contract, not just a convention.** `CRecipeEditMgr::GetRecipeInfo()` (`Recipe/RecipeEditMgr.cpp`) returns `&m_pRecipeFunc->m_recipeMgr.m_sInfo` — a raw pointer into the dfcRecipe DLL's own struct. A struct present in only one copy compiles fine and reads past the DLL's allocation at runtime. Diff both files after any `S_RecipeInfo` change; only comments should differ.
+- **UI grids:** `InitGridUI(grid, id, nRow, nCol, bSmall, bHeader, PIX_UNIFORMITY)` pins every column to **61px** regardless of the control's width, leaving any excess as a blank strip that reads as one extra cell. `.rc` widths run ≈1.48px per dialog unit, so N columns need ≥ N×61/1.48 units — or re-spread the widths after `InitGridUI`.
 
 ## Resume Inspection
 
@@ -232,7 +284,9 @@ Allows resuming an interrupted Glass inspection from where it stopped (e.g., aft
 2. **`ShareMem.h` (VTM_SYSTEM)** — 멤버 추가 시 반드시 struct 끝에 추가 (공유 메모리 오프셋 보존)
 3. **`AlarmIDList.h` 수정** — pch.h에 포함되어 있어 전체 리빌드
 4. **`IOMapAddressDefine.h` (plc_MBIT_t enum)** — PLC 주소 상수는 물리 I/O에 직접 매핑, 변경 시 하드웨어 영향
-5. **`AxisType.h` 수정** — 모든 모션 코드의 기반, 축 추가/변경 시 Position.ini와 Config_Motion_ACS.dat도 함께 수정
+5. **`AxisType.h` 수정** — 모든 모션 코드의 기반, 축 추가/변경 시 Position.ini와 Config_Motion_ACS.dat도 함께 수정.
+   - `.dat`의 `HW[]`는 ACS 컨트롤러 축 번호이고, **`USE[0]` 축과 `USE[1]` 축이 같은 번호를 공유하는 경우가 있다** (예: `PBY3`/`PBY4`가 ACS0의 30/31을 `Z3`/`Z4`와 공유). `USE` 플래그를 우회해 축 배열을 컨트롤러로 넘기면 엉뚱한 축이 움직인다. 충돌 확인은 `ACS[]`+`HW[]` 조합으로 `USE[1]`끼리만 비교할 것.
+   - **`stMotorPosition` 배열을 `ZeroMemory`로 초기화하지 말 것.** `AXIS_X == 0`이라 채우지 않은 슬롯이 "Stage Gantry를 0으로 이동"이라는 유효한 지령이 된다. `CMaintControlMgr::ClearMotorPos(pPos, n)`(슬롯을 `AXIS_NONE`으로 채움)을 쓰면 배열 길이를 그대로 넘겨도 `PackUsedAxes()`가 범위 밖 id(`< 0` 또는 `>= AXIS_TYPE_END`)를 버린다. 실제 사고: `MoveCmd_SafetyAll`이 P1~P4 슬롯 채움을 주석 처리하면서 카운트 5와 무초기화 상태를 유지해 쓰레기 슬롯이 전달, 초기화 중 크래시(2026-08-26). **슬롯 채움을 주석 처리할 때는 반드시 `ClearMotorPos`를 남길 것.** 참고로 `CMotorImpl::GetAxisProperty()`는 상한만 검사하고 enum 밖 id에는 `nullptr`를 반환한다.
 6. **`preDefine.h` (Recipe 구조체)** — App(`Source/Include/`)과 DLL(`CoreFunction/dll_Recipe/dfcRecipe/`) 양쪽에 동일 파일 존재, 구조체 변경 시 반드시 양쪽 동기화. `RCP_VERSION` enum과 `S_RecipeInfo` struct 포함
 7. **`FDCSheardDefine.h` / `SheardDefineMCC.h` (FDC/MCC 공유메모리 계약)** — `Source/Include/`와 DLL 프로젝트 내부에 수기 사본 존재, 배포된 외부 프로세스(FDCSense.exe, MCCLog.exe)와 struct 레이아웃이 바이트 단위로 일치해야 함. 필드 추가는 반드시 struct 끝에만
 
@@ -297,3 +351,10 @@ Allows resuming an interrupted Glass inspection from where it stopped (e.g., aft
 | [MCC_Implementation_Plan.md](docs/MCC_Implementation_Plan.md) | MCC 기능 이식 구현 계획 |
 | [MCC_GMI_TO_HMI_IMPLEMENTATION_REPORT.md](docs/MCC_GMI_TO_HMI_IMPLEMENTATION_REPORT.md) | MCC 이식 결과 보고서 (파일 목록, 검증 결과, 미확정 항목) |
 | [WAD_MultiMeas_Porting_Plan.md](docs/WAD_MultiMeas_Porting_Plan.md) | WAD 다점측정 이식 계획 |
+| [AgingSet_Porting_Plan.md](docs/AgingSet_Porting_Plan.md) | OCP AgingSet 다이얼로그(Aging 목표값 알람) 기능 완성 이식 계획 |
+| [AgingTest_Porting_Plan.md](docs/AgingTest_Porting_Plan.md) | OCP AgingTest 다이얼로그(Aging 시퀀스 레시피/셀맵/Cycle Test) 완성 이식 계획 |
+| [AgingCycleEngine_Design_Plan.md](docs/AgingCycleEngine_Design_Plan.md) | OCP DoWorkStartMeasOCP_A(6,743줄) 대응 에이징 리스트 측정 엔진 설계 |
+| [Glass_Rotation_Change_Plan.md](docs/Glass_Rotation_Change_Plan.md) | Glass 방향(Stage Rotate 각도 체계 -90°) 변경 플랜 |
+| [Angle_Porting_Plan.md](docs/Angle_Porting_Plan.md) | OCP ANGLE 다이얼로그(특성 각도 스케줄러) 이식 플랜 — **보류** (Angle 조작 통신 사양서 부재) |
+| [AutoContact_Porting_Plan.md](docs/AutoContact_Porting_Plan.md) | OCP↔HMI AutoContact(프로브 자동 컨택) 비교 및 스텁 완성 이식 플랜 |
+| [HW_Verification_Checklist.md](docs/HW_Verification_Checklist.md) | HW 연동 검증 체크리스트 — Probe Gantry X/P5 인터록/시퀀스/통신별 확인 항목, 로그 grep 문구·알람 번호 부록 |

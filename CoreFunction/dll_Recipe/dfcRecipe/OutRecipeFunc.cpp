@@ -145,6 +145,15 @@ BOOL	C_OutRecipeFunc::LoadRcpFile (CString strRcpName)
 	m_recipeMgr.m_sInfo.m_sInspectItem.m_bUseAngle_6	 = ReadInt (&File); 
 	m_recipeMgr.m_sInfo.m_sInspectItem.m_bUseEFA		 = ReadInt (&File);
 	m_recipeMgr.m_sInfo.m_sInspectItem.m_bUseSpec_Multi  = ReadInt (&File);
+
+	// LYS 2026-08-06 강화검사
+	if (nVersion >= RECIPE_FILE_V1006) {
+		m_recipeMgr.m_sInfo.m_sInspectItem.m_bUseAging_Test = ReadInt(&File);
+	}
+	else {
+		m_recipeMgr.m_sInfo.m_sInspectItem.m_bUseAging_Test = 0; // 기본값
+	}	
+
 	strTemp = ReadString (&File);
 	dfcArryParsing (&strArr, strTemp);
 	for (int i = 0; i < M_RCP_INS_ITEM; i++) {
@@ -308,7 +317,7 @@ BOOL	C_OutRecipeFunc::LoadRcpFile (CString strRcpName)
 		wcscpy_s (m_recipeMgr.m_sMap.m_chCellDistance, ReadString (&File));
 	}
 
-		// LYS 2026-07-08 Sub Z Load (V1005+)
+	// LYS 2026-07-08 Sub Z Load (V1005+)
 	if (nVersion > RECIPE_FILE_V1005) {
 		ReadString(&File);	//Head Sub Z Header
 		m_recipeMgr.m_sInfo.m_sMotionSubZ.m_fWadSubzRight = ReadDouble(&File);
@@ -319,6 +328,23 @@ BOOL	C_OutRecipeFunc::LoadRcpFile (CString strRcpName)
 		//m_recipeMgr.m_sInfo.m_sMotionSubZ.m_fAngleSubzLeft = ReadDouble(&File);
 	} else {
 		m_recipeMgr.m_sInfo.m_sMotionSubZ.Clear();
+	}
+
+	// LYS 2026-08-19 Angle Axis Load (V1007+)
+	if (nVersion > RECIPE_FILE_V1007) {
+		ReadString(&File);	//Angle Axis Header
+		m_recipeMgr.m_sInfo.m_sMotionAngle.m_fAngleScheimpflug1 = ReadDouble(&File);
+		m_recipeMgr.m_sInfo.m_sMotionAngle.m_fAngleRotate1 = ReadDouble(&File);
+		m_recipeMgr.m_sInfo.m_sMotionAngle.m_fAngleZoom1 = ReadDouble(&File);
+		m_recipeMgr.m_sInfo.m_sMotionAngle.m_fAngleTilt1 = ReadDouble(&File);
+		m_recipeMgr.m_sInfo.m_sMotionAngle.m_fAngleAzimuth1 = ReadDouble(&File);
+		m_recipeMgr.m_sInfo.m_sMotionAngle.m_fAngleScheimpflug2 = ReadDouble(&File);
+		m_recipeMgr.m_sInfo.m_sMotionAngle.m_fAngleRotate2 = ReadDouble(&File);
+		m_recipeMgr.m_sInfo.m_sMotionAngle.m_fAngleZoom2 = ReadDouble(&File);
+		m_recipeMgr.m_sInfo.m_sMotionAngle.m_fAngleTilt2 = ReadDouble(&File);
+		m_recipeMgr.m_sInfo.m_sMotionAngle.m_fAngleAzimuth2 = ReadDouble(&File);
+	} else {
+		m_recipeMgr.m_sInfo.m_sMotionAngle.Clear();
 	}
 
 	File.Close ();

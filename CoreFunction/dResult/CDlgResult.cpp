@@ -1941,7 +1941,9 @@ int CDlgResult::ExportAsAPDICP(CString strResultPath, CString strTime)
 	strBody.Format(_T("%-20s,%-20d,\n"), _T("AREA_CNT"), iAreaCnt);
 	File.WriteString(strBody);
 
-	int iArea = 1000;
+	// LYS 2026-08-18 AREA_MAX_CNT 1000 -> 2500.
+	// 최대 행 = 에이징 항목 x 멀티포인트 x 글라스당 셀. 3 x 7 x 108 = 2268로 기존 한계를 넘었다.
+	int iArea = 2500;
 	strBody.Format(_T("%-20s,%-20d,\n"), _T("AREA_MAX_CNT"), iArea);
 	File.WriteString(strBody);
 
@@ -2226,7 +2228,8 @@ void CDlgResult::ExportAsAPDHead(CArchive& ar)
 	strBody.Format(_T("%-20s,%-20d,\r\n"), _T("AREA_CNT"), iAreaCnt);
 	ar.WriteString(strBody);
 
-	int iArea = 1000;	
+	// LYS 2026-08-18 AREA_MAX_CNT 1000 -> 2500.
+	int iArea = 2500;	
 	strBody.Format(_T("%-20s,%-20d,\r\n"), _T("AREA_MAX_CNT"), iArea);
 	ar.WriteString(strBody);
 

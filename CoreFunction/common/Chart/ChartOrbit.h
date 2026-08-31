@@ -91,6 +91,8 @@ public:
 	CChart2DTextArea** m_pTextMeasResult;
 
 	int				m_nProbe;
+	// LYS 2026-08-26 기종별 프로브 카드 장착 여부. P5만 표시한다.
+	BOOL			m_bProbeCardUse[INT_USE_MAX_PROBE_DATA];
 	BOOL			m_bCurPosDraw;
 	double			m_dCurPosX;
 	double			m_dCurPosY;
@@ -170,6 +172,9 @@ public:
 
 	void	SetLoaderSize(double dXMax, double dXMin, double dYMax, double dYMin, int iLoaderCCut);
 	void	SetProbeCardSize(double dXMax, double dXMin, double dYMax, double dYMin);
+	// LYS 2026-08-26 nProbeID는 0기준(0=P1 .. 4=P5). 끄면 즉시 숨겨지고 다시 그려지지 않는다.
+	void	SetProbeCardUse(int nProbeID, BOOL bUse);
+	void	HideProbeCard(int nProbeID);
 	void	SetGlassSize(double dXMax, double dXMin, double dYMax, double dYMin, int iGlsCCut);
 	void	SetGlobalMakrPos(double x, double y);
 	void	SetCurPos(int iProbe, BOOL bDraw, double x, double y);

@@ -1,0 +1,19 @@
+#pragma once
+
+namespace ALM {
+	enum AlarmList {
+
+		PG_1_DISCONNECT				= 1000, //PG 1 ~ 10
+		PG_1_TIMEOUT				= 1010,
+		PG_1_NAK					= 1020,
+		PG_1_RCP_CNG_FAIL			= 1030,
+		PG_1_FILE_FIND_FAIL			= 1040,
+
+		QUALITY_1_DISCONNECT		= 1100,
+		QUALITY_1_TIMEOUT			= 1110,
+		QUALITY_1_NAK				= 1120,
+		QUALITY_1_RCP_CNG_FAIL		= 1130,
+		QUALITY_1_FILE_FIND_FAIL	= 1140,
+
+	};
+}

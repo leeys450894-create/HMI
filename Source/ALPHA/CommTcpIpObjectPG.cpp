@@ -9,6 +9,7 @@
 #include "Alarm\AlarmController.h"
 #include "AuroraFuncDefine.h"
 #include "Manager\SequenceManager.h"
+#include "DoWork\AutoContactInfo.h"	// LYS 2026-08-10 AutoContact Phase 3
 
 #include "CommEthFunction\EthernetManagerTCP.h"
 
@@ -499,6 +500,13 @@ bool CCommTcpIpObjectPG::WaitInspectionComplete(DWORD dwTimeOut, int iMeasType)
 		}
 		else if (iMeasType == 7)	// RTEST
 		{
+			// LYS 2026-08-10 AutoContact Phase 3: OOS sim - raw all-pass status (21)
+			{
+				CAutoContactInfo* pAutoCnt = CAutoContactInfo::GetInstance();
+				pAutoCnt->ClearCellStatus();
+				for (int iCnt = 0; iCnt < (int)nCellCnt && iCnt < RTEST_MAX; iCnt++)
+					pAutoCnt->SetCellStatus(iCnt, 21);
+			}
 			for (size_t i = 0; i < nCellCnt; i++)
 			{
 				if (nCellCnt > 10)
@@ -872,6 +880,14 @@ bool CCommTcpIpObjectPG::WaitInspectionComplete(DWORD dwTimeOut, int iMeasType)
 	}
 	else if (iMeasType == 7)	// RTEST
 	{
+		// LYS 2026-08-10 AutoContact Phase 3: 셀별 raw 값 + 20 유지
+		// (OCP CalcPGResult(2,-1) 규약: 21=PASS, 28=포트 실패)
+		{
+			CAutoContactInfo* pAutoCnt = CAutoContactInfo::GetInstance();
+			pAutoCnt->ClearCellStatus();
+			for (int iCnt = 0; iCnt < m_strPGResult.GetLength() && iCnt < RTEST_MAX; iCnt++)
+				pAutoCnt->SetCellStatus(iCnt, _ttoi(m_strPGResult.Mid(iCnt, 1)) + 20);
+		}
 		if (nCellCnt > 10)
 		{
 			if (m_bAgingingEven != true)

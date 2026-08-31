@@ -1,6 +1,8 @@
 ﻿#include "pch.h"
 #include "ALPHA.h"
 #include "DlgSubManual_AgingSet.h"
+#include "AuroraMgr.h"				// LYS 2026-08-05
+#include "Manager\ShareMemoryMgr.h"	// LYS 2026-08-05
 #include "afxdialogex.h"
 
 #include <iostream>
@@ -12,9 +14,12 @@ using namespace std;
 
 IMPLEMENT_DYNAMIC(CDlgSubManual_AgingSet, CDialogEx)
 
-CDlgSubManual_AgingSet::CDlgSubManual_AgingSet(CWnd* pParent /*=NULL*/)
+CDlgSubManual_AgingSet::CDlgSubManual_AgingSet(CAuroraMgr* pAuroraMgr, CWnd* pParent /*=NULL*/)
 	:CDialogEx(CDlgSubManual_AgingSet::IDD, pParent)
+	, m_pAuroraMgr(pAuroraMgr)	// LYS 2026-08-05
 {
+	m_spreadAgAlarmList = NULL;	// LYS 2026-08-05
+	m_hfont = NULL;				// LYS 2026-08-05
 	//m_pSystem = NULL;
 	//m_pSystem = SMEM_GetSharedMemory();
 }
@@ -91,8 +96,8 @@ BOOL CDlgSubManual_AgingSet::OnInitDialog()
 	//if (m_pSystem->stEquip.m_nEQType == EQU_TYPE_ICP) strPath.Format(_T("D:\\KMAC\\%s\\PARAM\\AgingTargetRcp\\"), _T("PARAM_ICP"));
 	//else if (m_pSystem->stEquip.m_nEQType == EQU_TYPE_OCP) strPath.Format(_T("D:\\KMAC\\%s\\PARAM\\AgingTargetRcp\\"), _T("PARAM_OCP"));
 	
-	//m_strAgingRcpPath = theApp.GetProfileString(_T("DIR"), _T("AGING_TARGET_RCP"), strPath);
-	//GetDlgItem(IDC_EDIT_2)->SetWindowText(m_strAgingRcpPath);
+	m_strAgingRcpPath = theApp.GetProfileString(_T("DIR"), _T("AGING_TARGET_RCP"), _T("D:\\HBS\\PARAM_OCP\\PARAM\\AgingTargetRcp\\"));	// LYS 2026-08-05 default path per user 2026-08-05
+	GetDlgItem(IDC_EDIT_2)->SetWindowText(m_strAgingRcpPath);	// LYS 2026-08-05 1 restore
 	
 	m_strOldRcp = _T("");
 	m_strPtn = _T("");
@@ -187,7 +192,7 @@ void CDlgSubManual_AgingSet::OnItemAdd()
 void CDlgSubManual_AgingSet::OnItemDel()
 {
 	int nMaxRow = m_spreadAgAlarmList->GetMaxRows();
-	if (nMaxRow <= 1) return;
+	if (nMaxRow < 1) return;	// LYS 2026-08-05 (HMI grid: MaxRows = data row count)
 	
 	m_spreadAgAlarmList->SetMaxRows(nMaxRow - 1);
 	
@@ -226,238 +231,153 @@ void CDlgSubManual_AgingSet::OnLoadAgingInfo()
 
 void CDlgSubManual_AgingSet::OnAgingProcStrart()
 {
-	//if (!IsOfflineStatus()) return;
-	//if (SMEM_GetSys_ProcessStatus() == SPS_PROCESS) {
-	//	AfxMessageBox(_T("프로세스 진행중 입니다.\n 프로세스 완료후 진행 하십시오."), MB_ICONWARNING);
-	//	return;
-	//}
-	//
-	//////20180429 add by Hee
-	////if (!m_pSystem->stInterLock.m_bSafetyPos_X) {
-	////	AfxMessageBox (_T("Safety 위치가 아닙니다. \n\n안전위치 이동 후 진행하십시오."));
-	////	return;
-	////}
-	//
-	////if (m_pSystem->m_bProbeRotateInstall) {
-	////	if (fabs (m_pDlgNaviMaint->m_dlgNaviMaintMotionACS.GetCurPos (AXIS_R1)) > 0.01) {
-	////		AfxMessageBox (_T("Safety 위치가 아닙니다. \n\n안전위치 이동 후 진행하십시오."));
-	////		return;
-	////	}
-	////}
-	//
-	//if (AfxMessageBox(_T("Aging 결과 파일 에서 전류값을 확인 합니다.\n 계속 하시겠습니까?"), MB_YESNO | MB_ICONQUESTION) != IDYES) return;
-	//
-	//CString strRcp;
-	//GetDlgItem(IDC_EDIT_1)->GetWindowText(strRcp);
-	//
-	//if (strRcp == _T("") && strRcp == _T("UNKNOWN")) {
-	//	AfxMessageBox(_T("레시피 정보가 없습니다.\n 레시피 설정 후 진행 하십시오."), MB_ICONWARNING);
-	//	return;
-	//}
-	//
-	//int nMaxCount = m_spreadAgAlarmList.GetMaxRows();
-	//
-	//if (nMaxCount <= 1) {
-	//	AfxMessageBox(_T("리스트 정보가 없습니다.\n 리스트 추가 및 저장 후 진행 하십시오."), MB_ICONWARNING);
-	//	return;
-	//}
-	//
-	//////Cycle Count 정보
-	//CString strTemp;
-	////int nCycleCount = 1;
-	////m_cmbCycle.GetWindowText (strTemp);
-	////nCycleCount = atoi (strTemp);
-	//
-	////////스틱 정보
-	//////m_nStick.clear ();
-	//////for (int i = 0; i < MAX_AGING_STICK; i++) {
-	//////	if (m_chkStick[i].IsWindowEnabled ()) {
-	//////		m_nStick.push_back (m_chkStick[i].GetCheck ());
-	//////	}
-	//////	else break;
-	//////}
-	//
-	////Aging 리스트 정보
-	//m_vecAgTgAlarm.clear();
-	//S_AgingTargetAlarm sAgingAlarm;
-	//for (int i = 0; i < nMaxCount - 1; i++) {
-	//	m_spreadAgAlarmList.SetRow(i + 2);
-	//
-	//	for (int j = 2; j < MAX_AGING_ITEM + 1; j++) {
-	//		m_spreadAgAlarmList.SetCol(j);
-	//
-	//		if (j == 2) {
-	//			strTemp = m_spreadAgAlarmList.GetValue();
-	//			sAgingAlarm.m_bUseAlarm = atoi(strTemp);
-	//		}
-	//		else if (j == 3) {
-	//			m_spreadAgAlarmList.GetWindowText(strTemp);
-	//			sAgingAlarm.m_nPtnRGB = atoi(strTemp);
-	//		}
-	//		else if (j == 4) {
-	//			m_spreadAgAlarmList.GetWindowText(strTemp);
-	//			sAgingAlarm.m_fPtnBase = atof(strTemp);
-	//		}
-	//		else if (j == 5) {
-	//			strTemp = m_spreadAgAlarmList.GetValue();
-	//			sAgingAlarm.m_fPtnUp = atof(strTemp);
-	//		}
-	//		else if (j == 6) {
-	//			strTemp = m_spreadAgAlarmList.GetValue();
-	//			sAgingAlarm.m_fPtnLo = atof(strTemp);
-	//		}
-	//	}
-	//
-	//	m_vecAgTgAlarm.push_back(sAgingAlarm);
-	//}
-	//
-	////m_pSystem->m_bAutoAgingMode = TRUE;
-	////m_pSystem->nJobCount = nCycleCount;
-	//
-	//////진행 위치
-	////m_pSystem->m_nAgingListRow = 0;
-	////m_pSystem->m_nAgingListCol = 0;
-	//
-	////m_pJobProc->DoStartCycleTest ();
-	//
-	//
-	//
-////////////////////////////////
-	//
-	////DeleteAgingFile ();
-	//
-	////LoadAgingInfo (); //레시피 확인
-	////if (!LoadAgingInfo ())
-	//
-	////AGING_NOT_FILE    //Aging 생성된 파일 없을때
-	////AGING_FIND_ALARM  //Aging Spec Out 찾았을때
-	//
-	//int nAlarm = 0;
-	//CString str;
-	//nAlarm = FindAgingAlarm();
-	//
-	//if (nAlarm == AGING_NOT_FILE) {
-	//	AfxMessageBox(_T("Aging 파일을 찾을수 없습니다. \n Aging 파일이 생성되었는지 확인 하십시오."));
-	//}
-	//else if (nAlarm == AGING_FIND_ALARM) {
-	//	str.Format(_T("Aging Spec Out : Ptn(%s) Cell(%d)"), GetPtn(), GetCell());
-	//	AfxMessageBox(str);
-	//}
+	// LYS 2026-08-05 : check aging current values from result file (port of OCP DlgNaviManualAgingSet)
+	if (!IsOfflineStatus()) return;
+
+	if (m_pAuroraMgr != NULL && m_pAuroraMgr->GetShareMemoryMgrPtr() != NULL) {
+		if (m_pAuroraMgr->GetShareMemoryMgrPtr()->GetSys_ProcessStatus() == SPS_PROCESS) {
+			AfxMessageBox(_T("프로세스 진행중 입니다.\n 프로세스 완료후 진행 하십시오."), MB_ICONWARNING);
+			return;
+		}
+	}
+
+	if (AfxMessageBox(_T("Aging 결과 파일 에서 전류값을 확인 합니다.\n 계속 하시겠습니까?"), MB_YESNO | MB_ICONQUESTION) != IDYES) return;
+
+	CString strRcp;
+	GetDlgItem(IDC_EDIT_1)->GetWindowText(strRcp);
+
+	if (strRcp.IsEmpty() || strRcp == _T("UNKNOWN")) {	// OCP original used &&, corrected to ||
+		AfxMessageBox(_T("레시피 정보가 없습니다.\n 레시피 설정 후 진행 하십시오."), MB_ICONWARNING);
+		return;
+	}
+
+	int nMaxCount = m_spreadAgAlarmList->GetMaxRows();	// HMI grid: MaxRows = item count
+	if (nMaxCount < 1) {
+		AfxMessageBox(_T("리스트 정보가 없습니다.\n 리스트 추가 및 저장 후 진행 하십시오."), MB_ICONWARNING);
+		return;
+	}
+
+	// collect grid -> m_vecAgTgAlarm (cols 1..5, data rows 1..nMaxCount)
+	m_vecAgTgAlarm.clear();
+	S_AgingTargetAlarm sAgingAlarm;
+	for (int i = 0; i < nMaxCount; i++) {
+		int nRow = i + 1;
+		sAgingAlarm.m_bUseAlarm = m_spreadAgAlarmList->GetDataInt(1, nRow);
+		sAgingAlarm.m_nPtnRGB   = m_spreadAgAlarmList->GetDataInt(2, nRow);
+		sAgingAlarm.m_fPtnBase  = m_spreadAgAlarmList->GetDataDbl(3, nRow);
+		sAgingAlarm.m_fPtnUp    = m_spreadAgAlarmList->GetDataDbl(4, nRow);
+		sAgingAlarm.m_fPtnLo    = m_spreadAgAlarmList->GetDataDbl(5, nRow);
+		m_vecAgTgAlarm.push_back(sAgingAlarm);
+	}
+
+	int nAlarm = FindAgingAlarm();
+
+	if (nAlarm == AGING_NOT_FILE) {
+		AfxMessageBox(_T("Aging 파일을 찾을수 없습니다. \n Aging 파일이 생성되었는지 확인 하십시오."));
+	}
+	else if (nAlarm == AGING_FIND_ALARM) {
+		CString str;
+		str.Format(_T("Aging Spec Out : Ptn(%s) Cell(%d)"), (LPCTSTR)GetPtn(), GetCell());
+		AfxMessageBox(str);
+	}
 }
 
 void CDlgSubManual_AgingSet::UpdateListNum()
 {
+	// LYS 2026-08-05 : No goes to row header col 0 (old code wrote into col 1 = Use)
 	CString str;
 	int nMaxRow = m_spreadAgAlarmList->GetMaxRows();
-	//m_spreadAgAlarmList->SetCol(1);
-	for (int i = 1; i < nMaxRow; i++) {
-		//m_spreadAgAlarmList->SetRow(i + 1);
-		//m_spreadAgAlarmList->SetCellType(1);
-		//m_spreadAgAlarmList->SetTypeHAlign(2);
-		//m_spreadAgAlarmList->SetTypeVAlign(2);
+	for (int i = 1; i <= nMaxRow; i++) {
 		str.Format(_T("%d"), i);
-		m_spreadAgAlarmList->SetDataString(1, i+1, str);
+		m_spreadAgAlarmList->SetDataString(0, i, str);
 	}
 }
 
 BOOL CDlgSubManual_AgingSet::IsOfflineStatus()
 {
-	//if (m_pSystem->stTitle.m_nHostMode != df_HOST_OFFLINE) {
-	//	AfxMessageBox(_T("Offline 모드가 아닙니다..\n Offline 모드로 변경 후 진행 하십시오."), MB_ICONWARNING);
-	//	return FALSE;
-	//}
-	//
+	// LYS 2026-08-05 : restore offline check via ShareMemoryMgr
+	if (m_pAuroraMgr != NULL && m_pAuroraMgr->GetShareMemoryMgrPtr() != NULL) {
+		if (m_pAuroraMgr->GetShareMemoryMgrPtr()->GetSys_MachineMode() != df_HOST_OFFLINE) {
+			AfxMessageBox(_T("Offline 모드가 아닙니다..\n Offline 모드로 변경 후 진행 하십시오."), MB_ICONWARNING);
+			return FALSE;
+		}
+	}
+
 	return TRUE;
 }
 
 BOOL CDlgSubManual_AgingSet::LoadAgingInfo(CString strRcp)
 {
+	// LYS 2026-08-05 : rcp 경로 복원 + 그리드 인덱싱 수정
+	// HMI 그리드 좌표: 헤더 = SS_HEADER 행, 데이터 1..MaxRows, 열 1..5
 	CString strAgingRcpPath;
-	//strAgingRcpPath = dfcStr(_T("%s%s.rcp"), m_strAgingRcpPath, strRcp/*(CString)m_pSystem->stLotInfo.m_szRecipeID*/);
-	
-	//CString strPath = gf_GetFilePath(dfDEFAULT_AGING_FILE_PATH);
-	
+	strAgingRcpPath = dfcStr(_T("%s%s.rcp"), m_strAgingRcpPath, strRcp);
+
 	TCHAR cValue[MAX_PATH];
-	ZeroMemory(cValue, MAX_PATH);
-	
+	ZeroMemory(cValue, sizeof(cValue));
+
 	GetPrivateProfileString(_T("COUNT"), _T("MaxCount"), _T("0"), cValue, MAX_PATH, strAgingRcpPath);
 	int nMaxCount = _ttoi(cValue);
-	
+
 	AgingItemClearAll();
 	if (nMaxCount <= 0) return FALSE;
-	
-	//
+
 	m_vecAgTgAlarm.clear();
 	S_AgingTargetAlarm sAgingAlarm;
-	//
-	
+
 	CString strItem;
-	for (int i = 0; i < nMaxCount; i++) {
-		strItem.Format(_T("ITEM_%d"), i + 1);
+	for (int iItem = 0; iItem < nMaxCount; iItem++) {
+		strItem.Format(_T("ITEM_%d"), iItem + 1);
 		AgingItemAdd();
-	
-		//m_spreadAgAlarmList.SetRow(i + 2);
-	
-		for (int i = 2; i < MAX_AGING_ITEM + 1; i++) {
-			//m_spreadAgAlarmList.SetCol(i);
-	
-			if (i == 2) {
-				GetPrivateProfileString(strItem, _T("USE_ALARM"), _T("0"), cValue, MAX_PATH, strAgingRcpPath);
-				//m_spreadAgAlarmList.SetValue(cValue);
-				m_spreadAgAlarmList->SetData(i, i + 2, cValue);
-				sAgingAlarm.m_bUseAlarm = _ttoi(cValue);
-			}
-			else if (i == 3) {
-				GetPrivateProfileString(strItem, _T("PTN_RGB"), _T("0"), cValue, MAX_PATH, strAgingRcpPath);
-				//m_spreadAgAlarmList->SetTypeComboBoxCurSel(_ttoi(cValue));
-				sAgingAlarm.m_nPtnRGB = _ttoi(cValue);
-			}
-			else if (i == 4) {
-				GetPrivateProfileString(strItem, _T("BASE_VAL"), _T("0.0"), cValue, MAX_PATH, strAgingRcpPath);
-				//m_spreadAgAlarmList.SetValue(cValue);
-				m_spreadAgAlarmList->SetData(i, i + 2, cValue);
-				sAgingAlarm.m_fPtnBase = _ttoi(cValue);
-			}
-			else if (i == 5) {
-				GetPrivateProfileString(strItem, _T("UP_VAL"), _T("0.0"), cValue, MAX_PATH, strAgingRcpPath);
-				//m_spreadAgAlarmList.SetValue(cValue);
-				m_spreadAgAlarmList->SetData(i, i + 2, cValue);
-				sAgingAlarm.m_fPtnUp = _ttoi(cValue);
-			}
-			else if (i == 6) {
-				GetPrivateProfileString(strItem, _T("LO_VAL"), _T("0.0"), cValue, MAX_PATH, strAgingRcpPath);
-				//m_spreadAgAlarmList.SetValue(cValue);
-				m_spreadAgAlarmList->SetData(i, i + 2, cValue);
-				sAgingAlarm.m_fPtnLo = _ttoi(cValue);
-			}
-		}
-	
+
+		int nRow = iItem + 1;
+
+		GetPrivateProfileString(strItem, _T("USE_ALARM"), _T("0"), cValue, MAX_PATH, strAgingRcpPath);
+		m_spreadAgAlarmList->SetData(1, nRow, cValue);
+		sAgingAlarm.m_bUseAlarm = _ttoi(cValue);
+
+		GetPrivateProfileString(strItem, _T("PTN_RGB"), _T("0"), cValue, MAX_PATH, strAgingRcpPath);
+		m_spreadAgAlarmList->SetData(2, nRow, cValue);
+		sAgingAlarm.m_nPtnRGB = _ttoi(cValue);
+
+		GetPrivateProfileString(strItem, _T("BASE_VAL"), _T("0.0"), cValue, MAX_PATH, strAgingRcpPath);
+		m_spreadAgAlarmList->SetData(3, nRow, cValue);
+		sAgingAlarm.m_fPtnBase = _tstof(cValue);
+
+		GetPrivateProfileString(strItem, _T("UP_VAL"), _T("0.0"), cValue, MAX_PATH, strAgingRcpPath);
+		m_spreadAgAlarmList->SetData(4, nRow, cValue);
+		sAgingAlarm.m_fPtnUp = _tstof(cValue);
+
+		GetPrivateProfileString(strItem, _T("LO_VAL"), _T("0.0"), cValue, MAX_PATH, strAgingRcpPath);
+		m_spreadAgAlarmList->SetData(5, nRow, cValue);
+		sAgingAlarm.m_fPtnLo = _tstof(cValue);
+
 		m_vecAgTgAlarm.push_back(sAgingAlarm);
 	}
-	
+
 	return TRUE;
 }
 
 void CDlgSubManual_AgingSet::SaveAgingInfo(CString strRcp)
 {
 	CString strAgingRcpPath;
-	//strAgingRcpPath = dfcStr(_T("%s%s.rcp"), m_strAgingRcpPath, strRcp/*(CString)m_pSystem->stLotInfo.m_szRecipeID*/);
+	strAgingRcpPath = dfcStr(_T("%s%s.rcp"), m_strAgingRcpPath, strRcp);	// LYS 2026-08-05 restore
 	
-	//dfcCreateFolder(m_strAgingRcpPath);
+	dfcCreateFolder(m_strAgingRcpPath);	// LYS 2026-08-05 restore
 	
 	//CString strPath = gf_GetFilePath(dfDEFAULT_AGING_FILE_PATH);
 	CString strValue, strItem;
 	
 	int nMaxCount = m_spreadAgAlarmList->GetMaxRows();
-	if (nMaxCount <= 1) {
+	if (nMaxCount < 1) {	// LYS 2026-08-05 (HMI: MaxRows = item count)
 		AfxMessageBox(_T("Aging 레시피 항목 추가후 저장 하십시오."));
 		return;
 	}
 	
-	strValue.Format(_T("%d"), nMaxCount - 1);
+	strValue.Format(_T("%d"), nMaxCount);	// LYS 2026-08-05 
 	WritePrivateProfileString(_T("COUNT"), _T("MaxCount"), strValue, strAgingRcpPath);
 	
-	for (int i = 0; i < nMaxCount - 1; i++) {
+	for (int i = 0; i < nMaxCount; i++) {	// LYS 2026-08-05 
 		//m_spreadAgAlarmList.SetRow(i + 2);
 	
 		strItem.Format(_T("ITEM_%d"), i + 1);
@@ -466,11 +386,11 @@ void CDlgSubManual_AgingSet::SaveAgingInfo(CString strRcp)
 			//m_spreadAgAlarmList.SetCol(j);
 	
 			if (j == 1) {
-				strValue = m_spreadAgAlarmList->GetDataString(j, i + 2);
+				strValue = m_spreadAgAlarmList->GetDataString(j, i + 1);	// LYS 2026-08-05 row fix
 				WritePrivateProfileString(strItem, _T("USE_ALARM"), strValue, strAgingRcpPath);
 			}
 			else if (j == 2) {
-				strValue.Format(_T("%d"), m_spreadAgAlarmList->GetDataString(j, i + 1));
+				strValue = m_spreadAgAlarmList->GetDataString(j, i + 1);	// LYS 2026-08-05 remove bogus %d format
 				WritePrivateProfileString(strItem, _T("PTN_RGB"), strValue, strAgingRcpPath);
 			}
 			else if (j == 3) {
@@ -491,8 +411,8 @@ void CDlgSubManual_AgingSet::SaveAgingInfo(CString strRcp)
 
 void CDlgSubManual_AgingSet::AgingItemClearAll()
 {
-	m_spreadAgAlarmList->ClearRange(1, 1, -1, -1);
-	m_spreadAgAlarmList->SetMaxRows(1);
+	m_spreadAgAlarmList->InitMySpread_AGINGSET();	// LYS 2026-08-05 : re-init header + zero rows
+	//m_spreadAgAlarmList->SetMaxRows(1);	// LYS 2026-08-05 : InitMySpread_AGINGSET resets rows
 	
 	CStringArray strArr;
 	strArr.Add(_T("No"));
@@ -518,43 +438,37 @@ void CDlgSubManual_AgingSet::AgingItemClearAll()
 
 void CDlgSubManual_AgingSet::AgingItemAdd()
 {
-	//int nMaxRow = m_spreadAgAlarmList.GetMaxRows();
-	//if (nMaxRow < 1) return;
-	//
-	//CString str;
-	//
-	//m_spreadAgAlarmList.SetMaxRows(nMaxRow + 1);
-	////m_spreadAgAlarmList.InsertRows (nMaxRow, 1);
-	//m_spreadAgAlarmList.SetRow(nMaxRow + 1);
-	//
-	//for (int i = 2; i < MAX_AGING_ITEM + 1; i++) {
-	//	m_spreadAgAlarmList.SetCol(i);
-	//	if (i == 2 /*|| i == 5 || i == 6*/) {
-	//		m_spreadAgAlarmList.SetCellType(10);			//Check Box
-	//		m_spreadAgAlarmList.SetTypeCheckCenter(TRUE);
-	//		m_spreadAgAlarmList.SetTypeCheckType(0);
-	//	}
-	//
-	//	if (i == 3) {
-	//		m_spreadAgAlarmList.SetCellType(8);			//Combo Box
-	//		m_spreadAgAlarmList.SetTypeHAlign(2);
-	//		m_spreadAgAlarmList.SetTypeVAlign(2);
-	//		for (int j = 20; j >= 0; j--) {
-	//			str.Format(_T("%d"), j);
-	//			m_spreadAgAlarmList.SetTypeComboBoxString(str);
-	//		}
-	//		m_spreadAgAlarmList.SetTypeComboBoxCurSel(0);
-	//	}
-	//
-	//	if (i == 4 || i == 5 || i == 6) {
-	//		m_spreadAgAlarmList.SetCellType(1);			//Edit
-	//		m_spreadAgAlarmList.SetTypeHAlign(2);
-	//		m_spreadAgAlarmList.SetTypeVAlign(2);
-	//		m_spreadAgAlarmList.SetWindowText(_T("0.0000"));
-	//	}
-	//}
-	//
-	//UpdateListNum();
+	// LYS 2026-08-05 : 데이터 행 1개 추가(열별 셀 타입, AgingTest 패턴)
+	// 1열 Use(체크), 2열 점등 패턴(콤보 0..20), 3~5열 base/up/low(에디트)
+	int nMaxRow = m_spreadAgAlarmList->GetMaxRows();
+	if (nMaxRow < 0) return;
+
+	CString str, sComboList;
+	SS_CELLTYPE cellType;
+
+	int nNewRow = nMaxRow + 1;
+	m_spreadAgAlarmList->SetMaxRows(nNewRow);
+
+	m_spreadAgAlarmList->SetTypeCheckBox(&cellType, SSS_ALIGN_VCENTER | SSS_ALIGN_CENTER, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL);
+	m_spreadAgAlarmList->SetCellType(1, nNewRow, &cellType);
+	m_spreadAgAlarmList->SetData(1, nNewRow, _T("0"));
+
+	sComboList = _T("");
+	for (int j = 0; j <= 20; j++) {
+		str.Format(_T("%d\t"), j);
+		sComboList += str;
+	}
+	m_spreadAgAlarmList->SetTypeComboBox(&cellType, SSS_ALIGN_VCENTER | SSS_ALIGN_CENTER, sComboList);
+	m_spreadAgAlarmList->SetCellType(2, nNewRow, &cellType);
+	m_spreadAgAlarmList->SetData(2, nNewRow, _T("0"));
+
+	m_spreadAgAlarmList->SetTypeEdit(&cellType, SSS_ALIGN_VCENTER | SSS_ALIGN_CENTER, 20, NULL, SS_CASE_NOCASE);
+	for (int j = 3; j <= 5; j++) {
+		m_spreadAgAlarmList->SetCellType(j, nNewRow, &cellType);
+		m_spreadAgAlarmList->SetData(j, nNewRow, _T("0.0000"));
+	}
+
+	UpdateListNum();
 }
 
 BOOL CDlgSubManual_AgingSet::CmAgingFileFindTimeOut(CString strFile, int nTimeOut)
@@ -704,8 +618,8 @@ int CDlgSubManual_AgingSet::FindAgingAlarm()
 	
 					if (i > 1 && i < nLength - 2) {
 						m_nCell++;
-						if (_ttoi(strTemp) > m_vecAgTgAlarm[nItem].m_fPtnBase + m_vecAgTgAlarm[nItem].m_fPtnUp ||
-							_ttoi(strTemp) < m_vecAgTgAlarm[nItem].m_fPtnBase - m_vecAgTgAlarm[nItem].m_fPtnLo) {
+						if (_tstof(strTemp) > m_vecAgTgAlarm[nItem].m_fPtnBase + m_vecAgTgAlarm[nItem].m_fPtnUp ||
+							_tstof(strTemp) < m_vecAgTgAlarm[nItem].m_fPtnBase - m_vecAgTgAlarm[nItem].m_fPtnLo) {
 							return AGING_FIND_ALARM;
 						}
 					}

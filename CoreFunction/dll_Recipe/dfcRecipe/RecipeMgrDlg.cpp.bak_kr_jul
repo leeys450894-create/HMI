@@ -1,0 +1,2483 @@
+#include "pch.h"
+#include "dfcRecipe.h"
+#include "RecipeMgrDlg.h"
+#include "afxdialogex.h"
+//#include "API_RECIPE.h"  // LYS 2026-07-20 for GetRecipeMgr
+
+//#define WM_MSG_RECIPE_LOADED  (WM_USER + 107)  // LYS 2026-07-20 must match eMessage::WM_MSG_UPDATE_RECIPE_INFORMATION
+
+IMPLEMENT_DYNAMIC (C_RecipeMgrDlg, CDialogEx)
+
+C_RecipeMgrDlg::C_RecipeMgrDlg (CWnd* pParent /*=NULL*/) : C_BaseDialog (IDD_PAGE_RECIPE, pParent)
+{
+	m_hWnd = pParent;
+	m_pRecipeMem = NULL;
+	m_pRecipeMem = g_pSysMapView;
+
+	m_pMakeCellDlg = NULL;
+	m_pMakeCellDlg = new C_MakeCellDlg (this);
+	m_pMakeCellDlg->Create (IDD_MAKE_CELL_DLG, this);
+
+	m_pSelectCellDlg = NULL;
+	m_pSelectCellDlg = new C_SelectCellDlg (this);
+	m_pSelectCellDlg->Create (IDD_SELECT_CELL_DLG, this);
+
+	m_pAlignRcpDlg = NULL;
+	m_pAlignRcpDlg = new C_AlignRcpDlg (this);
+	m_pAlignRcpDlg->Create (IDD_ALIGN_RECIPE_DLG, this);
+
+	// LYS 2026-07-02 TestMode dialog
+	m_pTestModeDlg = NULL;
+	m_pTestModeDlg = new CDlgTestMode(this);
+	m_pTestModeDlg->Create(IDD_DLG_TEST_MODE, this);
+}
+
+C_RecipeMgrDlg::~C_RecipeMgrDlg ()
+{
+}
+
+void C_RecipeMgrDlg::DoDataExchange (CDataExchange* pDX)
+{
+	CDialogEx::DoDataExchange(pDX);
+	for (int i = 0; i < 8; i++) DDX_Control (pDX, IDC_BUTTON_1 + i, m_btnStyle[i]);
+	for (int i = 0; i < 2; i++) DDX_Control (pDX, IDC_RADIO_1 + i, m_rdHeadSel[i]);
+	for (int i = 0; i < 5; i++) DDX_Control (pDX, IDC_RADIO_3 + i, m_rdHeadMode[i]);
+
+	DDX_Control (pDX, IDC_GRID_1,   m_gridRecipeName);
+	DDX_Control (pDX, IDC_GRID_2,   m_gridCellInfoHead);
+	DDX_Control (pDX, IDC_GRID_3,   m_gridCellInfoData);
+	DDX_Control (pDX, IDC_GRID_4,   m_gridInspectOptionHead);
+	DDX_Control (pDX, IDC_GRID_5,   m_gridInspectOptionData);
+	DDX_Control (pDX, IDC_GRID_6,   m_gridInspectItemHead);
+	DDX_Control (pDX, IDC_GRID_7,   m_gridInspectItemData);
+	DDX_Control (pDX, IDC_GRID_8,   m_gridLampHead);
+	DDX_Control (pDX, IDC_GRID_9,   m_gridLampData);
+	DDX_Control (pDX, IDC_GRID_10,  m_gridContactHead);
+	DDX_Control (pDX, IDC_GRID_11,  m_gridContactData);
+	DDX_Control (pDX, IDC_GRID_12,  m_gridProbeIDHead);
+	DDX_Control (pDX, IDC_GRID_13,  m_gridProbeIDData);
+	DDX_Control (pDX, IDC_GRID_14,  m_gridUserOffsetHead);
+	DDX_Control (pDX, IDC_GRID_15,  m_gridUserOffsetData);
+	DDX_Control (pDX, IDC_GRID_16,  m_gridStageMoveHead);
+	DDX_Control (pDX, IDC_GRID_17,  m_gridStageMoveData);
+	DDX_Control (pDX, IDC_GRID_18,  m_gridHeadMoveHead);
+	DDX_Control (pDX, IDC_GRID_19,  m_gridHeadMoveData);
+	DDX_Control (pDX, IDC_GRID_20,  m_gridHeadZHead);
+	DDX_Control (pDX, IDC_GRID_21,  m_gridHeadZData);
+	DDX_Control(pDX, IDC_GRID_23, m_gridSRMLampHead);
+	DDX_Control(pDX, IDC_GRID_22, m_gridSRMLampData);
+
+	DDX_Control(pDX, IDC_GRID_24, m_gridColorHead);
+	DDX_Control(pDX, IDC_GRID_25, m_gridColorData);
+
+	// LYS 2026-07-07 Add Sub Z Offset
+	DDX_Control(pDX, IDC_GRID_26, m_gridSubZHead);
+	DDX_Control(pDX, IDC_GRID_27, m_gridSubZData);
+
+	// LYS 2026-08-19 Add Angle Axis
+	DDX_Control(pDX, IDC_GRID_ANGLE_HEAD1, m_gridAxisAngleHead1);
+	DDX_Control(pDX, IDC_GRID_ANGLE_DATA1, m_gridAxisAngleData1);
+	DDX_Control(pDX, IDC_GRID_ANGLE_HEAD2, m_gridAxisAngleHead2);
+	DDX_Control(pDX, IDC_GRID_ANGLE_DATA2, m_gridAxisAngleData2);
+}
+
+BEGIN_MESSAGE_MAP (C_RecipeMgrDlg, CDialogEx)
+	ON_WM_ERASEBKGND ()
+	ON_WM_DESTROY ()
+	ON_WM_TIMER ()
+	ON_MESSAGE (WM_RECIPE_EVENT, OnRecipeEvent)
+	ON_COMMAND (IDC_BUTTON_1, OnRecipeLoad)
+	ON_COMMAND (IDC_BUTTON_2, OnRecipeSave)
+	ON_COMMAND (IDC_BUTTON_3, OnRecipeSaveAs)
+	ON_COMMAND (IDC_BUTTON_4, OnRecipeMakeCell)
+	ON_COMMAND (IDC_BUTTON_5, OnRecipeSelCell)
+	ON_COMMAND (IDC_BUTTON_6, OnRecipeAlign)
+	ON_COMMAND(IDC_BUTTON_7, OnSetLampOff)
+	ON_COMMAND(IDC_BUTTON_8, OnSetSRMLampOff)
+	ON_COMMAND(IDC_BUTTON_9, OnSetLampOn)
+	ON_COMMAND(IDC_BUTTON_10, OnSetLampOn2)
+
+	ON_COMMAND_RANGE (IDC_RADIO_1, IDC_RADIO_2, OnSelHead)
+	ON_COMMAND_RANGE (IDC_RADIO_3, IDC_RADIO_7, OnSelMode)
+	ON_NOTIFY (NM_DBLCLK, IDC_GRID_5, OnSelAlignRcp)
+	ON_NOTIFY (NM_CLICK, IDC_GRID_9, OnSetCcdLamp)
+	ON_NOTIFY (NM_CLICK, IDC_GRID_11, OnSetContactPos)
+	ON_NOTIFY (NM_CLICK, IDC_GRID_17, OnSetStage)
+	ON_NOTIFY (NM_CLICK, IDC_GRID_19, OnSetHead)
+	ON_NOTIFY (NM_CLICK, IDC_GRID_22, OnSetSRMLamp)
+	ON_NOTIFY (NM_CLICK, IDC_GRID_25, OnSetColorPos)
+	//ON_NOTIFY (TVN_SELCHANGING, IDC_GRID_25, OnSetColorItem)
+
+	ON_COMMAND(IDC_BUTTON_TEST_MODE, OnBtnTestMode)	// LYS 2026-07-02
+END_MESSAGE_MAP ()
+
+void C_RecipeMgrDlg::OnDestroy()
+{	
+	KillTimer (TIMER_RECIPE);
+
+	if (m_pMakeCellDlg) {
+		delete m_pMakeCellDlg;
+		m_pMakeCellDlg = NULL;
+	}
+
+	if (m_pSelectCellDlg) {
+		delete m_pSelectCellDlg;
+		m_pSelectCellDlg = NULL;
+	}
+
+	if (m_pAlignRcpDlg) {
+		delete m_pAlignRcpDlg;
+		m_pAlignRcpDlg = NULL;
+	}
+
+	CDialogEx::OnDestroy();
+}
+
+BOOL C_RecipeMgrDlg::OnInitDialog ()
+{
+	CDialogEx::OnInitDialog ();
+	
+	for (int i = 0; i < 8; i++) InitButtons (m_btnStyle[i]);
+	for (int i = 0; i < 2; i++) InitButtons (m_rdHeadSel[i]);
+	for (int i = 0; i < 5; i++) InitButtons (m_rdHeadMode[i]);
+
+	m_rdHeadSel[0].SetCheck (TRUE);
+	m_rdHeadMode[0].SetCheck (TRUE);
+	m_nHeadSel  = RCP_HEAD_LEFT;
+	m_nHeadMode = RCP_MODE_REVIEW;
+	m_nStage = -1;
+	m_nHead = -1;
+
+	m_iniPPID = C_IniFile (theApp.m_strPPIDPath);
+
+	InitRecipeName ();
+	InitCellInfo ();
+	InitInspectOption ();
+	InitInspectItem ();
+	InitLamp ();
+	InitSRMLamp();
+	InitContact ();
+	InitProbeID ();
+	InitUserOffset ();
+	InitStageMove ();
+	InitHeadMove ();
+	InitHeadZ ();
+	InitColorHeadZ();
+
+	InitSubZ();		// LYS 2026-07-07 Add Sub Z Offset
+
+	InitAngleAxis();	// LYS 2026-08-19 Add Angle Axis
+
+	MakeRcpList ();
+
+	m_nSelOld = 0;
+	Invalidate(FALSE);
+	SetTimer (TIMER_RECIPE, 100, NULL);
+
+	return TRUE;
+}
+
+LRESULT	C_RecipeMgrDlg::OnRecipeEvent (WPARAM wParam, LPARAM lParam)
+{
+	int nItem = (int)wParam;
+
+	switch (nItem) {
+		case M_MAKE_CELL_SET:
+			SetRecipeView ();
+			SendAlignKeyPos ();
+			break;
+		case M_ALIGN_SHOW_REFIMG:
+		case M_ALIGN_PATTERN_SEARCH:
+		case M_ALIGN_CCD_SET:
+		case M_ALIGN_GLASS_GET_POS:
+		case M_ALIGN_GLASS_MOVE:
+		case M_ALIGN_PROBE_GET_POS:
+		case M_ALIGN_PROBE_MOVE:
+		case M_ALIGN_GLASS_PROC:
+		case M_ALIGN_PROBE_PROC:
+		case M_ALIGN_RESET:
+		case M_RCP_LAMP_SET:
+		case M_RCP_CONTACT_SET:
+		case M_RCP_STAGE_GET_POS:
+		case M_RCP_STAGE_MOVE:
+		case M_RCP_PROBE_MOVE:
+		case M_RCP_HEAD_GET_POS:
+		case M_RCP_HEAD_MOVE:
+		case M_RCP_SRM_LAMP_SET:
+			AlignRcpEventProc (nItem, (int)lParam);
+			break;
+		case M_RCP_TEST_MODE:	// LYS 2026-07-02 (data already set by DlgTestMode, do not clear)
+			m_pRecipeMem->m_sRunState.m_nRunStatus = M_RUN_REQ;
+			break;
+		case 0:
+		{
+			GetContactData();
+			SetContactData();
+
+			Invalidate(FALSE);
+		}
+			break;
+	}
+
+	return 0;
+}
+
+void C_RecipeMgrDlg::OnTimer (UINT_PTR nIDEvent)
+{
+	static int nTime = 0;
+	static int nSec	 = 0;
+	static bool bOdd = false;
+
+	int nSel = 0;
+
+	switch (nTime%3) {//각 case 마다 300ms 주기
+		case 0:
+			UpdateUI ();
+		break;
+
+		case 1:
+			nSel = m_gridColorData.GetItemCurSel(0, 0);
+			if (nSel >= 0)
+			{
+				if (nSel <= theApp.m_arrColorPosZ.GetSize()) {
+
+					if (nSel != m_nSelOld) {
+						m_gridColorData.SetItemText(0, 1, theApp.m_arrColorPosZ.GetAt(nSel));
+						m_nSelOld = nSel;
+						Invalidate(FALSE);
+					}
+				}
+			}
+		break;
+
+		case 2:
+			if (bOdd) {//600ms 주기
+			}
+			bOdd = !bOdd;
+		break;
+	}
+
+	nTime++;
+	if (nTime >= 3) {
+		nTime = 0;
+	}
+
+	CDialogEx::OnTimer (nIDEvent);
+}
+
+void	C_RecipeMgrDlg::SetRecipeName (CString str)
+{
+	m_gridRecipeName.SetItemText (0, 1, str);
+	Invalidate (FALSE);
+}
+
+CString	C_RecipeMgrDlg::GetRecipeName ()
+{
+	return m_gridRecipeName.GetItemText (0, 1);
+}
+
+void	C_RecipeMgrDlg::SetAlignName (CString str)
+{
+	m_gridInspectOptionData.SetItemText (7, 1, str);
+	Invalidate (FALSE);
+}
+
+void	C_RecipeMgrDlg::OnRecipeLoad ()
+{
+	CString strfilePath, strName;
+
+	strfilePath.Format (_T("%s*.rcp"), theApp.m_strRcpFolder);
+	CFileDialog dlg (TRUE, _T("rcp"), strfilePath, OFN_FILEMUSTEXIST | OFN_NOCHANGEDIR, _T("Recipe Files (*.rcp)|*.rcp|"));
+
+	if (dlg.DoModal() == IDOK)
+	{			
+		strName = dlg.GetFileName ();
+
+		if (!strName.IsEmpty ()) {
+			int nFind = strName.Find (_T(".rcp"));
+
+			if (nFind > 0)	strName = strName.Left (nFind); //remove ".rcp"
+			else			strName = strName;
+
+			if (g_inRcpInfo.LoadRcpFile (strName)) {
+
+				if (!g_inRcpInfo.GetAlignRecipeName().IsEmpty()) m_pAlignRcpDlg->LoadAlignRecipe (g_inRcpInfo.GetAlignRecipeName ());
+				SetRecipeView ();
+				SetRecipeName (strName);
+
+				// LYS 2026-07-20 sync g_outRcpInfo and notify App to update Cell UI
+				//C_OutRecipeFunc* pOut = GetRecipeMgr();
+				//if (pOut) {
+				//	pOut->LoadRcpFile(strName);
+				//	if (!g_inRcpInfo.GetAlignRecipeName().IsEmpty())
+				//		pOut->LoadAlignRcpFile(g_inRcpInfo.GetAlignRecipeName());
+				//}
+				//// Notify App (DlgMainForm) to refresh cell display
+				//CWnd* pParent = GetParent();  // DlgSubRecipe
+				//if (pParent && pParent->GetParent())
+				//	pParent->GetParent()->PostMessage(WM_MSG_RECIPE_LOADED, NULL, NULL);
+			}
+			else {
+				AfxMessageBox (_T("레시피 열기 실패!!."));
+				return;
+			}
+		}
+		else {
+			AfxMessageBox (_T("선택된 레시피가 없습니다."));
+			return;
+		}
+	}
+}
+
+void	C_RecipeMgrDlg::OnRecipeSave ()
+{
+	if (AfxMessageBox (_T("레시피를 저장 합니다.\n 계속 하시겠습니까?"), MB_YESNO|MB_ICONQUESTION) != IDYES) return;
+
+	CString strRcpName = GetRecipeName ();
+	if (strRcpName.IsEmpty ()) {
+		AfxMessageBox (_T("현재 레시피 이름이 없습니다."));
+		return;
+	}
+
+	if (!GetRecipeView ()) return;
+
+	CString strOldPath, strNewPath, strTime;
+	SYSTEMTIME st;
+	::GetLocalTime(&st);
+	strTime.Format (_T("%04d%02d%02d-%02d%02d%02d"), st.wYear, st.wMonth, st.wDay, st.wHour, st.wMinute, st.wSecond);
+
+	strOldPath = theApp.m_strRcpFolder + strRcpName + _T(".rcp");
+	strNewPath = theApp.m_strRcpBackup + strRcpName + _T("\\") + strTime + _T(".bak");
+
+	dfcCreateDirectory (strNewPath);
+	CopyFile (strOldPath, strNewPath, FALSE);
+
+	SaveFile (strRcpName);
+	WritePPIDFile (strRcpName);
+	MakeRcpList ();
+}
+
+void	C_RecipeMgrDlg::OnRecipeSaveAs ()
+{
+	if (AfxMessageBox (_T("새이름으로 저장 합니다.\n 계속 하시겠습니까?"), MB_YESNO|MB_ICONQUESTION) != IDYES) return;
+
+	CString strRcpName = GetRecipeName ();
+
+	CString strFile, strName;
+
+	strFile.Format (_T("%s%s"), theApp.m_strRcpFolder, _T("default.rcp") );
+	CFileDialog dlg (FALSE, _T("rcp"), strFile, OFN_OVERWRITEPROMPT, _T("Recipe Files (*.rcp)|*.rcp|"));
+
+	if (dlg.DoModal () == IDOK)
+	{
+		strName = dlg.GetFileName ();
+
+		if (!strName.IsEmpty ()) {
+			int nFind = strName.Find (_T(".rcp"));
+
+			if (nFind > 0)	strName = strName.Left (nFind); //remove ".rcp"
+			else			strName = strName;
+
+			if (strRcpName == strName) {
+				AfxMessageBox (_T("동일한 이름으로 저장 할 수 없습니다."));
+				return;
+			}
+
+			if (!GetRecipeView ()) return;
+
+			//Backup
+			CFileFind finder;
+			BOOL bFind = finder.FindFile (dfcStr (_T("%s%s%s"), theApp.m_strRcpFolder, strName, _T(".rcp")));
+
+			CString strOldPath, strNewPath, strTime;
+			SYSTEMTIME st;
+			::GetLocalTime(&st);
+			strTime.Format (_T("%04d%02d%02d-%02d%02d%02d"), st.wYear, st.wMonth, st.wDay, st.wHour, st.wMinute, st.wSecond);
+
+			strOldPath = theApp.m_strRcpFolder + strName + _T(".rcp");
+			strNewPath = theApp.m_strRcpBackup + strName + _T("\\") + strTime + _T(".bak");
+
+			dfcCreateDirectory (strNewPath);
+			CopyFile (strOldPath, strNewPath, FALSE);
+			//
+
+			SaveFile (strName);
+			WritePPIDFile (strName);
+			MakeRcpList ();
+			SetRecipeName (strName);
+		}
+		else {
+			AfxMessageBox (_T("레시피 이름이 없습니다."));
+			return;
+		}
+	}
+}
+
+BOOL	C_RecipeMgrDlg::SaveFile (CString strRcpName)
+{
+	CString strPath;
+	strPath = theApp.m_strRcpFolder + strRcpName + _T(".rcp");
+
+	dfcCreateDirectory (strPath);
+
+	CStdioFile File;
+	if(!File.Open (strPath, CFile::modeCreate | CFile::modeWrite)) return FALSE; // file 생성 오류
+
+	CString str, strTemp, strTemp2, strTemp3, strTemp4;
+	int nTemp = 0;
+
+	//Version Header
+	WriteString (&File, _T("_VERSION_"));
+	//Version Data
+	WriteInt (&File, RECIPE_FILE_END);
+
+	//CellInfo Header
+	WriteString (&File, _T("_CELL_INFO_"));
+	//CellInfo Data
+	WriteString (&File, g_inRcpInfo.GetModelInfoName ());
+	WriteDouble (&File, g_inRcpInfo.m_recipeMgr.m_sMap.m_fCellSize.x);
+	WriteDouble (&File, g_inRcpInfo.m_recipeMgr.m_sMap.m_fCellSize.y);
+	WriteDouble (&File, g_inRcpInfo.m_recipeMgr.m_sMap.m_fCellDistance.x);
+	WriteDouble (&File, g_inRcpInfo.m_recipeMgr.m_sMap.m_fCellDistance.y);
+	WriteInt	(&File, (int)g_inRcpInfo.m_recipeMgr.m_sMap.m_fCellCount.x);
+	WriteInt	(&File, (int)g_inRcpInfo.m_recipeMgr.m_sMap.m_fCellCount.y);
+	WriteDouble (&File, g_inRcpInfo.m_recipeMgr.m_sMap.m_fContactOffset);
+
+	//Option Header
+	WriteString (&File, _T("_OPTION_INFO_"));
+	//Option Data
+	WriteInt	(&File, (int)g_inRcpInfo.m_recipeMgr.m_sInfo.m_sOptionItem.m_bUseRtestNgPass);
+	WriteInt	(&File, (int)g_inRcpInfo.m_recipeMgr.m_sInfo.m_sOptionItem.m_bUseSampling);
+	WriteInt	(&File, (int)g_inRcpInfo.m_recipeMgr.m_sInfo.m_sOptionItem.m_bUseAlign);
+	WriteInt	(&File, (int)g_inRcpInfo.m_recipeMgr.m_sInfo.m_sOptionItem.m_bUseReviewSnap);
+	WriteInt	(&File, (int)g_inRcpInfo.m_recipeMgr.m_sInfo.m_sOptionItem.m_nGlsRotate);
+	WriteDouble (&File, g_inRcpInfo.m_recipeMgr.m_sInfo.m_sOptionItem.m_fFrontHeadGap);
+	WriteDouble (&File, g_inRcpInfo.m_recipeMgr.m_sInfo.m_sOptionItem.m_fBackHeadGap);
+	WriteString (&File, g_inRcpInfo.m_recipeMgr.m_sInfo.m_sOptionItem.m_chAlignName);
+
+	//InspectionItem Header
+	WriteString (&File, _T("_INSPECTION_ITEM_"));
+	//InspectionInfo Data
+	WriteInt (&File, (int)g_inRcpInfo.m_recipeMgr.m_sInfo.m_sInspectItem.m_bUsePre_0);
+	WriteInt (&File, (int)g_inRcpInfo.m_recipeMgr.m_sInfo.m_sInspectItem.m_bUseElect_1);
+	WriteInt (&File, (int)g_inRcpInfo.m_recipeMgr.m_sInfo.m_sInspectItem.m_bUseAgingTest_2);
+	WriteInt (&File, (int)g_inRcpInfo.m_recipeMgr.m_sInfo.m_sInspectItem.m_bUseSpec_3);
+	WriteInt (&File, (int)g_inRcpInfo.m_recipeMgr.m_sInfo.m_sInspectItem.m_bUseQuality_4);
+	WriteInt (&File, (int)g_inRcpInfo.m_recipeMgr.m_sInfo.m_sInspectItem.m_bUseColor_5);
+	WriteInt (&File, (int)g_inRcpInfo.m_recipeMgr.m_sInfo.m_sInspectItem.m_bUseAngle_6);
+	WriteInt (&File, (int)g_inRcpInfo.m_recipeMgr.m_sInfo.m_sInspectItem.m_bUseEFA);
+	WriteInt (&File, (int)g_inRcpInfo.m_recipeMgr.m_sInfo.m_sInspectItem.m_bUseSpec_Multi);
+	WriteInt (&File, (int)g_inRcpInfo.m_recipeMgr.m_sInfo.m_sInspectItem.m_bUseAging_Test);
+
+	for (int i = 0; i < M_RCP_INS_ITEM; i++) {
+		str.Format (_T("%d,"), g_inRcpInfo.m_recipeMgr.m_sInfo.m_sInspectItem.m_nTimeOut[i]);
+		strTemp += str;
+	}
+	WriteString (&File, strTemp);
+
+	//ProbeID Header
+	WriteString (&File, _T("_PROBE_ID_"));
+	//ProbeID Data
+	strTemp = _T(""), strTemp2 = _T("");
+	// LYS 2026-07-15 Probe ID 기록
+	for (int i = 0; i < M_RCP_PROBE_MAX; i++) {
+		str.Format (_T("%s,"), g_inRcpInfo.m_recipeMgr.m_sInfo.m_sProbeInfo.m_chProbeFirst[i]);
+		strTemp += str;
+		str.Format (_T("%s,"), g_inRcpInfo.m_recipeMgr.m_sInfo.m_sProbeInfo.m_chProbeSecond[i]);
+		strTemp2 += str;
+	}
+	WriteString (&File, strTemp);
+	WriteString (&File, strTemp2);
+	WriteInt (&File, g_inRcpInfo.m_recipeMgr.m_sInfo.m_sProbeInfo.m_nProbePriority);
+
+	//ContactPos Header
+	WriteString (&File, _T("_CONTACT_POS_"));
+	//ContactPos Data
+	WriteDouble (&File, g_inRcpInfo.m_recipeMgr.m_sInfo.m_sContactPos.m_fReadyPos);
+	WriteDouble (&File, g_inRcpInfo.m_recipeMgr.m_sInfo.m_sContactPos.m_fPreContactPos);
+	WriteDouble (&File, g_inRcpInfo.m_recipeMgr.m_sInfo.m_sContactPos.m_fEndContactPos);
+	WriteDouble (&File, g_inRcpInfo.m_recipeMgr.m_sInfo.m_sContactPos.m_fAddOD);
+
+	//Lamp Header
+	WriteString (&File, _T("_LAMP_"));
+	//Lamp Data
+	WriteInt (&File, g_inRcpInfo.m_recipeMgr.m_sInfo.m_sLampItem.m_nFrontLeft);
+	WriteInt (&File, g_inRcpInfo.m_recipeMgr.m_sInfo.m_sLampItem.m_nFrontRight);
+	WriteInt (&File, g_inRcpInfo.m_recipeMgr.m_sInfo.m_sLampItem.m_nBackLeft);
+	WriteInt (&File, g_inRcpInfo.m_recipeMgr.m_sInfo.m_sLampItem.m_nBackRight);
+
+	//HeadOffset Header
+	WriteString (&File, _T("_HEAD_OFFSET_"));
+	//HeadOffset Data
+	WriteDouble (&File, g_inRcpInfo.m_recipeMgr.m_sInfo.m_sMotionOffsetPos.m_fStageY);
+	WriteDouble (&File, g_inRcpInfo.m_recipeMgr.m_sInfo.m_sMotionOffsetPos.m_fStageRotate);
+	WriteDouble (&File, g_inRcpInfo.m_recipeMgr.m_sInfo.m_sMotionOffsetPos.m_fHeadReviewY);
+	WriteDouble (&File, g_inRcpInfo.m_recipeMgr.m_sInfo.m_sMotionOffsetPos.m_fHeadReviewLeft);
+	WriteDouble (&File, g_inRcpInfo.m_recipeMgr.m_sInfo.m_sMotionOffsetPos.m_fHeadReviewRight);
+	WriteInt	(&File, g_inRcpInfo.m_recipeMgr.m_sInfo.m_sMotionOffsetPos.m_nQualityRotate);
+	WriteDouble (&File, g_inRcpInfo.m_recipeMgr.m_sInfo.m_sMotionOffsetPos.m_fQualityLeftRot);
+	WriteDouble (&File, g_inRcpInfo.m_recipeMgr.m_sInfo.m_sMotionOffsetPos.m_fQualityRightRot);
+	WriteDouble(&File, g_inRcpInfo.m_recipeMgr.m_sInfo.m_sMotionOffsetPos.m_fProbeShift);	// jsyoon 2022.05.13 add
+
+	//Stage Header
+	WriteString (&File, _T("_STAGE_"));
+	//Stage Data
+	strTemp = _T(""), strTemp2 = _T(""), strTemp3 = _T("");
+	nTemp = g_inRcpInfo.GetStickCount ();
+
+	S_StickInfo sStick;
+	for (int i = 0; i < nTemp; i++) {
+		sStick = g_inRcpInfo.GetStickItem (i);
+		str.Format (_T("%d,"), sStick.m_nStickNum);
+		strTemp += str;
+
+		str.Format (_T("%.4lf,"), sStick.m_fStageY);
+		strTemp2 += str;
+
+		str.Format (_T("%.4lf,"), sStick.m_fStageR);
+		strTemp3 += str;
+	}
+	WriteInt (&File, nTemp);
+	WriteString (&File, strTemp);
+	WriteString (&File, strTemp2);
+	WriteString (&File, strTemp3);
+
+	//HeadZ Header
+	WriteString (&File, _T("_HEAD_Z_"));
+	//HeadZ Data
+	WriteDouble (&File, g_inRcpInfo.m_recipeMgr.m_sData.m_sHeadZ.m_fReviewZ);
+	WriteDouble (&File, g_inRcpInfo.m_recipeMgr.m_sData.m_sHeadZ.m_fSpecZ);
+	WriteDouble (&File, g_inRcpInfo.m_recipeMgr.m_sData.m_sHeadZ.m_fQualityZ);
+	WriteDouble (&File, g_inRcpInfo.m_recipeMgr.m_sData.m_sHeadZ.m_fColorZ);
+	WriteDouble (&File, g_inRcpInfo.m_recipeMgr.m_sData.m_sHeadZ.m_fAngleZ);
+	WriteDouble (&File, g_inRcpInfo.m_recipeMgr.m_sData.m_sHeadZ.m_fZoom);
+	WriteDouble (&File, g_inRcpInfo.m_recipeMgr.m_sData.m_sHeadZ.m_fFocus);
+
+	//Head Header
+	WriteString (&File, _T("_CELL_"));
+	//Head Data
+	nTemp = g_inRcpInfo.GetCellCount (0);
+	WriteInt    (&File, nTemp);
+
+	S_CellInfo sCell;
+	for (int i = 0; i < g_inRcpInfo.GetStickCount (); i++) {
+		strTemp = _T(""), strTemp2 = _T(""), strTemp3 = _T(""), strTemp4 = _T("");
+		for (int j = 0; j < nTemp; j++) {
+			sCell = g_inRcpInfo.GetCellItem (i, j);
+
+			str.Format (_T("%s,"), sCell.m_chCellID);
+			strTemp += str;
+
+			str.Format (_T("%.4lf,"), sCell.m_fCellY);
+			strTemp2 += str;
+
+			str.Format (_T("%.4lf,"), sCell.m_fCellX);
+			strTemp3 += str;
+
+			str.Format (_T("%d,"), sCell.m_nArea);
+			strTemp4 += str;
+		}
+		WriteString (&File, strTemp);
+		WriteString (&File, strTemp2);
+		WriteString (&File, strTemp3);
+		WriteString (&File, strTemp4);
+	}
+
+	//Cell Select Header
+	WriteString (&File, _T("_CELL_SELECT_"));
+	//Cell Select Data
+	for (int i = 0; i < g_inRcpInfo.GetStickCount (); i++) {
+		strTemp = _T(""), strTemp2 = _T(""), strTemp3 = _T(""), strTemp4 = _T("");
+		for (int j = 0; j < nTemp; j++) {
+			sCell = g_inRcpInfo.GetCellItem (i, j);
+
+			str.Format (_T("%d,"), sCell.m_nSelectCell[M_SPEC]);
+			strTemp += str;
+
+			str.Format (_T("%d,"), sCell.m_nSelectCell[M_QUALITY]);
+			strTemp2 += str;
+
+			str.Format (_T("%d,"), sCell.m_nSelectCell[M_COLOR]);
+			strTemp3 += str;
+
+			str.Format (_T("%d,"), sCell.m_nSelectCell[M_ANGLE]);
+			strTemp4 += str;
+		}
+		WriteString (&File, strTemp);
+		WriteString (&File, strTemp2);
+		WriteString (&File, strTemp3);
+		WriteString (&File, strTemp4);
+	}
+
+	//CAD Info Header
+	WriteString (&File, _T("_CAD_INFO_"));
+	//CAD Info Data
+	strTemp = _T(""), strTemp2 = _T("");
+	for (int i = 0; i < CAD_ROW_P1_1; i++) {//CAD_ROW_A ~ CAD_ROW_X7
+		str.Format (_T("%.4lf,"), g_inRcpInfo.m_recipeMgr.m_sMap.m_fCadData[i]);
+		strTemp += str;
+	}
+	for (int i = 0; i < CAD_ROW_END - CAD_ROW_P1_1; i++) {//CAD_ROW_P1_1 ~ CAD_ROW_P5_2
+		str.Format (_T("%s,"), g_inRcpInfo.m_recipeMgr.m_sMap.m_chCadData[i]);
+		strTemp2 += str;
+	}
+	WriteString (&File, strTemp);
+	WriteString (&File, strTemp2);
+
+	//Cell Map 용 추가 저장
+	WriteDouble (&File, g_inRcpInfo.m_recipeMgr.m_sMap.m_fGlobalMark.x);
+	WriteDouble (&File, g_inRcpInfo.m_recipeMgr.m_sMap.m_fGlobalMark.y);
+	WriteDouble (&File, g_inRcpInfo.m_recipeMgr.m_sMap.m_fCellCenter.x);
+	WriteDouble (&File, g_inRcpInfo.m_recipeMgr.m_sMap.m_fCellCenter.y);
+
+	strTemp.Format (_T("%s"), g_inRcpInfo.m_recipeMgr.m_sMap.m_chCellCount);
+	WriteString (&File, strTemp);
+	strTemp.Format (_T("%s"), g_inRcpInfo.m_recipeMgr.m_sMap.m_chCellDistance);
+	WriteString (&File, strTemp);
+
+
+	// LYS 2026-07-08 Sub Z Save (appended at end for V1005+ compatibility)
+	WriteString(&File, _T("_HEAD_SUBZ_"));
+	WriteDouble(&File, g_inRcpInfo.m_recipeMgr.m_sInfo.m_sMotionSubZ.m_fWadSubzRight);
+	WriteDouble(&File, g_inRcpInfo.m_recipeMgr.m_sInfo.m_sMotionSubZ.m_fWadSubzLeft);
+	WriteDouble(&File, g_inRcpInfo.m_recipeMgr.m_sInfo.m_sMotionSubZ.m_fVisionSubzRight);
+	WriteDouble(&File, g_inRcpInfo.m_recipeMgr.m_sInfo.m_sMotionSubZ.m_fVisionSubzLeft);
+	//WriteDouble(&File, g_inRcpInfo.m_recipeMgr.m_sInfo.m_sMotionSubZ.m_fAngleSubzRight);
+	//WriteDouble(&File, g_inRcpInfo.m_recipeMgr.m_sInfo.m_sMotionSubZ.m_fAngleSubzLeft);
+
+	// LYS 2026-08-19 Angle Axis Save (appended at end for V1007+ compatibility)
+	WriteString(&File, _T("_ANGLE_AXIS_"));
+	WriteDouble(&File, g_inRcpInfo.m_recipeMgr.m_sInfo.m_sMotionAngle.m_fAngleScheimpflug1);
+	WriteDouble(&File, g_inRcpInfo.m_recipeMgr.m_sInfo.m_sMotionAngle.m_fAngleRotate1);
+	WriteDouble(&File, g_inRcpInfo.m_recipeMgr.m_sInfo.m_sMotionAngle.m_fAngleZoom1);
+	WriteDouble(&File, g_inRcpInfo.m_recipeMgr.m_sInfo.m_sMotionAngle.m_fAngleTilt1);
+	WriteDouble(&File, g_inRcpInfo.m_recipeMgr.m_sInfo.m_sMotionAngle.m_fAngleAzimuth1);
+	WriteDouble(&File, g_inRcpInfo.m_recipeMgr.m_sInfo.m_sMotionAngle.m_fAngleScheimpflug2);
+	WriteDouble(&File, g_inRcpInfo.m_recipeMgr.m_sInfo.m_sMotionAngle.m_fAngleRotate2);
+	WriteDouble(&File, g_inRcpInfo.m_recipeMgr.m_sInfo.m_sMotionAngle.m_fAngleZoom2);
+	WriteDouble(&File, g_inRcpInfo.m_recipeMgr.m_sInfo.m_sMotionAngle.m_fAngleTilt2);
+	WriteDouble(&File, g_inRcpInfo.m_recipeMgr.m_sInfo.m_sMotionAngle.m_fAngleAzimuth2);
+
+	File.Close ();
+
+	return TRUE;
+}
+
+void	C_RecipeMgrDlg::OnRecipeMakeCell ()
+{
+	if (m_pMakeCellDlg && !m_pMakeCellDlg->IsWindowVisible ()) {
+		m_pMakeCellDlg->ShowWindow (SW_SHOW);
+	}
+}
+
+void	C_RecipeMgrDlg::OnRecipeSelCell ()
+{
+	if (m_pSelectCellDlg && !m_pSelectCellDlg->IsWindowVisible ()) {
+		if (GetRecipeName ().IsEmpty ()) {
+			AfxMessageBox (_T("로드된 레시피가 없습니다."));
+			return;
+		}
+		m_pSelectCellDlg->ShowWindow (SW_SHOW);
+	}
+}
+
+void	C_RecipeMgrDlg::OnRecipeAlign ()
+{
+	if (m_pAlignRcpDlg && !m_pAlignRcpDlg->IsWindowVisible ()) {
+		m_pAlignRcpDlg->ShowWindow (SW_SHOW);
+	}
+}
+
+void	C_RecipeMgrDlg::OnSetLampOff()
+{
+	::PostMessage(GetSafeHwnd(), WM_RECIPE_EVENT, (WPARAM)M_RCP_LAMP_SET, -1);
+}
+
+void	C_RecipeMgrDlg::OnSetSRMLampOff()
+{
+	::PostMessage(GetSafeHwnd(), WM_RECIPE_EVENT, (WPARAM)M_RCP_SRM_LAMP_SET, -1);
+}
+
+void	C_RecipeMgrDlg::OnSetLampOn()
+{
+	::PostMessage(GetSafeHwnd(), WM_RECIPE_EVENT, (WPARAM)M_RCP_LAMP_SET, ALG_FRONT);
+}
+
+void	C_RecipeMgrDlg::OnSetLampOn2()
+{
+	::PostMessage(GetSafeHwnd(), WM_RECIPE_EVENT, (WPARAM)M_RCP_LAMP_SET, ALG_BACK);
+}
+
+void	C_RecipeMgrDlg::InitRecipeName ()
+{
+	InitGridUI (m_gridRecipeName, IDC_GRID_1, 1, 2);
+	m_gridRecipeName.SetItemText	 (0, 0, _T("RECIPE NAME"));
+	m_gridRecipeName.SetItemState	 (0, 1, m_gridRecipeName.GetItemState (0, 1) | GVIS_READONLY);
+	m_gridRecipeName.SetItemFgColour (0, 1, COLOR_GRAY);
+}
+
+void	C_RecipeMgrDlg::InitCellInfo ()
+{
+	InitGridUI (m_gridCellInfoHead, IDC_GRID_2, 1, 1, TRUE);
+	m_gridCellInfoHead.SetItemText (0, 0, _T("CELL INFO."));
+	m_gridCellInfoHead.EnableWindow	 (FALSE);
+
+	InitGridUI (m_gridCellInfoData, IDC_GRID_3, 8, 2, TRUE);
+	m_gridCellInfoData.SetItemText (0, 0, _T("CELL SIZE X"));
+	m_gridCellInfoData.SetItemText (1, 0, _T("CELL SIZE Y"));
+	m_gridCellInfoData.SetItemText (2, 0, _T("CELL TO CELL X"));
+	m_gridCellInfoData.SetItemText (3, 0, _T("CELL TO CELL Y"));
+	m_gridCellInfoData.SetItemText (4, 0, _T("CELL COUNT"));
+	m_gridCellInfoData.SetItemText (5, 0, _T("CONTACT GAP"));
+	m_gridCellInfoData.SetItemText (6, 0, _T("GLOBAL MARK X"));	// 2023.02.03 add
+	m_gridCellInfoData.SetItemText (7, 0, _T("GLOBAL MARK Y")); // 2023.02.03 add
+
+	for (int i = 0; i < 8; i++) {
+		m_gridCellInfoData.SetItemState	   (i, 1, m_gridCellInfoData.GetItemState (i, 1) | GVIS_READONLY);
+		m_gridCellInfoData.SetItemFgColour (i, 1, COLOR_GRAY);
+	}
+}
+
+void	C_RecipeMgrDlg::SetCellInfoData ()
+{
+	m_gridCellInfoData.SetItemText (0, 1, dfcStr (g_inRcpInfo.m_recipeMgr.m_sMap.m_fCellSize.x));
+	m_gridCellInfoData.SetItemText (1, 1, dfcStr (g_inRcpInfo.m_recipeMgr.m_sMap.m_fCellSize.y));
+	m_gridCellInfoData.SetItemText (2, 1, dfcStr (g_inRcpInfo.m_recipeMgr.m_sMap.m_fCellDistance.x));
+	m_gridCellInfoData.SetItemText (3, 1, dfcStr (g_inRcpInfo.m_recipeMgr.m_sMap.m_fCellDistance.y));
+	m_gridCellInfoData.SetItemText (4, 1, dfcStr ((int)g_inRcpInfo.m_recipeMgr.m_sMap.m_fCellCount.x));
+	m_gridCellInfoData.SetItemText (5, 1, dfcStr (g_inRcpInfo.m_recipeMgr.m_sMap.m_fContactOffset));
+
+	m_gridCellInfoData.SetItemText(6, 1, dfcStr(g_inRcpInfo.m_recipeMgr.m_sMap.m_fGlobalMark.x));
+	m_gridCellInfoData.SetItemText(7, 1, dfcStr(g_inRcpInfo.m_recipeMgr.m_sMap.m_fGlobalMark.y));
+}
+
+BOOL	C_RecipeMgrDlg::GetCellInfoData ()
+{
+	g_inRcpInfo.m_recipeMgr.m_sMap.m_fCellSize.x	 = _wtof (m_gridCellInfoData.GetItemText (0, 1));
+	g_inRcpInfo.m_recipeMgr.m_sMap.m_fCellSize.y	 = _wtof (m_gridCellInfoData.GetItemText (1, 1));
+	g_inRcpInfo.m_recipeMgr.m_sMap.m_fCellDistance.x = _wtof (m_gridCellInfoData.GetItemText (2, 1));
+	g_inRcpInfo.m_recipeMgr.m_sMap.m_fCellDistance.y = _wtof (m_gridCellInfoData.GetItemText (3, 1));
+	g_inRcpInfo.m_recipeMgr.m_sMap.m_fCellCount.x    = _wtoi (m_gridCellInfoData.GetItemText (4, 1));
+	g_inRcpInfo.m_recipeMgr.m_sMap.m_fContactOffset  = _wtof (m_gridCellInfoData.GetItemText (5, 1));
+
+	return TRUE;
+}
+
+void	C_RecipeMgrDlg::InitInspectOption ()
+{
+	InitGridUI (m_gridInspectOptionHead, IDC_GRID_4, 1, 1, TRUE);
+	m_gridInspectOptionHead.SetItemText (0, 0, _T("OPTION INFO."));
+	m_gridInspectOptionHead.EnableWindow	 (FALSE);
+
+	InitGridUI (m_gridInspectOptionData, IDC_GRID_5, 8, 2, TRUE);
+	m_gridInspectOptionData.SetItemText (0, 0, _T("R-TEST NG PASS"));
+	m_gridInspectOptionData.SetItemText (1, 0, _T("SAMPLING"));
+	m_gridInspectOptionData.SetItemText (2, 0, _T("ALIGN USE"));
+	m_gridInspectOptionData.SetItemText (3, 0, _T("REVIEW SNAP"));
+	m_gridInspectOptionData.SetItemText (4, 0, _T("GLASS ROTATE"));
+	m_gridInspectOptionData.SetItemText (5, 0, _T("FRONT HEAD GAP"));
+	m_gridInspectOptionData.SetItemText (6, 0, _T("BACK HEAD GAP"));
+	m_gridInspectOptionData.SetItemText (7, 0, _T("ALIGN RECIPE"));
+
+	//콤보박스
+	for (int i = 0; i < 5; i++) {
+		m_gridInspectOptionData.SetCellType (i, 1, RUNTIME_CLASS(CGridCellCombo));
+		
+		// LYS 2026-08-07 rotation-change: GLASS ROTATE combo editable (was readonly)
+		m_gridInspectOptionData.SetItemState (i, 1, m_gridInspectOptionData.GetItemState (i, 1) & GVIS_READONLY);
+	}
+
+	m_gridInspectOptionData.SetItemState (7, 1, m_gridInspectOptionData.GetItemState (7, 1) | GVIS_READONLY);
+
+	//콤보 데이터
+	CStringArray use, ang;
+	use.Add (_T("미사용"));
+	use.Add (_T("사용"));
+	ang.Add (_T("0˚"));
+	ang.Add (_T("90˚"));
+	ang.Add (_T("180˚"));	// LYS 2026-08-07 rotation-change: m_nGlsRotate=2
+	ang.Add (_T("270˚"));	// LYS 2026-08-07 rotation-change: m_nGlsRotate=3
+
+	CGridCellCombo* pCell = NULL;
+	for (int i = 0; i < 5; i++) {
+		pCell = (CGridCellCombo*)m_gridInspectOptionData.GetCell (i, 1);
+		pCell->SetStyle (CBS_DROPDOWNLIST);	
+		
+		if (i == 4) pCell->SetOptions (ang);
+		else		pCell->SetOptions (use);
+
+		m_gridInspectOptionData.SetItemCurSel (i, 1, 0);
+	}
+}
+
+void	C_RecipeMgrDlg::SetInspectOptionData ()
+{
+	m_gridInspectOptionData.SetItemCurSel	(0, 1, g_inRcpInfo.m_recipeMgr.m_sInfo.m_sOptionItem.m_bUseRtestNgPass);
+	m_gridInspectOptionData.SetItemCurSel	(1, 1, g_inRcpInfo.m_recipeMgr.m_sInfo.m_sOptionItem.m_bUseSampling);
+	m_gridInspectOptionData.SetItemCurSel	(2, 1, g_inRcpInfo.m_recipeMgr.m_sInfo.m_sOptionItem.m_bUseAlign);
+	m_gridInspectOptionData.SetItemCurSel	(3, 1, g_inRcpInfo.m_recipeMgr.m_sInfo.m_sOptionItem.m_bUseReviewSnap);
+	m_gridInspectOptionData.SetItemCurSel (4, 1, g_inRcpInfo.m_recipeMgr.m_sInfo.m_sOptionItem.m_nGlsRotate);
+	m_gridInspectOptionData.SetItemText	(5, 1, dfcStr (g_inRcpInfo.m_recipeMgr.m_sInfo.m_sOptionItem.m_fFrontHeadGap));
+	m_gridInspectOptionData.SetItemText	(6, 1, dfcStr (g_inRcpInfo.m_recipeMgr.m_sInfo.m_sOptionItem.m_fBackHeadGap));
+	m_gridInspectOptionData.SetItemText	(7, 1, dfcStr (g_inRcpInfo.m_recipeMgr.m_sInfo.m_sOptionItem.m_chAlignName));
+}
+
+BOOL	C_RecipeMgrDlg::GetInspectOptionData ()
+{
+	g_inRcpInfo.m_recipeMgr.m_sInfo.m_sOptionItem.m_bUseRtestNgPass = m_gridInspectOptionData.GetItemCurSel (0, 1);
+	g_inRcpInfo.m_recipeMgr.m_sInfo.m_sOptionItem.m_bUseSampling	= m_gridInspectOptionData.GetItemCurSel (1, 1);
+	g_inRcpInfo.m_recipeMgr.m_sInfo.m_sOptionItem.m_bUseAlign		= m_gridInspectOptionData.GetItemCurSel (2, 1);
+	g_inRcpInfo.m_recipeMgr.m_sInfo.m_sOptionItem.m_bUseReviewSnap	= m_gridInspectOptionData.GetItemCurSel (3, 1);
+	g_inRcpInfo.m_recipeMgr.m_sInfo.m_sOptionItem.m_nGlsRotate		= m_gridInspectOptionData.GetItemCurSel (4, 1);
+	g_inRcpInfo.m_recipeMgr.m_sInfo.m_sOptionItem.m_fFrontHeadGap	= _wtof (m_gridInspectOptionData.GetItemText (5, 1));
+	g_inRcpInfo.m_recipeMgr.m_sInfo.m_sOptionItem.m_fBackHeadGap	= _wtof (m_gridInspectOptionData.GetItemText (6, 1));
+	wcscpy_s (g_inRcpInfo.m_recipeMgr.m_sInfo.m_sOptionItem.m_chAlignName, m_gridInspectOptionData.GetItemText (7, 1));
+
+	return TRUE;
+}
+
+void	C_RecipeMgrDlg::InitInspectItem ()
+{
+	InitGridUI (m_gridInspectItemHead, IDC_GRID_6, 1, 3, TRUE, TRUE);
+	m_gridInspectItemHead.SetItemText (0, 0, _T("ITEM"));
+	m_gridInspectItemHead.SetItemText (0, 1, _T("TIME OUT"));
+	m_gridInspectItemHead.SetItemText (0, 2, _T("USE"));
+	m_gridInspectItemHead.EnableWindow	 (FALSE);
+
+	//InitGridUI (m_gridInspectItemData, IDC_GRID_7, 9, 3, TRUE);
+	//m_gridInspectItemData.SetItemText (0, 0, _T("사전검사"));
+	//m_gridInspectItemData.SetItemText (1, 0, _T("전기검사"));
+	//m_gridInspectItemData.SetItemText (2, 0, _T("AGING TEST"));
+	//m_gridInspectItemData.SetItemText (3, 0, _T("특성검사"));
+	//m_gridInspectItemData.SetItemText (4, 0, _T("화질검사"));
+	//m_gridInspectItemData.SetItemText (5, 0, _T("면계측검사"));
+	//m_gridInspectItemData.SetItemText (6, 0, _T("시야각검사"));
+	//m_gridInspectItemData.SetItemText (7, 0, _T("TSP"));
+	//m_gridInspectItemData.SetItemText (8, 0, _T("LCR"));
+
+	// LYS 2026-07-02 안쓰는 Mode 삭제
+	InitGridUI(m_gridInspectItemData, IDC_GRID_7, 9, 3, TRUE);
+	m_gridInspectItemData.SetItemText(0, 0, _T("사전검사"));
+	m_gridInspectItemData.SetItemText(1, 0, _T("전기검사"));
+	m_gridInspectItemData.SetItemText(2, 0, _T("AGING TEST"));
+	m_gridInspectItemData.SetItemText(3, 0, _T("특성검사"));
+	m_gridInspectItemData.SetItemText(4, 0, _T("화질검사"));
+	m_gridInspectItemData.SetItemText(5, 0, _T("시야각검사"));
+	m_gridInspectItemData.SetItemText(6, 0, _T("EFA"));
+	m_gridInspectItemData.SetItemText(7, 0, _T("특성Multi"));
+	m_gridInspectItemData.SetItemText(8, 0, _T("강화검사"));
+
+
+	//콤보박스
+	for (int i = 0; i < 9; i++) {
+		m_gridInspectItemData.SetCellType  (i, 2, RUNTIME_CLASS(CGridCellCombo));
+		m_gridInspectItemData.SetItemState (i, 2, m_gridInspectItemData.GetItemState (i, 2) & GVIS_READONLY);
+	}
+	//for (int i = 0; i < 8; i++) {
+	//	m_gridInspectItemData.SetCellType(i, 2, RUNTIME_CLASS(CGridCellCombo));
+	//	m_gridInspectItemData.SetItemState(i, 2, m_gridInspectItemData.GetItemState(i, 2) & GVIS_READONLY);
+	//}
+
+	//콤보 데이터
+	CStringArray use;
+	use.Add (_T("미사용"));
+	use.Add (_T("사용"));
+
+	CGridCellCombo* pCell = NULL;
+	for (int i = 0; i < 9; i++) {
+		pCell = (CGridCellCombo*)m_gridInspectItemData.GetCell (i, 2);
+		pCell->SetStyle (CBS_DROPDOWNLIST);	
+		pCell->SetOptions (use);
+	
+		m_gridInspectItemData.SetItemCurSel (i, 2, 0);
+	}
+	//for (int i = 0; i < 8; i++) {
+	//	pCell = (CGridCellCombo*)m_gridInspectItemData.GetCell(i, 2);
+	//	pCell->SetStyle(CBS_DROPDOWNLIST);
+	//	pCell->SetOptions(use);
+	//
+	//	m_gridInspectItemData.SetItemCurSel(i, 2, 0);
+	//}
+}
+
+void	C_RecipeMgrDlg::SetInspectItemData ()
+{
+	// LYS 2026-07-02 안쓰는 Mode 삭제
+	//m_gridInspectItemData.SetItemCurSel (0, 2, g_inRcpInfo.m_recipeMgr.m_sInfo.m_sInspectItem.m_bUsePre_0);
+	//m_gridInspectItemData.SetItemCurSel (1, 2, g_inRcpInfo.m_recipeMgr.m_sInfo.m_sInspectItem.m_bUseElect_1);
+	//m_gridInspectItemData.SetItemCurSel (2, 2, g_inRcpInfo.m_recipeMgr.m_sInfo.m_sInspectItem.m_bUseAgingTest_2);
+	//m_gridInspectItemData.SetItemCurSel (3, 2, g_inRcpInfo.m_recipeMgr.m_sInfo.m_sInspectItem.m_bUseSpec_3);
+	//m_gridInspectItemData.SetItemCurSel (4, 2, g_inRcpInfo.m_recipeMgr.m_sInfo.m_sInspectItem.m_bUseQuality_4);
+	//m_gridInspectItemData.SetItemCurSel (5, 2, g_inRcpInfo.m_recipeMgr.m_sInfo.m_sInspectItem.m_bUseColor_5);
+	//m_gridInspectItemData.SetItemCurSel (6, 2, g_inRcpInfo.m_recipeMgr.m_sInfo.m_sInspectItem.m_bUseAngle_6);
+	//m_gridInspectItemData.SetItemCurSel (7, 2, g_inRcpInfo.m_recipeMgr.m_sInfo.m_sInspectItem.m_bUseTSP_7);
+	//m_gridInspectItemData.SetItemCurSel (8, 2, g_inRcpInfo.m_recipeMgr.m_sInfo.m_sInspectItem.m_bUseLCR_8);
+
+	m_gridInspectItemData.SetItemCurSel(0, 2, g_inRcpInfo.m_recipeMgr.m_sInfo.m_sInspectItem.m_bUsePre_0);
+	m_gridInspectItemData.SetItemCurSel(1, 2, g_inRcpInfo.m_recipeMgr.m_sInfo.m_sInspectItem.m_bUseElect_1);
+	m_gridInspectItemData.SetItemCurSel(2, 2, g_inRcpInfo.m_recipeMgr.m_sInfo.m_sInspectItem.m_bUseAgingTest_2);
+	m_gridInspectItemData.SetItemCurSel(3, 2, g_inRcpInfo.m_recipeMgr.m_sInfo.m_sInspectItem.m_bUseSpec_3);
+	m_gridInspectItemData.SetItemCurSel(4, 2, g_inRcpInfo.m_recipeMgr.m_sInfo.m_sInspectItem.m_bUseQuality_4);
+	m_gridInspectItemData.SetItemCurSel(5, 2, g_inRcpInfo.m_recipeMgr.m_sInfo.m_sInspectItem.m_bUseAngle_6);
+
+	m_gridInspectItemData.SetItemCurSel(6, 2, g_inRcpInfo.m_recipeMgr.m_sInfo.m_sInspectItem.m_bUseEFA);
+	m_gridInspectItemData.SetItemCurSel(7, 2, g_inRcpInfo.m_recipeMgr.m_sInfo.m_sInspectItem.m_bUseSpec_Multi);
+
+	m_gridInspectItemData.SetItemCurSel(8, 2, g_inRcpInfo.m_recipeMgr.m_sInfo.m_sInspectItem.m_bUseAging_Test);
+
+	for (int i = 0; i < M_RCP_INS_ITEM; i++) {
+		m_gridInspectItemData.SetItemText (i, 1, dfcStr (g_inRcpInfo.m_recipeMgr.m_sInfo.m_sInspectItem.m_nTimeOut[i]));
+	}
+}
+
+BOOL	C_RecipeMgrDlg::GetInspectItemData ()
+{
+	// LYS 2026-07-02 안쓰는 Mode 삭제
+	//g_inRcpInfo.m_recipeMgr.m_sInfo.m_sInspectItem.m_bUsePre_0		 = m_gridInspectItemData.GetItemCurSel (0, 2);
+	//g_inRcpInfo.m_recipeMgr.m_sInfo.m_sInspectItem.m_bUseElect_1	 = m_gridInspectItemData.GetItemCurSel (1, 2);
+	//g_inRcpInfo.m_recipeMgr.m_sInfo.m_sInspectItem.m_bUseAgingTest_2 = m_gridInspectItemData.GetItemCurSel (2, 2);
+	//g_inRcpInfo.m_recipeMgr.m_sInfo.m_sInspectItem.m_bUseSpec_3		 = m_gridInspectItemData.GetItemCurSel (3, 2);
+	//g_inRcpInfo.m_recipeMgr.m_sInfo.m_sInspectItem.m_bUseQuality_4	 = m_gridInspectItemData.GetItemCurSel (4, 2);
+	//g_inRcpInfo.m_recipeMgr.m_sInfo.m_sInspectItem.m_bUseColor_5	 = m_gridInspectItemData.GetItemCurSel (5, 2);
+	//g_inRcpInfo.m_recipeMgr.m_sInfo.m_sInspectItem.m_bUseAngle_6	 = m_gridInspectItemData.GetItemCurSel (6, 2);
+	//g_inRcpInfo.m_recipeMgr.m_sInfo.m_sInspectItem.m_bUseTSP_7		 = m_gridInspectItemData.GetItemCurSel (7, 2);
+	//g_inRcpInfo.m_recipeMgr.m_sInfo.m_sInspectItem.m_bUseLCR_8		 = m_gridInspectItemData.GetItemCurSel (8, 2);
+
+	g_inRcpInfo.m_recipeMgr.m_sInfo.m_sInspectItem.m_bUsePre_0		 = m_gridInspectItemData.GetItemCurSel (0, 2);
+	g_inRcpInfo.m_recipeMgr.m_sInfo.m_sInspectItem.m_bUseElect_1	 = m_gridInspectItemData.GetItemCurSel (1, 2);
+	g_inRcpInfo.m_recipeMgr.m_sInfo.m_sInspectItem.m_bUseAgingTest_2 = m_gridInspectItemData.GetItemCurSel (2, 2);
+	g_inRcpInfo.m_recipeMgr.m_sInfo.m_sInspectItem.m_bUseSpec_3		 = m_gridInspectItemData.GetItemCurSel (3, 2);
+	g_inRcpInfo.m_recipeMgr.m_sInfo.m_sInspectItem.m_bUseQuality_4	 = m_gridInspectItemData.GetItemCurSel (4, 2);
+	g_inRcpInfo.m_recipeMgr.m_sInfo.m_sInspectItem.m_bUseAngle_6	 = m_gridInspectItemData.GetItemCurSel (5, 2);
+
+	g_inRcpInfo.m_recipeMgr.m_sInfo.m_sInspectItem.m_bUseEFA		= m_gridInspectItemData.GetItemCurSel(6, 2);
+	g_inRcpInfo.m_recipeMgr.m_sInfo.m_sInspectItem.m_bUseSpec_Multi = m_gridInspectItemData.GetItemCurSel(7, 2);
+	g_inRcpInfo.m_recipeMgr.m_sInfo.m_sInspectItem.m_bUseAging_Test = m_gridInspectItemData.GetItemCurSel(8, 2);
+
+	for (int i = 0; i < M_RCP_INS_ITEM; i++) {
+		g_inRcpInfo.m_recipeMgr.m_sInfo.m_sInspectItem.m_nTimeOut[i] = _wtoi (m_gridInspectItemData.GetItemText (i, 1));
+	}
+
+	return TRUE;
+}
+
+void	C_RecipeMgrDlg::InitLamp ()
+{
+	InitGridUI (m_gridLampHead, IDC_GRID_8, 1, 3, TRUE, TRUE);
+	m_gridLampHead.SetItemText (0, 0, _T("LAMP"));
+	m_gridLampHead.SetItemText (0, 1, _T("VALUE"));
+	m_gridLampHead.SetItemText (0, 2, _T("APPLY"));
+	m_gridLampHead.EnableWindow	 (FALSE);
+
+	InitGridUI (m_gridLampData, IDC_GRID_9, 4, 3, TRUE);
+	m_gridLampData.SetItemText (0, 0, _T("특성축 LEFT"));
+	m_gridLampData.SetItemText (1, 0, _T("특성축 RIGHT"));
+	m_gridLampData.SetItemText (2, 0, _T("화질축 LEFT"));
+	m_gridLampData.SetItemText (3, 0, _T("화질축 RIGHT"));
+
+	//버튼
+	for (int i = 0; i < 4; i++) {
+		m_gridLampData.SetCellType  (i, 2, RUNTIME_CLASS(CGridCellButton));
+		m_gridLampData.SetItemState (i, 2, m_gridLampData.GetItemState (i, 2) | GVIS_READONLY);
+	}
+
+	//버튼 이름
+	CGridCellButton* pCell = NULL;
+	for (int i = 0; i < 4; i++) {
+		pCell = (CGridCellButton*)m_gridLampData.GetCell (i, 2);
+		pCell->SetText (_T("적용"));
+	}
+}
+
+void	C_RecipeMgrDlg::SetLampData ()
+{
+	m_gridLampData.SetItemText (0, 1, dfcStr (g_inRcpInfo.m_recipeMgr.m_sInfo.m_sLampItem.m_nFrontLeft));
+	m_gridLampData.SetItemText (1, 1, dfcStr (g_inRcpInfo.m_recipeMgr.m_sInfo.m_sLampItem.m_nFrontRight));
+	m_gridLampData.SetItemText (2, 1, dfcStr (g_inRcpInfo.m_recipeMgr.m_sInfo.m_sLampItem.m_nBackLeft));
+	m_gridLampData.SetItemText (3, 1, dfcStr (g_inRcpInfo.m_recipeMgr.m_sInfo.m_sLampItem.m_nBackRight));
+}
+
+BOOL	C_RecipeMgrDlg::GetLampData ()
+{
+	if (!CheckLampData ()) return FALSE;
+
+	g_inRcpInfo.m_recipeMgr.m_sInfo.m_sLampItem.m_nFrontLeft  = _wtoi (m_gridLampData.GetItemText (0, 1));
+	g_inRcpInfo.m_recipeMgr.m_sInfo.m_sLampItem.m_nFrontRight = _wtoi (m_gridLampData.GetItemText (1, 1));
+	g_inRcpInfo.m_recipeMgr.m_sInfo.m_sLampItem.m_nBackLeft   = _wtoi (m_gridLampData.GetItemText (2, 1));
+	g_inRcpInfo.m_recipeMgr.m_sInfo.m_sLampItem.m_nBackRight  = _wtoi (m_gridLampData.GetItemText (3, 1));
+
+	return TRUE;
+}
+
+BOOL	C_RecipeMgrDlg::GetLampData(int* nData, int nItem)
+{
+	int nData1 = 0;
+
+	if (nItem == -1)
+	{
+		nData[0] = 0;
+		nData[1] = 0;
+		nData[2] = 0;
+		nData[3] = 0;
+	}
+	else
+	{
+		nData1 = _wtoi(m_gridLampData.GetItemText(nItem, 1));
+		if (255 < nData1 || 0 > nData1) {
+			AfxMessageBox(_T("Lamp 값 허용치(0 ~ 255)를 벗어 납니다."));
+			return FALSE;
+		}
+
+		nData[0] = _wtoi(m_gridLampData.GetItemText(0, 1));
+		nData[1] = _wtoi(m_gridLampData.GetItemText(1, 1));
+		nData[2] = _wtoi(m_gridLampData.GetItemText(2, 1));
+		nData[3] = _wtoi(m_gridLampData.GetItemText(3, 1));
+	}
+
+	return TRUE;
+}
+
+BOOL	C_RecipeMgrDlg::CheckLampData ()
+{
+	int nData1 = 0, nData2 = 0, nData3 = 0, nData4 = 0;
+
+	nData1 = _wtoi (m_gridLampData.GetItemText (0, 1));
+	nData2 = _wtoi (m_gridLampData.GetItemText (1, 1));
+	nData3 = _wtoi (m_gridLampData.GetItemText (2, 1));
+	nData4 = _wtoi (m_gridLampData.GetItemText (3, 1));
+
+	if (255 < nData1 || 255 < nData2 || 255 < nData3 || 255 < nData4 
+		|| 0 > nData1 || 0 > nData2 || 0 > nData3 || 0 > nData4) {
+		AfxMessageBox (_T("Lamp 값 허용치(0 ~ 255)를 벗어 납니다."));
+		return FALSE;
+	}
+
+	return TRUE;
+}
+
+void	C_RecipeMgrDlg::InitSRMLamp()
+{
+	InitGridUI(m_gridSRMLampHead, IDC_GRID_23, 1, 3, TRUE, TRUE);
+	m_gridSRMLampHead.SetItemText(0, 0, _T("LAMP"));
+	m_gridSRMLampHead.SetItemText(0, 1, _T("VALUE"));
+	m_gridSRMLampHead.SetItemText(0, 2, _T("APPLY"));
+	m_gridSRMLampHead.EnableWindow(FALSE);
+
+	InitGridUI(m_gridSRMLampData, IDC_GRID_22, 4, 3, TRUE);
+	m_gridSRMLampData.SetItemText(0, 0, _T("RED"));
+	m_gridSRMLampData.SetItemText(1, 0, _T("GREEN"));
+	m_gridSRMLampData.SetItemText(2, 0, _T("BLUE"));
+	m_gridSRMLampData.SetItemText(3, 0, _T("WHITE"));
+
+	//버튼
+	for (int i = 0; i < 4; i++) {
+		m_gridSRMLampData.SetCellType(i, 2, RUNTIME_CLASS(CGridCellButton));
+		m_gridSRMLampData.SetItemState(i, 2, m_gridSRMLampData.GetItemState(i, 2) | GVIS_READONLY);
+	}
+
+	//버튼 이름
+	CGridCellButton* pCell = NULL;
+	for (int i = 0; i < 4; i++) {
+		pCell = (CGridCellButton*)m_gridSRMLampData.GetCell(i, 2);
+		pCell->SetText(_T("적용"));
+	}
+}
+
+void	C_RecipeMgrDlg::SetSRMLampData()
+{
+	m_gridSRMLampData.SetItemText(0, 1, dfcStr(g_inRcpInfo.m_recipeMgr.m_sInfo.m_sLampItem.m_nSRMLamp[0]));
+	m_gridSRMLampData.SetItemText(1, 1, dfcStr(g_inRcpInfo.m_recipeMgr.m_sInfo.m_sLampItem.m_nSRMLamp[1]));
+	m_gridSRMLampData.SetItemText(2, 1, dfcStr(g_inRcpInfo.m_recipeMgr.m_sInfo.m_sLampItem.m_nSRMLamp[2]));
+	m_gridSRMLampData.SetItemText(3, 1, dfcStr(g_inRcpInfo.m_recipeMgr.m_sInfo.m_sLampItem.m_nSRMLamp[3]));
+}
+
+BOOL	C_RecipeMgrDlg::GetSRMLampData()
+{
+	if (!CheckSRMLampData()) return FALSE;
+
+	g_inRcpInfo.m_recipeMgr.m_sInfo.m_sLampItem.m_nSRMLamp[0] = _wtoi(m_gridSRMLampData.GetItemText(0, 1));
+	g_inRcpInfo.m_recipeMgr.m_sInfo.m_sLampItem.m_nSRMLamp[1] = _wtoi(m_gridSRMLampData.GetItemText(1, 1));
+	g_inRcpInfo.m_recipeMgr.m_sInfo.m_sLampItem.m_nSRMLamp[2] = _wtoi(m_gridSRMLampData.GetItemText(2, 1));
+	g_inRcpInfo.m_recipeMgr.m_sInfo.m_sLampItem.m_nSRMLamp[3] = _wtoi(m_gridSRMLampData.GetItemText(3, 1));
+
+	return TRUE;
+}
+
+BOOL	C_RecipeMgrDlg::GetSRMLampData(int* nData, int nItem)
+{
+	int nData1 = 0;
+
+	if (nItem == -1)
+	{
+		nData[0] = 0;
+		nData[1] = 0;
+		nData[2] = 0;
+		nData[3] = 0;
+	}
+	else if (nItem == ALG_FRONT)	// jsyoon 2022.08.10 add
+	{
+		nData1 = _wtoi(m_gridSRMLampData.GetItemText(ALG_FRONT_LEFT, 1));
+		if (255 < nData1 || 0 > nData1) {
+			AfxMessageBox(_T("Lamp 값 허용치(0 ~ 255)를 벗어 납니다."));
+			return FALSE;
+		}
+
+		nData1 = _wtoi(m_gridSRMLampData.GetItemText(ALG_FRONT_RIGHT, 1));
+		if (255 < nData1 || 0 > nData1) {
+			AfxMessageBox(_T("Lamp 값 허용치(0 ~ 255)를 벗어 납니다."));
+			return FALSE;
+		}
+
+		nData[0] = _wtoi(m_gridSRMLampData.GetItemText(0, 1));
+		nData[1] = _wtoi(m_gridSRMLampData.GetItemText(1, 1));
+		nData[2] = _wtoi(m_gridSRMLampData.GetItemText(2, 1));
+		nData[3] = _wtoi(m_gridSRMLampData.GetItemText(3, 1));
+	}
+	else if (nItem == ALG_BACK)		// jsyoon 2022.08.10 add
+	{
+		nData1 = _wtoi(m_gridSRMLampData.GetItemText(ALG_BACK_LEFT, 1));
+		if (255 < nData1 || 0 > nData1) {
+			AfxMessageBox(_T("Lamp 값 허용치(0 ~ 255)를 벗어 납니다."));
+			return FALSE;
+		}
+
+		nData1 = _wtoi(m_gridSRMLampData.GetItemText(ALG_BACK_RIGHT, 1));
+		if (255 < nData1 || 0 > nData1) {
+			AfxMessageBox(_T("Lamp 값 허용치(0 ~ 255)를 벗어 납니다."));
+			return FALSE;
+		}
+
+		nData[0] = _wtoi(m_gridSRMLampData.GetItemText(0, 1));
+		nData[1] = _wtoi(m_gridSRMLampData.GetItemText(1, 1));
+		nData[2] = _wtoi(m_gridSRMLampData.GetItemText(2, 1));
+		nData[3] = _wtoi(m_gridSRMLampData.GetItemText(3, 1));
+	}
+	else
+	{
+		nData1 = _wtoi(m_gridSRMLampData.GetItemText(nItem, 1));
+		if (255 < nData1 || 0 > nData1) {
+			AfxMessageBox(_T("Lamp 값 허용치(0 ~ 255)를 벗어 납니다."));
+			return FALSE;
+		}
+
+		nData[0] = _wtoi(m_gridSRMLampData.GetItemText(0, 1));
+		nData[1] = _wtoi(m_gridSRMLampData.GetItemText(1, 1));
+		nData[2] = _wtoi(m_gridSRMLampData.GetItemText(2, 1));
+		nData[3] = _wtoi(m_gridSRMLampData.GetItemText(3, 1));
+	}
+
+	
+
+	return TRUE;
+}
+
+BOOL	C_RecipeMgrDlg::CheckSRMLampData()
+{
+	int nData1 = 0, nData2 = 0, nData3 = 0, nData4 = 0;
+
+	nData1 = _wtoi(m_gridSRMLampData.GetItemText(0, 1));
+	nData2 = _wtoi(m_gridSRMLampData.GetItemText(1, 1));
+	nData3 = _wtoi(m_gridSRMLampData.GetItemText(2, 1));
+	nData4 = _wtoi(m_gridSRMLampData.GetItemText(3, 1));
+
+	if (255 < nData1 || 255 < nData2 || 255 < nData3 || 255 < nData4
+		|| 0 > nData1 || 0 > nData2 || 0 > nData3 || 0 > nData4) {
+		AfxMessageBox(_T("Lamp 값 허용치(0 ~ 255)를 벗어 납니다."));
+		return FALSE;
+	}
+
+	return TRUE;
+}
+
+void	C_RecipeMgrDlg::InitContact ()
+{
+	InitGridUI (m_gridContactHead, IDC_GRID_10, 1, 3, TRUE, TRUE);
+	m_gridContactHead.SetItemText (0, 0, _T("CONTACT"));
+	m_gridContactHead.SetItemText (0, 1, _T("POSITION"));
+	m_gridContactHead.SetItemText (0, 2, _T("MOVE"));
+	m_gridContactHead.EnableWindow	 (FALSE);
+
+	InitGridUI (m_gridContactData, IDC_GRID_11, 5, 3, TRUE);
+	m_gridContactData.SetItemText (0, 0, _T("READY(mm)"));
+	m_gridContactData.SetItemText (1, 0, _T("PRE-CONTACT(mm)"));
+	m_gridContactData.SetItemText (2, 0, _T("CONTACT(mm)"));
+	m_gridContactData.SetItemText (3, 0, _T("OD(0~500um)"));
+	m_gridContactData.SetItemText (4, 0, _T("CONTACT"));
+
+	m_gridContactData.SetItemState	  (4, 1, m_gridContactData.GetItemState (4, 1) | GVIS_READONLY);
+
+	//버튼
+	for (int i = 0; i < 5; i++) {
+		m_gridContactData.SetCellType  (i, 2, RUNTIME_CLASS(CGridCellButton));
+		m_gridContactData.SetItemState (i, 2, m_gridContactData.GetItemState (i, 2) | GVIS_READONLY);
+	}
+
+	//버튼 이름
+	CGridCellButton* pCell = NULL;
+	for (int i = 0; i < 5; i++) {
+		pCell = (CGridCellButton*)m_gridContactData.GetCell (i, 2);
+
+		if( i != 3)
+			pCell->SetText (_T("이동"));
+		else
+			pCell->SetText (_T("적용"));
+	}
+}
+
+void	C_RecipeMgrDlg::SetContactData ()
+{
+	m_gridContactData.SetItemText (0, 1, dfcStr (g_inRcpInfo.m_recipeMgr.m_sInfo.m_sContactPos.m_fReadyPos));
+	m_gridContactData.SetItemText (1, 1, dfcStr (g_inRcpInfo.m_recipeMgr.m_sInfo.m_sContactPos.m_fPreContactPos));
+	m_gridContactData.SetItemText (2, 1, dfcStr (g_inRcpInfo.m_recipeMgr.m_sInfo.m_sContactPos.m_fEndContactPos));
+	m_gridContactData.SetItemText (3, 1, dfcStr (g_inRcpInfo.m_recipeMgr.m_sInfo.m_sContactPos.m_fAddOD));
+
+	m_gridContactData.SetItemText(4, 1, dfcStr(g_inRcpInfo.m_recipeMgr.m_sInfo.m_sContactPos.m_fEndContactPos + g_inRcpInfo.m_recipeMgr.m_sInfo.m_sContactPos.m_fAddOD));	// jsyoon 2022.04,18 add
+}
+
+BOOL	C_RecipeMgrDlg::GetContactData ()
+{
+	if (!CheckContactData ()) return FALSE;
+
+	g_inRcpInfo.m_recipeMgr.m_sInfo.m_sContactPos.m_fReadyPos	   = _wtof (m_gridContactData.GetItemText (0, 1));
+	g_inRcpInfo.m_recipeMgr.m_sInfo.m_sContactPos.m_fPreContactPos = _wtof (m_gridContactData.GetItemText (1, 1));
+	g_inRcpInfo.m_recipeMgr.m_sInfo.m_sContactPos.m_fEndContactPos = _wtof (m_gridContactData.GetItemText (2, 1));
+	g_inRcpInfo.m_recipeMgr.m_sInfo.m_sContactPos.m_fAddOD         = _wtof (m_gridContactData.GetItemText (3, 1));
+
+	return TRUE;
+}
+
+BOOL	C_RecipeMgrDlg::GetContactData (double *fData, int nItem)
+{
+	double fData1 = 0.0, fData2 = 0.0;
+
+	if (nItem == 0 || nItem == 1)
+	{
+		fData1 = _wtoi(m_gridContactData.GetItemText(nItem, 1));
+		fData[0] = fData1;
+	}
+	else if (nItem == 2)
+	{
+		fData1 = _wtoi(m_gridContactData.GetItemText(nItem, 1));
+		fData[0] = fData1;
+	}
+	else if (nItem == 3)
+	{
+		fData1 = _wtof(m_gridContactData.GetItemText(2, 1));
+		fData2 = _wtof(m_gridContactData.GetItemText(3, 1));
+
+		if (fData2 < 0.0 || fData2 > 0.5) {
+			AfxMessageBox(_T("OD값은 (0 ~ 500um) 값만 허용 됩니다."));
+			return FALSE;
+		}
+		if (theApp.m_fContactLimit < fData1) {
+			AfxMessageBox(dfcStr(_T("Contact 값이 설정된 값(%.4lf)을 초과 합니다."), theApp.m_fContactLimit));
+			return FALSE;
+		}
+		fData[0] = fData1 + fData2;
+	}
+	else if (nItem == 4) {//Contact Pos + OD
+		fData1 = _wtof (m_gridContactData.GetItemText (2, 1));
+		fData2 = _wtof (m_gridContactData.GetItemText (3, 1));
+
+		if (fData2 < 0.0 || fData2 > 0.5) {
+			AfxMessageBox (_T("OD값은 (0 ~ 500um) 값만 허용 됩니다."));
+			return FALSE;
+		}
+		if (theApp.m_fContactLimit < fData1) {
+			AfxMessageBox (dfcStr (_T("Contact 값이 설정된 값(%.4lf)을 초과 합니다."), theApp.m_fContactLimit));
+			return FALSE;
+		}
+		fData[0] = fData1 + fData2;
+	}
+	else {
+		/*fData1 = _wtoi (m_gridContactData.GetItemText (nItem, 1));
+
+		if (nItem == 3) {
+			if (fData1 < 0.0 || fData1 > 0.5) {
+				AfxMessageBox (_T("OD값은 (0 ~ 500um) 값만 허용 됩니다."));
+				return FALSE;
+			}
+		}
+		else {
+			if (theApp.m_fContactLimit < fData1) {
+				AfxMessageBox (dfcStr (_T("Contact 값이 설정된 값(%.4lf)을 초과 합니다."), theApp.m_fContactLimit));
+				return FALSE;
+			}
+		}
+
+		fData[0] = fData1;*/
+
+		return FALSE;
+	}
+
+	//fData[0] = _wtof (m_gridContactData.GetItemText (0, 1));
+	//fData[1] = _wtof (m_gridContactData.GetItemText (1, 1));
+	//fData[2] = _wtof (m_gridContactData.GetItemText (2, 1));
+	//fData[3] = _wtof (m_gridContactData.GetItemText (3, 1));
+
+	return TRUE;
+}
+
+BOOL	C_RecipeMgrDlg::CheckContactData ()
+{
+	double fData1 = 0.0, fData2 = 0.0, fData3 = 0.0, fData4 = 0.0;
+	fData1 = _wtof (m_gridContactData.GetItemText (0, 1));
+	fData2 = _wtof (m_gridContactData.GetItemText (1, 1));
+	fData3 = _wtof (m_gridContactData.GetItemText (2, 1));
+	fData4 = _wtof (m_gridContactData.GetItemText (3, 1));
+
+	if (theApp.m_fContactLimit < fData1 || theApp.m_fContactLimit < fData2 || theApp.m_fContactLimit < fData3) {
+		AfxMessageBox (dfcStr (_T("Contact 값이 설정된 값(%.4lf)을 초과 합니다."), theApp.m_fContactLimit));
+		return FALSE;
+	}
+
+	if (fData4 < 0.0 || fData4 > 0.5) {
+		AfxMessageBox (_T("OD값은 (0 ~ 500um) 값만 허용 됩니다."));
+		return FALSE;
+	}
+
+	return TRUE;
+}
+
+void	C_RecipeMgrDlg::InitProbeID ()
+{
+	InitGridUI (m_gridProbeIDHead, IDC_GRID_12, 1, 1, TRUE);
+	m_gridProbeIDHead.SetItemText (0, 0, _T("PROBE ID"));
+	m_gridProbeIDHead.EnableWindow	 (FALSE);
+
+	// LYS 2026-07-21 P5 only, 3 rows (ReadOnly P5_1, P5_2 + Priority combo)
+	InitGridUI (m_gridProbeIDData, IDC_GRID_13, 3, 2, TRUE);
+	m_gridProbeIDData.SetItemText (0, 0, _T("PROBE(1)"));
+	m_gridProbeIDData.SetItemText (1, 0, _T("PROBE(2)"));
+	m_gridProbeIDData.SetItemText (2, 0, _T("Priority"));
+
+	//for (int i = 0; i < 11; i++) {
+	//	m_gridProbeIDData.SetItemState	  (i, 1, m_gridProbeIDData.GetItemState (i, 1) | GVIS_READONLY);
+	//	m_gridProbeIDData.SetItemFgColour (i, 1, COLOR_GRAY);
+	//}
+
+	// LYS 2026-07-07 HMI -> OCP.. Probe 5ea -> 1ea
+	//InitGridUI(m_gridProbeIDData, IDC_GRID_13, 3, 2, TRUE);
+	//m_gridProbeIDData.SetItemText(0, 0, _T("PROBE(1)"));
+	//m_gridProbeIDData.SetItemText(1, 0, _T("PROBE(2)"));
+	//m_gridProbeIDData.SetItemText(2, 0, _T("우선순위"));
+
+	//콤보박스
+	// LYS 2026-07-21 Rows 0,1 ReadOnly (P5 ID from CAD)
+	for (int i = 0; i < 2; i++) {
+		m_gridProbeIDData.SetItemState (i, 1, m_gridProbeIDData.GetItemState (i, 1) | GVIS_READONLY);
+		m_gridProbeIDData.SetItemFgColour (i, 1, COLOR_GRAY);
+	}
+
+	m_gridProbeIDData.SetCellType  (2, 1, RUNTIME_CLASS(CGridCellCombo));
+	m_gridProbeIDData.SetItemState (2, 1, m_gridProbeIDData.GetItemState (2, 1) & GVIS_READONLY);
+
+	//m_gridProbeIDData.SetCellType(2, 1, RUNTIME_CLASS(CGridCellCombo));
+	//m_gridProbeIDData.SetItemState(2, 1, m_gridProbeIDData.GetItemState(10, 1) & GVIS_READONLY);
+
+	//콤보 데이터
+	CStringArray num;
+	num.Add (_T("1"));
+	num.Add (_T("2"));
+
+	CGridCellCombo* pCell = NULL;
+	pCell = (CGridCellCombo*)m_gridProbeIDData.GetCell (2, 1);
+	pCell->SetStyle (CBS_DROPDOWNLIST);	
+	pCell->SetOptions (num);
+	m_gridProbeIDData.SetItemCurSel (2, 1, 0);
+}
+
+void	C_RecipeMgrDlg::SetProbeIDData ()
+{
+	// LYS 2026-07-21 P5 only, ReadOnly display from CAD data
+	m_gridProbeIDData.SetItemText (0, 1, g_inRcpInfo.m_recipeMgr.m_sInfo.m_sProbeInfo.m_chProbeFirst[4]);
+	m_gridProbeIDData.SetItemText (1, 1, g_inRcpInfo.m_recipeMgr.m_sInfo.m_sProbeInfo.m_chProbeSecond[4]);
+
+	m_gridProbeIDData.SetItemCurSel (2, 1, g_inRcpInfo.m_recipeMgr.m_sInfo.m_sProbeInfo.m_nProbePriority);
+	//m_gridProbeIDData.SetItemCurSel(2, 1, g_inRcpInfo.m_recipeMgr.m_sInfo.m_sProbeInfo.m_nProbePriority);
+}
+
+BOOL	C_RecipeMgrDlg::GetProbeIDData ()
+{
+	// LYS 2026-07-21 ProbeFirst/Second set by CAD (MakeCellDlg), only Priority here
+	g_inRcpInfo.m_recipeMgr.m_sInfo.m_sProbeInfo.m_nProbePriority = m_gridProbeIDData.GetItemCurSel (2, 1);
+	//g_inRcpInfo.m_recipeMgr.m_sInfo.m_sProbeInfo.m_nProbePriority = m_gridProbeIDData.GetItemCurSel(2, 1);
+
+	return TRUE;
+}
+
+void	C_RecipeMgrDlg::InitUserOffset ()
+{
+	InitGridUI (m_gridUserOffsetHead, IDC_GRID_14, 1, 2, TRUE, TRUE);
+	m_gridUserOffsetHead.SetItemText (0, 0, _T("ITEM"));
+	m_gridUserOffsetHead.SetItemText (0, 1, _T("OFFSET"));
+	m_gridUserOffsetHead.EnableWindow	 (FALSE);
+
+	InitGridUI (m_gridUserOffsetData, IDC_GRID_15, 9, 2, TRUE);
+	m_gridUserOffsetData.SetItemText (0, 0, _T("STAGE Y"));
+	m_gridUserOffsetData.SetItemText (1, 0, _T("STAGE R"));
+	m_gridUserOffsetData.SetItemText (2, 0, _T("REVIEW Y"));
+	m_gridUserOffsetData.SetItemText (3, 0, _T("REVIEW LEFT"));
+	m_gridUserOffsetData.SetItemText (4, 0, _T("REVIEW RIGHT"));
+	m_gridUserOffsetData.SetItemText (5, 0, _T("화질 ROTATE"));
+	m_gridUserOffsetData.SetItemText (6, 0, _T("화질1 R"));
+	m_gridUserOffsetData.SetItemText (7, 0, _T("화질2 R"));
+	m_gridUserOffsetData.SetItemText (8, 0, _T("PROBE"));
+
+	//for (int i = 0; i < 8; i++) {
+	//	m_gridUserOffsetData.SetItemState	  (i, 1, m_gridProbeIDData.GetItemState (i, 1) | GVIS_READONLY);
+	//	m_gridUserOffsetData.SetItemFgColour (i, 1, COLOR_GRAY);
+	//}
+
+	//콤보박스
+	m_gridUserOffsetData.SetCellType  (5, 1, RUNTIME_CLASS(CGridCellCombo));
+	m_gridUserOffsetData.SetItemState (5, 1, m_gridUserOffsetData.GetItemState (5, 1) & GVIS_READONLY);
+
+	//콤보 데이터
+	CStringArray ang;;
+	ang.Add (_T("0˚"));
+	ang.Add (_T("90˚"));
+
+	CGridCellCombo* pCell = NULL;
+	pCell = (CGridCellCombo*)m_gridUserOffsetData.GetCell (5, 1);
+	pCell->SetStyle (CBS_DROPDOWNLIST);	
+	pCell->SetOptions (ang);
+	m_gridUserOffsetData.SetItemCurSel (5, 1, 0);
+}
+
+void	C_RecipeMgrDlg::SetUserOffsetData ()
+{
+	m_gridUserOffsetData.SetItemText   (0, 1, dfcStr (g_inRcpInfo.m_recipeMgr.m_sInfo.m_sMotionOffsetPos.m_fStageY));
+	m_gridUserOffsetData.SetItemText   (1, 1, dfcStr (g_inRcpInfo.m_recipeMgr.m_sInfo.m_sMotionOffsetPos.m_fStageRotate));
+	m_gridUserOffsetData.SetItemText   (2, 1, dfcStr (g_inRcpInfo.m_recipeMgr.m_sInfo.m_sMotionOffsetPos.m_fHeadReviewY));
+	m_gridUserOffsetData.SetItemText   (3, 1, dfcStr (g_inRcpInfo.m_recipeMgr.m_sInfo.m_sMotionOffsetPos.m_fHeadReviewLeft));
+	m_gridUserOffsetData.SetItemText   (4, 1, dfcStr (g_inRcpInfo.m_recipeMgr.m_sInfo.m_sMotionOffsetPos.m_fHeadReviewRight));
+	m_gridUserOffsetData.SetItemCurSel (5, 1, g_inRcpInfo.m_recipeMgr.m_sInfo.m_sMotionOffsetPos.m_nQualityRotate);
+	m_gridUserOffsetData.SetItemText   (6, 1, dfcStr (g_inRcpInfo.m_recipeMgr.m_sInfo.m_sMotionOffsetPos.m_fQualityLeftRot));
+	m_gridUserOffsetData.SetItemText   (7, 1, dfcStr (g_inRcpInfo.m_recipeMgr.m_sInfo.m_sMotionOffsetPos.m_fQualityRightRot));
+	m_gridUserOffsetData.SetItemText   (8, 1, dfcStr(g_inRcpInfo.m_recipeMgr.m_sInfo.m_sMotionOffsetPos.m_fProbeShift));	// jsyoon 2022.05.13 add
+}
+
+BOOL	C_RecipeMgrDlg::GetUserOffsetData ()
+{
+	g_inRcpInfo.m_recipeMgr.m_sInfo.m_sMotionOffsetPos.m_fStageY		  = _wtof (m_gridUserOffsetData.GetItemText (0, 1));
+	g_inRcpInfo.m_recipeMgr.m_sInfo.m_sMotionOffsetPos.m_fStageRotate	  = _wtof (m_gridUserOffsetData.GetItemText (1, 1));
+	g_inRcpInfo.m_recipeMgr.m_sInfo.m_sMotionOffsetPos.m_fHeadReviewY	  = _wtof (m_gridUserOffsetData.GetItemText (2, 1));
+	g_inRcpInfo.m_recipeMgr.m_sInfo.m_sMotionOffsetPos.m_fHeadReviewLeft  = _wtof (m_gridUserOffsetData.GetItemText (3, 1));
+	g_inRcpInfo.m_recipeMgr.m_sInfo.m_sMotionOffsetPos.m_fHeadReviewRight = _wtof (m_gridUserOffsetData.GetItemText (4, 1));
+	g_inRcpInfo.m_recipeMgr.m_sInfo.m_sMotionOffsetPos.m_nQualityRotate   = m_gridUserOffsetData.GetItemCurSel (5, 1);
+	g_inRcpInfo.m_recipeMgr.m_sInfo.m_sMotionOffsetPos.m_fQualityLeftRot  = _wtof (m_gridUserOffsetData.GetItemText (6, 1));
+	g_inRcpInfo.m_recipeMgr.m_sInfo.m_sMotionOffsetPos.m_fQualityRightRot = _wtof (m_gridUserOffsetData.GetItemText (7, 1));
+	g_inRcpInfo.m_recipeMgr.m_sInfo.m_sMotionOffsetPos.m_fProbeShift	  = _wtof(m_gridUserOffsetData.GetItemText(8, 1));	// jsyoon 2022.05.13 add
+
+
+	return TRUE;
+}
+
+void	C_RecipeMgrDlg::InitSubZ()
+{
+	InitGridUI(m_gridSubZHead, IDC_GRID_26, 1, 2, TRUE, TRUE);
+	m_gridSubZHead.SetItemText(0, 0, _T("ITEM"));
+	m_gridSubZHead.SetItemText(0, 1, _T("SUB Z"));
+	m_gridSubZHead.EnableWindow(FALSE);
+
+	InitGridUI(m_gridSubZData, IDC_GRID_27, 4, 2, TRUE);
+	m_gridSubZData.SetItemText(0, 0, _T("WAD RIGHT"));
+	m_gridSubZData.SetItemText(1, 0, _T("WAD LEFT"));
+	m_gridSubZData.SetItemText(2, 0, _T("VIS+ANG RIGHT"));
+	m_gridSubZData.SetItemText(3, 0, _T("VIS+ANG LEFT"));
+	//m_gridSubZData.SetItemText(4, 0, _T("ANGLE RIGHT"));
+	//m_gridSubZData.SetItemText(5, 0, _T("ANGLE LEFT"));
+}
+
+void	C_RecipeMgrDlg::SetSubZ()
+{
+	m_gridSubZData.SetItemText(0, 1, dfcStr(g_inRcpInfo.m_recipeMgr.m_sInfo.m_sMotionSubZ.m_fWadSubzRight));
+	m_gridSubZData.SetItemText(1, 1, dfcStr(g_inRcpInfo.m_recipeMgr.m_sInfo.m_sMotionSubZ.m_fWadSubzLeft));
+	m_gridSubZData.SetItemText(2, 1, dfcStr(g_inRcpInfo.m_recipeMgr.m_sInfo.m_sMotionSubZ.m_fVisionSubzRight));
+	m_gridSubZData.SetItemText(3, 1, dfcStr(g_inRcpInfo.m_recipeMgr.m_sInfo.m_sMotionSubZ.m_fVisionSubzLeft));
+	//m_gridSubZData.SetItemText(4, 1, dfcStr(g_inRcpInfo.m_recipeMgr.m_sInfo.m_sMotionSubZ.m_fAngleSubzRight));
+	//m_gridSubZData.SetItemText(5, 1, dfcStr(g_inRcpInfo.m_recipeMgr.m_sInfo.m_sMotionSubZ.m_fAngleSubzLeft));
+
+}
+
+BOOL	C_RecipeMgrDlg::GetSubZ()
+{
+	g_inRcpInfo.m_recipeMgr.m_sInfo.m_sMotionSubZ.m_fWadSubzRight = _wtof(m_gridSubZData.GetItemText(0, 1));
+	g_inRcpInfo.m_recipeMgr.m_sInfo.m_sMotionSubZ.m_fWadSubzLeft = _wtof(m_gridSubZData.GetItemText(1, 1));
+	g_inRcpInfo.m_recipeMgr.m_sInfo.m_sMotionSubZ.m_fVisionSubzRight = _wtof(m_gridSubZData.GetItemText(2, 1));
+	g_inRcpInfo.m_recipeMgr.m_sInfo.m_sMotionSubZ.m_fVisionSubzLeft = _wtof(m_gridSubZData.GetItemText(3, 1));
+	//g_inRcpInfo.m_recipeMgr.m_sInfo.m_sMotionSubZ.m_fAngleSubzRight = _wtof(m_gridSubZData.GetItemText(4, 1));
+	//g_inRcpInfo.m_recipeMgr.m_sInfo.m_sMotionSubZ.m_fAngleSubzLeft = _wtof(m_gridSubZData.GetItemText(5, 1));
+
+	return TRUE;
+}
+
+// LYS 2026-08-19 PIX_UNIFORMITY가 열 폭을 61px로 고정해, 컨트롤이 더 넓으면
+// 오른쪽 여백이 셀 하나처럼 보인다. 실제 컨트롤 폭에 맞춰 열을 재분배한다.
+static void	AngleFitColumns(C_GridCtrl &Grid, int nCol)
+{
+	if (nCol <= 0) return;
+
+	CRect rc;
+	Grid.GetWindowRect(&rc);
+
+	int nWidth = rc.Width() - 4;
+	if (nWidth <= 0) return;
+
+	int nColWidth = nWidth / nCol;
+	for (int i = 0; i < nCol - 1; i++) Grid.SetColumnWidth(i, nColWidth);
+	Grid.SetColumnWidth(nCol - 1, nWidth - nColWidth * (nCol - 1));
+}
+
+// LYS 2026-08-19 Angle 축 레시피 파라미터.
+// S_MotionAngle 하나가 두 모듈을 담는다: 그리드1 = *1 필드, 그리드2 = *2 필드.
+void	C_RecipeMgrDlg::InitAngleAxis()
+{
+	InitGridUI(m_gridAxisAngleHead1, IDC_GRID_ANGLE_HEAD1, 1, 5, TRUE, TRUE, PIX_UNIFORMITY);
+	AngleFitColumns(m_gridAxisAngleHead1, 5);
+	m_gridAxisAngleHead1.SetItemText(0, 0, _T("Scheimpflug1"));
+	m_gridAxisAngleHead1.SetItemText(0, 1, _T("Rotate1"));
+	m_gridAxisAngleHead1.SetItemText(0, 2, _T("Zoom1"));
+	m_gridAxisAngleHead1.SetItemText(0, 3, _T("TILT1"));
+	m_gridAxisAngleHead1.SetItemText(0, 4, _T("Azimuth1"));
+	m_gridAxisAngleHead1.EnableWindow(FALSE);
+
+	InitGridUI(m_gridAxisAngleData1, IDC_GRID_ANGLE_DATA1, 1, 5, TRUE, FALSE, PIX_UNIFORMITY);
+	AngleFitColumns(m_gridAxisAngleData1, 5);
+
+	InitGridUI(m_gridAxisAngleHead2, IDC_GRID_ANGLE_HEAD2, 1, 5, TRUE, TRUE, PIX_UNIFORMITY);
+	AngleFitColumns(m_gridAxisAngleHead2, 5);
+	m_gridAxisAngleHead2.SetItemText(0, 0, _T("Scheimpflug2"));
+	m_gridAxisAngleHead2.SetItemText(0, 1, _T("Rotate2"));
+	m_gridAxisAngleHead2.SetItemText(0, 2, _T("Zoom2"));
+	m_gridAxisAngleHead2.SetItemText(0, 3, _T("TILT2"));
+	m_gridAxisAngleHead2.SetItemText(0, 4, _T("Azimuth2"));
+	m_gridAxisAngleHead2.EnableWindow(FALSE);
+
+	InitGridUI(m_gridAxisAngleData2, IDC_GRID_ANGLE_DATA2, 1, 5, TRUE, FALSE, PIX_UNIFORMITY);
+	AngleFitColumns(m_gridAxisAngleData2, 5);
+}
+
+void	C_RecipeMgrDlg::SetAngleAxis()
+{
+	m_gridAxisAngleData1.SetItemText(0, 0, dfcStr(g_inRcpInfo.m_recipeMgr.m_sInfo.m_sMotionAngle.m_fAngleScheimpflug1));
+	m_gridAxisAngleData1.SetItemText(0, 1, dfcStr(g_inRcpInfo.m_recipeMgr.m_sInfo.m_sMotionAngle.m_fAngleRotate1));
+	m_gridAxisAngleData1.SetItemText(0, 2, dfcStr(g_inRcpInfo.m_recipeMgr.m_sInfo.m_sMotionAngle.m_fAngleZoom1));
+	m_gridAxisAngleData1.SetItemText(0, 3, dfcStr(g_inRcpInfo.m_recipeMgr.m_sInfo.m_sMotionAngle.m_fAngleTilt1));
+	m_gridAxisAngleData1.SetItemText(0, 4, dfcStr(g_inRcpInfo.m_recipeMgr.m_sInfo.m_sMotionAngle.m_fAngleAzimuth1));
+
+	m_gridAxisAngleData2.SetItemText(0, 0, dfcStr(g_inRcpInfo.m_recipeMgr.m_sInfo.m_sMotionAngle.m_fAngleScheimpflug2));
+	m_gridAxisAngleData2.SetItemText(0, 1, dfcStr(g_inRcpInfo.m_recipeMgr.m_sInfo.m_sMotionAngle.m_fAngleRotate2));
+	m_gridAxisAngleData2.SetItemText(0, 2, dfcStr(g_inRcpInfo.m_recipeMgr.m_sInfo.m_sMotionAngle.m_fAngleZoom2));
+	m_gridAxisAngleData2.SetItemText(0, 3, dfcStr(g_inRcpInfo.m_recipeMgr.m_sInfo.m_sMotionAngle.m_fAngleTilt2));
+	m_gridAxisAngleData2.SetItemText(0, 4, dfcStr(g_inRcpInfo.m_recipeMgr.m_sInfo.m_sMotionAngle.m_fAngleAzimuth2));
+}
+
+BOOL	C_RecipeMgrDlg::GetAngleAxis()
+{
+	g_inRcpInfo.m_recipeMgr.m_sInfo.m_sMotionAngle.m_fAngleScheimpflug1 = _wtof(m_gridAxisAngleData1.GetItemText(0, 0));
+	g_inRcpInfo.m_recipeMgr.m_sInfo.m_sMotionAngle.m_fAngleRotate1 = _wtof(m_gridAxisAngleData1.GetItemText(0, 1));
+	g_inRcpInfo.m_recipeMgr.m_sInfo.m_sMotionAngle.m_fAngleZoom1 = _wtof(m_gridAxisAngleData1.GetItemText(0, 2));
+	g_inRcpInfo.m_recipeMgr.m_sInfo.m_sMotionAngle.m_fAngleTilt1 = _wtof(m_gridAxisAngleData1.GetItemText(0, 3));
+	g_inRcpInfo.m_recipeMgr.m_sInfo.m_sMotionAngle.m_fAngleAzimuth1 = _wtof(m_gridAxisAngleData1.GetItemText(0, 4));
+
+	g_inRcpInfo.m_recipeMgr.m_sInfo.m_sMotionAngle.m_fAngleScheimpflug2 = _wtof(m_gridAxisAngleData2.GetItemText(0, 0));
+	g_inRcpInfo.m_recipeMgr.m_sInfo.m_sMotionAngle.m_fAngleRotate2 = _wtof(m_gridAxisAngleData2.GetItemText(0, 1));
+	g_inRcpInfo.m_recipeMgr.m_sInfo.m_sMotionAngle.m_fAngleZoom2 = _wtof(m_gridAxisAngleData2.GetItemText(0, 2));
+	g_inRcpInfo.m_recipeMgr.m_sInfo.m_sMotionAngle.m_fAngleTilt2 = _wtof(m_gridAxisAngleData2.GetItemText(0, 3));
+	g_inRcpInfo.m_recipeMgr.m_sInfo.m_sMotionAngle.m_fAngleAzimuth2 = _wtof(m_gridAxisAngleData2.GetItemText(0, 4));
+
+	return TRUE;
+}
+
+void	C_RecipeMgrDlg::InitStageMove (int nStick)
+{
+	InitGridUI (m_gridStageMoveHead, IDC_GRID_16, 6, 1, TRUE);
+	m_gridStageMoveHead.SetItemText (0, 0, _T("GET POSITION"));
+	m_gridStageMoveHead.SetItemText (1, 0, _T("MOVE POSITION"));
+	m_gridStageMoveHead.SetItemText (2, 0, _T("STICK"));
+	m_gridStageMoveHead.SetItemText (3, 0, _T("STAGE Y"));
+	m_gridStageMoveHead.SetItemText (4, 0, _T("STAGE ROTATE"));
+	m_gridStageMoveHead.SetItemText (5, 0, _T("PROBE CARD"));
+	m_gridStageMoveHead.EnableWindow	 (FALSE);
+
+	InitGridUI (m_gridStageMoveData, IDC_GRID_17, 6, nStick, TRUE, FALSE, PIX_UNIFORMITY);
+
+	////버튼
+	for (int i = 0; i < nStick; i++) {
+		m_gridStageMoveData.SetCellType  (0, i, RUNTIME_CLASS(CGridCellButton));
+		m_gridStageMoveData.SetItemState (0, i, m_gridStageMoveData.GetItemState (0, i) | GVIS_READONLY);
+
+		m_gridStageMoveData.SetCellType  (1, i, RUNTIME_CLASS(CGridCellButton));
+		m_gridStageMoveData.SetItemState (1, i, m_gridStageMoveData.GetItemState (1, i) | GVIS_READONLY);
+
+		m_gridStageMoveData.SetItemState (2, i, m_gridStageMoveData.GetItemState (2, i) | GVIS_READONLY);
+
+		//if (i == 0) m_gridStageMoveData.SetCellType  (5, i, RUNTIME_CLASS(CGridCellButton));
+		//m_gridStageMoveData.SetItemState (5, i, m_gridStageMoveData.GetItemState (5, i) | GVIS_READONLY);
+	}
+
+	//버튼 이름
+	CGridCellButton* pCell = NULL;
+	for (int i = 0; i < nStick; i++) {
+		pCell = (CGridCellButton*)m_gridStageMoveData.GetCell (0, i);
+		pCell->SetText (_T("GET"));
+
+		pCell = (CGridCellButton*)m_gridStageMoveData.GetCell (1, i);
+		pCell->SetText (_T("MOVE"));
+
+		//if (i == 0) {
+		//	pCell = (CGridCellButton*)m_gridStageMoveData.GetCell (5, i);
+		//	pCell->SetText (_T("NOT USE"));
+		//}
+	}
+}
+
+void	C_RecipeMgrDlg::SetStageMoveData ()
+{
+	int nCnt = g_inRcpInfo.GetStickCount ();
+	InitStageMove (nCnt);
+
+	S_StickInfo sStick;
+	for (int i = 0; i < nCnt; i++) {
+		sStick = g_inRcpInfo.GetStickItem (i);
+
+		m_gridStageMoveData.SetItemText (2, i, dfcStr (sStick.m_nStickNum));
+		m_gridStageMoveData.SetItemText (3, i, dfcStr (sStick.m_fStageY));
+		m_gridStageMoveData.SetItemText (4, i, dfcStr (sStick.m_fStageR));
+	}
+}
+
+BOOL	C_RecipeMgrDlg::GetStageMoveData ()
+{
+	int nCnt = g_inRcpInfo.GetStickCount ();
+
+	S_StickInfo sStick;
+	for (int i = 0; i < nCnt; i++) {
+		sStick = g_inRcpInfo.GetStickItem (i);
+		sStick.m_nStickNum = _wtoi (m_gridStageMoveData.GetItemText (2, i));
+		sStick.m_fStageY   = _wtof (m_gridStageMoveData.GetItemText (3, i));
+		sStick.m_fStageR   = _wtof (m_gridStageMoveData.GetItemText (4, i));
+
+		g_inRcpInfo.SetStickItem (i, sStick);
+	}
+
+	return TRUE;
+}
+
+void	C_RecipeMgrDlg::SetStageGetPos (double *fData)
+{
+	m_gridStageMoveData.SetItemText (3, m_nStage, dfcStr (fData[0]));
+	m_gridStageMoveData.SetItemText (4, m_nStage, dfcStr (fData[1]));
+}
+
+BOOL	C_RecipeMgrDlg::GetStageMoveData (double *fData)
+{
+	for (int i = 0; i < 100; i++)
+	{
+		fData[i] = -9999.;
+	}
+
+	//if (m_nStage > 0)
+	//{
+	//	fData[0] = (_wtof(m_gridStageMoveData.GetItemText(3, 0)) - _wtof(m_gridStageMoveData.GetItemText(3, m_nStage))) + _wtof(m_gridUserOffsetData.GetItemText(0, 1));
+	//	
+	//}
+	//else
+	//{
+	//	fData[0] = 0 + _wtof(m_gridUserOffsetData.GetItemText(0, 1)); //2023.07.05 add
+	//}
+
+	// LYS 2026-07-01 Recipe : Move Stage
+	fData[0] = _wtof(m_gridStageMoveData.GetItemText(3, m_nStage));
+
+//	fData[0] = _wtof (m_gridStageMoveData.GetItemText (3, m_nStage));	// OffSet X
+	fData[1] = _wtof (m_gridStageMoveData.GetItemText (4, m_nStage)) + _wtof(m_gridUserOffsetData.GetItemText(1, 1));	// OffSet R
+
+	// jsyoon 2022.03.29 add
+	fData[2] = _wtof(m_gridStageMoveData.GetItemText(2, m_nStage)) -1.;		// Stick Num
+	fData[3] = _wtof(m_gridCellInfoData.GetItemText(3, 1));					// Stick Distance
+
+	fData[4] = _wtof(m_gridStageMoveData.GetItemText(3, 0));	// HEAD X
+
+	// Stick Count
+	int nCnt = g_inRcpInfo.GetStickCount();
+	fData[5] = (double)nCnt;
+
+	// Probe Move 
+	for (int i = 0; i < nCnt; i++)
+	{
+		fData[6 + i] = _wtof(m_gridStageMoveData.GetItemText(3, i)) + _wtof(m_gridUserOffsetData.GetItemText(8, 1)) + _wtof(m_gridUserOffsetData.GetItemText(0, 1));  // Probe Offset
+	//	fData[6+i] = _wtof(m_gridStageMoveData.GetItemText(3, i)) + _wtof(m_gridUserOffsetData.GetItemText(8, 1));  // Probe Offset
+	}
+
+	//switch (nCnt)
+	//{
+	//case 1:
+	//	fData[4] = _wtof(m_gridStageMoveData.GetItemText(3, 0)) + _wtof(m_gridUserOffsetData.GetItemText(8, 1));  // Probe Offset
+	//	fData[5] = -9999.;
+	//	fData[6] = -9999.;
+	//	fData[7] = -9999.;
+	//	fData[8] = -9999.;
+	//	break;
+	//case 2:
+	//	fData[4] = _wtof(m_gridStageMoveData.GetItemText(3, 0)) + _wtof(m_gridUserOffsetData.GetItemText(8, 1));  // Probe Offset
+	//	fData[5] = _wtof(m_gridStageMoveData.GetItemText(3, 1)) + _wtof(m_gridUserOffsetData.GetItemText(8, 1));  // Probe Offset
+	//	fData[6] = -9999.;
+	//	fData[7] = -9999.;
+	//	fData[8] = -9999.;
+	//	break;
+	//case 3:
+	//	fData[4] = _wtof(m_gridStageMoveData.GetItemText(3, 0)) + _wtof(m_gridUserOffsetData.GetItemText(8, 1));  // Probe Offset
+	//	fData[5] = _wtof(m_gridStageMoveData.GetItemText(3, 1)) + _wtof(m_gridUserOffsetData.GetItemText(8, 1));  // Probe Offset
+	//	fData[6] = _wtof(m_gridStageMoveData.GetItemText(3, 2)) + _wtof(m_gridUserOffsetData.GetItemText(8, 1));  // Probe Offset
+	//	fData[7] = -9999.;
+	//	fData[8] = -9999.;
+	//	break;
+	//case 4:
+	//	fData[4] = _wtof(m_gridStageMoveData.GetItemText(3, 0)) + _wtof(m_gridUserOffsetData.GetItemText(8, 1));  // Probe Offset
+	//	fData[5] = _wtof(m_gridStageMoveData.GetItemText(3, 1)) + _wtof(m_gridUserOffsetData.GetItemText(8, 1));  // Probe Offset
+	//	fData[6] = _wtof(m_gridStageMoveData.GetItemText(3, 2)) + _wtof(m_gridUserOffsetData.GetItemText(8, 1));  // Probe Offset
+	//	fData[7] = _wtof(m_gridStageMoveData.GetItemText(3, 3)) + _wtof(m_gridUserOffsetData.GetItemText(8, 1));  // Probe Offset
+	//	fData[8] = -9999.;
+	//	break;
+	//default:
+	//	fData[4] = _wtof(m_gridStageMoveData.GetItemText(3, 0));
+	//	fData[5] = _wtof(m_gridStageMoveData.GetItemText(3, 1));
+	//	fData[6] = _wtof(m_gridStageMoveData.GetItemText(3, 2));
+	//	fData[7] = _wtof(m_gridStageMoveData.GetItemText(3, 3));
+	//	fData[8] = _wtof(m_gridStageMoveData.GetItemText(3, 4));
+	//	break;
+	//}
+
+	
+
+	//// Probe Move 
+	//fData[4] = _wtof(m_gridStageMoveData.GetItemText(3, 0));
+	//fData[5] = 0.;
+	//fData[6] = 0.;
+	//fData[7] = 0.;
+	//fData[8] = 0.;
+	//fData[5] = _wtof(m_gridStageMoveData.GetItemText(3, 1));
+	//fData[6] = _wtof(m_gridStageMoveData.GetItemText(3, 2));
+	//fData[7] = _wtof(m_gridStageMoveData.GetItemText(3, 3));
+	//fData[8] = _wtof(m_gridStageMoveData.GetItemText(3, 4));
+	//fData[9] = _wtof(m_gridUserOffsetData.GetItemText(8, 1));  // Probe Offset
+
+	return TRUE;
+}
+
+void	C_RecipeMgrDlg::InitHeadMove (int nCell)
+{
+	InitGridUI (m_gridHeadMoveHead, IDC_GRID_18, 1, 6, TRUE, TRUE, PIX_NON_UNIFORMITY);
+	m_gridHeadMoveHead.SetItemText (0, 0,  _T("NUM"));
+	m_gridHeadMoveHead.SetItemText (0, 1,  _T("GET"));
+	m_gridHeadMoveHead.SetItemText (0, 2,  _T("MOVE"));
+	m_gridHeadMoveHead.SetItemText (0, 3,  _T("CELL ID"));
+	m_gridHeadMoveHead.SetItemText (0, 4,  _T("HEAD Y"));
+	m_gridHeadMoveHead.SetItemText (0, 5,  _T("HEAD X"));
+	m_gridHeadMoveHead.EnableWindow	 (FALSE);
+
+	InitGridUI (m_gridHeadMoveData, IDC_GRID_19, nCell, 6, TRUE, FALSE, PIX_NON_UNIFORMITY);
+
+	////버튼
+	for (int i = 0; i < nCell; i++) {
+		m_gridHeadMoveData.SetCellType  (i, 1, RUNTIME_CLASS(CGridCellButton));
+		m_gridHeadMoveData.SetItemState (i, 1, m_gridHeadMoveData.GetItemState (i, 1) | GVIS_READONLY);
+
+		m_gridHeadMoveData.SetCellType  (i, 2, RUNTIME_CLASS(CGridCellButton));
+		m_gridHeadMoveData.SetItemState (i, 2, m_gridHeadMoveData.GetItemState (i, 2) | GVIS_READONLY);
+	}
+
+	//버튼 이름
+	CGridCellButton* pCell = NULL;
+	for (int i = 0; i < nCell; i++) {
+		pCell = (CGridCellButton*)m_gridHeadMoveData.GetCell (i, 1);
+		pCell->SetText (_T("GET"));
+
+		pCell = (CGridCellButton*)m_gridHeadMoveData.GetCell (i, 2);
+		pCell->SetText (_T("MOVE"));
+	}
+}
+
+void	C_RecipeMgrDlg::SetHeadMoveData (int nStick)
+{
+	int nCnt = g_inRcpInfo.GetCellCount (nStick);
+	InitHeadMove (nCnt);
+
+	S_CellInfo sCell;
+	for (int i = 0; i < nCnt; i++) {
+		sCell = g_inRcpInfo.GetCellItem (nStick, i);
+
+		m_gridHeadMoveData.SetItemText (i, 0, dfcStr (i + 1));
+		m_gridHeadMoveData.SetItemText (i, 3, dfcStr (sCell.m_chCellID));
+		m_gridHeadMoveData.SetItemText (i, 4, dfcStr (sCell.m_fCellY));
+		m_gridHeadMoveData.SetItemText (i, 5, dfcStr (sCell.m_fCellX));
+	}
+}
+
+BOOL	C_RecipeMgrDlg::GetHeadMoveData (int nStick)
+{
+	int nCellCnt = g_inRcpInfo.GetCellCount (nStick);
+
+	S_CellInfo sCell;
+
+	for (int i = 0; i < g_inRcpInfo.GetStickCount (); i++) {
+		for (int j = 0; j < nCellCnt; j++) {
+			sCell = g_inRcpInfo.GetCellItem (i, j);
+
+			//wcscpy_s (sCell.m_chCellID, m_gridHeadMoveData.GetItemText (j, 3));
+			sCell.m_fCellY = _wtof (m_gridHeadMoveData.GetItemText (j, 4));
+			sCell.m_fCellX = _wtof (m_gridHeadMoveData.GetItemText (j, 5));
+
+			g_inRcpInfo.SetCellItem (i, j, sCell);
+		}
+	}
+
+	return TRUE;
+}
+
+void	C_RecipeMgrDlg::SetHeadGetPos (double *fData)
+{
+	m_gridHeadMoveData.SetItemText (m_nHead, 4, dfcStr (fData[0]));
+	m_gridHeadMoveData.SetItemText (m_nHead, 5, dfcStr (fData[1]));
+
+	m_gridHeadZData.SetItemText (0, m_nHeadMode, dfcStr (fData[2]));
+}
+
+BOOL	C_RecipeMgrDlg::GetHeadGetPos (double *fData)
+{
+//	fData[0] = _wtof (m_gridHeadMoveData.GetItemText (m_nHead, 4)); // jsyoon change 2022.03.30
+//	fData[0] = _wtof(m_gridStageMoveData.GetItemText(3, 0));
+
+
+	fData[0] = _wtof(m_gridStageMoveData.GetItemText(3, 0)) + _wtof(m_gridUserOffsetData.GetItemText(0, 1));	// 2023.07.05 change
+
+	fData[0] = _wtof(m_gridStageMoveData.GetItemText(3, 0));
+	fData[0] = _wtof(m_gridUserOffsetData.GetItemText(0, 1));
+
+
+	fData[1] = _wtof(m_gridHeadMoveData.GetItemText(m_nHead, 5));
+	fData[2] = _wtof (m_gridHeadZData.GetItemText (0, m_nHeadMode));
+
+	fData[3] = _wtof(m_gridUserOffsetData.GetItemText(2, 1));	// Review Y
+
+	// jsyoon 2022.05.12
+	fData[4] = _wtof(m_gridUserOffsetData.GetItemText(3, 1));   // Review Left  
+	fData[5] = _wtof(m_gridUserOffsetData.GetItemText(4, 1));   // Review Right
+
+	/*!
+	* 2023.03.10 추가
+	* Cell 하나일 경우 화질 이동 조건 처리
+	*/
+	//if (m_nHeadMode == RCP_MODE_QUALITY)
+	//if (m_nHeadMode == RCP_MODE_QUALITY || m_nHeadMode == RCP_MODE_COLOR)  // 2023.04.17 add 
+	if (m_nHeadMode == RCP_MODE_QUALITY || m_nHeadMode == RCP_MODE_ANGLE)  // LYS 2026-07-01 add Angle
+	{
+		if (g_inRcpInfo.m_recipeMgr.m_sMap.m_fCellCount.x == 1)
+		{
+			double dMovePos = 0;
+			dMovePos = g_inRcpInfo.m_recipeMgr.m_sInfo.m_sOptionItem.m_fFrontHeadGap / 2;
+
+			// 
+			fData[6] = 10;
+			fData[7] = dMovePos * -1;
+			fData[8] = dMovePos * 1;
+		}
+	}
+
+	return TRUE;
+}
+
+//void	C_RecipeMgrDlg::InitHeadZ ()
+//{
+//	InitGridUI (m_gridHeadZHead, IDC_GRID_20, 1, 7, TRUE, TRUE, PIX_UNIFORMITY);
+//	m_gridHeadZHead.SetItemText (0, 0,  _T("Z(리뷰)"));
+//	m_gridHeadZHead.SetItemText (0, 1,  _T("Z(특성)"));
+//	m_gridHeadZHead.SetItemText (0, 2,  _T("Z(화질)"));
+//	m_gridHeadZHead.SetItemText (0, 3,  _T("Z(면계측)"));
+//	m_gridHeadZHead.SetItemText (0, 4, _T("Z(시야각)"));
+//	m_gridHeadZHead.SetItemText (0, 5, _T("ZOOM"));
+//	m_gridHeadZHead.SetItemText (0, 6, _T("FOCUS"));
+//	m_gridHeadZHead.EnableWindow (FALSE);
+//
+//	InitGridUI (m_gridHeadZData, IDC_GRID_21, 1, 7, TRUE, FALSE, PIX_UNIFORMITY);
+//}
+//
+//void	C_RecipeMgrDlg::SetHeadZData ()
+//{
+//	m_gridHeadZData.SetItemText (0, 0, dfcStr (g_inRcpInfo.m_recipeMgr.m_sData.m_sHeadZ.m_fReviewZ));
+//	m_gridHeadZData.SetItemText (0, 1, dfcStr (g_inRcpInfo.m_recipeMgr.m_sData.m_sHeadZ.m_fSpecZ));
+//	m_gridHeadZData.SetItemText (0, 2, dfcStr (g_inRcpInfo.m_recipeMgr.m_sData.m_sHeadZ.m_fQualityZ));
+//	m_gridHeadZData.SetItemText (0, 3, dfcStr (g_inRcpInfo.m_recipeMgr.m_sData.m_sHeadZ.m_fColorZ));
+//	m_gridHeadZData.SetItemText (0, 4, dfcStr (g_inRcpInfo.m_recipeMgr.m_sData.m_sHeadZ.m_fAngleZ));
+//	m_gridHeadZData.SetItemText (0, 5, dfcStr (g_inRcpInfo.m_recipeMgr.m_sData.m_sHeadZ.m_fZoom));
+//	m_gridHeadZData.SetItemText (0, 6, dfcStr (g_inRcpInfo.m_recipeMgr.m_sData.m_sHeadZ.m_fFocus));
+//}
+//
+//BOOL	C_RecipeMgrDlg::GetHeadZData ()
+//{
+//	g_inRcpInfo.m_recipeMgr.m_sData.m_sHeadZ.m_fReviewZ	 = _wtof (m_gridHeadZData.GetItemText (0, 0));
+//	g_inRcpInfo.m_recipeMgr.m_sData.m_sHeadZ.m_fSpecZ	 = _wtof (m_gridHeadZData.GetItemText (0, 1));
+//	g_inRcpInfo.m_recipeMgr.m_sData.m_sHeadZ.m_fQualityZ = _wtof (m_gridHeadZData.GetItemText (0, 2));
+//	g_inRcpInfo.m_recipeMgr.m_sData.m_sHeadZ.m_fColorZ	 = _wtof (m_gridHeadZData.GetItemText (0, 3));
+//	g_inRcpInfo.m_recipeMgr.m_sData.m_sHeadZ.m_fAngleZ	 = _wtof (m_gridHeadZData.GetItemText (0, 4));
+//	g_inRcpInfo.m_recipeMgr.m_sData.m_sHeadZ.m_fZoom	 = _wtof (m_gridHeadZData.GetItemText (0, 5));
+//	g_inRcpInfo.m_recipeMgr.m_sData.m_sHeadZ.m_fFocus	 = _wtof (m_gridHeadZData.GetItemText (0, 6));
+//
+//	return TRUE;
+//}
+
+// LYS 2026-07-28 Remove Color
+void	C_RecipeMgrDlg::InitHeadZ()
+{
+	InitGridUI(m_gridHeadZHead, IDC_GRID_20, 1, 6, TRUE, TRUE, PIX_UNIFORMITY);
+	m_gridHeadZHead.SetItemText(0, 0, _T("Z(리뷰)"));
+	m_gridHeadZHead.SetItemText(0, 1, _T("Z(특성)"));
+	m_gridHeadZHead.SetItemText(0, 2, _T("Z(화질)"));
+	m_gridHeadZHead.SetItemText(0, 3, _T("Z(시야각)"));
+	m_gridHeadZHead.SetItemText(0, 4, _T("ZOOM"));
+	m_gridHeadZHead.SetItemText(0, 5, _T("FOCUS"));
+	m_gridHeadZHead.EnableWindow(FALSE);
+
+	InitGridUI(m_gridHeadZData, IDC_GRID_21, 1, 6, TRUE, FALSE, PIX_UNIFORMITY);
+}
+
+void	C_RecipeMgrDlg::SetHeadZData()
+{
+	m_gridHeadZData.SetItemText(0, 0, dfcStr(g_inRcpInfo.m_recipeMgr.m_sData.m_sHeadZ.m_fReviewZ));
+	m_gridHeadZData.SetItemText(0, 1, dfcStr(g_inRcpInfo.m_recipeMgr.m_sData.m_sHeadZ.m_fSpecZ));
+	m_gridHeadZData.SetItemText(0, 2, dfcStr(g_inRcpInfo.m_recipeMgr.m_sData.m_sHeadZ.m_fQualityZ));
+	m_gridHeadZData.SetItemText(0, 3, dfcStr(g_inRcpInfo.m_recipeMgr.m_sData.m_sHeadZ.m_fAngleZ));
+	m_gridHeadZData.SetItemText(0, 4, dfcStr(g_inRcpInfo.m_recipeMgr.m_sData.m_sHeadZ.m_fZoom));
+	m_gridHeadZData.SetItemText(0, 5, dfcStr(g_inRcpInfo.m_recipeMgr.m_sData.m_sHeadZ.m_fFocus));
+}
+
+BOOL	C_RecipeMgrDlg::GetHeadZData()
+{
+	g_inRcpInfo.m_recipeMgr.m_sData.m_sHeadZ.m_fReviewZ = _wtof(m_gridHeadZData.GetItemText(0, 0));
+	g_inRcpInfo.m_recipeMgr.m_sData.m_sHeadZ.m_fSpecZ = _wtof(m_gridHeadZData.GetItemText(0, 1));
+	g_inRcpInfo.m_recipeMgr.m_sData.m_sHeadZ.m_fQualityZ = _wtof(m_gridHeadZData.GetItemText(0, 2));
+	g_inRcpInfo.m_recipeMgr.m_sData.m_sHeadZ.m_fAngleZ = _wtof(m_gridHeadZData.GetItemText(0, 3));
+	g_inRcpInfo.m_recipeMgr.m_sData.m_sHeadZ.m_fZoom = _wtof(m_gridHeadZData.GetItemText(0, 4));
+	g_inRcpInfo.m_recipeMgr.m_sData.m_sHeadZ.m_fFocus = _wtof(m_gridHeadZData.GetItemText(0, 5));
+
+	return TRUE;
+}
+
+void	C_RecipeMgrDlg::InitColorHeadZ()
+{
+	InitGridUI(m_gridColorHead, IDC_GRID_24, 1, 3, TRUE, TRUE, PIX_UNIFORMITY);
+	m_gridColorHead.SetItemText(0, 0, _T("면계측(mm)"));
+	m_gridColorHead.SetItemText(0, 1, _T("Recipe(mm)"));
+	m_gridColorHead.SetItemText(0, 2, _T("SET"));
+	m_gridColorHead.EnableWindow(FALSE);
+
+	InitGridUI(m_gridColorData, IDC_GRID_25, 1, 3, TRUE, FALSE, PIX_UNIFORMITY);
+
+	//콤보박스
+	m_gridColorData.SetCellType(0, 0, RUNTIME_CLASS(CGridCellCombo));
+	m_gridColorData.SetItemState(0, 0, m_gridColorData.GetItemState(0, 0) & GVIS_READONLY);
+
+	//콤보 데이터
+	//CStringArray ang;
+	//ang.Add(_T("0˚"));
+	//ang.Add(_T("90˚"));
+
+	CGridCellCombo* pCell = NULL;
+	pCell = (CGridCellCombo*)m_gridColorData.GetCell(0, 0);
+	pCell->SetStyle(CBS_DROPDOWNLIST);
+	pCell->SetOptions(theApp.m_arrColorItem/*ang*/);
+	m_gridColorData.SetItemCurSel(0, 0, 0);
+
+	//Read Only
+	m_gridColorData.SetItemState(0, 1, m_gridColorData.GetItemState(0, 1) | GVIS_READONLY);
+
+	//Button
+	m_gridColorData.SetCellType(0, 2, RUNTIME_CLASS(CGridCellButton));
+	m_gridColorData.SetItemState(0, 2, m_gridColorData.GetItemState(0, 2) | GVIS_READONLY);
+
+	//버튼 이름
+	CGridCellButton* pCell2 = NULL;
+	pCell2 = (CGridCellButton*)m_gridColorData.GetCell(0, 2);
+	pCell2->SetText(_T("적용"));
+
+	////
+	if (theApp.m_arrColorPosZ.GetSize() > 0) {
+		m_gridColorData.SetItemText(0, 1, theApp.m_arrColorPosZ.GetAt(0));
+	}
+}
+
+void	C_RecipeMgrDlg::OnSelHead (UINT nID)
+{
+	switch (nID) {
+		case IDC_RADIO_1:	m_nHeadSel = RCP_HEAD_LEFT;		break;
+		case IDC_RADIO_2:	m_nHeadSel = RCP_HEAD_RIGHT;	break;
+	}
+}
+
+void	C_RecipeMgrDlg::OnSelMode (UINT nID)
+{
+	switch (nID) {
+		case IDC_RADIO_3:	m_nHeadMode = RCP_MODE_REVIEW;	break;
+		case IDC_RADIO_4:	m_nHeadMode = RCP_MODE_SPEC;	break;
+		case IDC_RADIO_5:	m_nHeadMode = RCP_MODE_QUALITY;	break;
+		case IDC_RADIO_6:	m_nHeadMode = RCP_MODE_COLOR;	break;
+		case IDC_RADIO_7:	m_nHeadMode = RCP_MODE_ANGLE;	break;
+	}
+}
+
+void	C_RecipeMgrDlg::SetRecipeView ()
+{
+	SetCellInfoData ();		//Cell Info
+	SetInspectOptionData ();//Inspection Option
+	SetInspectItemData ();	//Inspection Item
+	SetProbeIDData ();		//Probe ID
+	SetLampData ();			//Lamp
+	SetSRMLampData();		//SRM Lamp
+	SetContactData ();		//Contact Pos
+	SetStageMoveData ();	//Stage Pos
+	SetHeadZData ();		//Z Axis Pos
+	SetUserOffsetData ();	//User Offset
+	SetHeadMoveData ();		//Head Pos
+	SetSubZ();				//Sub Z
+	SetAngleAxis();			//Angle Axis
+	Invalidate (FALSE);
+}
+
+BOOL	C_RecipeMgrDlg::GetRecipeView ()
+{
+	if (!GetCellInfoData ())	  return FALSE;	//Cell Info
+	if (!GetInspectOptionData ()) return FALSE;	//Inspection Option
+	if (!GetInspectItemData ())   return FALSE;	//Inspection Item
+	if (!GetProbeIDData ())		  return FALSE;	//Probe ID
+	if (!GetLampData ())		  return FALSE;	//Lamp
+	if (!GetSRMLampData())		  return FALSE;	//SRM Lamp
+	if (!GetContactData ())		  return FALSE;	//Contact Pos
+	if (!GetStageMoveData ())	  return FALSE;	//Stage Pos
+	if (!GetHeadZData ())		  return FALSE;	//Z Axis Pos
+	if (!GetUserOffsetData ())	  return FALSE;	//User Offset
+	if (!GetHeadMoveData ())	  return FALSE;	//Head Pos
+	if (!GetSubZ())				  return FALSE;	//Sub Z
+	if (!GetAngleAxis())		  return FALSE;	//Angle Axis
+
+	return TRUE;
+}
+
+void	C_RecipeMgrDlg::SendAlignKeyPos ()
+{
+	m_pAlignRcpDlg->SetGlassAlignKeyPos ();
+}
+
+void	C_RecipeMgrDlg::OnSelAlignRcp (NMHDR *pNMHDR, LRESULT *pResult)
+{
+	NM_GRIDVIEW*	pNMLV = reinterpret_cast<NM_GRIDVIEW*>(pNMHDR);
+
+	if (pNMLV->iColumn != 1 || pNMLV->iRow != 7) return;
+
+	CString strfilePath, strName;
+	strfilePath.Format (_T("%s*.alg"), theApp.m_strAlignFolder);
+	CFileDialog dlg (TRUE, _T("alg"), strfilePath, OFN_FILEMUSTEXIST | OFN_NOCHANGEDIR, _T("Recipe Files (*.alg)|*.alg|"));
+
+	if (dlg.DoModal() == IDOK)
+	{			
+		strName = dlg.GetFileName ();
+
+		if (!strName.IsEmpty ()) {
+			int nFind = strName.Find (_T(".alg"));
+
+			if (nFind > 0)	strName = strName.Left (nFind);
+			else			strName = strName;
+
+			SetAlignName (strName);
+		}
+		else {
+			AfxMessageBox (_T("선택된 레시피가 없습니다."));
+			return;
+		}
+	}	
+}
+
+void	C_RecipeMgrDlg::OnSetCcdLamp (NMHDR *pNMHDR, LRESULT *pResult)
+{
+	NM_GRIDVIEW*	pNMLV = reinterpret_cast<NM_GRIDVIEW*>(pNMHDR);
+	if (pNMLV->iColumn != 2) return;
+
+	CString strCcd;
+	if		(pNMLV->iRow == ALG_FRONT_LEFT)  strCcd = _T("특성축 Left");
+	else if (pNMLV->iRow == ALG_FRONT_RIGHT) strCcd = _T("특성축 Right");
+	else if (pNMLV->iRow == ALG_BACK_LEFT)   strCcd = _T("화질축 Left");
+	else if (pNMLV->iRow == ALG_BACK_RIGHT)  strCcd = _T("화질축 Right");
+
+	if (AfxMessageBox (dfcStr (_T("%s CCD 조명 값을 적용 합니다.\n 계속 하시겠습니까?"), strCcd), MB_YESNO|MB_ICONQUESTION) != IDYES) return;
+
+	::PostMessage (GetSafeHwnd (), WM_RECIPE_EVENT, (WPARAM)M_RCP_LAMP_SET, pNMLV->iRow);
+}
+
+void	C_RecipeMgrDlg::OnSetSRMLamp(NMHDR* pNMHDR, LRESULT* pResult)
+{
+	NM_GRIDVIEW* pNMLV = reinterpret_cast<NM_GRIDVIEW*>(pNMHDR);
+	if (pNMLV->iColumn != 2) return;
+
+	CString strCcd;
+	if (pNMLV->iRow == ALG_FRONT_LEFT)  strCcd = _T("RED");
+	else if (pNMLV->iRow == ALG_FRONT_RIGHT) strCcd = _T("GREEN");
+	else if (pNMLV->iRow == ALG_BACK_LEFT)   strCcd = _T("BLUE");
+	else if (pNMLV->iRow == ALG_BACK_RIGHT)  strCcd = _T("WHITE");
+
+	if (AfxMessageBox(dfcStr(_T("%s 표준광원 조명 값을 적용 합니다.\n 계속 하시겠습니까?"), strCcd), MB_YESNO | MB_ICONQUESTION) != IDYES) return;
+
+	::PostMessage(GetSafeHwnd(), WM_RECIPE_EVENT, (WPARAM)M_RCP_SRM_LAMP_SET, pNMLV->iRow);
+}
+
+void	C_RecipeMgrDlg::OnSetContactPos (NMHDR *pNMHDR, LRESULT *pResult)
+{
+	NM_GRIDVIEW*	pNMLV = reinterpret_cast<NM_GRIDVIEW*>(pNMHDR);
+
+	if (pNMLV->iColumn != 2) return;
+
+	if (pNMLV->iRow == 3)
+	{
+		::PostMessage(GetSafeHwnd(), WM_RECIPE_EVENT, (WPARAM)0, 0);
+	}
+	else
+	{
+		if (AfxMessageBox(_T("Contact 위치를 이동 합니다.\n 계속 하시겠습니까?"), MB_YESNO | MB_ICONQUESTION) != IDYES) return;
+
+		::PostMessage(GetSafeHwnd(), WM_RECIPE_EVENT, (WPARAM)M_RCP_CONTACT_SET, pNMLV->iRow);
+	}
+}
+
+void	C_RecipeMgrDlg::OnSetStage (NMHDR *pNMHDR, LRESULT *pResult)
+{
+	NM_GRIDVIEW*	pNMLV = reinterpret_cast<NM_GRIDVIEW*>(pNMHDR);
+	if (pNMLV->iRow != 0 && pNMLV->iRow != 1 && pNMLV->iRow != 5) return;
+
+	int nItem = 0;
+	CString strItem;
+	if (pNMLV->iRow == 0) {
+		nItem = M_RCP_STAGE_GET_POS;
+		strItem = _T("STAGE GET");
+	}
+	else if (pNMLV->iRow == 1) {
+		nItem = M_RCP_STAGE_MOVE;
+		strItem = _T("STAGE MOVE");
+	}
+	else if (pNMLV->iRow == 5) {
+		if (pNMLV->iColumn != 0) return;
+
+		nItem = M_RCP_PROBE_MOVE;
+		strItem = _T("PROBE MOVE");
+	}
+
+	if (AfxMessageBox (dfcStr (_T("%s를 진행 합니다.\n 계속 하시겠습니까?"), strItem), MB_YESNO|MB_ICONQUESTION) != IDYES) return;
+
+	m_nStage = pNMLV->iColumn;
+	::PostMessage (GetSafeHwnd (), WM_RECIPE_EVENT, (WPARAM)nItem, NULL);
+}
+
+void	C_RecipeMgrDlg::OnSetHead (NMHDR *pNMHDR, LRESULT *pResult)
+{
+	NM_GRIDVIEW*	pNMLV = reinterpret_cast<NM_GRIDVIEW*>(pNMHDR);
+	if (pNMLV->iColumn != 1 && pNMLV->iColumn != 2) return;
+
+	CString strHead, strMode, strCmd;
+	if (m_nHeadSel == RCP_HEAD_LEFT) strHead = _T("Head Left");
+	else							 strHead = _T("Head Right");
+
+	if		(m_nHeadMode == RCP_MODE_REVIEW)  strMode = _T("리뷰");
+	else if (m_nHeadMode == RCP_MODE_SPEC)    strMode = _T("특성");
+	else if (m_nHeadMode == RCP_MODE_QUALITY) strMode = _T("화질");
+	else if (m_nHeadMode == RCP_MODE_COLOR)   strMode = _T("면계측");
+	else if (m_nHeadMode == RCP_MODE_ANGLE)   strMode = _T("시야각");
+
+	int nItem = 0;
+	if (pNMLV->iColumn == 1) {
+		nItem = M_RCP_HEAD_GET_POS;
+		strCmd = _T("Get");
+	}
+	else {
+		nItem = M_RCP_HEAD_MOVE;
+		strCmd = _T("Move");
+	}
+
+	if (AfxMessageBox (dfcStr (_T("%s %s %s을(를) 진행 합니다.\n 계속 하시겠습니까?"), strHead, strMode, strCmd), MB_YESNO|MB_ICONQUESTION) != IDYES) return;
+
+	m_nHead = pNMLV->iRow;
+	::PostMessage (GetSafeHwnd (), WM_RECIPE_EVENT, (WPARAM)nItem, NULL);
+}
+
+void	C_RecipeMgrDlg::OnSetColorPos(NMHDR* pNMHDR, LRESULT* pResult)
+{
+	NM_GRIDVIEW* pNMLV = reinterpret_cast<NM_GRIDVIEW*>(pNMHDR);
+	if (pNMLV->iColumn != 2) return;
+
+	double fData = 0.0;
+	if (AfxMessageBox (_T("면계측 Z축 값을 Recipe Z값으로 변환하여 적용 합니다. \n 계속 하시겠습니까?"), MB_YESNO | MB_ICONQUESTION) != IDYES) return;
+
+	fData = _wtof (m_gridColorData.GetItemText(0, 1));
+	m_gridHeadZData.SetItemText (0, 3, dfcStr(fData));
+
+	Invalidate(FALSE);
+}
+
+//void	C_RecipeMgrDlg::OnSetColorItem(NMHDR* pNMHDR, LRESULT* pResult)
+//{
+//	NM_GRIDVIEW* pNMLV = reinterpret_cast<NM_GRIDVIEW*>(pNMHDR);
+//	if (pNMLV->iColumn != 0) return;
+//
+//	int nSel = m_gridColorData.GetItemCurSel(0, 0);
+//	if (nSel <= theApp.m_arrColorPosZ.GetSize()) {
+//		m_gridColorData.SetItemText(0, 1, theApp.m_arrColorPosZ.GetAt(nSel));
+//	}
+//
+//	Invalidate(FALSE);
+//}
+
+void	C_RecipeMgrDlg::UpdateUI ()
+{
+	static BOOL bEnable = TRUE;
+
+	if (m_pRecipeMem->m_sRunState.m_nRunStatus == M_RUN_NONE) {
+		if (bEnable) {
+			EnableControls (TRUE);
+			m_pMakeCellDlg->EnableControls (TRUE);
+			m_pSelectCellDlg->EnableControls (TRUE);
+			m_pAlignRcpDlg->EnableControls (TRUE);
+
+			bEnable = FALSE;
+		}
+	}
+	else {
+		if (!bEnable) {
+			EnableControls (FALSE);
+			m_pMakeCellDlg->EnableControls (FALSE);
+			m_pSelectCellDlg->EnableControls (FALSE);
+			m_pAlignRcpDlg->EnableControls (FALSE);
+
+			bEnable = TRUE;
+		}
+	}
+
+	if (m_pRecipeMem->m_sRunState.m_nRunStatus == M_RUN_END) {	//완료 처리
+		if (m_pRecipeMem->m_sRunState.m_dwData1 == M_CMD_GLASS_GET_POS) {
+			m_pAlignRcpDlg->SetAlignPos (m_pRecipeMem->m_sRunState.m_fData);
+		}
+		else if (m_pRecipeMem->m_sRunState.m_dwData1 == M_CMD_PROBE_GET_POS) {
+			m_pAlignRcpDlg->SetProbePos (m_pRecipeMem->m_sRunState.m_fData);
+		}
+		else if (m_pRecipeMem->m_sRunState.m_dwData1 == M_CMD_GLASS_PROC) {
+			m_pAlignRcpDlg->SetAlignEndPos (m_pRecipeMem->m_sRunState.m_fData, 0);
+		}
+		else if (m_pRecipeMem->m_sRunState.m_dwData1 == M_CMD_PROBE_PROC) {
+			m_pAlignRcpDlg->SetAlignEndPos (m_pRecipeMem->m_sRunState.m_fData, 1);
+		}
+		else if (m_pRecipeMem->m_sRunState.m_dwData1 == M_CMD_STAGE_GET_POS) {
+			SetStageGetPos (m_pRecipeMem->m_sRunState.m_fData);
+		}
+		else if (m_pRecipeMem->m_sRunState.m_dwData1 == M_CMD_HEAD_GET_POS) {
+			SetHeadGetPos (m_pRecipeMem->m_sRunState.m_fData);
+		}
+
+		m_pRecipeMem->m_sRunState.m_nRunStatus = M_RUN_NONE;
+	}
+	else if (m_pRecipeMem->m_sRunState.m_nRunStatus == M_RUN_NG) { //실패 처리
+
+		m_pRecipeMem->m_sRunState.m_nRunStatus = M_RUN_NONE;
+	}
+}
+
+void	C_RecipeMgrDlg::AlignRcpEventProc (int nItem, int nItem2)
+{
+	m_pRecipeMem->m_sRunState.Clear ();
+
+	////m_dwData1
+	if		(nItem == M_ALIGN_SHOW_REFIMG)    m_pRecipeMem->m_sRunState.m_dwData1 = M_CMD_SHOW_REF_SET;
+	else if (nItem == M_ALIGN_PATTERN_SEARCH) m_pRecipeMem->m_sRunState.m_dwData1 = M_CMD_PATTERN_SEARCH;
+	else if (nItem == M_ALIGN_CCD_SET)		  m_pRecipeMem->m_sRunState.m_dwData1 = M_CMD_CCD_SET;
+	else if (nItem == M_ALIGN_GLASS_GET_POS)  m_pRecipeMem->m_sRunState.m_dwData1 = M_CMD_GLASS_GET_POS;
+	else if (nItem == M_ALIGN_GLASS_MOVE)	  m_pRecipeMem->m_sRunState.m_dwData1 = M_CMD_GLASS_MOVE;
+	else if (nItem == M_ALIGN_PROBE_GET_POS)  m_pRecipeMem->m_sRunState.m_dwData1 = M_CMD_PROBE_GET_POS;
+	else if (nItem == M_ALIGN_PROBE_MOVE)     m_pRecipeMem->m_sRunState.m_dwData1 = M_CMD_PROBE_MOVE;
+	else if (nItem == M_ALIGN_GLASS_PROC)	  m_pRecipeMem->m_sRunState.m_dwData1 = M_CMD_GLASS_PROC;
+	else if (nItem == M_ALIGN_PROBE_PROC)	  m_pRecipeMem->m_sRunState.m_dwData1 = M_CMD_PROBE_PROC;
+	else if (nItem == M_ALIGN_RESET)		  m_pRecipeMem->m_sRunState.m_dwData1 = M_CMD_RESET;
+	else if (nItem == M_RCP_LAMP_SET)		  m_pRecipeMem->m_sRunState.m_dwData1 = M_CMD_LAMP_SET;
+	else if (nItem == M_RCP_CONTACT_SET)	  m_pRecipeMem->m_sRunState.m_dwData1 = M_CMD_CONTACT_SET;
+	else if (nItem == M_RCP_STAGE_GET_POS)    m_pRecipeMem->m_sRunState.m_dwData1 = M_CMD_STAGE_GET_POS;
+	else if (nItem == M_RCP_STAGE_MOVE)		  m_pRecipeMem->m_sRunState.m_dwData1 = M_CMD_STAGE_MOVE;
+	else if (nItem == M_RCP_PROBE_MOVE)		  m_pRecipeMem->m_sRunState.m_dwData1 = M_CMD_STAGE_PROBE_MOVE;
+	else if (nItem == M_RCP_HEAD_GET_POS)	  m_pRecipeMem->m_sRunState.m_dwData1 = M_CMD_HEAD_GET_POS;
+	else if (nItem == M_RCP_HEAD_MOVE)		  m_pRecipeMem->m_sRunState.m_dwData1 = M_CMD_HEAD_MOVE;
+	else if (nItem == M_RCP_SRM_LAMP_SET)	  m_pRecipeMem->m_sRunState.m_dwData1 = M_CMD_SRM_LAMP_SET;
+
+	////m_dwData2
+	if (nItem == M_ALIGN_SHOW_REFIMG || nItem == M_ALIGN_PATTERN_SEARCH || nItem == M_ALIGN_CCD_SET || nItem == M_RCP_LAMP_SET || nItem == M_RCP_SRM_LAMP_SET) {
+		if		(/*m_pAlignRcpDlg->GetSelHead ()*/nItem2 == ALG_FRONT_LEFT)  m_pRecipeMem->m_sRunState.m_dwData2 = M_HEAD_FRONT_LEFT;
+		else if (/*m_pAlignRcpDlg->GetSelHead ()*/nItem2 == ALG_FRONT_RIGHT) m_pRecipeMem->m_sRunState.m_dwData2 = M_HEAD_FRONT_RIGHT;
+		else if (/*m_pAlignRcpDlg->GetSelHead ()*/nItem2 == ALG_BACK_LEFT)   m_pRecipeMem->m_sRunState.m_dwData2 = M_HEAD_BACK_LEFT;
+		else if (/*m_pAlignRcpDlg->GetSelHead ()*/nItem2 == ALG_BACK_RIGHT)  m_pRecipeMem->m_sRunState.m_dwData2 = M_HEAD_BACK_RIGHT;
+		else if (/*m_pAlignRcpDlg->GetSelHead ()*/nItem2 == ALG_FRONT)  m_pRecipeMem->m_sRunState.m_dwData2 = M_HEAD_FRONT;
+		else if (/*m_pAlignRcpDlg->GetSelHead ()*/nItem2 == ALG_BACK)  m_pRecipeMem->m_sRunState.m_dwData2 = M_HEAD_BACK;
+		else  m_pRecipeMem->m_sRunState.m_dwData2 = 0;
+	}
+	else if (nItem == M_RCP_CONTACT_SET) {
+//		if (nItem2 == 4) m_pRecipeMem->m_sRunState.m_dwData2 = M_PROBE_MOVE_POS; //Contact + OD
+		if (nItem2 == 0 || nItem2 == 1) m_pRecipeMem->m_sRunState.m_dwData2 = M_PROBE_MOVE_POS; //Ready or Pre-Contact
+		else							m_pRecipeMem->m_sRunState.m_dwData2 = M_PROBE_MOVE_OD;  //Contact + OD
+	}
+	else if (nItem == M_RCP_HEAD_GET_POS || nItem == M_RCP_HEAD_MOVE) {
+		if (m_nHeadSel == RCP_HEAD_LEFT) m_pRecipeMem->m_sRunState.m_dwData2 = M_HEAD_LEFT;
+		else							 m_pRecipeMem->m_sRunState.m_dwData2 = M_HEAD_RIGHT;
+	}
+
+	////m_dwData3
+	if (nItem == M_RCP_HEAD_GET_POS || nItem == M_RCP_HEAD_MOVE) {
+		if		(m_nHeadMode == RCP_MODE_REVIEW)  m_pRecipeMem->m_sRunState.m_dwData3 = M_TYPE_REVIEW;
+		else if (m_nHeadMode == RCP_MODE_SPEC)    m_pRecipeMem->m_sRunState.m_dwData3 = M_TYPE_SPEC;
+		else if (m_nHeadMode == RCP_MODE_QUALITY) m_pRecipeMem->m_sRunState.m_dwData3 = M_TYPE_QUALITY;
+		else if (m_nHeadMode == RCP_MODE_COLOR)   m_pRecipeMem->m_sRunState.m_dwData3 = M_TYPE_COLOR;
+		else if (m_nHeadMode == RCP_MODE_ANGLE)   m_pRecipeMem->m_sRunState.m_dwData3 = M_TYPE_ANGLE;		
+	}
+
+	////nData or fData
+	if (nItem == M_ALIGN_PATTERN_SEARCH) {
+		wcscpy_s (m_pRecipeMem->m_sRunState.m_chData1, m_pAlignRcpDlg->GetRefImageName ());
+		m_pRecipeMem->m_sRunState.m_nData[0] = m_pAlignRcpDlg->GetMatchingScore ();
+
+	}
+	else if	(nItem == M_ALIGN_CCD_SET)	  m_pAlignRcpDlg->GetCcdCurrentVal (m_pRecipeMem->m_sRunState.m_nData);
+	else if (nItem == M_ALIGN_GLASS_MOVE)
+	{ 
+		m_pRecipeMem->m_sRunState.m_nData[0] = m_pAlignRcpDlg->GetProbeSel();
+		m_pAlignRcpDlg->GetAlignPos(m_pRecipeMem->m_sRunState.m_fData);
+	}
+	else if (nItem == M_ALIGN_PROBE_MOVE) {
+		m_pRecipeMem->m_sRunState.m_nData[0] = m_pAlignRcpDlg->GetProbeSel ();
+		m_pAlignRcpDlg->GetProbePos (m_pRecipeMem->m_sRunState.m_fData);
+	}
+	else if (nItem == M_ALIGN_GLASS_PROC || nItem == M_ALIGN_PROBE_PROC) {
+		m_pRecipeMem->m_sAlign.Clear ();
+
+		if		(nItem == M_ALIGN_GLASS_PROC) m_pAlignRcpDlg->GetGlassAlignData (TRUE, &m_pRecipeMem->m_sAlign.m_sGlsAlign);
+		else if (nItem == M_ALIGN_PROBE_PROC) {
+			m_pRecipeMem->m_sRunState.m_nData[0] = m_pAlignRcpDlg->GetProbeSel ();
+			m_pAlignRcpDlg->GetProbeAlignData (TRUE, &m_pRecipeMem->m_sAlign.m_sProbeAlign);
+		}
+
+		m_pAlignRcpDlg->GetCcdSetMntData (TRUE, &m_pRecipeMem->m_sAlign.m_sCcdSet);
+		m_pAlignRcpDlg->GetRefImageData (TRUE, &m_pRecipeMem->m_sAlign);
+		m_pAlignRcpDlg->GetMarginData (TRUE, &m_pRecipeMem->m_sAlign.m_sMargin);
+	}
+	else if (nItem == M_RCP_LAMP_SET) {
+		if (!GetLampData (m_pRecipeMem->m_sRunState.m_nData, nItem2)) return;
+	}
+	else if (nItem == M_RCP_CONTACT_SET) {
+		if (!GetContactData (m_pRecipeMem->m_sRunState.m_fData, nItem2)) return;
+	}
+	else if (nItem == M_RCP_STAGE_MOVE || nItem == M_RCP_PROBE_MOVE) {
+		if (!GetStageMoveData (m_pRecipeMem->m_sRunState.m_fData)) return;
+	}
+	else if (nItem == M_RCP_HEAD_MOVE) {
+		if (!GetHeadGetPos (m_pRecipeMem->m_sRunState.m_fData)) return;
+	}
+	else if (nItem == M_RCP_SRM_LAMP_SET) {
+		if (!GetSRMLampData(m_pRecipeMem->m_sRunState.m_nData, nItem2)) return;
+	}
+
+	//진행 요청
+	m_pRecipeMem->m_sRunState.m_nRunStatus = M_RUN_REQ;
+}
+
+void	C_RecipeMgrDlg::WritePPIDFile (CString strModel)
+{
+	m_iniPPID.WriteProfileInt (strModel, _T("m_nCellWidthNum"), g_inRcpInfo.GetCellCount (0));
+	m_iniPPID.WriteProfileInt (strModel, _T("m_nCellHeightNum"), g_inRcpInfo.GetStickCount ());
+
+	m_iniPPID.WriteProfileInt (strModel, _T("m_nAttachDirection"), 1);
+	m_iniPPID.WriteProfileInt (strModel, _T("m_nProbePinCompCount"), 1);
+	m_iniPPID.WriteProfileInt (strModel, _T("m_nProbeContactCellIdx"), 1);
+	m_iniPPID.WriteProfileInt (strModel, _T("m_nProbeContactPadIdx"), 1);
+
+	m_iniPPID.WriteProfileString (strModel, _T("m_lfCellSizeWidth"), dfcStr (g_inRcpInfo.m_recipeMgr.m_sMap.m_fCellSize.x));
+	m_iniPPID.WriteProfileString (strModel, _T("m_lfCellSizeHeight"), dfcStr (g_inRcpInfo.m_recipeMgr.m_sMap.m_fCellSize.y));
+	m_iniPPID.WriteProfileString (strModel, _T("m_lfGlassSizeWidth"), dfcStr ((double)RCP_GLASS_SIZE_X));
+	m_iniPPID.WriteProfileString (strModel, _T("m_lfGlassSizeHeight"), dfcStr ((double)RCP_GLASS_SIZE_Y));
+
+	for (int i = 0; i < CAD_ROW_P1_1; i++) {//CAD_ROW_A ~ CAD_ROW_X7
+		m_iniPPID.WriteProfileString (strModel, dfcStr (_T("m_lfCellDist[%d]"), i), dfcStr (g_inRcpInfo.m_recipeMgr.m_sMap.m_fCadData[i]));
+	}
+
+	for (int i = 0; i < CAD_ROW_END - CAD_ROW_P1_1; i++) {//CAD_ROW_P1_1 ~ CAD_ROW_P5_2
+		m_iniPPID.WriteProfileString (strModel, dfcStr (_T("m_szMachingProbeRFID[%d]"), i), g_inRcpInfo.m_recipeMgr.m_sMap.m_chCadData[i]);
+	}
+}
+
+void C_RecipeMgrDlg::MakeRcpList ()
+{
+	CString strPath = theApp.m_strRcpFolder + _T("*.rcp");
+	CStringArray arrRcp;
+	arrRcp.RemoveAll ();
+
+	//파일 찾기
+	BOOL bExist = FALSE;
+	CFileFind finder;
+	BOOL bWorking = finder.FindFile (strPath);
+	while (bWorking) {
+		bWorking = finder.FindNextFile ();
+		if (finder.IsDots () || finder.IsDirectory ()) continue;
+
+		arrRcp.Add (finder.GetFileName ());
+	}
+	finder.Close ();
+	//
+
+	//List 생성
+	CString strTime;
+	int nCnt = (int) arrRcp.GetSize ();
+
+	CStdioFile File;
+	if (!File.Open(theApp.m_strRcpListPath, CFile::modeCreate | CFile::modeWrite))
+		return;
+
+	WriteString(&File, _T("[RECIPE]"));
+	WriteString(&File, dfcStr(_T("Num=%04d"), nCnt));
+
+	CFileStatus fs;
+	for (int i = 0; i < nCnt; i++) {
+		if (!CFile::GetStatus(dfcStr(_T("%s%s"), theApp.m_strRcpFolder, arrRcp.GetAt(i)), fs)) continue;
+
+		strTime.Format(_T("%4d%02d%02d%02d%02d%02d"), fs.m_mtime.GetYear(), fs.m_mtime.GetMonth(), fs.m_mtime.GetDay(), fs.m_mtime.GetHour(), fs.m_mtime.GetMinute(), fs.m_mtime.GetSecond());
+		//WriteString(&File, dfcStr(_T("%d=0000^%-30s^%s^%s^"), i + 1, arrRcp.GetAt(i).Left(arrRcp.GetAt(i).GetLength() - 4), _T("HMI"), strTime));
+		WriteString(&File, dfcStr(_T("%d=0000^%-30s^%s^%s^"), i + 1, arrRcp.GetAt(i).Left(arrRcp.GetAt(i).GetLength() - 4), _T("OCP"), strTime));		// LYS 2026-06-26 HMI -> OCP Change
+	}
+
+	File.Close();
+
+//	CFile file (theApp.m_strRcpListPath, CFile::modeCreate | CFile::modeWrite);
+//	CArchive ar (&file, CArchive::store);
+	////ar.WriteString (_T("[RECIPE]\r\n"));
+	////ar.WriteString (dfcStr (_T("Num=%04d\r\n"), nCnt));
+
+	////CFileStatus fs;
+	////for (int i = 0; i < nCnt; i++) {
+	////	if (!CFile::GetStatus (dfcStr (_T("%s%s"), theApp.m_strRcpFolder, arrRcp.GetAt (i)), fs)) continue;
+
+	////	strTime.Format (_T("%4d%02d%02d%02d%02d%02d"), fs.m_mtime.GetYear (), fs.m_mtime.GetMonth (), fs.m_mtime.GetDay (), fs.m_mtime.GetHour (), fs.m_mtime.GetMinute (), fs.m_mtime.GetSecond ());
+	////	ar.WriteString (dfcStr (_T("%d=0000^%-30s^%s^%s^\r\n"), i + 1, arrRcp.GetAt (i).Left (arrRcp.GetAt (i).GetLength () - 4), _T("OCP"), strTime));
+	////}
+
+	////ar.Close();
+	////file.Close();
+	//
+
+}
+
+// LYS 2026-07-02 TestMode dialog launch (same pattern as OnRecipeAlign)
+void C_RecipeMgrDlg::OnBtnTestMode()
+{
+	if (m_pTestModeDlg && !m_pTestModeDlg->IsWindowVisible()) {
+		m_pTestModeDlg->ShowWindow(SW_SHOW);
+	}
+}

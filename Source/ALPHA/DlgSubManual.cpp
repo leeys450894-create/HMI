@@ -133,7 +133,7 @@ BOOL CDlgSubManual::OnInitDialog()
 	//--------------------------------------------------------------------
 	//4. AUTO CONTACT 생성
 	//--------------------------------------------------------------------
-	m_pDlgSub_AutoContact = new CDlgSubManual_AutoContact();
+	m_pDlgSub_AutoContact = new CDlgSubManual_AutoContact(m_pAuroraMgr);	// LYS 2026-08-10 AutoContact Phase 1
 	m_pDlgSub_AutoContact->Create(IDD_DLG_SUB_MANUAL_AUTO_CONTACT, this);
 	m_pDlgSub_AutoContact->GetWindowRect(r);
 	m_pDlgSub_AutoContact->MoveWindow(rtROI.left + 2, rtROI.top, r.Width(), r.Height());
@@ -142,7 +142,7 @@ BOOL CDlgSubManual::OnInitDialog()
 	//--------------------------------------------------------------------
 	//5. AGING TEST 생성 
 	//--------------------------------------------------------------------
-	m_pDlgSub_AgingTest = new CDlgSubManual_AgingTest();
+	m_pDlgSub_AgingTest = new CDlgSubManual_AgingTest(m_pAuroraMgr);	// LYS 2026-08-06 Phase 1
 	m_pDlgSub_AgingTest->Create(IDD_DLG_SUB_MANUAL_AGING_TEST, this);
 	m_pDlgSub_AgingTest->GetWindowRect(r);
 	m_pDlgSub_AgingTest->MoveWindow(rtROI.left + 2, rtROI.top, r.Width(), r.Height());
@@ -151,7 +151,7 @@ BOOL CDlgSubManual::OnInitDialog()
 	//--------------------------------------------------------------------
 	//6. AGING SET 생성 
 	//--------------------------------------------------------------------
-	m_pDlgSub_AgingSet = new CDlgSubManual_AgingSet();
+	m_pDlgSub_AgingSet = new CDlgSubManual_AgingSet(m_pAuroraMgr);	// LYS 2026-08-05 Phase 1
 	m_pDlgSub_AgingSet->Create(IDD_DLG_SUB_MANUAL_AGING_SET, this);
 	m_pDlgSub_AgingSet->GetWindowRect(r);
 	m_pDlgSub_AgingSet->MoveWindow(rtROI.left + 2, rtROI.top, r.Width(), r.Height());
@@ -191,7 +191,7 @@ void CDlgSubManual::RefreshFileView(BOOL bShow)
 	// jsyoon 2022.06.10 not used
 	GetDlgItem(IDC_BUTTON_MANUAL_IONIZER)->ShowWindow(SW_HIDE);
 	GetDlgItem(IDC_BUTTON_MANUAL_AGING_TEST)->ShowWindow(SW_SHOW);
-	GetDlgItem(IDC_BUTTON_MANUAL_5)->ShowWindow(SW_HIDE);
+	GetDlgItem(IDC_BUTTON_MANUAL_5)->ShowWindow(SW_SHOW);
 	GetDlgItem(IDC_BUTTON_MANUAL_AGING_SET)->ShowWindow(SW_SHOW);
 	///
 

@@ -796,8 +796,8 @@ bool CIOMapControlMgr::ReadAdressFileCSV(CString strFilename)
 
 	fileConfig.Close();
 
-	// LYS 2026-07-28 startup verification: valid rows must equal enum count (index binding).
-	// A mismatch means PLC signal mapping is (or will be) SHIFTED - warn immediately at startup.
+	// LYS 2026-07-28 기동 검증 - 유효 행 수와 enum 수가 같아야 한다(행 순서가 곧 인덱스).
+	// 불일치는 PLC 신호 매핑이 밀렸다는 뜻이므로 기동 시 즉시 경고한다.
 	if (nNext + 4000 != (int)PLC_MBIT_COUNT || strBadRows.IsEmpty() == FALSE)
 	{
 		CString strMsg;

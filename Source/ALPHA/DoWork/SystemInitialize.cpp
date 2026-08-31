@@ -21,7 +21,7 @@ CSystemInitialize::CSystemInitialize(stAuroraMgrPool &MgrPool)
 {
     m_strSeqType = _T("SEQUENCE_ITEM_INITIALIZE");
     m_strSeqComm = _T("TCPIP");
-    m_strSeqCorp = _T("KMAC");
+    m_strSeqCorp = _T("HBS");
     m_strSeqName = _T("SEQ INITIALIZE");
     m_strSeqGUID = _T("BFABDAE7-1381-4D6C-BC33-0610D62606F0");
     m_strSeqDesc = _T("SYSTEM INITIALIZE");

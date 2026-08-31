@@ -23,7 +23,7 @@ CDoWorkGlassMeasure::CDoWorkGlassMeasure(stAuroraMgrPool &MgrPool)
 {
 	m_strSeqType = _T("SEQUENCE_ITEM_DWGLASS_SEQ_MEASURE");
 	m_strSeqComm = _T("TCPIP");
-	m_strSeqCorp = _T("KMAC");
+	m_strSeqCorp = _T("HBS");
 	m_strSeqName = _T("GLASS 6_MEASURE");
 	m_strSeqGUID = _T("03F88644-473D-4B03-9BC5-E09B679A4C57");
 	m_strSeqDesc = _T("GLASS MEASURE");
@@ -44,6 +44,7 @@ CDoWorkGlassMeasure::CDoWorkGlassMeasure(stAuroraMgrPool &MgrPool)
 	m_vecSeqStep.push_back(dynamic_cast<CDoWorkGlassMeasureStep*>(new CDoWorkGlassMeasureStep_OST(this, m_pMeasSeqItemEngine)));
 	m_vecSeqStep.push_back(dynamic_cast<CDoWorkGlassMeasureStep*>(new CDoWorkGlassMeasureStep_RTEST(this, m_pMeasSeqItemEngine)));
 	m_vecSeqStep.push_back(dynamic_cast<CDoWorkGlassMeasureStep*>(new CDoWorkGlassMeasureStep_AGING(this, m_pMeasSeqItemEngine)));
+	m_vecSeqStep.push_back(dynamic_cast<CDoWorkGlassMeasureStep*>(new CDoWorkGlassMeasureStep_AGING_PTN(this, m_pMeasSeqItemEngine)));	// LYS 2026-08-06 AgingCycle E3: per-item lighting
 
 	m_vecSeqStep.push_back(dynamic_cast<CDoWorkGlassMeasureStep*>(new CDoWorkGlassMeasureStep_Measure_WAD(this, m_pMeasSeqItemEngine)));			// 특성모드 이동 & 검사
 	m_vecSeqStep.push_back(dynamic_cast<CDoWorkGlassMeasureStep*>(new CDoWorkGlassMeasureStep_Measure_ANGLE(this, m_pMeasSeqItemEngine)));			// 시야각위치 이동 & 검사
@@ -160,11 +161,24 @@ void CDoWorkGlassMeasure::ThreadRun()
 	// LYS 2026-07-03 Resume: clear resume mode flag after applying start index
 	CSystemParamShare::GetInstance()->SetResumeMode(false);
 
+	// LYS 2026-08-06 AgingCycle E3: locate aging loop-back step indexes by name
+	long nStepIdxAging = -1, nStepIdxVision = -1;
+	for (size_t k = 0; k < m_vecSeqStep.size(); ++k)
+	{
+		if (m_vecSeqStep[k]->GetName() == _T("Aging"))  nStepIdxAging = (long)k;
+		if (m_vecSeqStep[k]->GetName() == _T("VISION")) nStepIdxVision = (long)k;
+	}
+
 	for (size_t i = nStartStick; i < nStepIndex; i++)		// N Stick
 	{
 		CMCCLogMgr::GetInstance()->SetMCC_Action(MCC_A_STEP_MEAS_N, true, 0);
 		
 		GoToInitStep();  // Init
+
+		// LYS 2026-08-06 AgingCycle E3: per-stick aging-list cycle begin (OCP DoWorkStartMeasOCP_A)
+		bool bAgingCycle = false;
+		if (m_pMeasSeqItemEngine != NULL && nStepIdxAging >= 0 && nStepIdxVision >= 0)
+			bAgingCycle = m_pMeasSeqItemEngine->AgingCycleBegin();
 
 		while (true)
 		{
@@ -187,6 +201,13 @@ void CDoWorkGlassMeasure::ThreadRun()
 					if (pSeqItem->Run() == true) // 동작
 					{
 						m_pShareItem->GetSeqTactTimeMgrPtr()->SetSeqItemTimeED(1, strName, GetCurStep());	// End Time
+
+						// LYS 2026-08-06 AgingCycle E3: more aging items -> jump back to AGING step
+						if (bAgingCycle && GetCurStep() == nStepIdxVision && m_pMeasSeqItemEngine->AgingCycleNextItem())
+						{
+							GoToStep(nStepIdxAging);
+							continue;
+						}
 
 						GoToNextStep();
 					}
@@ -223,6 +244,13 @@ void CDoWorkGlassMeasure::ThreadRun()
 					if (pSeqItem->Run() == true) // 동작
 					{
 						m_pShareItem->GetSeqTactTimeMgrPtr()->SetSeqItemTimeED(1, strName, GetCurStep());  // End Time
+
+							// LYS 2026-08-06 AgingCycle E3: more aging items -> jump back to AGING step
+							if (bAgingCycle && GetCurStep() == nStepIdxVision && m_pMeasSeqItemEngine->AgingCycleNextItem())
+							{
+								GoToStep(nStepIdxAging);
+								continue;
+							}
 
 						if (GetCurStep() == GetExitStepIndex() - 1)  
 						{
@@ -277,6 +305,9 @@ void CDoWorkGlassMeasure::ThreadRun()
 		}
 
 		CMCCLogMgr::GetInstance()->SetMCC_Action(MCC_A_STEP_MEAS_N, false, 0);
+
+		// LYS 2026-08-06 AgingCycle E3: per-stick aging cycle end (progress reset)
+		if (m_pMeasSeqItemEngine != NULL) m_pMeasSeqItemEngine->AgingCycleEnd();
 
 		// LYS 2026-07-03 Resume Save: stick completed
 		if (!bExis)

@@ -64,6 +64,11 @@ CChartOrbit::CChartOrbit()
 	m_dCurPosY = 0.0;
 
 	m_nProbe = 1;
+
+	// LYS 2026-08-26 기본은 전 카드 사용. 미장착 카드는 호출부에서 끈다(P5만).
+	for (int ipc = 0; ipc < INT_USE_MAX_PROBE_DATA; ipc++)
+		m_bProbeCardUse[ipc] = TRUE;
+
 	m_px1	= NULL;
 	m_ppy1	= NULL;
 
@@ -80,7 +85,7 @@ CChartOrbit::CChartOrbit()
 	m_iChart = 0;
 
 	m_nData1 = 1;
-	m_dCardWidth = 30;
+	m_dCardWidth = 250;
 
 	m_bUseGlassVcm = FALSE;
 	m_nCntGlassVcm = 5;
@@ -630,6 +635,48 @@ void CChartOrbit::SetLoaderSize(double dXMax, double dXMin, double dYMax, double
 	m_dLYMin = dYMin;
 }
 
+// LYS 2026-08-26 프로브 카드(시리즈 4..8 = P1..P5)를 표시 범위 밖으로 옮기고 라벨을 지운다.
+// SetProbeCardSize()가 5개를 전부 그리므로 미장착 카드는 제거
+void CChartOrbit::HideProbeCard(int nProbeID)
+{
+	if (nProbeID < 0 || nProbeID >= INT_USE_MAX_PROBE_DATA)
+		return;
+
+	if (m_pData1 != NULL)
+	{
+		for (int i = 0; i < CHART_DATA_ITEM_END; i++)
+		{
+			m_pData1->SetXElement(4 + nProbeID, i, XRT_HUGE_VAL);
+			m_pData1->SetYElement(4 + nProbeID, i, XRT_HUGE_VAL);
+		}
+	}
+
+	if (m_pTextItem != NULL && m_pTextItem[CHART_TEXT_PROBE1 + nProbeID] != NULL)
+	{
+		CString strEmpty;	strEmpty.Empty();
+		TCHAR* pStr[2];
+		pStr[0] = (TCHAR*)(LPCTSTR)strEmpty;
+		pStr[1] = NULL;
+		m_pTextItem[CHART_TEXT_PROBE1 + nProbeID]->SetStrings(pStr);
+	}
+}
+
+void CChartOrbit::SetProbeCardUse(int nProbeID, BOOL bUse)
+{
+	if (nProbeID < 0 || nProbeID >= INT_USE_MAX_PROBE_DATA)
+		return;
+
+	m_bProbeCardUse[nProbeID] = bUse;
+
+	// 차트 데이터 생성 전에도 호출 가능. 그 경우 이후 SetProbeCardSize()가 플래그를 따른다.
+	if (bUse != TRUE)
+	{
+		SetRepaint(FALSE);
+		HideProbeCard(nProbeID);
+		SetRepaint(TRUE);
+	}
+}
+
 void CChartOrbit::SetProbeCardSize(double dXMax, double dXMin, double dYMax, double dYMin)
 {	
 	SetRepaint(FALSE);
@@ -646,6 +693,10 @@ void CChartOrbit::SetProbeCardSize(double dXMax, double dXMin, double dYMax, dou
 
 	for (size_t i = 0; i < INT_USE_MAX_PROBE_DATA + 1; i++)		// ACX + PROBE
 	{
+		// LYS 2026-08-26 i==0은 ACX, i>=1이 프로브 카드. 미장착 카드는 건너뛴다
+		if (i > 0 && m_bProbeCardUse[i - 1] != TRUE)
+			continue;
+
 		m_pData1->SetXData(3 + i, px, CHART_DATA_ITEM_END);
 		m_pData1->SetYData(3 + i, py, CHART_DATA_ITEM_END);
 	}
@@ -713,12 +764,20 @@ void CChartOrbit::SetCurPos(int iProbe, BOOL bDraw, double x, double y)
 			break;
 		case -5:
 	//		strHead.Format(_T("P%d"), 5);
-			strHead.Format(_T("GAN"));
+			strHead.Format(_T("P"));
 			nProbeID = 4;
 			break;
 		default:
 			break;
 		}
+		// LYS 2026-08-26 미장착 카드는 건너뛰지 않고 숨김 처리한다(이미 그려져 있을 수 있음).
+		if (m_bProbeCardUse[nProbeID] != TRUE)
+		{
+			HideProbeCard(nProbeID);
+			SetRepaint(TRUE);
+			return;
+		}
+
 		int iProbeCard = 4;
 		iProbeCard += nProbeID; // ((iProbe * -1) - 1);
 

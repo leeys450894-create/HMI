@@ -1,0 +1,2386 @@
+//#include "stdafx.h"
+#include "pch.h"
+#include "CommTcpIpFactoryMgr.h"
+#include "SystemConfigMgr.h"	// LYS 2026-06-26 OCP option
+
+#include "NetworkConfigMgr.h"
+//#include "CommTcpIpObjectUTG.h"
+#include "..\Alarm\AlarmController.h"
+#include "CommTcpIpObjectVision.h"
+#include "CommTcpIpObjectColor.h"
+#include "CommTcpIpObjectWAD.h"
+#include "CommTcpIpObjectAngle.h"
+#include "CommTcpIpObjectPG.h"
+#include "CommTcpIpObjectAgingPG.h"
+#include "CommTcpIpObjectLCR.h"
+#include "CommTcpIpObjectTSP.h"
+#include "CommTcpIpObjectCIM.h"
+#include "CCommTcpIpObjectSysTime.h"
+#include "CCommTcpIpObjectMotion.h"
+#include "CommTcpIpObjectPGMon.h"	// LYS 2026-07-29 ELP ElecBox monitor
+
+
+#ifdef _DEBUG
+#define new DEBUG_NEW
+#endif
+
+/**
+ *
+ * @brief 외부 프로그램 통신명령 정의
+ * @details 외부프로그램과 통신방식이 TCP/IP 인 경우 추가
+ * @author
+ * @date
+ * @version 0.0.1
+ *
+ */
+CCommTcpIpFactoryMgr::CCommTcpIpFactoryMgr(stAuroraMgrPool &MgrPool)
+    : m_MgrPool_link(MgrPool)
+{
+	SetName(_T("COMM_TCPIP_FACTORY_MGR"));
+	
+	m_pCommTcpIpObjUTG1	= nullptr;
+	m_pCommTcpIpObjUTG2 = nullptr;
+
+	for (size_t i = 0; i < 2; i++)
+	{
+		m_pCommTcpIpObj_Vision[i] = nullptr;
+		m_pCommTcpIpObj_Color[i] = nullptr;
+		m_pCommTcpIpObj_Angle[i] = nullptr;
+	}
+	
+	m_pCommTcpIpObj_WAD = nullptr;
+	m_pCommTcpIpObj_PG = nullptr;
+	m_pCommTcpIpObj_AgingPG = nullptr;
+	m_pCommTcpIpObj_LCR = nullptr;
+//	m_pCommTcpIpObj_TSP = nullptr;
+	m_pCommTcpIpObj_CIM = nullptr;
+	m_pCommTcpIpObj_SysTime = nullptr;
+	m_pCommTcpIpObj_VisMotion = nullptr;
+	m_pCommTcpIpObj_PGMon = nullptr;	// LYS 2026-07-29
+	
+	// jsyoon 2022.10.19 change
+	for (size_t i = 0; i < 6; i++)
+	{
+		m_pCommTcpIpObj_TSP[i] = nullptr;
+	}
+	
+
+	m_MgrPool_link.pCommTcpIpFactoryMgr = this;
+
+	for (long i = 0; i < MgrPool.pNetworkConfigMgr->GetCount(); i++)
+	{
+		CreateComm(i);
+	}
+
+	ZeroMemory(&m_bUseMeas, sizeof(m_bUseMeas));
+	ZeroMemory(&m_nAreaNum, sizeof(m_nAreaNum));
+	m_nTimeOut = 0;
+}
+
+CCommTcpIpFactoryMgr::~CCommTcpIpFactoryMgr()
+{
+	Finalize();
+}
+
+void CCommTcpIpFactoryMgr::Finalize()
+{
+    //----------------------------------------------------------------------
+    // 데이터 삭제
+    //----------------------------------------------------------------------
+	for (long i = 0; i < m_MgrPool_link.pNetworkConfigMgr->GetCount(); i++)
+	{
+		DeleteComm(i);
+	}
+}
+
+void CCommTcpIpFactoryMgr::DisConnect()
+{
+	for (long i = 0; i < m_MgrPool_link.pNetworkConfigMgr->GetCount(); i++)
+	{
+		//		DeleteComm(i);
+		long lDeviceIndex = m_MgrPool_link.pNetworkConfigMgr->GetParam_DeviceIndex(i);
+		long lMeasType = m_MgrPool_link.pNetworkConfigMgr->GetParam_MeasType(i);
+
+
+		switch (lMeasType)
+		{
+		case enumTCPIpFactorytID_VISION: // Vision
+		{
+			if (m_pCommTcpIpObj_Vision[lDeviceIndex] != nullptr)
+			{
+				m_pCommTcpIpObj_Vision[lDeviceIndex]->CloseConnect();
+			}
+		}
+		break;
+		case enumTCPIpFactorytID_COLOR: // Color
+		{
+			if (m_pCommTcpIpObj_Color[lDeviceIndex] != nullptr)
+			{
+				m_pCommTcpIpObj_Color[lDeviceIndex]->CloseConnect();
+			}
+		}
+		break;
+		case enumTCPIpFactorytID_ANGLE: // Angle
+		{
+			if (m_pCommTcpIpObj_Angle[lDeviceIndex] != nullptr)
+			{
+				m_pCommTcpIpObj_Angle[lDeviceIndex]->CloseConnect();
+			}
+		}
+		break;
+		case enumTCPIpFactorytID_WAD: // WAD
+		{
+			if (m_pCommTcpIpObj_WAD != nullptr)
+			{
+				m_pCommTcpIpObj_WAD->CloseConnect();
+			}
+		}
+		break;
+		case enumTCPIpFactorytID_PG: // PG
+		{
+			if (m_pCommTcpIpObj_PG != nullptr)
+			{
+				m_pCommTcpIpObj_PG->CloseConnect();
+			}
+		}
+		break;
+		case enumTCPIpFactorytID_TSP: // TSP
+		{
+			// jsyoon 2022.10.19 change
+			if (m_pCommTcpIpObj_TSP[lDeviceIndex] != nullptr)
+			{
+				m_pCommTcpIpObj_TSP[lDeviceIndex]->CloseConnect();
+			}
+			
+		/*	if (m_pCommTcpIpObj_TSP != nullptr)
+			{
+				m_pCommTcpIpObj_TSP->CloseConnect();
+			}*/
+		}
+		break;
+		case enumTCPIpFactorytID_LCR: // LCR
+		{
+			if (m_pCommTcpIpObj_LCR != nullptr)
+			{
+				m_pCommTcpIpObj_LCR->CloseConnect();
+			}
+		}
+		break;
+		case enumTCPIpFactorytID_AGING: // AGING PG
+		{
+			if (m_pCommTcpIpObj_AgingPG != nullptr)
+			{
+				m_pCommTcpIpObj_AgingPG->CloseConnect();
+			}
+		}
+		break;
+		case enumTCPIpFactorytID_CIM: // CIM
+		{
+			if (m_pCommTcpIpObj_CIM != nullptr)
+			{
+				m_pCommTcpIpObj_CIM->CloseConnect();
+			}
+		}
+		break;
+		case enumTCPIpFactorytID_TIME:
+		{
+			if (m_pCommTcpIpObj_SysTime != nullptr)
+			{
+				m_pCommTcpIpObj_SysTime->CloseConnect();
+			}
+		}
+		break;
+		case enumTCPIpFactorytID_MOTION: // CIM
+		{
+			if (m_pCommTcpIpObj_VisMotion != nullptr)
+			{
+				m_pCommTcpIpObj_VisMotion->CloseConnect();
+			}
+		}
+		break;
+		case enumTCPIpFactorytID_PG_MON: // LYS 2026-07-29 ELP ElecBox monitor
+		{
+			if (m_pCommTcpIpObj_PGMon != nullptr)
+			{
+				m_pCommTcpIpObj_PGMon->CloseConnect();
+			}
+		}
+		break;
+		default:
+			break;
+		}
+		
+	}
+}
+
+void CCommTcpIpFactoryMgr::CreateComm(long nID)
+{
+	long lDeviceIndex = m_MgrPool_link.pNetworkConfigMgr->GetParam_DeviceIndex(nID);
+	long lMeasType = m_MgrPool_link.pNetworkConfigMgr->GetParam_MeasType(nID);
+	
+	//switch (nID)
+	switch (lMeasType)
+	{
+		//case enumTCPIpFactorytID_UTG:	// UTG
+		//{
+		//	/*if (lDeviceIndex != 0)
+		//		m_pCommTcpIpObjUTG2 = new CCommTcpIpObjectUTG(lDeviceIndex, m_MgrPool_link);
+		//	else
+		//		m_pCommTcpIpObjUTG1 = new CCommTcpIpObjectUTG(lDeviceIndex, m_MgrPool_link);*/
+		//}
+		//break;
+		case enumTCPIpFactorytID_VISION: // Vision
+		{
+			if(m_pCommTcpIpObj_Vision[lDeviceIndex] == nullptr)
+			   m_pCommTcpIpObj_Vision[lDeviceIndex] = new CCommTcpIpObjectVision(nID, m_MgrPool_link);
+		}
+		break;
+		case enumTCPIpFactorytID_COLOR: // Color
+		{
+			if (m_pCommTcpIpObj_Color[lDeviceIndex] == nullptr)
+				m_pCommTcpIpObj_Color[lDeviceIndex] = new CCommTcpIpObjectColor(nID, m_MgrPool_link);
+		}
+		break;
+		case enumTCPIpFactorytID_ANGLE: // Angle
+		{
+			if (m_pCommTcpIpObj_Angle[lDeviceIndex] == nullptr)
+				m_pCommTcpIpObj_Angle[lDeviceIndex] = new CCommTcpIpObjectAngle(nID, m_MgrPool_link);
+		}
+		break;
+		case enumTCPIpFactorytID_WAD: // WAD
+		{
+			if (m_pCommTcpIpObj_WAD == nullptr)
+				m_pCommTcpIpObj_WAD = new CCommTcpIpObjectWAD(nID, m_MgrPool_link);
+		}
+		break;
+		case enumTCPIpFactorytID_PG: // PG
+		{
+			if (m_pCommTcpIpObj_PG == nullptr)
+				m_pCommTcpIpObj_PG = new CCommTcpIpObjectPG(nID, m_MgrPool_link);
+		}
+		break;
+		case enumTCPIpFactorytID_TSP: // TSP
+		{
+			// jsyoon 2022.19.19 change
+			if (m_pCommTcpIpObj_TSP[lDeviceIndex] == nullptr)
+				m_pCommTcpIpObj_TSP[lDeviceIndex] = new CCommTcpIpObjectTSP(nID, m_MgrPool_link);
+
+		/*	if (m_pCommTcpIpObj_TSP == nullptr)
+				m_pCommTcpIpObj_TSP = new CCommTcpIpObjectTSP(nID, m_MgrPool_link);*/
+		}
+		break;
+		case enumTCPIpFactorytID_LCR: // LCR
+		{
+			if (m_pCommTcpIpObj_LCR == nullptr)
+				m_pCommTcpIpObj_LCR = new CCommTcpIpObjectLCR(nID, m_MgrPool_link);
+		}
+		break;
+		case enumTCPIpFactorytID_AGING: // AGING PG
+		{
+			// LYS 2026-06-26 OCP: skip AgingPG (no AGING probes)
+			if (m_MgrPool_link.pSystemConfigMgr && m_MgrPool_link.pSystemConfigMgr->IsOCP())
+				break;
+			if (m_pCommTcpIpObj_AgingPG == nullptr)
+				m_pCommTcpIpObj_AgingPG = new CCommTcpIpObjectAgingPG(nID, m_MgrPool_link);
+		}
+		break;
+		case enumTCPIpFactorytID_CIM:
+		{
+			if (m_pCommTcpIpObj_CIM == nullptr)
+				m_pCommTcpIpObj_CIM = new CCommTcpIpObjectCIM(nID, m_MgrPool_link);
+		}
+		break;
+		case enumTCPIpFactorytID_TIME:
+		{
+			if (m_pCommTcpIpObj_SysTime == nullptr)
+				m_pCommTcpIpObj_SysTime = new CCommTcpIpObjectSysTime(nID, m_MgrPool_link);
+		}
+		break;
+		case enumTCPIpFactorytID_MOTION:
+		{
+			if (m_pCommTcpIpObj_VisMotion == nullptr)
+				m_pCommTcpIpObj_VisMotion = new CCommTcpIpObjectMotion(nID, m_MgrPool_link);
+		}
+		break;
+		case enumTCPIpFactorytID_PG_MON: // LYS 2026-07-29 ELP ElecBox monitor
+		{
+			if (m_pCommTcpIpObj_PGMon == nullptr)
+				m_pCommTcpIpObj_PGMon = new CCommTcpIpObjectPGMon(nID, m_MgrPool_link);
+		}
+		break;
+		default:
+			break;
+	}
+}
+
+void CCommTcpIpFactoryMgr::DeleteComm(long nID)
+{
+	long lDeviceIndex = m_MgrPool_link.pNetworkConfigMgr->GetParam_DeviceIndex(nID);
+	long lMeasType = m_MgrPool_link.pNetworkConfigMgr->GetParam_MeasType(nID);
+
+	switch (lMeasType)
+	{
+	//case enumTCPIpFactorytID_UTG:	// UTG
+	//{
+	//	/*if (lDeviceIndex != 0)
+	//		m_pCommTcpIpObjUTG2 = new CCommTcpIpObjectUTG(lDeviceIndex, m_MgrPool_link);
+	//	else
+	//		m_pCommTcpIpObjUTG1 = new CCommTcpIpObjectUTG(lDeviceIndex, m_MgrPool_link);*/
+	//}
+	//break;
+	case enumTCPIpFactorytID_VISION: // Vision
+	{
+		if (m_pCommTcpIpObj_Vision[lDeviceIndex] != nullptr)
+			{ delete m_pCommTcpIpObj_Vision[lDeviceIndex];	m_pCommTcpIpObj_Vision[lDeviceIndex] = nullptr; }
+	}
+	break;
+	case enumTCPIpFactorytID_COLOR: // Color
+	{
+		if (m_pCommTcpIpObj_Color[lDeviceIndex] != nullptr)
+		{
+			delete m_pCommTcpIpObj_Color[lDeviceIndex];	
+
+			m_pCommTcpIpObj_Color[lDeviceIndex] = nullptr;
+		}
+	}
+	break;
+	case enumTCPIpFactorytID_ANGLE: // Angle
+	{
+		if (m_pCommTcpIpObj_Angle[lDeviceIndex] != nullptr)
+		{
+			delete m_pCommTcpIpObj_Angle[lDeviceIndex];	m_pCommTcpIpObj_Angle[lDeviceIndex] = nullptr;
+		}
+	}
+	break;
+	case enumTCPIpFactorytID_WAD: // WAD
+	{
+		if (m_pCommTcpIpObj_WAD != nullptr)
+		{
+			delete m_pCommTcpIpObj_WAD;	m_pCommTcpIpObj_WAD = nullptr;
+		}
+	}
+	break;
+	case enumTCPIpFactorytID_PG: // PG
+	{
+		if (m_pCommTcpIpObj_PG != nullptr)
+		{
+			delete m_pCommTcpIpObj_PG;	m_pCommTcpIpObj_PG = nullptr;
+		}
+	}
+	break;
+	case enumTCPIpFactorytID_TSP: // TSP
+	{
+		// jsyoon 2022.10.19 change
+		if (m_pCommTcpIpObj_TSP[lDeviceIndex] != nullptr)
+		{
+			delete m_pCommTcpIpObj_TSP[lDeviceIndex];	m_pCommTcpIpObj_TSP[lDeviceIndex] = nullptr;
+		}
+		//if (m_pCommTcpIpObj_TSP != nullptr)
+		//{
+		//	delete m_pCommTcpIpObj_TSP;	m_pCommTcpIpObj_TSP = nullptr;
+		//}
+	}
+	break;
+	case enumTCPIpFactorytID_LCR: // LCR
+	{
+		if (m_pCommTcpIpObj_LCR != nullptr)
+		{
+			delete m_pCommTcpIpObj_LCR;	m_pCommTcpIpObj_LCR = nullptr;
+		}
+	}
+	break;
+	case enumTCPIpFactorytID_AGING: // AGING PG
+	{
+		if (m_pCommTcpIpObj_AgingPG != nullptr)
+		{
+			delete m_pCommTcpIpObj_AgingPG;	m_pCommTcpIpObj_AgingPG = nullptr;
+		}
+	}
+	break;
+	case enumTCPIpFactorytID_CIM: // CIM
+	{
+		if (m_pCommTcpIpObj_CIM != nullptr)
+		{
+			delete m_pCommTcpIpObj_CIM;	m_pCommTcpIpObj_CIM = nullptr;
+		}
+	}
+	break;
+	case enumTCPIpFactorytID_TIME: // 
+	{
+		if (m_pCommTcpIpObj_SysTime != nullptr)
+		{
+			delete m_pCommTcpIpObj_SysTime;	m_pCommTcpIpObj_SysTime = nullptr;
+		}
+	}
+	break;
+	case enumTCPIpFactorytID_MOTION: // 
+	{
+		if (m_pCommTcpIpObj_VisMotion != nullptr)
+		{
+			delete m_pCommTcpIpObj_VisMotion;	m_pCommTcpIpObj_VisMotion = nullptr;
+		}
+	}
+	break;
+	case enumTCPIpFactorytID_PG_MON: // LYS 2026-07-29 ELP ElecBox monitor
+	{
+		if (m_pCommTcpIpObj_PGMon != nullptr)
+		{
+			delete m_pCommTcpIpObj_PGMon;	m_pCommTcpIpObj_PGMon = nullptr;
+		}
+	}
+	break;
+	default:
+		break;
+	}
+}
+
+long CCommTcpIpFactoryMgr::DoWorkSetParameter(long lMeasType)
+{
+	long nRet = VTM_RV_SUCCESSED;
+	bool bRet = true;
+
+	//bool bOutOfService = true;
+	//for (long i = 0; i < m_MgrPool_link.pNetworkConfigMgr->GetCount(); i++)
+	//{
+	//	if (m_MgrPool_link.pNetworkConfigMgr->GetParam_OutOfService(i) != true)
+	//	{
+	//		bOutOfService = false;
+	//		break;
+	//	}
+	//}
+
+	//if (bOutOfService == true)
+	//	return nRet;
+
+	switch (lMeasType)
+	{
+	case enumTCPIpFactorytID_VISION: // Vision
+	{
+		int lDeviceIndex = 0;
+		if (GetCommTcpIpObjectVision(lDeviceIndex) != nullptr)
+			bRet &= GetCommTcpIpObjectVision(lDeviceIndex)->SetParameter();
+	}
+	break;
+
+//	case 0:
+//	{
+//	//	if (m_MgrPool_link.pNetworkConfigMgr->GetParam_OutOfService(0) != true)
+//		{
+//			if (GetCommTcpIpObjectUTG1() != nullptr) bRet &= GetCommTcpIpObjectUTG1()->SetParameter();
+//		}
+//
+////		if (m_MgrPool_link.pNetworkConfigMgr->GetParam_OutOfService(1) != true)
+//		{
+//			if (GetCommTcpIpObjectUTG2() != nullptr) bRet &= GetCommTcpIpObjectUTG2()->SetParameter();
+//		}
+//	}
+//	break;
+//	case 1:
+//	{
+////		if (m_MgrPool_link.pNetworkConfigMgr->GetParam_OutOfService(0) != true)
+//		{
+//			if (GetCommTcpIpObjectUTG1() != nullptr) bRet &= GetCommTcpIpObjectUTG1()->SetParameter();
+//		}
+//	}
+//	break;
+//	case 2:
+//	{
+////		if (m_MgrPool_link.pNetworkConfigMgr->GetParam_OutOfService(1) != true)
+//		{
+//			if (GetCommTcpIpObjectUTG2() != nullptr) bRet &= GetCommTcpIpObjectUTG2()->SetParameter();
+//		}
+//	}
+//	break;
+
+	default:
+		break;
+	}
+
+	if (bRet != true)
+	{
+		nRet = JOB_RECIPE_OPEN_FAIL_ERROR;
+	}
+
+	return nRet;
+}
+
+long CCommTcpIpFactoryMgr::DoWorkRecipeOpen(long lMeasType)
+{
+	long nRet = VTM_RV_SUCCESSED;
+	bool bRet = true;
+
+	switch (lMeasType)
+	{
+	//case enumTCPIpFactorytID_UTG:	// UTG
+	//{
+	//	/*if (lDeviceIndex != 0)
+	//		m_pCommTcpIpObjUTG2 = new CCommTcpIpObjectUTG(lDeviceIndex, m_MgrPool_link);
+	//	else
+	//		m_pCommTcpIpObjUTG1 = new CCommTcpIpObjectUTG(lDeviceIndex, m_MgrPool_link);*/
+	//}
+	//break;
+	case enumTCPIpFactorytID_VISION: // Vision
+	{
+		for (size_t lDeviceIndex = 0; lDeviceIndex < 2; lDeviceIndex++)
+		{
+			if (GetCommTcpIpObjectVision(lDeviceIndex) != nullptr)
+				bRet &= GetCommTcpIpObjectVision(lDeviceIndex)->RecipeChange();
+		}
+	}
+	break;
+	case enumTCPIpFactorytID_COLOR: // Color
+	{
+		for (size_t lDeviceIndex = 0; lDeviceIndex < 2; lDeviceIndex++)
+		{
+			if (GetCommTcpIpObjectColor(lDeviceIndex) != nullptr)
+				bRet &= GetCommTcpIpObjectColor(lDeviceIndex)->RecipeChange();
+		}
+	}
+	break;
+	case enumTCPIpFactorytID_ANGLE: // Angle
+	{
+		for (size_t lDeviceIndex = 0; lDeviceIndex < 2; lDeviceIndex++)
+		{
+			if (GetCommTcpIpObjectAngle(lDeviceIndex) != nullptr)
+				bRet &= GetCommTcpIpObjectAngle(lDeviceIndex)->RecipeChange();
+		}
+	}
+	break;
+	case enumTCPIpFactorytID_WAD: // WAD
+	{
+		if (GetCommTcpIpObjectWAD() != nullptr)
+			bRet &= GetCommTcpIpObjectWAD()->RecipeChange();
+	}
+	break;
+	case enumTCPIpFactorytID_PG: // PG
+	{
+		if (GetCommTcpIpObjectPG() != nullptr)
+			bRet &= GetCommTcpIpObjectPG()->RecipeChange();
+	}
+	break;
+	case enumTCPIpFactorytID_TSP: // TSP
+	{
+		// jsyoon 2022.10.19 chagne
+		for (size_t lDeviceIndex = 0; lDeviceIndex < 6; lDeviceIndex++)
+		{
+			if (GetCommTcpIpObjectTSP(lDeviceIndex) != nullptr)
+				bRet &= GetCommTcpIpObjectTSP(lDeviceIndex)->RecipeChange();
+			if (bRet != true)
+			{
+				break;
+			}
+		}
+
+		if (bRet == true)
+		{
+			for (size_t lDeviceIndex = 0; lDeviceIndex < 6; lDeviceIndex++)
+			{
+				if (GetCommTcpIpObjectTSP(lDeviceIndex) != nullptr)
+					bRet &= GetCommTcpIpObjectTSP(lDeviceIndex)->RecipeChangeDone(30);
+			}
+		}
+	
+		/*if (GetCommTcpIpObjectTSP() != nullptr)
+			bRet &= GetCommTcpIpObjectTSP()->RecipeChange();*/
+	}
+	break;
+	case enumTCPIpFactorytID_LCR: // LCR
+	{
+		if (GetCommTcpIpObjectLCR() != nullptr)
+			bRet &= GetCommTcpIpObjectLCR()->RecipeChange();
+	}
+	break;
+	case enumTCPIpFactorytID_AGING: // AGING PG
+	{
+		if (GetCommTcpIpObjectAGING() != nullptr)
+			bRet &= GetCommTcpIpObjectAGING()->RecipeChange();
+	}
+	break;
+	default:
+		break;
+	}
+
+	if (bRet != true)
+	{
+		nRet = JOB_RECIPE_OPEN_FAIL_ERROR;
+	}
+
+	return nRet;
+}
+
+long CCommTcpIpFactoryMgr::DoWorkRecipeOpenComplate(long lMeasType, DWORD dwTimeOut)
+{
+	long nRet = VTM_RV_SUCCESSED;
+	bool bRet = true;
+	int  nMeasIndex = 1;
+
+	switch (lMeasType)
+	{
+	case enumTCPIpFactorytID_VISION: // Vision
+	{
+		for (size_t lDeviceIndex = 0; lDeviceIndex < 2; lDeviceIndex++)
+		{
+			if (GetCommTcpIpObjectVision(lDeviceIndex) != nullptr)
+				bRet &= GetCommTcpIpObjectVision(lDeviceIndex)->WaitRecipeChangeEnd(dwTimeOut);
+		}
+	}
+	break;
+	case enumTCPIpFactorytID_COLOR: // Color
+	{
+		{
+			for (size_t lDeviceIndex = 0; lDeviceIndex < 2; lDeviceIndex++)
+			{
+				if (GetCommTcpIpObjectColor(lDeviceIndex) != nullptr)
+					bRet &= GetCommTcpIpObjectColor(lDeviceIndex)->WaitRecipeChangeEnd(dwTimeOut);
+			}
+		}
+	}
+	break;
+	case enumTCPIpFactorytID_ANGLE: // Angle
+	{
+		for (size_t lDeviceIndex = 0; lDeviceIndex < 2; lDeviceIndex++)
+		{
+			if (GetCommTcpIpObjectAngle(lDeviceIndex) != nullptr)
+				bRet &= GetCommTcpIpObjectAngle(lDeviceIndex)->WaitRecipeChangeEnd(dwTimeOut);
+		}
+	}
+	break;
+	case enumTCPIpFactorytID_AGING: // Aging
+	{
+		if (GetCommTcpIpObjectAGING() != nullptr)
+			bRet &= GetCommTcpIpObjectAGING()->RecipeChangeDone(dwTimeOut);
+	}
+	break;
+	//case enumTCPIpFactorytID_WAD: // WAD
+	//{
+	//	if (GetCommTcpIpObjectWAD() != nullptr)
+	//		bRet &= GetCommTcpIpObjectWAD()->WaitInspectionComplete(dwTimeOut);
+	//}
+	//break;
+	//case enumTCPIpFactorytID_PG: // PG
+	//{
+	//	if (GetCommTcpIpObjectPG() != nullptr)
+	//		bRet &= GetCommTcpIpObjectPG()->WaitInspectionComplete(dwTimeOut);
+	//}
+	//break;
+	//case enumTCPIpFactorytID_TSP: // TSP
+	//{
+	//	if (GetCommTcpIpObjectTSP() != nullptr)
+	//		bRet &= GetCommTcpIpObjectTSP()->WaitInspectionComplete(dwTimeOut);
+	//}
+	//break;
+	//case enumTCPIpFactorytID_LCR: // LCR
+	//{
+	//	if (GetCommTcpIpObjectLCR() != nullptr)
+	//		bRet &= GetCommTcpIpObjectLCR()->WaitInspectionComplete(dwTimeOut);
+	//}
+	//break;
+	//case enumTCPIpFactorytID_AGING: // AGING PG
+	//{
+	//	if (GetCommTcpIpObjectAGING() != nullptr)
+	//		bRet &= GetCommTcpIpObjectAGING()->WaitInspectionComplete(dwTimeOut);
+	//}
+	break;
+	default:
+		break;
+	}
+
+	if (bRet != true)
+	{
+		nRet = HEAD_COMPLETE_NG;
+	}
+
+	return nRet;
+}
+
+long CCommTcpIpFactoryMgr::DoWorkInspectStart(long lMeasType, int iMeasMode, int nCellNum, bool bSideOut, bool bWadRHeadUse, bool bWait)
+{
+	long nRet = VTM_RV_SUCCESSED;
+	bool bRet = true;
+	int  nMeasIndex = 1;
+
+	switch (lMeasType)
+	{
+	//case enumTCPIpFactorytID_UTG:	// UTG
+	//{
+	//	/*if (lDeviceIndex != 0)
+	//		m_pCommTcpIpObjUTG2 = new CCommTcpIpObjectUTG(lDeviceIndex, m_MgrPool_link);
+	//	else
+	//		m_pCommTcpIpObjUTG1 = new CCommTcpIpObjectUTG(lDeviceIndex, m_MgrPool_link);*/
+	//}
+	//break;
+	case enumTCPIpFactorytID_VISION: // Vision
+	{
+		if (iMeasMode == 1)
+		{
+			if (GetCommTcpIpObjectVision(0) != nullptr)
+			{
+				bRet &= GetCommTcpIpObjectVision(0)->InspectStart(0, false);
+
+				if (bRet == true && bWait == true)
+				{
+					bRet = GetCommTcpIpObjectVision(0)->InspectStartWait();
+				}
+			}
+		}
+		else if (iMeasMode == 2)
+		{
+			if (GetCommTcpIpObjectVision(1) != nullptr)
+			{
+				bRet &= GetCommTcpIpObjectVision(1)->InspectStart(1, false);
+
+				if (bRet == true && bWait == true)
+				{
+					bRet = GetCommTcpIpObjectVision(1)->InspectStartWait();
+				}
+			}
+		}
+		else
+		{
+			for (size_t lDeviceIndex = 0; lDeviceIndex < 2; lDeviceIndex++)
+			{
+				if (GetCommTcpIpObjectVision(lDeviceIndex) != nullptr)
+					bRet &= GetCommTcpIpObjectVision(lDeviceIndex)->InspectStart(lDeviceIndex, false);
+			}
+
+			if (bRet == true && bWait == true)
+			{
+				for (size_t lDeviceIndex = 0; lDeviceIndex < 2; lDeviceIndex++)
+				{
+					if (GetCommTcpIpObjectVision(lDeviceIndex) != nullptr)
+						bRet &= GetCommTcpIpObjectVision(lDeviceIndex)->InspectStartWait();
+				}
+			}
+		}
+	}
+	break;
+	case enumTCPIpFactorytID_COLOR: // Color
+	{
+		if (iMeasMode == 1)
+		{
+			if (GetCommTcpIpObjectColor(0) != nullptr)
+			{
+				bRet &= GetCommTcpIpObjectColor(0)->InspectStart(0, false);
+				if (bRet == true && bWait == true)
+				{
+					bRet = GetCommTcpIpObjectColor(0)->InspectStartWait();
+				}
+			}
+				
+		}
+		else if (iMeasMode == 2)
+		{
+			if (GetCommTcpIpObjectColor(1) != nullptr)
+			{
+				bRet &= GetCommTcpIpObjectColor(1)->InspectStart(0, false);
+				if (bRet == true && bWait == true)
+				{
+					bRet = GetCommTcpIpObjectColor(1)->InspectStartWait();
+				}
+			}
+				
+		}
+		else
+		{
+			for (size_t lDeviceIndex = 0; lDeviceIndex < 2; lDeviceIndex++)
+			{
+				if (GetCommTcpIpObjectColor(lDeviceIndex) != nullptr)
+					bRet &= GetCommTcpIpObjectColor(lDeviceIndex)->InspectStart(0, false);
+			}
+
+			if (bRet == true && bWait == true)
+			{
+				for (size_t lDeviceIndex = 0; lDeviceIndex < 2; lDeviceIndex++)
+				{
+					if (GetCommTcpIpObjectColor(lDeviceIndex) != nullptr)
+						bRet &= GetCommTcpIpObjectColor(lDeviceIndex)->InspectStartWait();
+				}
+			}
+		}
+	}
+	break;
+	case enumTCPIpFactorytID_ANGLE: // Angle
+	{
+		if (iMeasMode == 1)
+		{
+			if (GetCommTcpIpObjectAngle(0) != nullptr)
+			{
+				bRet &= GetCommTcpIpObjectAngle(0)->InspectStart(0, false);
+				if (bRet == true && bWait == true)
+				{
+					bRet = GetCommTcpIpObjectAngle(0)->InspectStartWait();
+				}
+			}
+
+		}
+		else if (iMeasMode == 2)
+		{
+			if (GetCommTcpIpObjectAngle(1) != nullptr)
+			{
+				bRet &= GetCommTcpIpObjectAngle(1)->InspectStart(0, false);
+				if (bRet == true && bWait == true)
+				{
+					bRet = GetCommTcpIpObjectAngle(1)->InspectStartWait();
+				}
+			}
+
+		}
+		else
+		{
+			for (size_t lDeviceIndex = 0; lDeviceIndex < 2; lDeviceIndex++)
+			{
+				if (GetCommTcpIpObjectAngle(lDeviceIndex) != nullptr)
+					bRet &= GetCommTcpIpObjectAngle(lDeviceIndex)->InspectStart(0, false);
+			}
+
+			if (bRet == true && bWait == true)
+			{
+				for (size_t lDeviceIndex = 0; lDeviceIndex < 2; lDeviceIndex++)
+				{
+					if (GetCommTcpIpObjectAngle(lDeviceIndex) != nullptr)
+						bRet &= GetCommTcpIpObjectAngle(lDeviceIndex)->InspectStartWait();
+				}
+			}
+		}
+	}
+	break;
+	case enumTCPIpFactorytID_WAD: // WAD
+	{
+		if (GetCommTcpIpObjectWAD() != nullptr)
+		{
+			//bRet = GetCommTcpIpObjectWAD()->InspectStart(iMeasMode); //2023.06.09 특성 5점
+			bRet = GetCommTcpIpObjectWAD()->InspectStart(iMeasMode, true, 0, bWadRHeadUse);
+			if (bRet != true)
+			{
+				bRet;
+			}
+		}
+	}
+	break;
+	case enumTCPIpFactorytID_PG: // PG
+	{
+		if (GetCommTcpIpObjectPG() != nullptr)
+		{
+			bRet = GetCommTcpIpObjectPG()->InspectStart(iMeasMode, nCellNum, false);
+
+			/*if (bRet == true)
+			{
+				bRet = GetCommTcpIpObjectPG()->InspectStartWait();
+			}*/
+		}
+	}
+	break;
+	case enumTCPIpFactorytID_TSP: // TSP
+	{
+		// jsyoon 2022.10.19 change
+		// Start
+		for (size_t lDeviceIndex = 0; lDeviceIndex < 6; lDeviceIndex++)
+		{
+			if (GetCommTcpIpObjectTSP(lDeviceIndex) != nullptr)
+				GetCommTcpIpObjectTSP(lDeviceIndex)->InspectStartReq (iMeasMode);
+		}
+
+		//if (GetCommTcpIpObjectTSP() != nullptr)
+		//{
+		//	bRet &= GetCommTcpIpObjectTSP()->InspectStart();
+		//	/*if (bRet == true)
+		//	{
+		//		GetCommTcpIpObjectTSP()->InspectStartWait();
+		//	}*/
+		//}
+	}
+	break;
+	case enumTCPIpFactorytID_LCR: // LCR
+	{
+		if (GetCommTcpIpObjectLCR() != nullptr)
+		{
+			bRet &= GetCommTcpIpObjectLCR()->InspectStart();
+			/*if (bRet == true)
+			{
+				GetCommTcpIpObjectLCR()->InspectStartWait();
+			}*/
+		}
+	}
+	break;
+	case enumTCPIpFactorytID_AGING: // AGING PG
+	{
+		if (GetCommTcpIpObjectAGING() != nullptr)
+		{
+			bRet = GetCommTcpIpObjectAGING()->InspectStart(iMeasMode, nCellNum);
+			/*if (bRet == true)
+			{
+				bRet = GetCommTcpIpObjectAGING()->InspectStartWait();
+			}*/
+		}
+	}
+	break;
+	default:
+		break;
+	}
+	
+
+#ifdef _USE_NOT
+	//switch (lMeasType)
+	//{
+	///*case 0:
+	//{
+	//	if (iMeasMode == 1)
+	//	{
+	//		if (GetCommTcpIpObjectUTG1() != nullptr) bRet = GetCommTcpIpObjectUTG1()->InspectStart(1, false);
+
+	//		if (bRet == true)
+	//		{
+	//			if (bSideOut == true)
+	//			{
+	//				nMeasIndex = 2;
+	//			}
+	//			else
+	//			{
+	//				nMeasIndex = 6;
+	//			}
+
+	//			if (GetCommTcpIpObjectUTG2() != nullptr) bRet = GetCommTcpIpObjectUTG2()->InspectStart(nMeasIndex, false);
+	//		}
+
+	//		if (bRet == true)
+	//		{
+	//			if (GetCommTcpIpObjectUTG1() != nullptr) bRet = GetCommTcpIpObjectUTG1()->InspectStartWait();
+	//		}
+
+	//		if (bRet == true)
+	//		{
+	//			if (GetCommTcpIpObjectUTG1() != nullptr) bRet = GetCommTcpIpObjectUTG2()->InspectStartWait();
+	//		}
+	//	}
+	//	else if (iMeasMode == 2)
+	//	{
+	//		if (GetCommTcpIpObjectUTG1() != nullptr) bRet = GetCommTcpIpObjectUTG1()->InspectStart(2, false);
+
+	//		if (bRet == true)
+	//		{
+	//			if (bSideOut == true)
+	//			{
+	//				nMeasIndex = 1;
+	//			}
+	//			else
+	//			{
+	//				nMeasIndex = 5;
+	//			}
+
+	//			if (GetCommTcpIpObjectUTG2() != nullptr) bRet = GetCommTcpIpObjectUTG2()->InspectStart(nMeasIndex, false);
+	//		}
+
+	//		if (bRet == true)
+	//		{
+	//			if (GetCommTcpIpObjectUTG1() != nullptr) bRet = GetCommTcpIpObjectUTG1()->InspectStartWait();
+	//		}
+
+	//		if (bRet == true)
+	//		{
+	//			if (GetCommTcpIpObjectUTG1() != nullptr) bRet = GetCommTcpIpObjectUTG2()->InspectStartWait();
+	//		}
+	//		
+	//	}
+	//	else if (iMeasMode == 3)
+	//	{
+	//		if (GetCommTcpIpObjectUTG1() != nullptr) bRet = GetCommTcpIpObjectUTG1()->InspectStart(3, false);
+
+	//		if (bRet == true)
+	//		{
+	//			if (bSideOut == true)
+	//			{
+	//				nMeasIndex = 4;
+	//			}
+	//			else
+	//			{
+	//				nMeasIndex = 8;
+	//			}
+
+	//			if (GetCommTcpIpObjectUTG2() != nullptr) bRet = GetCommTcpIpObjectUTG2()->InspectStart(nMeasIndex, false);
+	//		}
+
+	//		if (bRet == true)
+	//		{
+	//			if (GetCommTcpIpObjectUTG1() != nullptr) bRet = GetCommTcpIpObjectUTG1()->InspectStartWait();
+	//		}
+
+	//		if (bRet == true)
+	//		{
+	//			if (GetCommTcpIpObjectUTG1() != nullptr) bRet = GetCommTcpIpObjectUTG2()->InspectStartWait();
+	//		}
+	//		
+	//	}
+	//	else if (iMeasMode == 4)
+	//	{
+	//		if (GetCommTcpIpObjectUTG1() != nullptr) bRet = GetCommTcpIpObjectUTG1()->InspectStart(4, false);
+
+	//		if (bRet == true)
+	//		{
+	//			if (bSideOut == true)
+	//			{
+	//				nMeasIndex = 3;
+	//			}
+	//			else
+	//			{
+	//				nMeasIndex = 7;
+	//			}
+
+	//			if (GetCommTcpIpObjectUTG2() != nullptr) bRet = GetCommTcpIpObjectUTG2()->InspectStart(nMeasIndex, false);
+	//		}
+
+	//		if (bRet == true)
+	//		{
+	//			if (GetCommTcpIpObjectUTG1() != nullptr) bRet = GetCommTcpIpObjectUTG1()->InspectStartWait();
+	//		}
+
+	//		if (bRet == true)
+	//		{
+	//			if (GetCommTcpIpObjectUTG1() != nullptr) bRet = GetCommTcpIpObjectUTG2()->InspectStartWait();
+	//		}
+	//	}
+	//}
+	//break;
+	//case 1:
+	//{
+	//	if (GetCommTcpIpObjectUTG1() != nullptr) bRet &= GetCommTcpIpObjectUTG1()->InspectStart(iMeasMode);
+	//}
+	//break;
+	//case 2:
+	//{
+	//	if (iMeasMode == 1)
+	//	{
+	//		if (bSideOut == true)
+	//		{
+	//			nMeasIndex = 2;
+	//		}
+	//		else
+	//		{
+	//			nMeasIndex = 6;
+	//		}
+
+	//		if (GetCommTcpIpObjectUTG2() != nullptr) bRet &= GetCommTcpIpObjectUTG2()->InspectStart(nMeasIndex);
+	//	}
+	//	else
+	//	{
+	//		if (bSideOut == true)
+	//		{
+	//			nMeasIndex = 1;
+	//		}
+	//		else
+	//		{
+	//			nMeasIndex = 5;
+	//		}
+
+	//		if (GetCommTcpIpObjectUTG2() != nullptr) bRet &= GetCommTcpIpObjectUTG2()->InspectStart(nMeasIndex);
+	//	}
+	//}
+	//break;*/
+
+	//default:
+	//	break;
+	//}
+#endif // _USE_NOT
+
+
+	if (bRet != true)
+	{
+		nRet = HEAD_COMMAND_ERROR;
+	}
+
+	return nRet;
+}
+
+long CCommTcpIpFactoryMgr::DoWorkInspectStartWait(long lMeasType, int iMeasMode /*= 0*/)
+{
+	long nRet = VTM_RV_SUCCESSED;
+	bool bRet = true;
+	int  nMeasIndex = 1;
+
+	switch (lMeasType)
+	{
+	case enumTCPIpFactorytID_VISION: // Vision
+	{
+		if (iMeasMode == 1)
+		{
+			if (GetCommTcpIpObjectVision(0) != nullptr)
+			{	
+				bRet = GetCommTcpIpObjectVision(0)->InspectStartWait();
+			}
+		}
+		else if (iMeasMode == 2)
+		{
+			if (GetCommTcpIpObjectVision(1) != nullptr)
+			{
+				bRet = GetCommTcpIpObjectVision(1)->InspectStartWait();
+			}
+		}
+		else
+		{
+			for (size_t lDeviceIndex = 0; lDeviceIndex < 2; lDeviceIndex++)
+			{
+				if (GetCommTcpIpObjectVision(lDeviceIndex) != nullptr)
+					bRet &= GetCommTcpIpObjectVision(lDeviceIndex)->InspectStartWait();
+			}
+		}
+	}
+	break;
+	case enumTCPIpFactorytID_COLOR: // Color
+	{
+		if (iMeasMode == 1)
+		{
+			if (GetCommTcpIpObjectColor(0) != nullptr)
+			{
+				bRet = GetCommTcpIpObjectColor(0)->InspectStartWait();
+			}
+
+		}
+		else if (iMeasMode == 2)
+		{
+			if (GetCommTcpIpObjectColor(1) != nullptr)
+			{
+				bRet = GetCommTcpIpObjectColor(1)->InspectStartWait();
+			}
+
+		}
+		else
+		{
+			for (size_t lDeviceIndex = 0; lDeviceIndex < 2; lDeviceIndex++)
+			{
+				if (GetCommTcpIpObjectColor(lDeviceIndex) != nullptr)
+					bRet &= GetCommTcpIpObjectColor(lDeviceIndex)->InspectStartWait();
+			}
+		}
+	}
+	break;
+	case enumTCPIpFactorytID_ANGLE: // Angle
+	{
+		if (iMeasMode == 1)
+		{
+			if (GetCommTcpIpObjectAngle(0) != nullptr)
+			{
+				bRet = GetCommTcpIpObjectAngle(0)->InspectStartWait();
+			}
+
+		}
+		else if (iMeasMode == 2)
+		{
+			if (GetCommTcpIpObjectAngle(1) != nullptr)
+			{
+				bRet = GetCommTcpIpObjectAngle(1)->InspectStartWait();
+			}
+
+		}
+		else
+		{
+			for (size_t lDeviceIndex = 0; lDeviceIndex < 2; lDeviceIndex++)
+			{
+				if (GetCommTcpIpObjectAngle(lDeviceIndex) != nullptr)
+					bRet &= GetCommTcpIpObjectAngle(lDeviceIndex)->InspectStartWait();
+			}
+		}
+	}
+	break;
+	default:
+		break;
+	}
+
+	if (bRet != true)
+	{
+		nRet = HEAD_COMMAND_ERROR;
+	}
+
+	return nRet;
+}
+
+
+long CCommTcpIpFactoryMgr::DoWorkInspectEnd(long lMeasType, int iMeasMode, DWORD dwTimeOut)
+{
+	long nRet = VTM_RV_SUCCESSED;
+	bool bRet = true;
+	int  nMeasIndex = 1;
+
+	switch (lMeasType)
+	{
+	case enumTCPIpFactorytID_VISION: // Vision
+	{
+		if (iMeasMode == 1)
+		{
+			if (GetCommTcpIpObjectVision(0) != nullptr)
+			{
+				bRet &= GetCommTcpIpObjectVision(0)->WaitInspectionEnd(dwTimeOut);
+			}
+		}
+		else if (iMeasMode == 2)
+		{
+			if (GetCommTcpIpObjectVision(1) != nullptr)
+			{
+				bRet &= GetCommTcpIpObjectVision(1)->WaitInspectionEnd(dwTimeOut);
+			}
+		}
+		else
+		{
+
+			bool bRet2[2] = { false, false };
+
+			for (size_t lDeviceIndex = 0; lDeviceIndex < 2; lDeviceIndex++)
+			{
+				if (GetCommTcpIpObjectVision(lDeviceIndex) != nullptr)
+				{
+					bRet2[lDeviceIndex] = GetCommTcpIpObjectVision(lDeviceIndex)->WaitInspectionEnd(dwTimeOut);
+				}
+			}
+
+			for (size_t lDeviceIndex = 0; lDeviceIndex < 2; lDeviceIndex++)
+			{
+				if (GetCommTcpIpObjectVision(lDeviceIndex) != nullptr)
+				{
+					if (bRet2[lDeviceIndex] != true)
+					{
+						bRet2[lDeviceIndex] = GetCommTcpIpObjectVision(lDeviceIndex)->InspectStart(lDeviceIndex, true);
+
+						if (bRet2[lDeviceIndex] == true)
+						{
+							bRet2[lDeviceIndex] = GetCommTcpIpObjectVision(lDeviceIndex)->WaitInspectionEnd(dwTimeOut);
+						}
+					}
+				}
+			}
+
+			for (size_t lDeviceIndex = 0; lDeviceIndex < 2; lDeviceIndex++)
+			{
+				bRet &= bRet2[lDeviceIndex];
+			}
+		}
+	}
+	break;
+	case enumTCPIpFactorytID_COLOR: // Color
+	{
+		if (iMeasMode == 1)
+		{
+			if (GetCommTcpIpObjectColor(0) != nullptr)
+				bRet &= GetCommTcpIpObjectColor(0)->WaitInspectionEnd(dwTimeOut);
+		}
+		else if (iMeasMode == 2)
+		{
+			if (GetCommTcpIpObjectColor(1) != nullptr)
+				bRet &= GetCommTcpIpObjectColor(1)->WaitInspectionEnd(dwTimeOut);
+		}
+		else
+		{
+			for (size_t lDeviceIndex = 0; lDeviceIndex < 2; lDeviceIndex++)
+			{
+				if (GetCommTcpIpObjectColor(lDeviceIndex) != nullptr)
+					bRet &= GetCommTcpIpObjectColor(lDeviceIndex)->WaitInspectionEnd(dwTimeOut);
+			}
+		}
+	}
+	break;
+	case enumTCPIpFactorytID_ANGLE: // Angle
+	{
+		if (iMeasMode == 1)
+		{
+			if (GetCommTcpIpObjectAngle(0) != nullptr)
+				bRet &= GetCommTcpIpObjectAngle(0)->WaitInspectionEnd(dwTimeOut);
+		}
+		else if (iMeasMode == 2)
+		{
+			if (GetCommTcpIpObjectAngle(1) != nullptr)
+				bRet &= GetCommTcpIpObjectAngle(1)->WaitInspectionEnd(dwTimeOut);
+		}
+		else
+		{
+			for (size_t lDeviceIndex = 0; lDeviceIndex < 2; lDeviceIndex++)
+			{
+				if (GetCommTcpIpObjectAngle(lDeviceIndex) != nullptr)
+					bRet &= GetCommTcpIpObjectAngle(lDeviceIndex)->WaitInspectionEnd(dwTimeOut);
+			}
+		}
+	}
+	break;
+	case enumTCPIpFactorytID_WAD: // WAD
+	{
+		if (GetCommTcpIpObjectWAD() != nullptr)
+			bRet &= GetCommTcpIpObjectWAD()->WaitInspectionEnd(dwTimeOut);
+	}
+	break;
+	case enumTCPIpFactorytID_PG: // PG
+	{
+		if (GetCommTcpIpObjectPG() != nullptr)
+		  bRet &= GetCommTcpIpObjectPG()->SetUserStop(dwTimeOut);	// Aging Stop
+	}
+	break;
+	case enumTCPIpFactorytID_TSP: // TSP
+	{
+		// jsyoon 2022.10.19 change
+		// Return
+		for (size_t lDeviceIndex = 0; lDeviceIndex < 6; lDeviceIndex++)
+		{
+			if (GetCommTcpIpObjectTSP(lDeviceIndex) != nullptr)
+				bRet &= GetCommTcpIpObjectTSP(lDeviceIndex)->WaitInspectionEnd(dwTimeOut);
+		}
+
+		/*if (GetCommTcpIpObjectTSP() != nullptr)
+			bRet &= GetCommTcpIpObjectTSP()->WaitInspectionEnd(dwTimeOut);*/
+	}
+	break;
+	case enumTCPIpFactorytID_LCR: // LCR
+	{
+		if (GetCommTcpIpObjectLCR() != nullptr)
+			bRet &= GetCommTcpIpObjectLCR()->WaitInspectionEnd(dwTimeOut);
+	}
+	break;
+	case enumTCPIpFactorytID_AGING: // AGING PG
+	{
+		if (GetCommTcpIpObjectAGING() != nullptr)
+			bRet &= GetCommTcpIpObjectAGING()->SetUserStop(0);	// Aging Stop
+//			bRet &= GetCommTcpIpObjectAGING()->WaitInspectionEnd(iMeasMode, dwTimeOut);
+	}
+	break;
+	case enumTCPIpFactorytID_CIM:
+	{
+		if (GetCommTcpIpObjectCIM() != nullptr)
+			GetCommTcpIpObjectCIM()->Cmd_Send_AT0();
+	}
+	break;
+	default:
+		break;
+	}
+
+	if (bRet != true)
+	{
+		nRet = HEAD_COMPLETE_NG;
+	}
+
+	return nRet;
+
+	//long nRet = 0;
+	//bool bRet = true;
+
+	////bool bOutOfService = true;
+	////for (long i = 0; i < m_MgrPool_link.pNetworkConfigMgr->GetCount(); i++)
+	////{
+	////	if (m_MgrPool_link.pNetworkConfigMgr->GetParam_OutOfService(i) != true)
+	////	{
+	////		bOutOfService = false;
+	////		break;
+	////	}
+	////}
+
+	////if (bOutOfService == true)
+	////	return nRet;
+
+	//switch (lMeasType)
+	//{
+	////case 0:
+	////{
+	////	if (GetCommTcpIpObjectUTG1() != nullptr) bRet &= GetCommTcpIpObjectUTG1()->InspectEnd();
+	////	if (GetCommTcpIpObjectUTG2() != nullptr) bRet &= GetCommTcpIpObjectUTG2()->InspectEnd();
+	////}
+	////break;
+	////case 1:
+	////{
+	////	if (GetCommTcpIpObjectUTG1() != nullptr) bRet &= GetCommTcpIpObjectUTG1()->InspectEnd();
+	////}
+	////break;
+	////case 2:
+	////{
+	////	if (GetCommTcpIpObjectUTG2() != nullptr) bRet &= GetCommTcpIpObjectUTG2()->InspectEnd();
+	////}
+	////break;
+
+	//default:
+	//	break;
+	//}
+
+	//if (bRet != true)
+	//{
+	//	nRet = HEAD_ACK_TIMEOUT;
+	//}
+
+	//return nRet;
+}
+
+long CCommTcpIpFactoryMgr::DoWorkInspectComplate(long lMeasType, int iMeasMode, DWORD dwTimeOut, int nRetry)
+{
+	long nRet = VTM_RV_SUCCESSED;
+	bool bRet = true;
+	int  nMeasIndex = 1;
+
+	switch (lMeasType)
+	{
+	case enumTCPIpFactorytID_VISION: // Vision
+	{
+		if (iMeasMode == 1)
+		{
+			if (GetCommTcpIpObjectVision(0) != nullptr)
+			{
+				bRet &= GetCommTcpIpObjectVision(0)->WaitInspectionComplete(dwTimeOut);
+			}
+		}
+		else if (iMeasMode == 2)
+		{
+			if (GetCommTcpIpObjectVision(1) != nullptr)
+			{
+				bRet &= GetCommTcpIpObjectVision(1)->WaitInspectionComplete(dwTimeOut);
+			}
+		}
+		else
+		{
+			for (size_t lDeviceIndex = 0; lDeviceIndex < 2; lDeviceIndex++)
+			{
+				if (GetCommTcpIpObjectVision(lDeviceIndex) != nullptr)
+				{
+					bRet = GetCommTcpIpObjectVision(lDeviceIndex)->WaitInspectionComplete(dwTimeOut);
+					if (bRet != true)
+					{
+						break;
+					}
+				}
+					
+			}
+		}
+	}
+	break;
+	case enumTCPIpFactorytID_COLOR: // Color
+	{
+		if (iMeasMode == 1)
+		{
+			if (GetCommTcpIpObjectColor(0) != nullptr)
+				bRet &= GetCommTcpIpObjectColor(0)->WaitInspectionComplete(dwTimeOut);
+		}
+		else if (iMeasMode == 2)
+		{
+			if (GetCommTcpIpObjectColor(1) != nullptr)
+				bRet &= GetCommTcpIpObjectColor(1)->WaitInspectionComplete(dwTimeOut);
+		}
+		else
+		{
+			for (size_t lDeviceIndex = 0; lDeviceIndex < 2; lDeviceIndex++)
+			{
+				if (GetCommTcpIpObjectColor(lDeviceIndex) != nullptr)
+					bRet &= GetCommTcpIpObjectColor(lDeviceIndex)->WaitInspectionComplete(dwTimeOut);
+			}
+		}
+	}
+	break;
+	case enumTCPIpFactorytID_ANGLE: // Angle
+	{
+		if (iMeasMode == 1)
+		{
+			if (GetCommTcpIpObjectAngle(0) != nullptr)
+				bRet &= GetCommTcpIpObjectAngle(0)->WaitInspectionComplete(dwTimeOut);
+		}
+		else if (iMeasMode == 2)
+		{
+			if (GetCommTcpIpObjectAngle(1) != nullptr)
+				bRet &= GetCommTcpIpObjectAngle(1)->WaitInspectionComplete(dwTimeOut);
+		}
+		else
+		{
+			for (size_t lDeviceIndex = 0; lDeviceIndex < 2; lDeviceIndex++)
+			{
+				if (GetCommTcpIpObjectAngle(lDeviceIndex) != nullptr)
+					bRet &= GetCommTcpIpObjectAngle(lDeviceIndex)->WaitInspectionComplete(dwTimeOut);
+			}
+		}
+	}
+	break;
+	case enumTCPIpFactorytID_WAD: // WAD
+	{
+		if (iMeasMode == 1)
+		{
+			if (GetCommTcpIpObjectWAD() != nullptr)
+				bRet &= GetCommTcpIpObjectWAD()->WaitInspectionComplete(dwTimeOut, nRetry);
+				//bRet &= GetCommTcpIpObjectWAD()->WaitInspectionComplete(dwTimeOut);
+		}
+		else if (iMeasMode == 2)
+		{
+			if (GetCommTcpIpObjectWAD() != nullptr)
+				bRet &= GetCommTcpIpObjectWAD()->WaitInspectionEnd(dwTimeOut, nRetry);
+				//bRet &= GetCommTcpIpObjectWAD()->WaitInspectionEnd(dwTimeOut);
+		}
+		else
+		{
+			if (GetCommTcpIpObjectWAD() != nullptr)
+			{
+				bRet &= GetCommTcpIpObjectWAD()->WaitInspectionComplete(dwTimeOut);
+				bRet &= GetCommTcpIpObjectWAD()->WaitInspectionEnd(dwTimeOut);
+			}
+				
+		}
+		
+	}
+	break;
+	case enumTCPIpFactorytID_PG: // PG
+	{
+		if (GetCommTcpIpObjectPG() != nullptr)
+			bRet &= GetCommTcpIpObjectPG()->WaitInspectionComplete(dwTimeOut, iMeasMode);	//Aging
+	}
+	break;
+	case enumTCPIpFactorytID_TSP: // TSP
+	{
+		// jsyoon 2022.10.19 change
+		// Wait Complete
+		for (size_t lDeviceIndex = 0; lDeviceIndex < 6; lDeviceIndex++)
+		{
+			if (GetCommTcpIpObjectTSP(lDeviceIndex) != nullptr)
+				bRet &= GetCommTcpIpObjectTSP(lDeviceIndex)->WaitInspectionComplete(dwTimeOut);
+			if (bRet != true)
+			{
+				break;
+			}
+		}
+
+		//if (GetCommTcpIpObjectTSP() != nullptr)
+		//	bRet &= GetCommTcpIpObjectTSP()->WaitInspectionComplete(dwTimeOut);
+	}
+	break;
+	case enumTCPIpFactorytID_LCR: // LCR
+	{
+		if (GetCommTcpIpObjectLCR() != nullptr)
+			bRet &= GetCommTcpIpObjectLCR()->WaitInspectionComplete(dwTimeOut);
+	}
+	break;
+	case enumTCPIpFactorytID_AGING: // AGING PG
+	{
+		if (GetCommTcpIpObjectAGING() != nullptr)
+			bRet &= GetCommTcpIpObjectAGING()->WaitInspectionComplete(iMeasMode, dwTimeOut);
+	}
+	break;
+	default:
+		break;
+	}
+
+	if (bRet != true)
+	{
+		nRet = HEAD_COMPLETE_NG;
+	}
+
+	return nRet;
+}
+
+
+void CCommTcpIpFactoryMgr::SetOutOfService(long nID, bool bOn)
+{
+	long lDeviceIndex = m_MgrPool_link.pNetworkConfigMgr->GetParam_DeviceIndex(nID);
+	long lMeasType = m_MgrPool_link.pNetworkConfigMgr->GetParam_MeasType(nID);
+
+	switch (lMeasType)
+	{
+	case enumTCPIpFactorytID_VISION: // Vision
+	{
+		if (GetCommTcpIpObjectVision(lDeviceIndex) != nullptr)
+			GetCommTcpIpObjectVision(lDeviceIndex)->SetOutOfService(bOn);
+	}
+	break;
+	case enumTCPIpFactorytID_COLOR: // Color
+	{
+		if (GetCommTcpIpObjectColor(lDeviceIndex) != nullptr)
+			GetCommTcpIpObjectColor(lDeviceIndex)->SetOutOfService(bOn);
+	}
+	break;
+	case enumTCPIpFactorytID_ANGLE: // Angle
+	{
+		if (GetCommTcpIpObjectAngle(lDeviceIndex) != nullptr)
+			GetCommTcpIpObjectAngle(lDeviceIndex)->SetOutOfService(bOn);
+	}
+	break;
+	case enumTCPIpFactorytID_WAD: // WAD
+	{
+		if (GetCommTcpIpObjectWAD() != nullptr)
+			GetCommTcpIpObjectWAD()->SetOutOfService(bOn);
+	}
+	break;
+	case enumTCPIpFactorytID_PG: // PG
+	{
+		if (GetCommTcpIpObjectPG() != nullptr)
+			GetCommTcpIpObjectPG()->SetOutOfService(bOn);
+	}
+	break;
+	case enumTCPIpFactorytID_TSP: // TSP
+	{
+		// jsyoon 2022.10.19 change
+		if (GetCommTcpIpObjectTSP(lDeviceIndex) != nullptr)
+			GetCommTcpIpObjectTSP(lDeviceIndex)->SetOutOfService(bOn);
+
+		/*if (GetCommTcpIpObjectTSP() != nullptr)
+			GetCommTcpIpObjectTSP()->SetOutOfService(bOn);*/
+	}
+	break;
+	case enumTCPIpFactorytID_LCR: // LCR
+	{
+		if (GetCommTcpIpObjectLCR() != nullptr)
+			GetCommTcpIpObjectLCR()->SetOutOfService(bOn);
+	}
+	break;
+	case enumTCPIpFactorytID_AGING: // AGING PG
+	{
+		if (GetCommTcpIpObjectAGING() != nullptr)
+			GetCommTcpIpObjectAGING()->SetOutOfService(bOn);
+	}
+	break;
+	case enumTCPIpFactorytID_CIM: // AGING PG
+	{
+		if (GetCommTcpIpObjectCIM() != nullptr)
+			GetCommTcpIpObjectCIM()->SetOutOfService(bOn);
+	}
+	break;
+	default:
+		break;
+	}
+
+	//switch (lMeasType)
+	//{
+	////case 0:
+	////{
+	////	if (GetCommTcpIpObjectUTG1() != nullptr) GetCommTcpIpObjectUTG1()->SetOutOfService(bOn);
+	////	if (GetCommTcpIpObjectUTG2() != nullptr) GetCommTcpIpObjectUTG2()->SetOutOfService(bOn);
+	////}
+	////break;
+	////case 1:
+	////{
+	////	if (GetCommTcpIpObjectUTG1() != nullptr) GetCommTcpIpObjectUTG1()->SetOutOfService(bOn);
+	////}
+	////break;
+	////case 2:
+	////{
+	////	if (GetCommTcpIpObjectUTG2() != nullptr) GetCommTcpIpObjectUTG2()->SetOutOfService(bOn);
+	////}
+	////break;
+
+	//default:
+	//	break;
+	//}
+}
+
+void CCommTcpIpFactoryMgr::SetTcpConnection(long nID, bool bConnect)
+{
+	long lDeviceIndex = m_MgrPool_link.pNetworkConfigMgr->GetParam_DeviceIndex(nID);
+	long lMeasType = m_MgrPool_link.pNetworkConfigMgr->GetParam_MeasType(nID);
+
+	switch (lMeasType)
+	{
+	case enumTCPIpFactorytID_VISION: // Vision
+	{
+		if (GetCommTcpIpObjectVision(lDeviceIndex) != nullptr)
+		{
+			GetCommTcpIpObjectVision(lDeviceIndex)->SetConnect(bConnect);
+			GetCommTcpIpObjectVision(lDeviceIndex)->SetForcedDisconnect(bConnect);
+		}
+
+	}
+	break;
+	case enumTCPIpFactorytID_COLOR: // Color
+	{
+		if (GetCommTcpIpObjectColor(lDeviceIndex) != nullptr)
+		{
+			GetCommTcpIpObjectColor(lDeviceIndex)->SetConnect(bConnect);
+			GetCommTcpIpObjectColor(lDeviceIndex)->SetForcedDisconnect(bConnect);
+		}
+	}
+	break;
+	case enumTCPIpFactorytID_ANGLE: // Angle
+	{
+		if (GetCommTcpIpObjectAngle(lDeviceIndex) != nullptr)
+		{
+			GetCommTcpIpObjectAngle(lDeviceIndex)->SetConnect(bConnect);
+			GetCommTcpIpObjectAngle(lDeviceIndex)->SetForcedDisconnect(bConnect);
+		}
+	}
+	break;
+	case enumTCPIpFactorytID_WAD: // WAD
+	{
+		if (GetCommTcpIpObjectWAD() != nullptr)
+		{
+			GetCommTcpIpObjectWAD()->SetConnect(bConnect);
+			GetCommTcpIpObjectWAD()->SetForcedDisconnect(bConnect);
+		}
+	}
+	break;
+	case enumTCPIpFactorytID_PG: // PG
+	{
+		if (GetCommTcpIpObjectPG() != nullptr)
+		{
+			GetCommTcpIpObjectPG()->SetConnect(bConnect);
+			GetCommTcpIpObjectPG()->SetForcedDisconnect(bConnect);
+		}
+	}
+	break;
+	case enumTCPIpFactorytID_TSP: // TSP
+	{
+		// jsyoon 2022.10.19 change
+		if (GetCommTcpIpObjectTSP(lDeviceIndex) != nullptr)
+		{
+			GetCommTcpIpObjectTSP(lDeviceIndex)->SetConnect(bConnect);
+			GetCommTcpIpObjectTSP(lDeviceIndex)->SetForcedDisconnect(bConnect);
+		}
+		/*if (GetCommTcpIpObjectTSP() != nullptr)
+		{
+			GetCommTcpIpObjectTSP()->SetConnect(bConnect);
+			GetCommTcpIpObjectTSP()->SetForcedDisconnect(bConnect);
+		}*/
+	}
+	break;
+	case enumTCPIpFactorytID_LCR: // LCR
+	{
+		if (GetCommTcpIpObjectLCR() != nullptr)
+		{
+			GetCommTcpIpObjectLCR()->SetConnect(bConnect);
+			GetCommTcpIpObjectLCR()->SetForcedDisconnect(bConnect);
+		}
+	}
+	break;
+	case enumTCPIpFactorytID_AGING: // AGING PG
+	{
+		if (GetCommTcpIpObjectAGING() != nullptr)
+		{
+			GetCommTcpIpObjectAGING()->SetConnect(bConnect);
+			GetCommTcpIpObjectAGING()->SetForcedDisconnect(bConnect);
+		}
+	}
+	break;
+	case enumTCPIpFactorytID_CIM: // CIM
+	{
+		if (GetCommTcpIpObjectCIM() != nullptr)
+		{
+			GetCommTcpIpObjectCIM()->SetConnect(bConnect);
+			GetCommTcpIpObjectCIM()->SetForcedDisconnect(bConnect);
+		}
+	}
+	break;
+	case enumTCPIpFactorytID_PG_MON: // LYS 2026-07-29 ELP ElecBox monitor
+	{
+		if (GetCommTcpIpObjectPGMon() != nullptr)
+		{
+			GetCommTcpIpObjectPGMon()->SetConnect(bConnect);
+			GetCommTcpIpObjectPGMon()->SetForcedDisconnect(bConnect);
+		}
+	}
+	break;
+	default:
+		break;
+	}
+
+	//switch (lMeasType)
+	//{
+	////case 0:
+	////{
+	////	if (GetCommTcpIpObjectUTG1() != nullptr) GetCommTcpIpObjectUTG1()->SetConnect(bConnect);
+	////	if (GetCommTcpIpObjectUTG2() != nullptr) GetCommTcpIpObjectUTG2()->SetConnect(bConnect);
+	////}
+	////break;
+	////case 1:
+	////{
+	////	if (GetCommTcpIpObjectUTG1() != nullptr) GetCommTcpIpObjectUTG1()->SetConnect(bConnect);
+	////}
+	////break;
+	////case 2:
+	////{
+	////	if (GetCommTcpIpObjectUTG2() != nullptr) GetCommTcpIpObjectUTG2()->SetConnect(bConnect);
+	////}
+	////break;
+
+	//default:
+	//	break;
+	//}
+}
+
+CLogFileAccessor* CCommTcpIpFactoryMgr::GetLogFileAccessorPtr(long nID)
+{
+	CLogFileAccessor *pLogFile = nullptr;
+
+	long lDeviceIndex = m_MgrPool_link.pNetworkConfigMgr->GetParam_DeviceIndex(nID);
+	long lMeasType = m_MgrPool_link.pNetworkConfigMgr->GetParam_MeasType(nID);
+
+	switch (lMeasType)
+	{
+	case enumTCPIpFactorytID_VISION: // Vision
+	{
+		if (GetCommTcpIpObjectVision(lDeviceIndex) != nullptr)
+			pLogFile = GetCommTcpIpObjectVision(lDeviceIndex)->GetLogFileAccessorPtr();
+	}
+	break;
+	case enumTCPIpFactorytID_COLOR: // Color
+	{
+		if (GetCommTcpIpObjectColor(lDeviceIndex) != nullptr)
+			pLogFile = GetCommTcpIpObjectColor(lDeviceIndex)->GetLogFileAccessorPtr();
+	}
+	break;
+	case enumTCPIpFactorytID_ANGLE: // Angle
+	{
+		if (GetCommTcpIpObjectAngle(lDeviceIndex) != nullptr)
+			pLogFile = GetCommTcpIpObjectAngle(lDeviceIndex)->GetLogFileAccessorPtr();
+	}
+	break;
+	case enumTCPIpFactorytID_WAD: // WAD
+	{
+		if (GetCommTcpIpObjectWAD() != nullptr)
+			pLogFile = GetCommTcpIpObjectWAD()->GetLogFileAccessorPtr();
+	}
+	break;
+	case enumTCPIpFactorytID_PG: // PG
+	{
+		if (GetCommTcpIpObjectPG() != nullptr)
+			pLogFile = GetCommTcpIpObjectPG()->GetLogFileAccessorPtr();
+	}
+	break;
+	case enumTCPIpFactorytID_TSP: // TSP
+	{
+		// jsyoon 2022.10.19 change
+		if (GetCommTcpIpObjectTSP(lDeviceIndex) != nullptr)
+			pLogFile = GetCommTcpIpObjectTSP(lDeviceIndex)->GetLogFileAccessorPtr();
+
+		//if (GetCommTcpIpObjectTSP() != nullptr)
+		//	pLogFile = GetCommTcpIpObjectTSP()->GetLogFileAccessorPtr();
+	}
+	break;
+	case enumTCPIpFactorytID_LCR: // LCR
+	{
+		if (GetCommTcpIpObjectLCR() != nullptr)
+			pLogFile = GetCommTcpIpObjectLCR()->GetLogFileAccessorPtr();
+	}
+	break;
+	case enumTCPIpFactorytID_AGING: // AGING PG
+	{
+		if (GetCommTcpIpObjectAGING() != nullptr)
+			pLogFile = GetCommTcpIpObjectAGING()->GetLogFileAccessorPtr();
+	}
+	break;
+	case enumTCPIpFactorytID_CIM: // CIM
+	{
+		if (GetCommTcpIpObjectCIM() != nullptr)
+			pLogFile = GetCommTcpIpObjectCIM()->GetLogFileAccessorPtr();
+	}
+	break;
+	case enumTCPIpFactorytID_TIME: // 
+	{
+		if (GetCommTcpIpObjectSystime() != nullptr)
+			pLogFile = GetCommTcpIpObjectSystime()->GetLogFileAccessorPtr();
+	}
+	break;
+	case enumTCPIpFactorytID_MOTION: //
+	{
+		if (GetCommTcpIpObjectVisMotion() != nullptr)
+			pLogFile = GetCommTcpIpObjectVisMotion()->GetLogFileAccessorPtr();
+	}
+	break;
+	default:
+		break;
+	}
+
+	/*switch (lMeasType)
+	{
+	case 0:
+	{
+		if (GetCommTcpIpObjectUTG1() != nullptr) pLogFile = GetCommTcpIpObjectUTG1()->GetLogFileAccessorPtr();
+	}
+	break;
+	case 1:
+	{
+		if (GetCommTcpIpObjectUTG2() != nullptr) pLogFile = GetCommTcpIpObjectUTG2()->GetLogFileAccessorPtr();
+	}
+	break;
+	}*/
+
+	return pLogFile;
+}
+
+bool CCommTcpIpFactoryMgr::IsOutOfService(long nID)
+{
+	bool bRet = false;
+
+	long lDeviceIndex = m_MgrPool_link.pNetworkConfigMgr->GetParam_DeviceIndex(nID);
+	long lMeasType = m_MgrPool_link.pNetworkConfigMgr->GetParam_MeasType(nID);
+
+	switch (lMeasType)
+	{
+	case enumTCPIpFactorytID_VISION: // Vision
+	{
+		if (GetCommTcpIpObjectVision(lDeviceIndex) != nullptr)
+			bRet = GetCommTcpIpObjectVision(lDeviceIndex)->IsOutOfService();
+	}
+	break;
+	case enumTCPIpFactorytID_COLOR: // Color
+	{
+		if (GetCommTcpIpObjectColor(lDeviceIndex) != nullptr)
+			bRet = GetCommTcpIpObjectColor(lDeviceIndex)->IsOutOfService();
+	}
+	break;
+	case enumTCPIpFactorytID_ANGLE: // Angle
+	{
+		if (GetCommTcpIpObjectAngle(lDeviceIndex) != nullptr)
+			bRet = GetCommTcpIpObjectAngle(lDeviceIndex)->IsOutOfService();
+	}
+	break;
+	case enumTCPIpFactorytID_WAD: // WAD
+	{
+		if (GetCommTcpIpObjectWAD() != nullptr)
+			bRet = GetCommTcpIpObjectWAD()->IsOutOfService();
+	}
+	break;
+	case enumTCPIpFactorytID_PG: // PG
+	{
+		if (GetCommTcpIpObjectPG() != nullptr)
+			bRet = GetCommTcpIpObjectPG()->IsOutOfService();
+	}
+	break;
+	case enumTCPIpFactorytID_TSP: // TSP
+	{
+		// jsyoon 2022.10.19 change
+		if (GetCommTcpIpObjectTSP(lDeviceIndex) != nullptr)
+			bRet = GetCommTcpIpObjectTSP(lDeviceIndex)->IsOutOfService();
+
+		/*if (GetCommTcpIpObjectTSP() != nullptr)
+			bRet = GetCommTcpIpObjectTSP()->IsOutOfService();*/
+	}
+	break;
+	case enumTCPIpFactorytID_LCR: // LCR
+	{
+		if (GetCommTcpIpObjectLCR() != nullptr)
+			bRet = GetCommTcpIpObjectLCR()->IsOutOfService();
+	}
+	break;
+	case enumTCPIpFactorytID_AGING: // AGING PG
+	{
+		if (GetCommTcpIpObjectAGING() != nullptr)
+			bRet = GetCommTcpIpObjectAGING()->IsOutOfService();
+	}
+	break;
+	case enumTCPIpFactorytID_CIM: // AGING PG
+	{
+		if (GetCommTcpIpObjectCIM() != nullptr)
+			bRet = GetCommTcpIpObjectCIM()->IsOutOfService();
+	}
+	break;
+	default:
+		break;
+	}
+
+	//switch (lMeasType)
+	//{
+	//case 0:
+	//{
+	//	if (GetCommTcpIpObjectUTG1() != nullptr) bRet = GetCommTcpIpObjectUTG1()->IsOutOfService();
+	//}
+	//break;
+	//case 1:
+	//{
+	//	if (GetCommTcpIpObjectUTG2() != nullptr) bRet = GetCommTcpIpObjectUTG2()->IsOutOfService();
+	//}
+	//break;
+
+	//default:
+	//	break;
+	//}
+
+	return bRet;
+}
+
+int CCommTcpIpFactoryMgr::GetCount()
+{
+	// TODO: 여기에 구현 코드 추가.
+	int nRet = 0;
+	nRet = m_MgrPool_link.pNetworkConfigMgr->GetCount();
+	return nRet;
+}
+
+CString CCommTcpIpFactoryMgr::GetParam_Name(long nID)
+{
+	return m_MgrPool_link.pNetworkConfigMgr->GetParam_Name(nID);
+}
+
+CString CCommTcpIpFactoryMgr::GetParam_IPNumber(long nID)
+{
+	return m_MgrPool_link.pNetworkConfigMgr->GetParam_IPNumber(nID);
+}
+
+long CCommTcpIpFactoryMgr::GetParam_PortNumger(long nID)
+{
+	return m_MgrPool_link.pNetworkConfigMgr->GetParam_PortNumger(nID);
+}
+
+bool CCommTcpIpFactoryMgr::IsConnected(long nID)
+{
+	bool bRet = false;
+
+	long lDeviceIndex = m_MgrPool_link.pNetworkConfigMgr->GetParam_DeviceIndex(nID);
+	long lMeasType = m_MgrPool_link.pNetworkConfigMgr->GetParam_MeasType(nID);
+
+	switch (lMeasType)
+	{
+	case enumTCPIpFactorytID_VISION: // Vision
+	{
+		if (GetCommTcpIpObjectVision(lDeviceIndex) != nullptr)
+			bRet = GetCommTcpIpObjectVision(lDeviceIndex)->IsConnected();
+	}
+	break;
+	case enumTCPIpFactorytID_COLOR: // Color
+	{
+		if (GetCommTcpIpObjectColor(lDeviceIndex) != nullptr)
+			bRet = GetCommTcpIpObjectColor(lDeviceIndex)->IsConnected();
+	}
+	break;
+	case enumTCPIpFactorytID_ANGLE: // Angle
+	{
+		if (GetCommTcpIpObjectAngle(lDeviceIndex) != nullptr)
+			bRet = GetCommTcpIpObjectAngle(lDeviceIndex)->IsConnected();
+	}
+	break;
+	case enumTCPIpFactorytID_WAD: // WAD
+	{
+		if (GetCommTcpIpObjectWAD() != nullptr)
+			bRet = GetCommTcpIpObjectWAD()->IsConnected();
+	}
+	break;
+	case enumTCPIpFactorytID_PG: // PG
+	{
+		if (GetCommTcpIpObjectPG() != nullptr)
+			bRet = GetCommTcpIpObjectPG()->IsConnected();
+	}
+	break;
+	case enumTCPIpFactorytID_TSP: // TSP
+	{
+		// jsyoon 2022.10.19 change
+		if (GetCommTcpIpObjectTSP(lDeviceIndex) != nullptr)
+			bRet = GetCommTcpIpObjectTSP(lDeviceIndex)->IsConnected();
+
+	//	if (GetCommTcpIpObjectTSP() != nullptr)
+	//		bRet = GetCommTcpIpObjectTSP()->IsConnected();
+	}
+	break;
+	case enumTCPIpFactorytID_LCR: // LCR
+	{
+		if (GetCommTcpIpObjectLCR() != nullptr)
+			bRet = GetCommTcpIpObjectLCR()->IsConnected();
+	}
+	break;
+	case enumTCPIpFactorytID_AGING: // AGING PG
+	{
+		if (GetCommTcpIpObjectAGING() != nullptr)
+			bRet = GetCommTcpIpObjectAGING()->IsConnected();
+	}
+	break;
+	case enumTCPIpFactorytID_CIM: // CIM
+	{
+		if (GetCommTcpIpObjectCIM() != nullptr)
+			bRet = GetCommTcpIpObjectCIM()->IsConnected();
+	}
+	break;
+	case enumTCPIpFactorytID_TIME: // SYSTEM TIME
+	{
+		if (GetCommTcpIpObjectSystime() != nullptr)
+			bRet = GetCommTcpIpObjectSystime()->IsConnected();
+	}
+	break;
+	case enumTCPIpFactorytID_MOTION: // VISION Motion
+	{
+		if (GetCommTcpIpObjectVisMotion() != nullptr)
+			bRet = GetCommTcpIpObjectVisMotion()->IsConnected();
+	}
+	break;
+	default:
+		break;
+	}
+
+	return bRet;
+}
+
+BOOL	CCommTcpIpFactoryMgr::CmQualityEmptyTimeOut(BOOL bLast, int nTimeOut)
+{
+	BOOL bTimeOut = FALSE;
+
+	DWORD dwTimeout = /*m_pDlgNaviRecipe->m_RecipeMeas.nTimeout[3]*/nTimeOut * 1000;
+	DWORD dwBeginTick = GetTickCount();
+	DWORD dwRecheck = 1500; //1.5Sec
+	DWORD dwCurrentTick = 0;
+	DWORD dwTemp = 0;
+
+	int nExeItem = -1;
+	if (bLast)	nExeItem = EXE_QUALITY_EMPTY_BUFFER_ALL;
+	else		nExeItem = EXE_QUALITY_EMPTY_BUFFER;
+
+	////마지막 검사에서는 이전 검사 대기 모두 끝났는지 확인
+	////마지막 검사 전에는 (두개의 버퍼중 하나라도 비었으면 사용 가능)
+
+	if (DoWorkVisionCmd(nExeItem) != VTM_RV_SUCCESSED) {
+		while (1) {
+			dwCurrentTick = GetTickCount();
+
+			if ((dwCurrentTick - dwBeginTick) < 0) dwBeginTick = dwTemp; //음수로 나오면 기존 지난 시간 사용
+			else dwTemp = (dwCurrentTick - dwBeginTick);
+
+			if ((dwCurrentTick - dwBeginTick) > dwTimeout) {
+				bTimeOut = TRUE;
+				break;
+			}
+			else if ((dwCurrentTick - dwBeginTick) > dwRecheck) {
+				if (DoWorkVisionCmd(nExeItem) == VTM_RV_SUCCESSED) break;
+				dwRecheck += 1500;
+			}
+			else
+			{
+				//Stop 확인 코드 추가 필요
+				//if (&(this->m_WTI) != NULL && WaitForSingleObject(this->m_WTI.m_hEvtStop, 0) == WAIT_OBJECT_0)
+				//{
+				//	bTimeOut = TRUE;
+				//	break;
+				//}
+			}
+		}
+	}
+
+	return bTimeOut;
+}
+
+int	CCommTcpIpFactoryMgr::CmQualityAlarm()
+{
+	UINT nAlarmID = HEAD_ACK_TIMEOUT;
+	for (int i = 0; i < DF_MAX_HEAD; i++) {
+		nAlarmID += i;
+		if (DoWorkVisionCmd(EXE_QUAITY_BUFFER_CHECK, FALSE, i) == HEAD_ACK_FAIL/*VTM_RV_FAILED*/) {
+			//int nRet = Alarm_SetAlarm(nAlarmID);
+
+			return nAlarmID;
+		}
+	}
+
+	return VTM_RV_SUCCESSED;
+}
+
+long CCommTcpIpFactoryMgr::DoWorkVisionCmd(int nItem, BOOL bQualityAutoSet, int nHead)
+{
+	long nRet = VTM_RV_SUCCESSED;
+	bool bRet = true;
+	//int  nMeasIndex = 1;
+	bool bRet2[2] = {true, true};
+
+	switch (nItem)
+	{
+	case EXE_QUALITY_GRAB:
+	{
+		for (size_t lDeviceIndex = 0; lDeviceIndex < 2; lDeviceIndex++)
+		{
+			if (GetCommTcpIpObjectVision(lDeviceIndex) != nullptr && m_bUseMeas[lDeviceIndex])
+				bRet &= GetCommTcpIpObjectVision(lDeviceIndex)->InspectStartMulti(lDeviceIndex, m_nAreaNum[lDeviceIndex]);
+		}
+
+		if (bRet == true)
+		{
+			for (size_t lDeviceIndex = 0; lDeviceIndex < 2; lDeviceIndex++)
+			{
+				if (GetCommTcpIpObjectVision(lDeviceIndex) != nullptr && m_bUseMeas[lDeviceIndex])
+					bRet &= GetCommTcpIpObjectVision(lDeviceIndex)->InspectStartWait();
+			}
+		}
+	}
+	break;
+	
+	case EXE_QUALITY_GRAB_WAIT:
+	{
+		for (size_t lDeviceIndex = 0; lDeviceIndex < 2; lDeviceIndex++)
+		{
+			if (GetCommTcpIpObjectVision(lDeviceIndex) != nullptr && m_bUseMeas[lDeviceIndex])
+			{
+				bRet2[lDeviceIndex] = GetCommTcpIpObjectVision(lDeviceIndex)->WaitInspectionEnd(m_nTimeOut);
+			}
+		}
+
+		for (size_t lDeviceIndex = 0; lDeviceIndex < 2; lDeviceIndex++)
+		{
+			if (GetCommTcpIpObjectVision(lDeviceIndex) != nullptr && m_bUseMeas[lDeviceIndex])
+			{
+				if (bRet2[lDeviceIndex] != true)
+				{
+					bRet2[lDeviceIndex] = GetCommTcpIpObjectVision(lDeviceIndex)->WaitInspectionEnd(m_nTimeOut);
+				}
+			}
+		}
+
+		for (size_t lDeviceIndex = 0; lDeviceIndex < 2; lDeviceIndex++)
+		{
+			bRet &= bRet2[lDeviceIndex];
+		}
+	}
+	break;
+
+	case EXE_QUALITY_WAIT_USE:
+		for (int nHead = 0; nHead < DF_MAX_HEAD; nHead++) {
+			if (GetCommTcpIpObjectVision(nHead) != nullptr)
+				GetCommTcpIpObjectVision(nHead)->QualityWaitUse(bQualityAutoSet);
+		}
+	break;
+
+	case EXE_QUALITY_EMPTY_BUFFER:
+		for (int nHead = 0; nHead < DF_MAX_HEAD; nHead++) {
+			if (GetCommTcpIpObjectVision(nHead) != nullptr)
+				bRet &= GetCommTcpIpObjectVision(nHead)->QualityBufferEmpty();
+		}
+	break;
+
+	case EXE_QUALITY_EMPTY_BUFFER_ALL:
+		for (int nHead = 0; nHead < DF_MAX_HEAD; nHead++) {
+			if (GetCommTcpIpObjectVision(nHead) != nullptr)
+				bRet &= GetCommTcpIpObjectVision(nHead)->QualityBufferEmptyAll();
+		}
+	break;
+
+	case EXE_QUAITY_BUFFER_CHECK:
+		if (GetCommTcpIpObjectVision(nHead) != nullptr)
+			bRet = GetCommTcpIpObjectVision(nHead)->QualityBufferEmpty();
+	break;
+
+	case EXE_QUALITY_RESET:
+		for (int nHead = 0; nHead < DF_MAX_HEAD; nHead++) {
+			if (GetCommTcpIpObjectVision(nHead) != nullptr)
+				GetCommTcpIpObjectVision(nHead)->QualityWaitClear();
+		}
+	break;
+
+	default:
+		break;
+	}
+
+	if (bRet != true)
+	{
+		nRet = HEAD_ACK_FAIL;
+	}
+
+	return nRet;
+}
+
+void CCommTcpIpFactoryMgr::SetMeasUseInfo(bool *bUseMeas, int *nAreaNum, int nTimeOut)
+{
+	memcpy(m_bUseMeas, bUseMeas, sizeof(m_bUseMeas));
+	memcpy(m_nAreaNum, nAreaNum, sizeof(m_nAreaNum));
+	m_nTimeOut = nTimeOut;
+}
+
+BOOL CCommTcpIpFactoryMgr::CmFileFind(CString strFile)
+{
+	//파일 이름만 가져오기
+	int pos = 0;
+	CString strID;
+	CString resToken = strFile.Tokenize(_T("\\"), pos);
+	while (resToken != _T("")) {
+		strID = resToken.Trim();
+		resToken = strFile.Tokenize(_T("\\"), pos);
+	}
+
+	//파일 찾기
+	BOOL bExist = FALSE;
+	CFileFind finder;
+	BOOL bWorking = finder.FindFile(strFile);
+	while (bWorking) {
+		bWorking = finder.FindNextFile();
+		if (finder.IsDots() || finder.IsDirectory()) continue;
+		if (strID == finder.GetFileName()) {
+			bExist = TRUE;
+			break;
+		}
+
+	}
+	finder.Close();
+
+	return bExist;
+}
+
+BOOL	CCommTcpIpFactoryMgr::CmFileFindTimeOut(CString strFile, int nTimeOut)
+{
+	BOOL bTimeOut = FALSE;
+
+	DWORD dwTimeout = nTimeOut;
+	DWORD dwBeginTick = GetTickCount();
+	DWORD dwRecheck = 1000; //1Sec
+	DWORD dwCurrentTick = 0;
+	DWORD dwTemp = 0;
+
+	if (!CmFileFind(strFile)) {
+		while (1) {
+			dwCurrentTick = GetTickCount();
+
+			if ((dwCurrentTick - dwBeginTick) < 0) dwBeginTick = dwTemp; //음수로 나오면 기존 지난 시간 사용
+			else dwTemp = (dwCurrentTick - dwBeginTick);
+
+			if ((dwCurrentTick - dwBeginTick) > dwTimeout) {
+				bTimeOut = TRUE;
+				break;
+			}
+			else if ((dwCurrentTick - dwBeginTick) > dwRecheck) {
+				if (CmFileFind(strFile)) break;
+				dwRecheck += 1000;
+			}
+		}
+	}
+
+	return bTimeOut;
+}
+
+void CCommTcpIpFactoryMgr::SetMeasPos(long lMeasType, double dx, double dy1, double dy2)
+{
+	switch (lMeasType)
+	{
+	case enumTCPIpFactorytID_VISION: // Vision
+	{
+		//if (GetCommTcpIpObjectVision(lDeviceIndex) != nullptr)
+		//	bRet = GetCommTcpIpObjectVision(lDeviceIndex)->IsConnected();
+	}
+	break;
+	case enumTCPIpFactorytID_COLOR: // Color
+	{
+		/*if (GetCommTcpIpObjectColor(lDeviceIndex) != nullptr)
+			bRet = GetCommTcpIpObjectColor(lDeviceIndex)->IsConnected();*/
+	}
+	break;
+	case enumTCPIpFactorytID_ANGLE: // Angle
+	{
+		/*if (GetCommTcpIpObjectAngle(lDeviceIndex) != nullptr)
+			bRet = GetCommTcpIpObjectAngle(lDeviceIndex)->IsConnected();*/
+	}
+	break;
+	case enumTCPIpFactorytID_WAD: // WAD
+	{
+		if (GetCommTcpIpObjectWAD() != nullptr)
+			GetCommTcpIpObjectWAD()->SetMeasPos(dx, dy1, dy2);
+	}
+	break;
+	case enumTCPIpFactorytID_PG: // PG
+	{
+		;
+	}
+	break;
+	case enumTCPIpFactorytID_TSP: // TSP
+	{
+	/*	if (GetCommTcpIpObjectTSP() != nullptr)
+			bRet = GetCommTcpIpObjectTSP()->IsConnected();*/
+	}
+	break;
+	case enumTCPIpFactorytID_LCR: // LCR
+	{
+	/*	if (GetCommTcpIpObjectLCR() != nullptr)
+			bRet = GetCommTcpIpObjectLCR()->IsConnected();*/
+	}
+	break;
+	case enumTCPIpFactorytID_AGING: // AGING PG
+	{
+	/*	if (GetCommTcpIpObjectAGING() != nullptr)
+			bRet = GetCommTcpIpObjectAGING()->IsConnected();*/
+	}
+	break;
+	case enumTCPIpFactorytID_CIM: // CIM
+	{
+		/*if (GetCommTcpIpObjectCIM() != nullptr)
+			bRet = GetCommTcpIpObjectCIM()->IsConnected();*/
+	}
+	break;
+	default:
+		break;
+	}
+}
+
+bool CCommTcpIpFactoryMgr::IsUsed(long nID)
+{
+	bool bRet = false;
+	bRet = m_MgrPool_link.pNetworkConfigMgr->GetParam_Use(nID);
+
+	return bRet;
+}

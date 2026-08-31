@@ -5,6 +5,8 @@
 
 
 
+class CAuroraMgr;	// LYS 2026-08-10 Phase 1
+
 class CDlgSubManual_AutoContact : public CDialogEx
 {
 	DECLARE_DYNAMIC(CDlgSubManual_AutoContact)
@@ -14,11 +16,20 @@ private:
 	CLabel		m_LabelInfo;
 
 public:
-	CDlgSubManual_AutoContact(CWnd* pParent = NULL);   // 표준 생성자입니다.
+	CDlgSubManual_AutoContact(CAuroraMgr* pAuroraMgr, CWnd* pParent = NULL);   // 표준 생성자입니다.
 	virtual ~CDlgSubManual_AutoContact();
 
 public:
 	//VTM_SYSTEM* m_pSystem;	//To Use Shared Memory Pointer
+	CAuroraMgr*		m_pAuroraMgr;	// LYS 2026-08-10 Phase 1
+	double			m_fAutoContactParam[8];	// LYS 2026-08-10 = AUTO_CONTACT_ITEM_MAX (local store until Phase 2 helper)
+	BOOL			m_bAutoCntRunning;		// LYS 2026-08-10 Phase 4
+	CComboBox		m_comboAcStick;			// LYS 2026-08-11 manual-only: stick selector
+	int				m_nAcStickCnt;			// LYS 2026-08-11 combo rebuild cache
+	volatile int	m_nAcSelStick;			// LYS 2026-08-11 -1=ALL, else 0-based stick
+	volatile int	m_nAcProgState;			// LYS 2026-08-11 0 idle/1 move/2 search/3 done/4 fail/5 stop
+	volatile int	m_nAcProgCur;
+	volatile int	m_nAcProgTotal;
 	double			m_fAutoCntReady;
 	double			m_fAutoCntContactPos;
 	double			m_fAutoCntODPos;
@@ -83,6 +94,10 @@ protected:
 	afx_msg void OnModelChangeUse();
 	afx_msg void OnProbeChangeUse();
 	afx_msg void OnAlwaysUse();
+	afx_msg void OnTimer(UINT_PTR nIDEvent);	// LYS 2026-08-10 Phase 1
+	static UINT AutoContactSearchThread(LPVOID pParam);	// LYS 2026-08-10 Phase 4
+	static UINT PgDownloadThread(LPVOID pParam);		// LYS 2026-08-10 Phase 4
+	void UpdateStickList();								// LYS 2026-08-11 manual-only
 
 
 	DECLARE_MESSAGE_MAP()

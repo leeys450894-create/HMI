@@ -2096,6 +2096,7 @@ struct S_AgingTest {
 	int	 m_nPtnSec;			//점등 유지 시간
 	BOOL m_bUseProperty;	//특성측정 유무
 	BOOL m_bUseQuality;		//화질측정 유무
+	BOOL m_bUseAngle;		// LYS 2026-08-06 Phase 2 ANGLE (HMI: OCP USE_LCR replaced)
 
 	S_AgingTest() {
 		Clear();
@@ -2107,6 +2108,7 @@ struct S_AgingTest {
 		m_nPtnSec = 0;
 		m_bUseProperty = FALSE;
 		m_bUseQuality = FALSE;
+		m_bUseAngle = FALSE;	// LYS 2026-08-06 Phase 2
 	}
 };
 

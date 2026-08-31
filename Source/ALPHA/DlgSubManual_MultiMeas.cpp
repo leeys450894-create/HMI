@@ -1,7 +1,6 @@
-// LYS 2026-07-23 WAD Multi Point measurement setting dialog (ported from OCP CDlgNaviManualMultiMeas)
-// Phase 3: CMySpreadDll grids + CWadMultiMeasMgr binding.
-// Grid init is done inline here (not in MySpreadDll.cpp) to avoid rebuilding
-// every CoreFunction consumer project for a single-view layout.
+// LYS 2026-07-23 WAD 다점 측정 설정 다이얼로그(OCP CDlgNaviManualMultiMeas 이식, Phase 3).
+// 그리드 초기화는 이 화면 전용이라 MySpreadDll.cpp가 아닌 여기서 처리한다
+// - CoreFunction을 쓰는 전 프로젝트 리빌드를 피하기 위함.
 
 #include "pch.h"
 #include "ALPHA.h"
@@ -153,8 +152,8 @@ void CDlgSubManual_MultiMeas::InitSpreadPointList()
 	SetPointListHeaderText();
 }
 
-// LYS 2026-07-24 header labels via row 0 (OCP multi meas list format).
-// Re-applied after grid rebuilds because ClearRange/SetMaxRows can reset header cells.
+// LYS 2026-07-24 헤더 라벨은 row 0에 직접 기입한다(OCP multi meas 리스트 포맷).
+// ClearRange/SetMaxRows가 헤더 셀을 지우므로 그리드 재구성 뒤 다시 적용한다.
 void CDlgSubManual_MultiMeas::SetPointListHeaderText()
 {
 	if (m_spreadPointList == nullptr || m_spreadPointList->GetSafeHwnd() == NULL)
@@ -566,9 +565,8 @@ void CDlgSubManual_MultiMeas::OnBnClickedButtonMmOpen()
 	if (nExt > 0)
 		strFileName = strFileName.Left(nExt);
 
-	// LYS 2026-07-24 also load the main recipe here (same mechanism as
-	// Manual Meas recipe open: RecipeEditMgr::OpenRecipe) so the cell map
-	// reflects the selected recipe without opening it elsewhere first.
+	// LYS 2026-07-24 메인 레시피도 여기서 로드한다(Manual Meas와 동일하게 RecipeEditMgr::OpenRecipe).
+	// 다른 곳에서 먼저 열지 않아도 셀 맵이 선택한 레시피를 반영하도록.
 	if (m_pAuroraMgr == nullptr || m_pAuroraMgr->GetRecipeEditMgrPtr() == nullptr)
 		return;
 

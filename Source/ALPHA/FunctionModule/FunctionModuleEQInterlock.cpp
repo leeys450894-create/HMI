@@ -19,7 +19,7 @@ CFunctionModuleEQInterlock::CFunctionModuleEQInterlock(stAuroraMgrPool &MgrPool)
 {
 	m_strSeqType = _T("SEQUENCE_ITEM_FUNC_MODULE_CHECK_INTERLOCK");
 	m_strSeqComm = _T("TCPIP");
-	m_strSeqCorp = _T("KMAC");
+	m_strSeqCorp = _T("HBS");
 	m_strSeqName = _T("CHECK_INTERLOCK");
 	m_strSeqGUID = _T("2F30C4D2-1328-4CF6-B649-7C176BD80F3A");
 	m_strSeqDesc = _T("Check Interlock State");

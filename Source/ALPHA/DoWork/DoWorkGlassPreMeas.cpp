@@ -21,7 +21,7 @@ CDoWorkGlassPreMeas::CDoWorkGlassPreMeas(stAuroraMgrPool& MgrPool)
 {
 	m_strSeqType = _T("SEQUENCE_ITEM_DWGLASS_SEQ_GLASS_PRE_MEAS");
 	m_strSeqComm = _T("TCPIP");
-	m_strSeqCorp = _T("KMAC");
+	m_strSeqCorp = _T("HBS");
 	m_strSeqName = _T("GLASS 4_PRE_MEAS");
 	m_strSeqGUID = _T("C415D3D0-E006-4963-ABF3-DEC16888CA24");
 	m_strSeqDesc = _T("GLASS PRE_MEAS");

@@ -1,13 +1,30 @@
 ﻿#include "pch.h"
 #include "ALPHA.h"
 #include "DlgSubManual_AutoContact.h"
+#include "AuroraMgr.h"					// LYS 2026-08-10 Phase 1
+#include "Manager\ShareMemoryMgr.h"	// LYS 2026-08-10 Phase 1
+#include "Manager\MaintControlMgr.h"	// LYS 2026-08-10 Phase 1
+#include "Recipe\RecipeEditMgr.h"		// LYS 2026-08-10 Phase 1
+#include "DoWork\AutoContactInfo.h"		// LYS 2026-08-10 Phase 4
+#include "Manager\CommTcpIpFactoryMgr.h"	// LYS 2026-08-10 Phase 4
+#include "Manager\SequenceManager.h"		// LYS 2026-08-10 Phase 4
+#include "Alarm\AlarmController.h"		// LYS 2026-08-10 Phase 4
+#include "SystemParamShare.h"			// LYS 2026-08-10 Phase 1
 #include "afxdialogex.h"
 
 IMPLEMENT_DYNAMIC(CDlgSubManual_AutoContact, CDialogEx)
 
-CDlgSubManual_AutoContact::CDlgSubManual_AutoContact(CWnd* pParent /*=NULL*/) 
+CDlgSubManual_AutoContact::CDlgSubManual_AutoContact(CAuroraMgr* pAuroraMgr, CWnd* pParent /*=NULL*/) 
 	:CDialogEx(CDlgSubManual_AutoContact::IDD, pParent)
+	, m_pAuroraMgr(pAuroraMgr)	// LYS 2026-08-10 Phase 1
 {
+	ZeroMemory(m_fAutoContactParam, sizeof(m_fAutoContactParam));	// LYS 2026-08-10
+	m_bAutoCntRunning = FALSE;	// LYS 2026-08-10 Phase 4
+	m_nAcStickCnt = -1;			// LYS 2026-08-11
+	m_nAcSelStick = -1;
+	m_nAcProgState = 0;
+	m_nAcProgCur = 0;
+	m_nAcProgTotal = 0;
 	//m_pSystem = NULL;
 	//m_pSystem = SMEM_GetSharedMemory();
 }
@@ -25,11 +42,13 @@ void CDlgSubManual_AutoContact::DoDataExchange(CDataExchange* pDX)
 	DDX_Control(pDX, IDC_CHECK_2, m_btnAutoModelChangeUse);
 	DDX_Control(pDX, IDC_CHECK_3, m_btnAutoProbeChangeUse);
 	DDX_Control(pDX, IDC_CHECK_4, m_btnAutoProbeAlways);
+	DDX_Control(pDX, IDC_COMBO_AC_STICK, m_comboAcStick);	// LYS 2026-08-11
 }
 
 
 BEGIN_MESSAGE_MAP(CDlgSubManual_AutoContact, CDialogEx)
 	ON_WM_ERASEBKGND()
+	ON_WM_TIMER()	// LYS 2026-08-10 Phase 1
 	ON_COMMAND(IDC_BUTTON_1, OnStop)
 	ON_COMMAND(IDC_BUTTON_2, OnRcpOpen)
 	ON_COMMAND(IDC_BUTTON_3, OnAutoContactSave)
@@ -92,6 +111,9 @@ BOOL CDlgSubManual_AutoContact::OnInitDialog()
 
 	//m_strIniPath = gf_GetCnfPath(m_pSystem->stEquip.m_nEQType, dfDEFAULT_CONFIG_FILE);
 	//m_strAutoLogPath = gf_GetFilePath(dfDEFAULT_AUTOCNT_LOG_FILE_PATH);
+	// LYS 2026-08-10 Phase 1: HMI config path (C7: Config.ini [PROBE_AUTO_CONTACT])
+	m_strIniPath.Format(_T("%s\\Config.ini"), CSystemParamShare::GetInstance()->GetConfigFolderPath());
+	m_strAutoLogPath.Format(_T("%s\\AutoContactLog.ini"), CSystemParamShare::GetInstance()->GetConfigFolderPath());
 
 	m_btnStop.SetImage(IDB_CHECKNO32);
 	m_btnStop.m_nFlatStyle = CMFCButton::BUTTONSTYLE_3D;
@@ -133,19 +155,21 @@ BOOL CDlgSubManual_AutoContact::OnInitDialog()
 	m_btnAutoProbeAlways.m_nFlatStyle = CMFCButton::BUTTONSTYLE_SEMIFLAT;
 	m_btnAutoProbeAlways.SetCheck(m_bAutoCntAlways);
 
+	// LYS 2026-08-10 Phase 1: load params into grid (CMySpreadDll: data col 1, rows 1..8)
 	CString strTemp;
-	//m_spreadAutoContact.SetCol(2);
 	for (int i = 0; i < AUTO_CONTACT_ITEM_MAX; i++) {
-		if (i <= AUTO_CT_PERCENT || i == AUTO_CT_ADD_OD) {
-			//strTemp.Format(_T("%.4lf"), m_pSystem->stInterLock.m_fAutoContactData[i]);
-			//m_spreadAutoContact.SetRow(i + 2);
-			m_spreadAutoContact->SetData(1, i + 1, strTemp);
-		}
-		else {
-			//m_spreadAutoContact.SetRow(i + 2);
-			//m_spreadAutoContact.SetTypeComboBoxCurSel((int)m_pSystem->stInterLock.m_fAutoContactData[i]);
-		}
+		if (i == AUTO_CT_PORT_FAIL)	strTemp.Format(_T("%d"), (int)m_fAutoContactParam[i]);	// combo row: text=value
+		else						strTemp.Format(_T("%.4lf"), m_fAutoContactParam[i]);
+		m_spreadAutoContact->SetData(1, i + 1, strTemp);
 	}
+
+	// LYS 2026-08-10 Phase 1: show current recipe id (always from RecipeEditMgr)
+	if (m_pAuroraMgr != NULL && m_pAuroraMgr->GetRecipeEditMgrPtr() != NULL)
+		GetDlgItem(IDC_EDIT_1)->SetWindowText(m_pAuroraMgr->GetRecipeEditMgrPtr()->GetRecipeID());
+
+	UpdateStickList();		// LYS 2026-08-11 manual-only: stick selector
+
+	SetTimer(1, 500, NULL);	// LYS 2026-08-10 Phase 1: status refresh
 
 	return TRUE;
 }
@@ -158,27 +182,35 @@ void CDlgSubManual_AutoContact::GetAutoContactData()
 	ZeroMemory(szValue, MAX_PATH);
 	GetPrivateProfileString(_T("PROBE_AUTO_CONTACT"), _T("ReadyPos"), _T("0.0"), szValue, MAX_PATH, strPath);
 	//m_pSystem->stInterLock.m_fAutoContactData[AUTO_CT_READY] = atof(szValue);
+	m_fAutoContactParam[AUTO_CT_READY] = _tstof(szValue);	// LYS 2026-08-10 Phase 1
 	GetPrivateProfileString(_T("PROBE_AUTO_CONTACT"), _T("FirstLimitPos"), _T("0.0"), szValue, MAX_PATH, strPath);
 	//m_pSystem->stInterLock.m_fAutoContactData[AUTO_CT_FLIMIT] = atof(szValue);
+	m_fAutoContactParam[AUTO_CT_FLIMIT] = _tstof(szValue);	// LYS 2026-08-10 Phase 1
 	GetPrivateProfileString(_T("PROBE_AUTO_CONTACT"), _T("FirstMoveGap"), _T("0.0"), szValue, MAX_PATH, strPath);
 	//m_pSystem->stInterLock.m_fAutoContactData[AUTO_CT_FGAP] = atof(szValue);
+	m_fAutoContactParam[AUTO_CT_FGAP] = _tstof(szValue);	// LYS 2026-08-10 Phase 1
 	GetPrivateProfileString(_T("PROBE_AUTO_CONTACT"), _T("SecondMoveGap"), _T("0.0"), szValue, MAX_PATH, strPath);
 	//m_pSystem->stInterLock.m_fAutoContactData[AUTO_CT_SGAP] = atof(szValue);
+	m_fAutoContactParam[AUTO_CT_SGAP] = _tstof(szValue);	// LYS 2026-08-10 Phase 1
 	GetPrivateProfileString(_T("PROBE_AUTO_CONTACT"), _T("ODMax"), _T("0.0"), szValue, MAX_PATH, strPath);
 	//m_pSystem->stInterLock.m_fAutoContactData[AUTO_CT_OD_MAX] = atof(szValue);
+	m_fAutoContactParam[AUTO_CT_OD_MAX] = _tstof(szValue);	// LYS 2026-08-10 Phase 1
 	GetPrivateProfileString(_T("PROBE_AUTO_CONTACT"), _T("Percent"), _T("0.0"), szValue, MAX_PATH, strPath);
 	//m_pSystem->stInterLock.m_fAutoContactData[AUTO_CT_PERCENT] = atof(szValue);
+	m_fAutoContactParam[AUTO_CT_PERCENT] = _tstof(szValue);	// LYS 2026-08-10 Phase 1
 	GetPrivateProfileString(_T("PROBE_AUTO_CONTACT"), _T("Portfail"), _T("0.0"), szValue, MAX_PATH, strPath);
 	//m_pSystem->stInterLock.m_fAutoContactData[AUTO_CT_PORT_FAIL] = atof(szValue);
+	m_fAutoContactParam[AUTO_CT_PORT_FAIL] = _tstof(szValue);	// LYS 2026-08-10 Phase 1
 	GetPrivateProfileString(_T("PROBE_AUTO_CONTACT"), _T("AddOD"), _T("0.01"), szValue, MAX_PATH, strPath);
 	//m_pSystem->stInterLock.m_fAutoContactData[AUTO_CT_ADD_OD] = atof(szValue);
+	m_fAutoContactParam[AUTO_CT_ADD_OD] = _tstof(szValue);	// LYS 2026-08-10 Phase 1
 	
 	GetPrivateProfileString(_T("PROBE_AUTO_CONTACT"), _T("ContactDataReady"), _T("0.0"), szValue, MAX_PATH, strPath);
-	m_fAutoCntReady = _ttoi(szValue);
+	m_fAutoCntReady = _tstof(szValue);	// LYS 2026-08-10 fix: was _ttoi (double truncation)
 	GetPrivateProfileString(_T("PROBE_AUTO_CONTACT"), _T("ContactDataPos1"), _T("0.0"), szValue, MAX_PATH, strPath);
-	m_fAutoCntContactPos = _ttoi(szValue);
+	m_fAutoCntContactPos = _tstof(szValue);	// LYS 2026-08-10 fix
 	GetPrivateProfileString(_T("PROBE_AUTO_CONTACT"), _T("ContactDataPos2"), _T("0.0"), szValue, MAX_PATH, strPath);
-	m_fAutoCntODPos = _ttoi(szValue);
+	m_fAutoCntODPos = _tstof(szValue);	// LYS 2026-08-10 fix
 	
 	GetPrivateProfileString(_T("PROBE_AUTO_CONTACT"), _T("ContactDataRcpID"), _T("UNKNOWN"), szValue, MAX_PATH, strPath);
 	m_strAutoCntRecipeID = szValue;
@@ -201,22 +233,82 @@ void CDlgSubManual_AutoContact::UpdateStatus(BOOL bEnable)
 {
 	//if (m_pSystem->stTitle.m_nHostMode != df_HOST_OFFLINE) m_btnStop.ShowWindow(FALSE);
 	//else m_btnStop.ShowWindow(!bEnable);
+	m_btnStop.ShowWindow(m_bAutoCntRunning ? SW_SHOW : SW_HIDE);	// LYS 2026-08-10 Phase 4
+
+	// LYS 2026-08-10: always show the currently open recipe in EDIT_1
+	// (recipe can be opened from other screens - refreshed by the 500ms timer)
+	if (m_pAuroraMgr != NULL && m_pAuroraMgr->GetRecipeEditMgrPtr() != NULL)
+	{
+		CString strCurRcp, strEditRcp;
+		strCurRcp = m_pAuroraMgr->GetRecipeEditMgrPtr()->GetRecipeID();
+		GetDlgItem(IDC_EDIT_1)->GetWindowText(strEditRcp);
+		if (strCurRcp != strEditRcp) GetDlgItem(IDC_EDIT_1)->SetWindowText(strCurRcp);
+	}
+	UpdateStickList();	// LYS 2026-08-11: follows recipe change (guarded by stick-count cache)
+
+	// LYS 2026-08-11: auto-contact progress display
+	{
+		CString strProg;
+		switch (m_nAcProgState)
+		{
+		case 1: strProg.Format(_T("Stick %d/%d moving"), m_nAcProgCur, m_nAcProgTotal); break;
+		case 2: strProg.Format(_T("Stick %d/%d searching"), m_nAcProgCur, m_nAcProgTotal); break;
+		case 3: strProg = _T("Done"); break;
+		case 4: strProg.Format(_T("Fail (stick %d)"), m_nAcProgCur); break;
+		case 5: strProg = _T("Stopped"); break;
+		default: strProg = _T("Idle"); break;
+		}
+		CString strProgOld;
+		GetDlgItem(IDC_STATIC_AC_PROG)->GetWindowText(strProgOld);
+		if (strProgOld != strProg) GetDlgItem(IDC_STATIC_AC_PROG)->SetWindowText(strProg);
+	}
 
 	for (int i = IDC_BUTTON_2; i < IDC_BUTTON_5 + 1; i++) GetDlgItem(i)->EnableWindow(bEnable);
 	for (int i = IDC_CHECK_1; i < IDC_CHECK_3 + 1; i++) GetDlgItem(i)->EnableWindow(bEnable);
 
 	CString strPos;
 	//strPos.Format(_T("%.4lf"), m_pSystem->stMotionStatus[AXIS_UNIT_Z].dAxisPos);
+	// LYS 2026-08-10 Phase 2: INI 계약에서 탐색 결과 상태를 갱신
+	// (시퀀스는 CAutoContactInfo로 갱신하고, UI 타이머는 공유 싱글톤을 건드리지 않고
+	//  파일을 직접 읽는다 - 스레드 안전)
+	if (!m_strIniPath.IsEmpty())
+	{
+		TCHAR szValue[MAX_PATH];
+		ZeroMemory(szValue, sizeof(szValue));
+		GetPrivateProfileString(_T("PROBE_AUTO_CONTACT"), _T("ContactDataReady"), _T("0.0"), szValue, MAX_PATH, m_strIniPath);
+		m_fAutoCntReady = _tstof(szValue);
+		GetPrivateProfileString(_T("PROBE_AUTO_CONTACT"), _T("ContactDataPos1"), _T("0.0"), szValue, MAX_PATH, m_strIniPath);
+		m_fAutoCntContactPos = _tstof(szValue);
+		GetPrivateProfileString(_T("PROBE_AUTO_CONTACT"), _T("ContactDataPos2"), _T("0.0"), szValue, MAX_PATH, m_strIniPath);
+		m_fAutoCntODPos = _tstof(szValue);
+		m_bAutoCntSucess = (BOOL)GetPrivateProfileInt(_T("PROBE_AUTO_CONTACT"), _T("ContactDataSucess"), 0, m_strIniPath);
+	}
+
+	// LYS 2026-08-10 Phase 1: OCP mode P5 probe Z (C1)
+	if (m_pAuroraMgr != NULL && m_pAuroraMgr->GetMaintControlMgr() != NULL)
+		strPos.Format(_T("%.4lf"), m_pAuroraMgr->GetMaintControlMgr()->GetCurPos(AXIS_PROBE_Z5));
 	GetDlgItem(IDC_EDIT_2)->SetWindowText(strPos);
 
 	strPos.Format(_T("Ready:%.4lf, Contact:%.4lf, OD:%.4lf"), m_fAutoCntReady, m_fAutoCntContactPos, m_fAutoCntODPos);
 	GetDlgItem(IDC_EDIT_3)->SetWindowText(strPos);
 }
 
+// LYS 2026-08-10 Phase 1: periodic status refresh
+void CDlgSubManual_AutoContact::OnTimer(UINT_PTR nIDEvent)
+{
+	if (nIDEvent == 1 && IsWindowVisible())
+	{
+		UpdateStatus(!m_bAutoCntRunning);	// LYS 2026-08-10 Phase 4: disable buttons while running
+	}
+	CDialogEx::OnTimer(nIDEvent);
+}
+
 void CDlgSubManual_AutoContact::OnStop()
 {
 	//gLog(m_pSystem->hLog, "CDlgSubManual_AutoContact::OnStop()", LOG_LEVEL_O);
 	//m_pJobProc->ActionStop();
+	// LYS 2026-08-10 Phase 4: stop the running search
+	CAutoContactInfo::GetInstance()->RequestStop();
 }
 
 void CDlgSubManual_AutoContact::OnRcpOpen()
@@ -253,14 +345,19 @@ void CDlgSubManual_AutoContact::OnRcpOpen()
 			}
 
 			//if (m_pDlgNaviRecipe->LoadPPID2(strRcpFile, TRUE) == VTM_RV_SUCCESSED)
+			// LYS 2026-08-11: real recipe load via RecipeChange (AgingTest pattern - P1 omission fix)
+			if (m_pAuroraMgr != NULL && m_pAuroraMgr->GetRecipeEditMgrPtr() != NULL
+				&& m_pAuroraMgr->GetRecipeEditMgrPtr()->RecipeChange(strRcpFile) == VTM_RV_SUCCESSED)
 			{
 				MessageBox(_T("Recipe file be imported complete."));
+				GetDlgItem(IDC_EDIT_1)->SetWindowText(m_pAuroraMgr->GetRecipeEditMgrPtr()->GetRecipeID());
+				UpdateStickList();	// LYS 2026-08-11 manual-only
 
 				//GetDlgItem(IDC_EDIT_1)->SetWindowText(m_pSystem->stLotInfo.m_szRecipeID);
 
 				return;
 			}
-			//else
+			else	// LYS 2026-08-11
 			{
 				AfxMessageBox(_T("Load Recipe Error"));
 			}
@@ -286,7 +383,7 @@ void CDlgSubManual_AutoContact::OnAutoContactSave()
 	for (int i = 0; i < AUTO_CONTACT_ITEM_MAX; i++) {
 		//m_spreadAutoContact.SetRow(i + 2);
 		strTemp = m_spreadAutoContact->GetDataString(1, i + 1);
-		fTemp[i] = _ttoi(strTemp);
+		fTemp[i] = _tstof(strTemp);	// LYS 2026-08-10 fix: was _ttoi (double truncation)
 		//m_pSystem->stInterLock.m_fAutoContactData[i] = atof (strTemp);
 	}
 
@@ -347,6 +444,7 @@ void CDlgSubManual_AutoContact::OnAutoContactSave()
 
 	for (int i = 0; i < AUTO_CONTACT_ITEM_MAX; i++) {
 		//m_pSystem->stInterLock.m_fAutoContactData[i] = fTemp[i];
+		m_fAutoContactParam[i] = fTemp[i];	// LYS 2026-08-10 Phase 1 local store (Phase 2: helper)
 	}
 
 	AutoCntPosReset();
@@ -354,6 +452,54 @@ void CDlgSubManual_AutoContact::OnAutoContactSave()
 
 void CDlgSubManual_AutoContact::OnAutoContactProcStrart()
 {
+	// LYS 2026-08-10 Phase 4: 오토 컨택 탐색 1회 실행
+	// (C5: 시퀀스 Contact 스텝과 동일 루틴, 단발 워커)
+	if (!IsOfflineStatus()) return;
+	if (m_pAuroraMgr == NULL) return;
+	if (m_bAutoCntRunning == TRUE) return;
+
+	if (m_pAuroraMgr->GetShareMemoryMgrPtr()->GetSys_ProcessStatus() != SPS_IDLE
+		|| CSequenceManager::GetInstance()->IsEngineCompleteAll() != true)
+	{
+		AfxMessageBox(_T("Process is running.\n Run after the process completes."), MB_ICONWARNING);
+		return;
+	}
+
+	if (m_pAuroraMgr->GetMaintControlMgr()->GetCurPos(AXIS_PROBE_Z5) > 0.1)
+	{
+		AfxMessageBox(_T("Probe Z(P5) is not at 0 position.\n Move Z to 0 first."), MB_ICONWARNING);
+		return;
+	}
+
+	CString strRcp;
+	GetDlgItem(IDC_EDIT_1)->GetWindowText(strRcp);
+	if (strRcp == _T("") || strRcp == _T("UNKNOWN"))
+	{
+		AfxMessageBox(_T("No recipe info.\n Open a recipe first."), MB_ICONWARNING);
+		return;
+	}
+
+	// LYS 2026-08-11: stick selection (ALL or a single stick)
+	int nSelAcStick = m_comboAcStick.GetCurSel();
+	if (nSelAcStick == CB_ERR)
+	{
+		AfxMessageBox(_T("Select a stick first."), MB_ICONWARNING);
+		return;
+	}
+	m_nAcSelStick = (nSelAcStick == 0) ? -1 : nSelAcStick - 1;
+
+	if (AfxMessageBox(_T("Run Auto Contact Proc.\n Continue?"), MB_YESNO | MB_ICONQUESTION) != IDYES) return;
+
+	if (strRcp != m_pAuroraMgr->GetRecipeEditMgrPtr()->GetRecipeID())
+	{
+		AfxMessageBox(_T("Recipe differs from the loaded one.\n Reload the recipe first."), MB_ICONWARNING);
+		return;
+	}
+
+	m_bAutoCntRunning = TRUE;
+	CAutoContactInfo::GetInstance()->ClearStopRequest();
+	AfxBeginThread(AutoContactSearchThread, this);
+
 	//if (!IsOfflineStatus()) return;
 	//if (SMEM_GetSys_ProcessStatus() == SPS_PROCESS) {
 	//	AfxMessageBox(_T("프로세스 진행중 입니다.\n 프로세스 완료후 진행 하십시오."), MB_ICONWARNING);
@@ -384,6 +530,37 @@ void CDlgSubManual_AutoContact::OnAutoContactProcStrart()
 
 void CDlgSubManual_AutoContact::OnPgRecipeDownload()
 {
+	// LYS 2026-08-10 Phase 4: PG recipe deployment (C4: HMI Recipe-step equivalent)
+	if (!IsOfflineStatus()) return;
+	if (m_pAuroraMgr == NULL) return;
+	if (m_bAutoCntRunning == TRUE) return;
+
+	if (m_pAuroraMgr->GetShareMemoryMgrPtr()->GetSys_ProcessStatus() != SPS_IDLE
+		|| CSequenceManager::GetInstance()->IsEngineCompleteAll() != true)
+	{
+		AfxMessageBox(_T("Process is running.\n Run after the process completes."), MB_ICONWARNING);
+		return;
+	}
+
+	CString strRcp;
+	GetDlgItem(IDC_EDIT_1)->GetWindowText(strRcp);
+	if (strRcp == _T("") || strRcp == _T("UNKNOWN"))
+	{
+		AfxMessageBox(_T("No recipe info.\n Open a recipe first."), MB_ICONWARNING);
+		return;
+	}
+
+	if (AfxMessageBox(_T("Run PG Recipe Download.\n Continue?"), MB_YESNO | MB_ICONQUESTION) != IDYES) return;
+
+	if (strRcp != m_pAuroraMgr->GetRecipeEditMgrPtr()->GetRecipeID())
+	{
+		AfxMessageBox(_T("Recipe differs from the loaded one.\n Reload the recipe first."), MB_ICONWARNING);
+		return;
+	}
+
+	m_bAutoCntRunning = TRUE;
+	AfxBeginThread(PgDownloadThread, this);
+
 	//if (!IsOfflineStatus()) return;
 	//if (SMEM_GetSys_ProcessStatus() == SPS_PROCESS) {
 	//	AfxMessageBox(_T("프로세스 진행중 입니다.\n 프로세스 완료후 진행 하십시오."), MB_ICONWARNING);
@@ -409,6 +586,14 @@ void CDlgSubManual_AutoContact::OnPgRecipeDownload()
 
 BOOL CDlgSubManual_AutoContact::IsOfflineStatus()
 {
+	// LYS 2026-08-10 Phase 1: restore offline gate via ShareMemoryMgr (AgingSet pattern)
+	if (m_pAuroraMgr != NULL && m_pAuroraMgr->GetShareMemoryMgrPtr() != NULL) {
+		if (m_pAuroraMgr->GetShareMemoryMgrPtr()->GetSys_MachineMode() != df_HOST_OFFLINE) {
+			AfxMessageBox(_T("Not in Offline mode.\n Switch to Offline mode first."), MB_ICONWARNING);
+			return FALSE;
+		}
+	}
+
 	//if (m_pSystem->stTitle.m_nHostMode != df_HOST_OFFLINE) {
 	//	AfxMessageBox(_T("Offline 모드가 아닙니다..\n Offline 모드로 변경 후 진행 하십시오."), MB_ICONWARNING);
 	//	return FALSE;
@@ -540,4 +725,147 @@ void CDlgSubManual_AutoContact::SetAutoCntLog()
 
 	strTemp.Format(_T("%.4lf"), m_fAutoCntODPos);
 	WritePrivateProfileString(m_strAutoCnttProbeID, _T("OD"), strTemp, m_strAutoLogPath);
+}
+
+// LYS 2026-08-11 수동 전용: 선택 stick(또는 ALL) 이동 + 오토 컨택 탐색.
+// stick별 흐름: 프로브 Z 상승 -> stage R/X 이동(MoveMeasureArea OCP 규칙)
+// -> PG 상태 stick 슬롯 -> DoSearch. 얼라인 체인은 미포함(정렬된 상태 전제).
+UINT CDlgSubManual_AutoContact::AutoContactSearchThread(LPVOID pParam)
+{
+	CDlgSubManual_AutoContact* pThis = (CDlgSubManual_AutoContact*)pParam;
+	if (pThis == NULL || pThis->m_pAuroraMgr == NULL) return 0;
+
+	CAuroraMgr* pMgr = pThis->m_pAuroraMgr;
+	CAutoContactInfo* pAutoCnt = CAutoContactInfo::GetInstance();
+	pAutoCnt->LoadAll();
+
+	// reset judgment moved here from the sequence (manual-only, A2)
+	CString strProbeID;
+	strProbeID.Format(_T("%s"), pMgr->GetShareMemoryMgrPtr()->GetSharedMemory()->m_szPROBEID[4]);
+	strProbeID.TrimRight();
+	pAutoCnt->CheckAndReset(pMgr->GetRecipeEditMgrPtr()->GetRecipeID(), strProbeID);
+
+	S_RecipeData* pRcpData = pMgr->GetRecipeEditMgrPtr()->GetRecipeData();
+	S_RecipeInfo* pRcpInfo = pMgr->GetRecipeEditMgrPtr()->GetRecipeInfo();
+	S_RecipeMgr*  pslData  = pMgr->GetRecipeEditMgrPtr()->GetRecipeMgrPtr();
+	int nMaxStick = (pRcpData != NULL) ? (int)pRcpData->m_vecStick.size() : 0;
+	int nCellCnt  = (pslData != NULL) ? pslData->m_nCellCnt : 0;
+
+	int nFrom = 0, nTo = nMaxStick - 1;
+	if (pThis->m_nAcSelStick >= 0) nFrom = nTo = pThis->m_nAcSelStick;
+
+	if (nMaxStick <= 0 || nTo >= nMaxStick || pRcpInfo == NULL)
+	{
+		pThis->m_nAcProgState = 4;
+		pThis->m_bAutoCntRunning = FALSE;
+		return 0;
+	}
+
+	pThis->m_nAcProgTotal = nMaxStick;
+
+	int nRtn = VTM_RV_SUCCESSED;
+	for (int iStick = nFrom; iStick <= nTo; iStick++)
+	{
+		pThis->m_nAcProgCur = iStick + 1;
+		pThis->m_nAcProgState = 1;	// moving
+
+		if (pAutoCnt->IsStopRequested()) { nRtn = VTM_RV_STOP_BY_USER; break; }
+
+		// lift probe Z before the stage move
+		nRtn = (int)pMgr->GetMaintControlMgr()->MoveCmdPosA(AXIS_PROBE_Z5, 0.0, true, SPEED_HIGH);
+		if (nRtn != VTM_RV_SUCCESSED) break;
+		nRtn = (int)pMgr->GetMaintControlMgr()->DoWork_MotionDone(AXIS_PROBE_Z5);	// LYS 2026-08-11 in-position
+		if (nRtn != VTM_RV_SUCCESSED) break;
+
+		// stage R then X to the stick position (MoveMeasureArea OCP rule)
+		double dStageY = pRcpData->m_vecStick[iStick].m_fStageY + pRcpInfo->m_sMotionOffsetPos.m_fStageY;
+		double dStageR = pRcpData->m_vecStick[iStick].m_fStageR + pRcpInfo->m_sMotionOffsetPos.m_fStageRotate;
+
+		if (fabs(dStageR - pMgr->GetMaintControlMgr()->GetCurPos(AXIS_LOADER_R)) > 0.0001)
+		{
+			nRtn = (int)pMgr->GetMaintControlMgr()->MoveCmdPosA(AXIS_LOADER_R, dStageR, true, SPEED_HIGH);
+			if (nRtn != VTM_RV_SUCCESSED) break;
+			nRtn = (int)pMgr->GetMaintControlMgr()->DoWork_MotionDone(AXIS_LOADER_R);	// LYS 2026-08-11 in-position
+			if (nRtn != VTM_RV_SUCCESSED) break;
+		}
+
+		nRtn = (int)pMgr->GetMaintControlMgr()->MoveCmdPosA(AXIS_X, dStageY, true, SPEED_HIGH);
+		if (nRtn != VTM_RV_SUCCESSED) break;
+		nRtn = (int)pMgr->GetMaintControlMgr()->DoWork_MotionDone(AXIS_X);	// LYS 2026-08-11 stage move done
+		if (nRtn != VTM_RV_SUCCESSED) break;
+
+		// PG status stick slot (same rotate conversion as OST/RTEST steps)
+		if (pRcpInfo->m_sOptionItem.m_nGlsRotate == 1)
+			pMgr->GetShareMemoryMgrPtr()->GetSharedMemory()->m_nAgingStartStick[4] = iStick;
+		else
+			pMgr->GetShareMemoryMgrPtr()->GetSharedMemory()->m_nAgingStartStick[4] = nMaxStick - iStick - 1;
+
+		Sleep(2000);
+		pThis->m_nAcProgState = 2;	// searching
+		nRtn = pAutoCnt->DoSearch(pMgr->GetMaintControlMgr(), pMgr->GetCommTcpIpFactoryMgrPtr(), nCellCnt);
+		if (nRtn != VTM_RV_SUCCESSED) break;
+	}
+
+	if (nRtn == VTM_RV_SUCCESSED)
+	{
+		// LYS 2026-08-11: display-only success mark (the sequence no longer consumes it)
+		pAutoCnt->SetSuccess(true);
+		pAutoCnt->SaveLog();
+		pThis->m_nAcProgState = 3;	// done
+	}
+	else if (nRtn == VTM_RV_STOP_BY_USER)
+	{
+		pThis->m_nAcProgState = 5;	// stopped
+	}
+	else
+	{
+		pThis->m_nAcProgState = 4;	// fail
+		CAlarmController::GetInstance()->SetAlarm(nRtn);
+	}
+
+	pThis->m_bAutoCntRunning = FALSE;
+	return 0;
+}
+
+// LYS 2026-08-10 Phase 4: PG 레시피 다운로드 워커
+// (OCP ExePGCtrl(5/6/2/0/1) -> HMI DoWorkRecipeOpen(PG), C4)
+UINT CDlgSubManual_AutoContact::PgDownloadThread(LPVOID pParam)
+{
+	CDlgSubManual_AutoContact* pThis = (CDlgSubManual_AutoContact*)pParam;
+	if (pThis == NULL || pThis->m_pAuroraMgr == NULL) return 0;
+
+	long nRtn = pThis->m_pAuroraMgr->GetCommTcpIpFactoryMgrPtr()->DoWorkRecipeOpen(enumTCPIpFactorytID_PG);
+
+	pThis->m_bAutoCntRunning = FALSE;
+
+	if (nRtn != VTM_RV_SUCCESSED)
+		AfxMessageBox(_T("PG Recipe Download failed."), MB_ICONWARNING);
+
+	return 0;
+}
+
+// LYS 2026-08-11 manual-only: fill the stick selector from the open recipe (ALL + 1..N)
+void CDlgSubManual_AutoContact::UpdateStickList()
+{
+	if (m_pAuroraMgr == NULL || m_pAuroraMgr->GetRecipeEditMgrPtr() == NULL) return;
+	if (m_comboAcStick.GetSafeHwnd() == NULL) return;
+
+	int nStick = 0;
+	S_RecipeData* pRcpData = m_pAuroraMgr->GetRecipeEditMgrPtr()->GetRecipeData();
+	if (pRcpData != NULL) nStick = (int)pRcpData->m_vecStick.size();
+
+	if (nStick == m_nAcStickCnt) return;	// rebuild only on count change
+	m_nAcStickCnt = nStick;
+
+	m_comboAcStick.ResetContent();
+	if (nStick <= 0) return;
+
+	m_comboAcStick.AddString(_T("ALL"));
+	CString strNo;
+	for (int i = 0; i < nStick; i++)
+	{
+		strNo.Format(_T("%d"), i + 1);
+		m_comboAcStick.AddString(strNo);
+	}
+	m_comboAcStick.SetCurSel(0);
 }

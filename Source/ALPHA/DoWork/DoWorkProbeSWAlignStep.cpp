@@ -91,7 +91,8 @@ int CDoWorkProbeSWAlignStep::Align_MovePosition(int nHead, int nIndex)
 	double dPosX = 0., dPosX2 = 0, dPosY1 = 700, dPosY2 = -700, dPosR = 0, dPosZ = 0;
 	double dProbeX = 0, dProbeY = 0;
 
-	if (m_pShareItem->GetMaintControlMgrPtr()->GetIOMapControlMgrPtr()->IsOutOfService() != true)
+	// LYS 2026-08-24 Move Probe Align Position TEMP
+	//if (m_pShareItem->GetMaintControlMgrPtr()->GetIOMapControlMgrPtr()->IsOutOfService() != true)
 	{
 		dProbeX = pAlignInfo->m_sProbeAlign.m_fProbeY;
 		dProbeY = pAlignInfo->m_sProbeAlign.m_fProbeX;
@@ -279,9 +280,12 @@ int CDoWorkProbeSWAlignStep::Align_MovePosition(int nHead, int nIndex)
 
 						// << AXIS_X2 << AXIS_X3
 						stPosition[0].axis = AXIS_X2;
+						//stPosition[0].dPosition = dPosX2;
 						stPosition[0].dPosition = pImpl->GetMaxSWLimit(AXIS_X2) - 0.5;
+
 						stPosition[1].axis = AXIS_X3;
 						stPosition[1].dPosition = dChangePos;
+						
 						nRet = pImpl->MoveOrgPosMulti(stPosition, 2, SPEED_HIGH, true);
 					}
 					//else

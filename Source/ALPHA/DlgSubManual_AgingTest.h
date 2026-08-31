@@ -6,7 +6,9 @@
 using namespace std;
 
 #define MAX_AGING_STICK	10
-#define MAX_AGING_ITEM	6
+#define MAX_AGING_ITEM	7	// LYS 2026-08-06 Phase 2: +ANGLE col (OCP 7 w/ LCR)
+
+class CAuroraMgr;	// LYS 2026-08-06 Phase 1
 
 class CDlgSubManual_AgingTest : public CDialogEx
 {
@@ -17,7 +19,7 @@ private:
 	CLabel		m_LabelInfo;
 
 public:
-	CDlgSubManual_AgingTest(CWnd* pParent = NULL);   // 표준 생성자입니다.
+	CDlgSubManual_AgingTest(CAuroraMgr* pAuroraMgr, CWnd* pParent = NULL);   // 표준 생성자입니다.
 	virtual ~CDlgSubManual_AgingTest();
 
 public:
@@ -33,7 +35,10 @@ protected:
 	CMySpreadDll*	m_spreadAgingMeas;
 	CComboBox		m_cmbCycle;
 	CString			m_strAgingRcpPath;
+	CAuroraMgr*		m_pAuroraMgr;	// LYS 2026-08-06 Phase 1
 	HFONT			m_hfont;
+	int			m_nHlRow;	// LYS 2026-08-06 E4: last highlighted cell (grid coords)
+	int			m_nHlCol;
 public:
 	void UpdateStatus(BOOL bEnable);
 	void UpdateListNum();
@@ -64,6 +69,7 @@ protected:
 	afx_msg void OnItemSave();
 	afx_msg void OnLoadAgingInfo();
 	afx_msg void OnAgingProcStrart();
+	afx_msg void OnTimer(UINT_PTR nIDEvent);	// LYS 2026-08-06 E4: aging progress highlight
 
 	DECLARE_MESSAGE_MAP()
 	DECLARE_EVENTSINK_MAP()

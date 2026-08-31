@@ -1,5 +1,5 @@
-// LYS 2026-07-23 WAD Multi Point measurement data manager (Phase 2)
-// See WadMultiMeasMgr.h for design notes and OCP file compatibility.
+// LYS 2026-07-23 WAD 다점 측정 데이터 관리자(Phase 2).
+// 설계 노트와 OCP 파일 호환성은 WadMultiMeasMgr.h 참조.
 
 #include "pch.h"
 #include "WadMultiMeasMgr.h"
@@ -41,6 +41,7 @@ CWadMultiMeasMgr::CWadMultiMeasMgr(CString strRcpFolderPath)
 
 	m_bRunActive[0] = m_bRunActive[1] = false;
 	m_nRunCurrent[0] = m_nRunCurrent[1] = 0;
+	m_nRunPointIdx[0] = m_nRunPointIdx[1] = -1;	// LYS 2026-08-18
 }
 
 CWadMultiMeasMgr::~CWadMultiMeasMgr()
@@ -355,6 +356,7 @@ void CWadMultiMeasMgr::ResetRunState()
 
 	m_bRunActive[0] = m_bRunActive[1] = false;
 	m_nRunCurrent[0] = m_nRunCurrent[1] = 0;
+	m_nRunPointIdx[0] = m_nRunPointIdx[1] = -1;	// LYS 2026-08-18
 }
 
 void CWadMultiMeasMgr::SetRunActive(int iProbe, bool bActive)
@@ -385,6 +387,26 @@ void CWadMultiMeasMgr::SetRunCurrent(int iProbe, int nCurrent)
 		return;
 
 	m_nRunCurrent[iProbe] = nCurrent;
+}
+
+void CWadMultiMeasMgr::SetRunPointIdx(int iProbe, int nIdx)
+{
+	CSingleLock lock(&m_cs, TRUE);
+
+	if (iProbe < 0 || iProbe >= 2)
+		return;
+
+	m_nRunPointIdx[iProbe] = nIdx;
+}
+
+int CWadMultiMeasMgr::GetRunPointIdx(int iProbe)
+{
+	CSingleLock lock(&m_cs, TRUE);
+
+	if (iProbe < 0 || iProbe >= 2)
+		return -1;
+
+	return m_nRunPointIdx[iProbe];
 }
 
 int CWadMultiMeasMgr::GetRunCurrent(int iProbe)

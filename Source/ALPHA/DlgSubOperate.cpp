@@ -512,6 +512,14 @@ BOOL CDlgSubOperate::OnInitDialog()
 	m_pParentMeasPathDlg->DrawChart(pCtrlRect);
 
 	m_pParentMeasPathDlg->SetNProbe(1);
+
+	// LYS 2026-08-26 OCP는 P5만 장착. SetCardSize()가 그리기 전에 P1~P4 카드를 끈다.
+	if (m_pAuroraMgr != nullptr && m_pAuroraMgr->GetSystemConfigMgrPtr() != nullptr
+		&& m_pAuroraMgr->GetSystemConfigMgrPtr()->IsOCP())
+	{
+		for (int iCard = 0; iCard < 4; iCard++)	// P1 ~ P4
+			m_pParentMeasPathDlg->SetProbeCardUse(iCard, FALSE);
+	}
 	m_pParentMeasPathDlg->SetAxisShow(TRUE);
 
 	CWnd* pCtrlRect2 = this->GetDlgItem(IDC_STATIC_CELL_MEASURE);
@@ -524,15 +532,15 @@ BOOL CDlgSubOperate::OnInitDialog()
 	m_pParentCellMeasDlg->SetAxisShow(FALSE);
 
 	RotateMeasPath(m_nOldAngle);
-	RotateGlassPath(1);
+	RotateGlassPath(0);	// LYS 2026-08-07 rotation-change: default view 0-deg (load posture, was 90)
 
-	m_pdCardSize[0] = 30;
+	m_pdCardSize[0] = 250;
 	m_pdCardSize[1] = 0;
 	m_pdCardSize[2] = m_pdGlassSize[_MAX_SIZE_X];
 	m_pdCardSize[3] = m_pdGlassSize[_MIN_SIZE_X];
 	m_pParentMeasPathDlg->SetCardSize(m_pdCardSize[0], m_pdCardSize[1], m_pdCardSize[2], m_pdCardSize[3]);
 
-	m_pParentMeasPathDlg->SetLoaderSize(m_pdGlassSize[_MAX_SIZE_Y], m_pdGlassSize[_MIN_SIZE_Y], m_pdGlassSize[_MAX_SIZE_X], m_pdGlassSize[_MIN_SIZE_X], 1);
+	m_pParentMeasPathDlg->SetLoaderSize(m_pdGlassSize[_MAX_SIZE_X], m_pdGlassSize[_MIN_SIZE_X], m_pdGlassSize[_MAX_SIZE_Y], m_pdGlassSize[_MIN_SIZE_Y], m_pnGlassEdgeCut[0]);	// LYS 2026-08-07 rotation-change: loader at 0-deg load posture (was 90-deg swap)
 
 //	SetTimer(MAIN_STATE_TIMER_ID, 5*1000, NULL);	// 45 sec
 
@@ -2839,13 +2847,11 @@ void CDlgSubOperate::GenGlassPath()
 	}
 
 	pstInfo = m_pAuroraMgr->GetRecipeEditMgrPtr()->GetRecipeInfo();
-	if (pstInfo->m_sOptionItem.m_nGlsRotate == 0)
+	// LYS 2026-08-07 rotation-change: follow full 0/90/180/270 glass rotate view (was binary 0/1)
 	{
-		RotateGlassPath(0);
-	}
-	else
-	{
-		RotateGlassPath(1);
+		int nRotView = pstInfo->m_sOptionItem.m_nGlsRotate;
+		if (nRotView < 0 || nRotView > 3) nRotView = 0;
+		RotateGlassPath(nRotView);
 	}
 
 	//int iBlock = 0, iNumX = 0, iNumY = 0, iSumX = 0, iStick = 0;
@@ -3302,8 +3308,8 @@ void CDlgSubOperate::RunStart()
 	
 }
 
-// LYS 2026-07-07 Common Resume check for manual button and CIM Online paths
-// Returns: true = proceed with inspection, false = user cancelled
+// LYS 2026-07-07 수동 버튼과 CIM Online 경로가 공용하는 Resume 확인.
+// 반환값 true = 검사 진행, false = 사용자 취소.
 bool CDlgSubOperate::CheckAndApplyResumeMode()
 {
 	CResumeInfoMgr* pResumeInfo = m_pAuroraMgr->GetResumeInfoMgrPtr();
@@ -3774,13 +3780,13 @@ void CDlgSubOperate::UpdateCimReportButtonColor(bool bChecked)
 	{
 		m_btnCimAlarmNotReport.SetFaceColor(RGB(255, 100, 100), TRUE);
 		m_btnCimAlarmNotReport.SetTextColor(RGB(255, 100, 100));
-		m_btnCimAlarmNotReport.SetWindowText(L"CIM Alarm\n\uBCF4\uACE0");
+		m_btnCimAlarmNotReport.SetWindowText(L"CIM Alarm\n\uBBF8\uBCF4\uACE0");
 	}
 	else
 	{
 		m_btnCimAlarmNotReport.SetFaceColor(GetSysColor(COLOR_BTNFACE), TRUE);
 		m_btnCimAlarmNotReport.SetTextColor(RGB(0, 0, 0));
-		m_btnCimAlarmNotReport.SetWindowText(L"CIM Alarm\n\uBBF8\uBCF4\uACE0");
+		m_btnCimAlarmNotReport.SetWindowText(L"CIM Alarm\n\uBCF4\uACE0");
 	}
 }
 

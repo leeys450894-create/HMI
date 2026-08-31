@@ -10,6 +10,34 @@ enum enumAXIS
 	enumAXIS_COUNT,
 };
 
+// LYS 2026-08-28 Sub Z Safety - Z3(WAD_RIGHT)/Z4(WAD_LEFT)/Z5(VISION_ANGLE_RIGHT)/Z6(VISION_ANGLE_LEFT) park position
+enum enumSubZAxis
+{
+	enumSUBZ_WAD_RIGHT = 0,
+	enumSUBZ_WAD_LEFT,
+	enumSUBZ_VISION_ANGLE_RIGHT,
+	enumSUBZ_VISION_ANGLE_LEFT,
+	enumSUBZ_COUNT,
+};
+
+// LYS 2026-08-28 Angle Sub Safety - Scheimpflug/Rotate/Zoom/Tilt/Azimuth park position, per head
+enum enumAngleSubAxis
+{
+	enumANGLESUB_SCHEIMPFLUG = 0,
+	enumANGLESUB_ROTATE,
+	enumANGLESUB_ZOOM,
+	enumANGLESUB_TILT,
+	enumANGLESUB_AZIMUTH,
+	enumANGLESUB_COUNT,
+};
+
+enum enumAngleHead
+{
+	enumANGLE_HEAD1 = 0,
+	enumANGLE_HEAD2,
+	enumANGLE_HEAD_COUNT,
+};
+
 struct stPositionAxis
 {
 	double dX;
@@ -51,6 +79,12 @@ struct stPositionParam
 	double dProbeXOffsetPos[5];
 	double dProbeYOffsetPos[5];
 	double dProbeTOffsetPos[5];
+
+	// LYS 2026-08-28 Sub Z Safety - Z3/Z4/Z5/Z6 park position (before/after main Head Z move)
+	double	dSubZSafety[enumSUBZ_COUNT];
+
+	// LYS 2026-08-28 Angle Sub Safety - [head][enumAngleSubAxis], head 0:Angle1(BACK), 1:Angle2(FRONT)
+	double	dAngleSubSafety[enumANGLE_HEAD_COUNT][enumANGLESUB_COUNT];
 
 	double dPickerStageX;
 	double dAlignToMeasGap;
@@ -126,6 +160,20 @@ struct stPositionParam
 		dHeadGap = 400;
 
 		dAlignPos = 0;
+
+		for (int i = 0; i < enumSUBZ_COUNT; i++)
+		{
+			dSubZSafety[i] = 0.0;
+		}
+
+		for (int i = 0; i < enumANGLE_HEAD_COUNT; i++)
+		{
+			dAngleSubSafety[i][enumANGLESUB_SCHEIMPFLUG] = 35.0;
+			dAngleSubSafety[i][enumANGLESUB_ROTATE] = 0.0;
+			dAngleSubSafety[i][enumANGLESUB_ZOOM] = 0.0;
+			dAngleSubSafety[i][enumANGLESUB_TILT] = 0.0;
+			dAngleSubSafety[i][enumANGLESUB_AZIMUTH] = 0.0;
+		}
 	}
 };
 
@@ -144,6 +192,12 @@ public:
 
 	void GetSafetyPosition(double *dSafetyStageX, double* dSafetyHeadX1, double* dSafetyHeadX2, double *dSafetyHeadY1, double *dSafetyHeadY2, double *dSafetyZ, double* dSafetyZ2) const;
 	void SetSafetyPosition(double dSafetyStageX, double dSafetyHeadX1, double dSafetyHeadX2, double dSafetyHeadY1, double dSafetyHeadY2, double dSafetyZ, double dSafetyZ2);
+
+	void GetSubZSafetyPosition(double* dWadRight, double* dWadLeft, double* dVisionAngleRight, double* dVisionAngleLeft) const;
+	void SetSubZSafetyPosition(double dWadRight, double dWadLeft, double dVisionAngleRight, double dVisionAngleLeft);
+
+	void GetAngleSubSafetyPosition(int iHead, double* dScheimpflug, double* dRotate, double* dZoom, double* dTilt, double* dAzimuth) const;
+	void SetAngleSubSafetyPosition(int iHead, double dScheimpflug, double dRotate, double dZoom, double dTilt, double dAzimuth);
 
 	void GetLoaderZPossition(double *dLoaderZUp, double *dLoaderZMiddle, double* dLoaderZPre, double *dLoaderZDown) const;
 	void SetLoaderZPossition(double dLoaderZUp, double dLoaderZMiddle, double dLoaderZPre, double dLoaderZDown = 0);

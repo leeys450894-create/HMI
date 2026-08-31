@@ -73,6 +73,12 @@ void C_RecipeMgrDlg::DoDataExchange (CDataExchange* pDX)
 	// LYS 2026-07-07 Add Sub Z Offset
 	DDX_Control(pDX, IDC_GRID_26, m_gridSubZHead);
 	DDX_Control(pDX, IDC_GRID_27, m_gridSubZData);
+
+	// LYS 2026-08-19 Add Angle Axis
+	DDX_Control(pDX, IDC_GRID_ANGLE_HEAD1, m_gridAxisAngleHead1);
+	DDX_Control(pDX, IDC_GRID_ANGLE_DATA1, m_gridAxisAngleData1);
+	DDX_Control(pDX, IDC_GRID_ANGLE_HEAD2, m_gridAxisAngleHead2);
+	DDX_Control(pDX, IDC_GRID_ANGLE_DATA2, m_gridAxisAngleData2);
 }
 
 BEGIN_MESSAGE_MAP (C_RecipeMgrDlg, CDialogEx)
@@ -159,6 +165,8 @@ BOOL C_RecipeMgrDlg::OnInitDialog ()
 	InitColorHeadZ();
 
 	InitSubZ();		// LYS 2026-07-07 Add Sub Z Offset
+
+	InitAngleAxis();	// LYS 2026-08-19 Add Angle Axis
 
 	MakeRcpList ();
 
@@ -459,6 +467,7 @@ BOOL	C_RecipeMgrDlg::SaveFile (CString strRcpName)
 	WriteInt (&File, (int)g_inRcpInfo.m_recipeMgr.m_sInfo.m_sInspectItem.m_bUseAngle_6);
 	WriteInt (&File, (int)g_inRcpInfo.m_recipeMgr.m_sInfo.m_sInspectItem.m_bUseEFA);
 	WriteInt (&File, (int)g_inRcpInfo.m_recipeMgr.m_sInfo.m_sInspectItem.m_bUseSpec_Multi);
+	WriteInt (&File, (int)g_inRcpInfo.m_recipeMgr.m_sInfo.m_sInspectItem.m_bUseAging_Test);
 
 	for (int i = 0; i < M_RCP_INS_ITEM; i++) {
 		str.Format (_T("%d,"), g_inRcpInfo.m_recipeMgr.m_sInfo.m_sInspectItem.m_nTimeOut[i]);
@@ -636,6 +645,19 @@ BOOL	C_RecipeMgrDlg::SaveFile (CString strRcpName)
 	//WriteDouble(&File, g_inRcpInfo.m_recipeMgr.m_sInfo.m_sMotionSubZ.m_fAngleSubzRight);
 	//WriteDouble(&File, g_inRcpInfo.m_recipeMgr.m_sInfo.m_sMotionSubZ.m_fAngleSubzLeft);
 
+	// LYS 2026-08-19 Angle Axis Save (appended at end for V1007+ compatibility)
+	WriteString(&File, _T("_ANGLE_AXIS_"));
+	WriteDouble(&File, g_inRcpInfo.m_recipeMgr.m_sInfo.m_sMotionAngle.m_fAngleScheimpflug1);
+	WriteDouble(&File, g_inRcpInfo.m_recipeMgr.m_sInfo.m_sMotionAngle.m_fAngleRotate1);
+	WriteDouble(&File, g_inRcpInfo.m_recipeMgr.m_sInfo.m_sMotionAngle.m_fAngleZoom1);
+	WriteDouble(&File, g_inRcpInfo.m_recipeMgr.m_sInfo.m_sMotionAngle.m_fAngleTilt1);
+	WriteDouble(&File, g_inRcpInfo.m_recipeMgr.m_sInfo.m_sMotionAngle.m_fAngleAzimuth1);
+	WriteDouble(&File, g_inRcpInfo.m_recipeMgr.m_sInfo.m_sMotionAngle.m_fAngleScheimpflug2);
+	WriteDouble(&File, g_inRcpInfo.m_recipeMgr.m_sInfo.m_sMotionAngle.m_fAngleRotate2);
+	WriteDouble(&File, g_inRcpInfo.m_recipeMgr.m_sInfo.m_sMotionAngle.m_fAngleZoom2);
+	WriteDouble(&File, g_inRcpInfo.m_recipeMgr.m_sInfo.m_sMotionAngle.m_fAngleTilt2);
+	WriteDouble(&File, g_inRcpInfo.m_recipeMgr.m_sInfo.m_sMotionAngle.m_fAngleAzimuth2);
+
 	File.Close ();
 
 	return TRUE;
@@ -761,8 +783,8 @@ void	C_RecipeMgrDlg::InitInspectOption ()
 	for (int i = 0; i < 5; i++) {
 		m_gridInspectOptionData.SetCellType (i, 1, RUNTIME_CLASS(CGridCellCombo));
 		
-		if (i == 4) m_gridInspectOptionData.SetItemState (i, 1, m_gridInspectOptionData.GetItemState (i, 1) | GVIS_READONLY);
-		else		m_gridInspectOptionData.SetItemState (i, 1, m_gridInspectOptionData.GetItemState (i, 1) & GVIS_READONLY);
+		// LYS 2026-08-07 rotation-change: GLASS ROTATE combo editable (was readonly)
+		m_gridInspectOptionData.SetItemState (i, 1, m_gridInspectOptionData.GetItemState (i, 1) & GVIS_READONLY);
 	}
 
 	m_gridInspectOptionData.SetItemState (7, 1, m_gridInspectOptionData.GetItemState (7, 1) | GVIS_READONLY);
@@ -773,6 +795,8 @@ void	C_RecipeMgrDlg::InitInspectOption ()
 	use.Add (_T("사용"));
 	ang.Add (_T("0˚"));
 	ang.Add (_T("90˚"));
+	ang.Add (_T("180˚"));	// LYS 2026-08-07 rotation-change: m_nGlsRotate=2
+	ang.Add (_T("270˚"));	// LYS 2026-08-07 rotation-change: m_nGlsRotate=3
 
 	CGridCellCombo* pCell = NULL;
 	for (int i = 0; i < 5; i++) {
@@ -832,27 +856,27 @@ void	C_RecipeMgrDlg::InitInspectItem ()
 	//m_gridInspectItemData.SetItemText (8, 0, _T("LCR"));
 
 	// LYS 2026-07-02 안쓰는 Mode 삭제
-	InitGridUI(m_gridInspectItemData, IDC_GRID_7, 8, 3, TRUE);
+	InitGridUI(m_gridInspectItemData, IDC_GRID_7, 9, 3, TRUE);
 	m_gridInspectItemData.SetItemText(0, 0, _T("사전검사"));
 	m_gridInspectItemData.SetItemText(1, 0, _T("전기검사"));
 	m_gridInspectItemData.SetItemText(2, 0, _T("AGING TEST"));
 	m_gridInspectItemData.SetItemText(3, 0, _T("특성검사"));
 	m_gridInspectItemData.SetItemText(4, 0, _T("화질검사"));
 	m_gridInspectItemData.SetItemText(5, 0, _T("시야각검사"));
-
 	m_gridInspectItemData.SetItemText(6, 0, _T("EFA"));
 	m_gridInspectItemData.SetItemText(7, 0, _T("특성Multi"));
+	m_gridInspectItemData.SetItemText(8, 0, _T("강화검사"));
 
 
 	//콤보박스
-	//for (int i = 0; i < 9; i++) {
-	//	m_gridInspectItemData.SetCellType  (i, 2, RUNTIME_CLASS(CGridCellCombo));
-	//	m_gridInspectItemData.SetItemState (i, 2, m_gridInspectItemData.GetItemState (i, 2) & GVIS_READONLY);
-	//}
-	for (int i = 0; i < 8; i++) {
-		m_gridInspectItemData.SetCellType(i, 2, RUNTIME_CLASS(CGridCellCombo));
-		m_gridInspectItemData.SetItemState(i, 2, m_gridInspectItemData.GetItemState(i, 2) & GVIS_READONLY);
+	for (int i = 0; i < 9; i++) {
+		m_gridInspectItemData.SetCellType  (i, 2, RUNTIME_CLASS(CGridCellCombo));
+		m_gridInspectItemData.SetItemState (i, 2, m_gridInspectItemData.GetItemState (i, 2) & GVIS_READONLY);
 	}
+	//for (int i = 0; i < 8; i++) {
+	//	m_gridInspectItemData.SetCellType(i, 2, RUNTIME_CLASS(CGridCellCombo));
+	//	m_gridInspectItemData.SetItemState(i, 2, m_gridInspectItemData.GetItemState(i, 2) & GVIS_READONLY);
+	//}
 
 	//콤보 데이터
 	CStringArray use;
@@ -860,20 +884,20 @@ void	C_RecipeMgrDlg::InitInspectItem ()
 	use.Add (_T("사용"));
 
 	CGridCellCombo* pCell = NULL;
-	//for (int i = 0; i < 9; i++) {
-	//	pCell = (CGridCellCombo*)m_gridInspectItemData.GetCell (i, 2);
-	//	pCell->SetStyle (CBS_DROPDOWNLIST);	
-	//	pCell->SetOptions (use);
-	//
-	//	m_gridInspectItemData.SetItemCurSel (i, 2, 0);
-	//}
-	for (int i = 0; i < 8; i++) {
-		pCell = (CGridCellCombo*)m_gridInspectItemData.GetCell(i, 2);
-		pCell->SetStyle(CBS_DROPDOWNLIST);
-		pCell->SetOptions(use);
-
-		m_gridInspectItemData.SetItemCurSel(i, 2, 0);
+	for (int i = 0; i < 9; i++) {
+		pCell = (CGridCellCombo*)m_gridInspectItemData.GetCell (i, 2);
+		pCell->SetStyle (CBS_DROPDOWNLIST);	
+		pCell->SetOptions (use);
+	
+		m_gridInspectItemData.SetItemCurSel (i, 2, 0);
 	}
+	//for (int i = 0; i < 8; i++) {
+	//	pCell = (CGridCellCombo*)m_gridInspectItemData.GetCell(i, 2);
+	//	pCell->SetStyle(CBS_DROPDOWNLIST);
+	//	pCell->SetOptions(use);
+	//
+	//	m_gridInspectItemData.SetItemCurSel(i, 2, 0);
+	//}
 }
 
 void	C_RecipeMgrDlg::SetInspectItemData ()
@@ -898,6 +922,8 @@ void	C_RecipeMgrDlg::SetInspectItemData ()
 
 	m_gridInspectItemData.SetItemCurSel(6, 2, g_inRcpInfo.m_recipeMgr.m_sInfo.m_sInspectItem.m_bUseEFA);
 	m_gridInspectItemData.SetItemCurSel(7, 2, g_inRcpInfo.m_recipeMgr.m_sInfo.m_sInspectItem.m_bUseSpec_Multi);
+
+	m_gridInspectItemData.SetItemCurSel(8, 2, g_inRcpInfo.m_recipeMgr.m_sInfo.m_sInspectItem.m_bUseAging_Test);
 
 	for (int i = 0; i < M_RCP_INS_ITEM; i++) {
 		m_gridInspectItemData.SetItemText (i, 1, dfcStr (g_inRcpInfo.m_recipeMgr.m_sInfo.m_sInspectItem.m_nTimeOut[i]));
@@ -926,6 +952,7 @@ BOOL	C_RecipeMgrDlg::GetInspectItemData ()
 
 	g_inRcpInfo.m_recipeMgr.m_sInfo.m_sInspectItem.m_bUseEFA		= m_gridInspectItemData.GetItemCurSel(6, 2);
 	g_inRcpInfo.m_recipeMgr.m_sInfo.m_sInspectItem.m_bUseSpec_Multi = m_gridInspectItemData.GetItemCurSel(7, 2);
+	g_inRcpInfo.m_recipeMgr.m_sInfo.m_sInspectItem.m_bUseAging_Test = m_gridInspectItemData.GetItemCurSel(8, 2);
 
 	for (int i = 0; i < M_RCP_INS_ITEM; i++) {
 		g_inRcpInfo.m_recipeMgr.m_sInfo.m_sInspectItem.m_nTimeOut[i] = _wtoi (m_gridInspectItemData.GetItemText (i, 1));
@@ -1486,6 +1513,84 @@ BOOL	C_RecipeMgrDlg::GetSubZ()
 	return TRUE;
 }
 
+// LYS 2026-08-19 PIX_UNIFORMITY가 열 폭을 61px로 고정해, 컨트롤이 더 넓으면
+// 오른쪽 여백이 셀 하나처럼 보인다. 실제 컨트롤 폭에 맞춰 열을 재분배한다.
+static void	AngleFitColumns(C_GridCtrl &Grid, int nCol)
+{
+	if (nCol <= 0) return;
+
+	CRect rc;
+	Grid.GetWindowRect(&rc);
+
+	int nWidth = rc.Width() - 4;
+	if (nWidth <= 0) return;
+
+	int nColWidth = nWidth / nCol;
+	for (int i = 0; i < nCol - 1; i++) Grid.SetColumnWidth(i, nColWidth);
+	Grid.SetColumnWidth(nCol - 1, nWidth - nColWidth * (nCol - 1));
+}
+
+// LYS 2026-08-19 Angle 축 레시피 파라미터.
+// S_MotionAngle 하나가 두 모듈을 담는다: 그리드1 = *1 필드, 그리드2 = *2 필드.
+void	C_RecipeMgrDlg::InitAngleAxis()
+{
+	InitGridUI(m_gridAxisAngleHead1, IDC_GRID_ANGLE_HEAD1, 1, 5, TRUE, TRUE, PIX_UNIFORMITY);
+	AngleFitColumns(m_gridAxisAngleHead1, 5);
+	m_gridAxisAngleHead1.SetItemText(0, 0, _T("Scheimpflug1"));
+	m_gridAxisAngleHead1.SetItemText(0, 1, _T("Rotate1"));
+	m_gridAxisAngleHead1.SetItemText(0, 2, _T("Zoom1"));
+	m_gridAxisAngleHead1.SetItemText(0, 3, _T("TILT1"));
+	m_gridAxisAngleHead1.SetItemText(0, 4, _T("Azimuth1"));
+	m_gridAxisAngleHead1.EnableWindow(FALSE);
+
+	InitGridUI(m_gridAxisAngleData1, IDC_GRID_ANGLE_DATA1, 1, 5, TRUE, FALSE, PIX_UNIFORMITY);
+	AngleFitColumns(m_gridAxisAngleData1, 5);
+
+	InitGridUI(m_gridAxisAngleHead2, IDC_GRID_ANGLE_HEAD2, 1, 5, TRUE, TRUE, PIX_UNIFORMITY);
+	AngleFitColumns(m_gridAxisAngleHead2, 5);
+	m_gridAxisAngleHead2.SetItemText(0, 0, _T("Scheimpflug2"));
+	m_gridAxisAngleHead2.SetItemText(0, 1, _T("Rotate2"));
+	m_gridAxisAngleHead2.SetItemText(0, 2, _T("Zoom2"));
+	m_gridAxisAngleHead2.SetItemText(0, 3, _T("TILT2"));
+	m_gridAxisAngleHead2.SetItemText(0, 4, _T("Azimuth2"));
+	m_gridAxisAngleHead2.EnableWindow(FALSE);
+
+	InitGridUI(m_gridAxisAngleData2, IDC_GRID_ANGLE_DATA2, 1, 5, TRUE, FALSE, PIX_UNIFORMITY);
+	AngleFitColumns(m_gridAxisAngleData2, 5);
+}
+
+void	C_RecipeMgrDlg::SetAngleAxis()
+{
+	m_gridAxisAngleData1.SetItemText(0, 0, dfcStr(g_inRcpInfo.m_recipeMgr.m_sInfo.m_sMotionAngle.m_fAngleScheimpflug1));
+	m_gridAxisAngleData1.SetItemText(0, 1, dfcStr(g_inRcpInfo.m_recipeMgr.m_sInfo.m_sMotionAngle.m_fAngleRotate1));
+	m_gridAxisAngleData1.SetItemText(0, 2, dfcStr(g_inRcpInfo.m_recipeMgr.m_sInfo.m_sMotionAngle.m_fAngleZoom1));
+	m_gridAxisAngleData1.SetItemText(0, 3, dfcStr(g_inRcpInfo.m_recipeMgr.m_sInfo.m_sMotionAngle.m_fAngleTilt1));
+	m_gridAxisAngleData1.SetItemText(0, 4, dfcStr(g_inRcpInfo.m_recipeMgr.m_sInfo.m_sMotionAngle.m_fAngleAzimuth1));
+
+	m_gridAxisAngleData2.SetItemText(0, 0, dfcStr(g_inRcpInfo.m_recipeMgr.m_sInfo.m_sMotionAngle.m_fAngleScheimpflug2));
+	m_gridAxisAngleData2.SetItemText(0, 1, dfcStr(g_inRcpInfo.m_recipeMgr.m_sInfo.m_sMotionAngle.m_fAngleRotate2));
+	m_gridAxisAngleData2.SetItemText(0, 2, dfcStr(g_inRcpInfo.m_recipeMgr.m_sInfo.m_sMotionAngle.m_fAngleZoom2));
+	m_gridAxisAngleData2.SetItemText(0, 3, dfcStr(g_inRcpInfo.m_recipeMgr.m_sInfo.m_sMotionAngle.m_fAngleTilt2));
+	m_gridAxisAngleData2.SetItemText(0, 4, dfcStr(g_inRcpInfo.m_recipeMgr.m_sInfo.m_sMotionAngle.m_fAngleAzimuth2));
+}
+
+BOOL	C_RecipeMgrDlg::GetAngleAxis()
+{
+	g_inRcpInfo.m_recipeMgr.m_sInfo.m_sMotionAngle.m_fAngleScheimpflug1 = _wtof(m_gridAxisAngleData1.GetItemText(0, 0));
+	g_inRcpInfo.m_recipeMgr.m_sInfo.m_sMotionAngle.m_fAngleRotate1 = _wtof(m_gridAxisAngleData1.GetItemText(0, 1));
+	g_inRcpInfo.m_recipeMgr.m_sInfo.m_sMotionAngle.m_fAngleZoom1 = _wtof(m_gridAxisAngleData1.GetItemText(0, 2));
+	g_inRcpInfo.m_recipeMgr.m_sInfo.m_sMotionAngle.m_fAngleTilt1 = _wtof(m_gridAxisAngleData1.GetItemText(0, 3));
+	g_inRcpInfo.m_recipeMgr.m_sInfo.m_sMotionAngle.m_fAngleAzimuth1 = _wtof(m_gridAxisAngleData1.GetItemText(0, 4));
+
+	g_inRcpInfo.m_recipeMgr.m_sInfo.m_sMotionAngle.m_fAngleScheimpflug2 = _wtof(m_gridAxisAngleData2.GetItemText(0, 0));
+	g_inRcpInfo.m_recipeMgr.m_sInfo.m_sMotionAngle.m_fAngleRotate2 = _wtof(m_gridAxisAngleData2.GetItemText(0, 1));
+	g_inRcpInfo.m_recipeMgr.m_sInfo.m_sMotionAngle.m_fAngleZoom2 = _wtof(m_gridAxisAngleData2.GetItemText(0, 2));
+	g_inRcpInfo.m_recipeMgr.m_sInfo.m_sMotionAngle.m_fAngleTilt2 = _wtof(m_gridAxisAngleData2.GetItemText(0, 3));
+	g_inRcpInfo.m_recipeMgr.m_sInfo.m_sMotionAngle.m_fAngleAzimuth2 = _wtof(m_gridAxisAngleData2.GetItemText(0, 4));
+
+	return TRUE;
+}
+
 void	C_RecipeMgrDlg::InitStageMove (int nStick)
 {
 	InitGridUI (m_gridStageMoveHead, IDC_GRID_16, 6, 1, TRUE);
@@ -1937,6 +2042,7 @@ void	C_RecipeMgrDlg::SetRecipeView ()
 	SetUserOffsetData ();	//User Offset
 	SetHeadMoveData ();		//Head Pos
 	SetSubZ();				//Sub Z
+	SetAngleAxis();			//Angle Axis
 	Invalidate (FALSE);
 }
 
@@ -1954,6 +2060,7 @@ BOOL	C_RecipeMgrDlg::GetRecipeView ()
 	if (!GetUserOffsetData ())	  return FALSE;	//User Offset
 	if (!GetHeadMoveData ())	  return FALSE;	//Head Pos
 	if (!GetSubZ())				  return FALSE;	//Sub Z
+	if (!GetAngleAxis())		  return FALSE;	//Angle Axis
 
 	return TRUE;
 }

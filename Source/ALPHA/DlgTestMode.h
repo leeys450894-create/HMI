@@ -1,6 +1,6 @@
 // DlgTestMode.h
-// LYS 2026-07-02 Test Mode dialog (ported from GMI IDD_TEST_MODE_DLG)
-// GMI option: 2Gantry 4Head, REAR STAGE only
+// LYS 2026-07-02 Test Mode 다이얼로그(GMI IDD_TEST_MODE_DLG 이식).
+// GMI 옵션 기준 - 2갠트리 4헤드, REAR STAGE 전용.
 #pragma once
 
 #include "resource.h"

@@ -1122,6 +1122,26 @@ int CSystemInitializeStep::MotionHome(int iStep)
 
 		CMCCLogMgr::GetInstance()->SetMCC_Action(MCC_A_MOT_HOME_HEAD_Z, true);
 
+		// LYS 2026-08-19 Z3~Z6 Sub Z homing 
+		for (int iAxis = AXIS_Z3; iAxis <= AXIS_Z6; iAxis++)
+		{
+			if (m_pShareItem->GetStopUser() == true)
+				continue;
+
+			nRet &= m_pShareItem->GetMaintControlMgrPtr()->MoveHome(iAxis);
+		}
+
+		for (int iAxis = AXIS_Z3; iAxis <= AXIS_Z6; iAxis++)
+		{
+			if (m_pShareItem->GetStopUser() == true)
+				continue;
+
+			nRet &= m_pShareItem->GetMaintControlMgrPtr()->CheckHomeDone(iAxis, df_HOMINGDONE_TIME);
+		}
+
+		if (nRet != VTM_RV_SUCCESSED)
+			return nRet;
+
 		// 2. Head AXIS
 		// 2.1 Z AXIS
 		for (int iAxis = AXIS_Z1; iAxis < AXIS_TYPE_END; iAxis++)
@@ -1151,7 +1171,10 @@ int CSystemInitializeStep::MotionHome(int iStep)
 			else if (
 				iAxis == AXIS_ZOOM1 || iAxis == AXIS_THETA1 || iAxis == AXIS_ZOOM2 || iAxis == AXIS_THETA2 || iAxis == AXIS_FILTER1 || iAxis == AXIS_FILTER2 || iAxis == AXIS_VLENS1 || iAxis == AXIS_VLENS2 ||
 				iAxis == AXIS_ROTATE1 || iAxis == AXIS_FOCUS1 || iAxis == AXIS_ROTATE2 || iAxis == AXIS_FOCUS2 || iAxis == AXIS_COLOR_DEGREE1 || iAxis == AXIS_COLOR_DEGREE2 ||
-				iAxis == AXIS_ROTATE3 || iAxis == AXIS_FOCUS3 || iAxis == AXIS_ROTATE4 || iAxis == AXIS_FOCUS4 || iAxis == AXIS_SPECTO_DEGREE1 || iAxis == AXIS_SPECTO_DEGREE2)
+				iAxis == AXIS_ROTATE3 || iAxis == AXIS_FOCUS3 || iAxis == AXIS_ROTATE4 || iAxis == AXIS_FOCUS4 || iAxis == AXIS_SPECTO_DEGREE1 || iAxis == AXIS_SPECTO_DEGREE2 ||
+				// LYS 2026-08-19 ADD ANGLE AXIS - homed with the head optics group
+				iAxis == AXIS_ANGLE_SF1 || iAxis == AXIS_ANGLE_ROTATE1 || iAxis == AXIS_ANGLE_ZOOM1 || iAxis == AXIS_ANGLE_TILT1 || iAxis == AXIS_ANGLE_AZM1 ||
+				iAxis == AXIS_ANGLE_SF2 || iAxis == AXIS_ANGLE_ROTATE2 || iAxis == AXIS_ANGLE_ZOOM2 || iAxis == AXIS_ANGLE_TILT2 || iAxis == AXIS_ANGLE_AZM2)
 			{
 				nRet &= m_pShareItem->GetMaintControlMgrPtr()->MoveHome(iAxis);
 			}
@@ -1190,7 +1213,10 @@ int CSystemInitializeStep::MotionHome(int iStep)
 				else if (
 					iAxis == AXIS_ZOOM1 || iAxis == AXIS_THETA1 || iAxis == AXIS_ZOOM2 || iAxis == AXIS_THETA2 || iAxis == AXIS_FILTER1 || iAxis == AXIS_FILTER2 || iAxis == AXIS_VLENS1 || iAxis == AXIS_VLENS2 ||
 					iAxis == AXIS_ROTATE1 || iAxis == AXIS_FOCUS1 || iAxis == AXIS_ROTATE2 || iAxis == AXIS_FOCUS2 || iAxis == AXIS_COLOR_DEGREE1 || iAxis == AXIS_COLOR_DEGREE2 ||
-					iAxis == AXIS_ROTATE3 || iAxis == AXIS_FOCUS3 || iAxis == AXIS_ROTATE4 || iAxis == AXIS_FOCUS4 || iAxis == AXIS_SPECTO_DEGREE1 || iAxis == AXIS_SPECTO_DEGREE2)
+					iAxis == AXIS_ROTATE3 || iAxis == AXIS_FOCUS3 || iAxis == AXIS_ROTATE4 || iAxis == AXIS_FOCUS4 || iAxis == AXIS_SPECTO_DEGREE1 || iAxis == AXIS_SPECTO_DEGREE2 ||
+					// LYS 2026-08-19 ADD ANGLE AXIS - homed with the head optics group
+					iAxis == AXIS_ANGLE_SF1 || iAxis == AXIS_ANGLE_ROTATE1 || iAxis == AXIS_ANGLE_ZOOM1 || iAxis == AXIS_ANGLE_TILT1 || iAxis == AXIS_ANGLE_AZM1 ||
+					iAxis == AXIS_ANGLE_SF2 || iAxis == AXIS_ANGLE_ROTATE2 || iAxis == AXIS_ANGLE_ZOOM2 || iAxis == AXIS_ANGLE_TILT2 || iAxis == AXIS_ANGLE_AZM2)
 				{
 					nRet &= m_pShareItem->GetMaintControlMgrPtr()->CheckHomeDone(iAxis, df_HOMINGDONE_TIME);
 				}
@@ -1555,16 +1581,17 @@ int CSystemInitializeStep::MotionHome(int iStep)
 	case 6:
 	{
 		// LYS 2026-06-26 OCP: skip Probe X homing, home Probe Rotate instead
-		if (m_pShareItem->GetSystemConfigMgrPtr() && m_pShareItem->GetSystemConfigMgrPtr()->IsOCP())
-		{
-			// Home Probe Rotate (AXIS_R1)
-			nRet = m_pShareItem->GetMaintControlMgrPtr()->MoveHome(AXIS_R1);
-			if (nRet == VTM_RV_SUCCESSED)
-			{
-				nRet = m_pShareItem->GetMaintControlMgrPtr()->CheckHomeDone(AXIS_R1, 30000);
-			}
-			break;
-		}
+		// LYS 2026-08-25 Probe Rotate Remove
+		//if (m_pShareItem->GetSystemConfigMgrPtr() && m_pShareItem->GetSystemConfigMgrPtr()->IsOCP())
+		//{
+		//	// Home Probe Rotate (AXIS_R1)
+		//	nRet = m_pShareItem->GetMaintControlMgrPtr()->MoveHome(AXIS_R1);
+		//	if (nRet == VTM_RV_SUCCESSED)
+		//	{
+		//		nRet = m_pShareItem->GetMaintControlMgrPtr()->CheckHomeDone(AXIS_R1, 30000);
+		//	}
+		//	break;
+		//}
 
 		// Probe
 		for (int iAxis = AXIS_X; iAxis < df_USE_MAX_AXIS; iAxis++)
@@ -1577,6 +1604,13 @@ int CSystemInitializeStep::MotionHome(int iStep)
 				}
 
 				if (nRet != VTM_RV_SUCCESSED)	// 2023.08.09 add
+				{
+					continue;
+				}
+
+				// LYS 2026-08-25 OCP는 P1~P4가 비활성이다. MoveCmdPosA()가 bUse == FALSE 축에
+				// 에러를 반환하고 루프가 첫 에러에서 중단되므로, 해당 갠트리는 건너뛴다.
+				if (m_pShareItem->GetMaintControlMgrPtr()->GetMotorControlMgrPtr()->GetAxisProperty(iAxis)->bUse != TRUE)
 				{
 					continue;
 				}
@@ -1622,6 +1656,13 @@ int CSystemInitializeStep::MotionHome(int iStep)
 
 				if (iAxis == AXIS_PROBE_X1 || iAxis == AXIS_PROBE_X3 || iAxis == AXIS_PROBE_X5 || iAxis == AXIS_PROBE_X7 || iAxis == AXIS_PROBE_X9)
 				{
+					// LYS 2026-08-25 위 호밍 루프와 같은 이유 - MoveCmdPosR()이 미장착 갠트리의
+					// 슬레이브 축에서 에러를 낸다.
+					if (m_pShareItem->GetMaintControlMgrPtr()->GetMotorControlMgrPtr()->GetAxisProperty(iAxis + 1)->bUse != TRUE)
+					{
+						continue;
+					}
+
 					double dPosGap = 0.;
 					dPosGap = m_pShareItem->GetMaintControlMgrPtr()->GetCurPos(iAxis) - m_pShareItem->GetMaintControlMgrPtr()->GetCurPos(iAxis + 1);
 					nRet = m_pShareItem->GetMaintControlMgrPtr()->MoveCmdPosR(iAxis + 1, dPosGap, true, SPEED_LOW);
@@ -1880,6 +1921,8 @@ bool CSystemInitializeStep_ProbeAlign::Run()
 
 		for (int iProbe = df_PROBE_AGING1; iProbe <= df_PROBE_MEAS; iProbe++)
 		{
+			if (m_pShareItem->GetSystemConfigMgrPtr()->IsOCP()) iProbe = df_PROBE_MEAS;		// LYS 2026-08-24 OCP ProbeAlign Init 1-4 Skip
+			
 			// Probe exist check
 			if (CSequenceManager::GetInstance()->GetFunctionModuleEQState()->IsProbeExistSensorOn(iProbe) == true)
 			{

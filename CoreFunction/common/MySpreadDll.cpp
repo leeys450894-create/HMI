@@ -204,7 +204,7 @@ void CMySpreadDll::InitMySpread_AGINGTEST_MEAS(int nFilter)
 
 void CMySpreadDll::InitMySpread_AGINGTEST_LIST(int nFilter)
 {
-	SetMaxCols(5);
+	SetMaxCols(6);	// LYS 2026-08-06 Phase 2 +ANGLE
 	SetMaxRows(0);
 	SetColWidth(SS_ALLCOLS, 10);
 	SetColWidth(SS_HEADER, 5.1);
@@ -215,6 +215,7 @@ void CMySpreadDll::InitMySpread_AGINGTEST_LIST(int nFilter)
 	SetData(3, SS_HEADER, _T("점등시간(Sec)"));
 	SetData(4, SS_HEADER, _T("특성"));
 	SetData(5, SS_HEADER, _T("화질"));
+	SetData(6, SS_HEADER, _T("시야각"));	// LYS 2026-08-06 Phase 2
 }
 
 void CMySpreadDll::InitMySpread_AUTOCONTACT(int nFilter)
