@@ -1236,7 +1236,8 @@ UINT CRecipeEditMgr::ThreadRun()
 					pRecipeEvent->m_sRunState.m_fData[2] = m_pMgrPool_link->pMaintControlMgr->GetCurPos(AXIS_X2); // < -BACK Y
 					pRecipeEvent->m_sRunState.m_fData[3] = m_pMgrPool_link->pMaintControlMgr->GetCurPos(AXIS_Y1); // < -BACK LEFT
 					pRecipeEvent->m_sRunState.m_fData[4] = m_pMgrPool_link->pMaintControlMgr->GetCurPos(AXIS_Y2); // < -BACK RIGHT
-					pRecipeEvent->m_sRunState.m_fData[5] = m_pMgrPool_link->pMaintControlMgr->GetCurPos(AXIS_Z1); // < -BACK Z
+					pRecipeEvent->m_sRunState.m_fData[5] = m_pMgrPool_link->pMaintControlMgr->GetCurPos(AXIS_Z3); // LYS 2026-09-04 SUB Z RIGHT
+					pRecipeEvent->m_sRunState.m_fData[6] = m_pMgrPool_link->pMaintControlMgr->GetCurPos(AXIS_Z4); // LYS 2026-09-04 SUB Z LEFT
 				}
 				break;
 				case M_CMD_GLASS_MOVE:
@@ -1280,10 +1281,11 @@ UINT CRecipeEditMgr::ThreadRun()
 					pRecipeEvent->m_sRunState.m_fData[0] = m_pMgrPool_link->pMaintControlMgr->GetCurPos(AXIS_PROBE_X9); //  PROBE Y
 					pRecipeEvent->m_sRunState.m_fData[1] = m_pMgrPool_link->pMaintControlMgr->GetCurPos(AXIS_PROBE_Y5); // PROBE X
 					pRecipeEvent->m_sRunState.m_fData[2] = m_pMgrPool_link->pMaintControlMgr->GetCurPos(AXIS_X2);       // <-BACK Y
-					pRecipeEvent->m_sRunState.m_fData[3] = m_pMgrPool_link->pMaintControlMgr->GetCurPos(AXIS_Y1);		// < -BACK LEFT
-					pRecipeEvent->m_sRunState.m_fData[4] = m_pMgrPool_link->pMaintControlMgr->GetCurPos(AXIS_Y2);		// < -BACK RIGHT
-					pRecipeEvent->m_sRunState.m_fData[5] = m_pMgrPool_link->pMaintControlMgr->GetCurPos(AXIS_Z1);		// < -BACK Z
-					pRecipeEvent->m_sRunState.m_fData[6] = m_pMgrPool_link->pMaintControlMgr->GetCurPos(AXIS_X);		 // < -STAGE Y
+					pRecipeEvent->m_sRunState.m_fData[3] = m_pMgrPool_link->pMaintControlMgr->GetCurPos(AXIS_Y1);		// < -BACK RIGHT
+					pRecipeEvent->m_sRunState.m_fData[4] = m_pMgrPool_link->pMaintControlMgr->GetCurPos(AXIS_Y2);		// < -BACK LEFT
+					pRecipeEvent->m_sRunState.m_fData[5] = m_pMgrPool_link->pMaintControlMgr->GetCurPos(AXIS_Z3); // LYS 2026-09-04 SUB Z RIGHT
+					pRecipeEvent->m_sRunState.m_fData[6] = m_pMgrPool_link->pMaintControlMgr->GetCurPos(AXIS_Z4); // LYS 2026-09-04 SUB Z LEFT
+					pRecipeEvent->m_sRunState.m_fData[7] = m_pMgrPool_link->pMaintControlMgr->GetCurPos(AXIS_X);  // LYS 2026-09-04 STAGE Y (reindex 6->7)
 				}
 				break;
 				case M_CMD_PROBE_MOVE:

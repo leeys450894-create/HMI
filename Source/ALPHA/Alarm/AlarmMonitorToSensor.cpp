@@ -61,7 +61,8 @@ CAlarmMonitorToSensor::CAlarmMonitorToSensor(stAuroraMgrPool &MgrPool)
 	
 	// jblee 20260804 modifed
 	//for (size_t i = 0; i < 16; i++)
-	for (size_t i = 0; i < 11; i++)
+	//for (size_t i = 0; i < 11; i++)
+	for (size_t i = 0; i < 10; i++)
 	{
 		strLog.Format(strSmokeName[i]);
 		m_vecItemSmoke.push_back(new CAlarmMonitorToSensorSmoke(MgrPool.strLogPath, PLC_BIT_SMOKE_DETECT_01+i, 0, 0, strLog, PLC_SMOKE_DETECT_ALARM_01+i));
@@ -95,7 +96,8 @@ CAlarmMonitorToSensor::CAlarmMonitorToSensor(stAuroraMgrPool &MgrPool)
 	m_vecItemTemperature.clear();
 	// jblee 20260804 modified
 	//for (size_t i = 0; i < 16; i++)
-	for (size_t i = 0; i < 11; i++)
+	//for (size_t i = 0; i < 11; i++)
+	for (size_t i = 0; i < 10; i++)
 	{
 		strLog.Format(strTempName[i]);
 		m_vecItemTemperature.push_back(new CAlarmMonitorToSensorTemperature(MgrPool.strLogPath, PLC_BIT_TEMP_SENSOR_01 + i, 0, 0, strLog, PLC_TEMPERATURE_SENSOR_OVER_01+i));
@@ -104,7 +106,8 @@ CAlarmMonitorToSensor::CAlarmMonitorToSensor(stAuroraMgrPool &MgrPool)
 	m_vecItemTemperatureLow.clear();
 	// jblee 20260804 modified
 	//for (size_t i = 0; i < 16; i++)
-	for (size_t i = 0; i < 11; i++)
+	//for (size_t i = 0; i < 11; i++)
+	for (size_t i = 0; i < 10; i++)
 	{
 		strLog.Format(strTempName[i]);
 		m_vecItemTemperatureLow.push_back(new CAlarmMonitorToSensorTemperatureLow(MgrPool.strLogPath, i, PLC_BIT_TEMP_SENSOR_RESET_SWITCH_01 + i, 0, strLog, PLC_TEMPERATURE_SENSOR_WARRING_01 + i));

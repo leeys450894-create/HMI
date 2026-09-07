@@ -341,6 +341,17 @@ void CDlgSubMaint_MotionFile::__RefreshListData1()
 			else
 				pCell->SetCheck(false);
 
+			// LYS 2026-09-02 SW 리밋 초과 시 L+/L- 셀 배경 노란색 (HW 센서 체크박스는 그대로)
+			{
+				CMaintControlMgr* pMaintSw = m_pAuroraMgr->GetMaintControlMgr();
+				if (pMaintSw != nullptr)
+				{
+					double dCurSw = m_stMoterInfo[iAxis].dAxisPos;
+					m_gridList[0].SetItemBkColour(i + 1, enumColumnName_Value5, (dCurSw > pMaintSw->GetMaxSWLimit(iAxis)) ? RGB(255, 255, 0) : RGB(255, 255, 255));
+					m_gridList[0].SetItemBkColour(i + 1, enumColumnName_Value6, (dCurSw < pMaintSw->GetMinSWLimit(iAxis)) ? RGB(255, 255, 0) : RGB(255, 255, 255));
+				}
+			}
+
 			// CheckBox - Home Done
 			m_gridList[0].SetCellType(i + 1, enumColumnName_Value7, RUNTIME_CLASS(CGridCellCheck));
 			m_gridList[0].SetItemState(i + 1, enumColumnName_Value7, GVIS_READONLY);
@@ -520,6 +531,17 @@ void CDlgSubMaint_MotionFile::__RefreshListData2()
 				pCell->SetCheck(true);
 			else
 				pCell->SetCheck(false);
+
+			// LYS 2026-09-02 SW 리밋 초과 시 L+/L- 셀 배경 노란색 (HW 센서 체크박스는 그대로)
+			{
+				CMaintControlMgr* pMaintSw = m_pAuroraMgr->GetMaintControlMgr();
+				if (pMaintSw != nullptr)
+				{
+					double dCurSw = m_stMoterInfo[iAxis].dAxisPos;
+					m_gridList[1].SetItemBkColour(i + 1, enumColumnName_Value5, (dCurSw > pMaintSw->GetMaxSWLimit(iAxis)) ? RGB(255, 255, 0) : RGB(255, 255, 255));
+					m_gridList[1].SetItemBkColour(i + 1, enumColumnName_Value6, (dCurSw < pMaintSw->GetMinSWLimit(iAxis)) ? RGB(255, 255, 0) : RGB(255, 255, 255));
+				}
+			}
 
 			// CheckBox - Home Done
 			m_gridList[1].SetCellType(i + 1, enumColumnName_Value7, RUNTIME_CLASS(CGridCellCheck));
@@ -709,6 +731,17 @@ void CDlgSubMaint_MotionFile::__RefreshListData3()
 				pCell->SetCheck(true);
 			else
 				pCell->SetCheck(false);
+
+			// LYS 2026-09-02 SW 리밋 초과 시 L+/L- 셀 배경 노란색 (HW 센서 체크박스는 그대로)
+			{
+				CMaintControlMgr* pMaintSw = m_pAuroraMgr->GetMaintControlMgr();
+				if (pMaintSw != nullptr)
+				{
+					double dCurSw = m_stMoterInfo[iAxis].dAxisPos;
+					m_gridList[2].SetItemBkColour(i + 1, enumColumnName_Value5, (dCurSw > pMaintSw->GetMaxSWLimit(iAxis)) ? RGB(255, 255, 0) : RGB(255, 255, 255));
+					m_gridList[2].SetItemBkColour(i + 1, enumColumnName_Value6, (dCurSw < pMaintSw->GetMinSWLimit(iAxis)) ? RGB(255, 255, 0) : RGB(255, 255, 255));
+				}
+			}
 
 			// CheckBox - Home Done
 			m_gridList[2].SetCellType(i + 1, enumColumnName_Value7, RUNTIME_CLASS(CGridCellCheck));
@@ -907,6 +940,17 @@ void CDlgSubMaint_MotionFile::__RefreshListData4()
 				pCell->SetCheck(true);
 			else
 				pCell->SetCheck(false);
+
+			// LYS 2026-09-02 SW 리밋 초과 시 L+/L- 셀 배경 노란색 (HW 센서 체크박스는 그대로)
+			{
+				CMaintControlMgr* pMaintSw = m_pAuroraMgr->GetMaintControlMgr();
+				if (pMaintSw != nullptr)
+				{
+					double dCurSw = m_stMoterInfo[iAxis].dAxisPos;
+					m_gridList[3].SetItemBkColour(i + 1, enumColumnName_Value5, (dCurSw > pMaintSw->GetMaxSWLimit(iAxis)) ? RGB(255, 255, 0) : RGB(255, 255, 255));
+					m_gridList[3].SetItemBkColour(i + 1, enumColumnName_Value6, (dCurSw < pMaintSw->GetMinSWLimit(iAxis)) ? RGB(255, 255, 0) : RGB(255, 255, 255));
+				}
+			}
 
 			// CheckBox - Home Done
 			m_gridList[3].SetCellType(i + 1, enumColumnName_Value7, RUNTIME_CLASS(CGridCellCheck));
@@ -1311,9 +1355,16 @@ UINT CDlgSubMaint_MotionFile::ThreadFunc2()
 			pImpl = m_pAuroraMgr->GetMaintControlMgr();
 			if (pImpl != nullptr)
 			{
+				// LYS 2026-09-02 프로브 X 마스터/슬레이브: ABS 이동 시 슬레이브도 마스터 상대변위(dPos-현재)만큼 이동
+				double dMasterCurAbs = pImpl->GetCurPos(nAxis, 0, 0);
 				nRet = pImpl->MoveCmdPosA(nAxis, dPos, false, SPEED_LOW, 0, 0);
 				if (nRet == df_MOTION_RV_SUCCESSED)
 				{
+					if (nAxis == AXIS_PROBE_X1 || nAxis == AXIS_PROBE_X3 || nAxis == AXIS_PROBE_X5 || nAxis == AXIS_PROBE_X7 || nAxis == AXIS_PROBE_X9)
+					{
+						pImpl->MoveCmdPosR(nAxis + 1, dPos - dMasterCurAbs, false, SPEED_LOW);
+						pImpl->DoWork_MotionDone(nAxis + 1);
+					}
 					nRet = pImpl->DoWork_MotionDone(nAxis);
 				}
 				else
@@ -1372,6 +1423,12 @@ UINT CDlgSubMaint_MotionFile::ThreadFunc3()
 
 			if (nRet == df_MOTION_RV_SUCCESSED)
 			{
+				// LYS 2026-09-02 프로브 X 마스터/슬레이브: 슬레이브(nAxis+1)도 동일 값 이동
+				if (nAxis == AXIS_PROBE_X1 || nAxis == AXIS_PROBE_X3 || nAxis == AXIS_PROBE_X5 || nAxis == AXIS_PROBE_X7 || nAxis == AXIS_PROBE_X9)
+				{
+					pImpl->MoveCmdPosR(nAxis + 1, dPos * -1, false, SPEED_LOW);
+					pImpl->DoWork_MotionDone(nAxis + 1);
+				}
 				nRet = pImpl->DoWork_MotionDone(nAxis);
 			}
 			else
@@ -1426,6 +1483,12 @@ UINT CDlgSubMaint_MotionFile::ThreadFunc4()
 		nRet = pImpl->MoveCmdPosR(nAxis, dPos * 1, false, SPEED_LOW);
 		if (nRet == df_MOTION_RV_SUCCESSED)
 		{
+			// LYS 2026-09-02 프로브 X 마스터/슬레이브: 슬레이브(nAxis+1)도 동일 값 이동
+			if (nAxis == AXIS_PROBE_X1 || nAxis == AXIS_PROBE_X3 || nAxis == AXIS_PROBE_X5 || nAxis == AXIS_PROBE_X7 || nAxis == AXIS_PROBE_X9)
+			{
+				pImpl->MoveCmdPosR(nAxis + 1, dPos * 1, false, SPEED_LOW);
+				pImpl->DoWork_MotionDone(nAxis + 1);
+			}
 			nRet = pImpl->DoWork_MotionDone(nAxis);
 		}
 		else

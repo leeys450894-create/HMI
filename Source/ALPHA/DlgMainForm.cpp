@@ -7,6 +7,7 @@
 #include "Manager\SystemConfigMgr.h"	// LYS 2026-06-26 OCP option
 #include "afxdialogex.h"
 #include "AuroraMgr.h"
+#include "Alarm\AlarmController.h"	// LYS 2026-09-02 SW Limit 알람용
 #include "SystemParamShare.h"
 
 #include "MainSubDlgWin.h"
@@ -1677,6 +1678,17 @@ void CDlgMainForm::GetMonitorMotion()
 			m_pAuroraMgr->GetShareMemoryMgrPtr()->GetSharedMemory()->stMotionStatus[iAxis].bHomeDone = m_stMoterInfo[iAxis].bHomeDone;
 			m_pAuroraMgr->GetShareMemoryMgrPtr()->GetSharedMemory()->stMotionStatus[iAxis].dAxisPos = m_stMoterInfo[iAxis].dPosition;
 			m_pAuroraMgr->GetShareMemoryMgrPtr()->GetSharedMemory()->stMotionStatus[iAxis].dAxisRMS = m_stMoterInfo[iAxis].dAxisRMS;
+
+			// LYS 2026-09-02 SW Limit 알람: homed+Enable 축이 SW 리밋 초과 시 MOTION_OVER_LIMIT_POS/NEG 발생
+			// (m_stMoterInfo[iAxis].bEnable && m_stMoterInfo[iAxis].bHomeDone)
+			//
+			//	double dSwMaxChk = pImpl->GetMotorControlMgrPtr()->GetMaxSWLimit(iAxis);
+			//	double dSwMinChk = pImpl->GetMotorControlMgrPtr()->GetMinSWLimit(iAxis);
+			//	if (m_stMoterInfo[iAxis].dPosition > dSwMaxChk)
+			//		CAlarmController::GetInstance()->SetAlarm(MOTION_SW_OVER_LIMIT_POS);
+			//	else if (m_stMoterInfo[iAxis].dPosition < dSwMinChk)
+			//		CAlarmController::GetInstance()->SetAlarm(MOTION_SW_OVER_LIMIT_NEG);
+			//
 
 			// jsyoon 2022.06.24 add
 			bool IonizerRun = false;

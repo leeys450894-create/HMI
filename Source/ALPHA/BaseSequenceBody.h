@@ -51,8 +51,8 @@ protected:
 	bool    m_bStopUser;
 	int		m_nFailNum;
 
-	HANDLE		m_hEvtUserPause;            //set by UI		쓰레드 작업 임시 멈춤
-	HANDLE		m_hEvtUserResume;           //set by UI		쓰레드 작업 임시 멈춤 해제
+	HANDLE		m_hEvtUserPause;            //set by UI		?�레???�업 ?�시 멈춤
+	HANDLE		m_hEvtUserResume;           //set by UI		?�레???�업 ?�시 멈춤 ?�제
 
 public:
 	CString GetType() const 			{ return m_strSeqType;				}
@@ -89,7 +89,7 @@ private:
 	long m_iStepIndex_backup;
 	long m_iStepIndex_loop;
 	long m_iStepIndex_exit;
-	long m_iStepIndex_idle;		// 아무것도 하지 않고 COMPLETE 시킨다.
+	long m_iStepIndex_idle;		// ?�무것도 ?��? ?�고 COMPLETE ?�킨??
 	long m_iStepIndex_total;
 public:
 	void GoToInitStep()					{ m_iStepIndex = 0;					}

@@ -456,6 +456,25 @@ BOOL	C_OutRecipeFunc::LoadAlignRcpFile (CString strAlignRcpName)
 	m_recipeMgr.m_sAlign.m_sMargin.m_sProbeMargin.m_nCentering  = ReadInt (&File);
 	m_recipeMgr.m_sAlign.m_sMargin.m_sProbeMargin.m_nFindPtn	= ReadInt (&File);
 
+	// LYS 2026-09-04 SUB Z trailing block + EOF detect (versionless backward compat)
+	{
+		CString strSubZHdr;
+		if (File.ReadString (strSubZHdr) && strSubZHdr.Find (_T("_SUB_Z_")) >= 0)   // new file
+		{
+			m_recipeMgr.m_sAlign.m_sGlsAlign.m_fSubZRight   = ReadDouble (&File);
+			m_recipeMgr.m_sAlign.m_sGlsAlign.m_fSubZLeft    = ReadDouble (&File);
+			m_recipeMgr.m_sAlign.m_sProbeAlign.m_fSubZRight = ReadDouble (&File);
+			m_recipeMgr.m_sAlign.m_sProbeAlign.m_fSubZLeft  = ReadDouble (&File);
+		}
+		else   // old file : copy legacy BACK Z into both SUB Z
+		{
+			m_recipeMgr.m_sAlign.m_sGlsAlign.m_fSubZRight   = m_recipeMgr.m_sAlign.m_sGlsAlign.m_fFrontZ;
+			m_recipeMgr.m_sAlign.m_sGlsAlign.m_fSubZLeft    = m_recipeMgr.m_sAlign.m_sGlsAlign.m_fFrontZ;
+			m_recipeMgr.m_sAlign.m_sProbeAlign.m_fSubZRight = m_recipeMgr.m_sAlign.m_sProbeAlign.m_fBackZ;
+			m_recipeMgr.m_sAlign.m_sProbeAlign.m_fSubZLeft  = m_recipeMgr.m_sAlign.m_sProbeAlign.m_fBackZ;
+		}
+	}
+
 	File.Close ();
 
 	return TRUE;

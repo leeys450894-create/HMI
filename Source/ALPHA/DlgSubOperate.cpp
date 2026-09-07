@@ -534,7 +534,7 @@ BOOL CDlgSubOperate::OnInitDialog()
 	RotateMeasPath(m_nOldAngle);
 	RotateGlassPath(0);	// LYS 2026-08-07 rotation-change: default view 0-deg (load posture, was 90)
 
-	m_pdCardSize[0] = 250;
+	m_pdCardSize[0] = 210;		// LYS 2026-09-03 프로브 사이즈 250 -> 210
 	m_pdCardSize[1] = 0;
 	m_pdCardSize[2] = m_pdGlassSize[_MAX_SIZE_X];
 	m_pdCardSize[3] = m_pdGlassSize[_MIN_SIZE_X];
@@ -2973,7 +2973,8 @@ void CDlgSubOperate::UpdateCurCoord()
 
 
 		m_pParentMeasPathDlg->UpdateCurCoord(-10, dMotionPos[AXIS_X], dMotionPos[AXIS_LOADER_R] * -1, 0, 0);		// STAGE   // jsyoon 2022.09.29 add * -1
-		m_pParentMeasPathDlg->UpdateCurCoord(-11, (dMotionPos[AXIS_X4] - dChangePos ) * -1, 0, 0, 0);		// ACX
+		//m_pParentMeasPathDlg->UpdateCurCoord(-11, (dMotionPos[AXIS_X4] - dChangePos ) , 0, 0, 0);		// ACX
+		m_pParentMeasPathDlg->UpdateCurCoord(-11, (dMotionPos[AXIS_X4]), 0, 0, 0);		// ACX		// LYS 2026-09-03 ACX UI 이동 수정
 
 		m_pParentMeasPathDlg->UpdateCurCoord(1, dMotionPos[AXIS_X2], dMotionPos[AXIS_Y1], 0, 0);		// HEAD 1
 		m_pParentMeasPathDlg->UpdateCurCoord(0, dMotionPos[AXIS_X2], dMotionPos[AXIS_Y2], 0, 0);		// HEAD 2

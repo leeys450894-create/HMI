@@ -1,10 +1,10 @@
 ===== FarPoint Technologies, Inc =====
 ===== Begin of Excel Workbook General Load =====
-7/30/2026 - 10:18
+9/3/2026 - 17:51
 
 Col	Row	Information
 ___	___	___________
-		Import Excel File: D:\OCP\0.SW_Matching\HMI\CoreFunction\EX_FDC\Bin\FDC_LIST\FDC_LIST.xls
+		Import Excel File: D:\0.SW\HMI\CoreFunction\EX_FDC\Bin\FDC_LIST\FDC_LIST.xls
 
 ===== End of Excel Workbook General Load =====
 

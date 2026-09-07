@@ -85,7 +85,7 @@ CChartOrbit::CChartOrbit()
 	m_iChart = 0;
 
 	m_nData1 = 1;
-	m_dCardWidth = 250;
+	m_dCardWidth = 200;
 
 	m_bUseGlassVcm = FALSE;
 	m_nCntGlassVcm = 5;

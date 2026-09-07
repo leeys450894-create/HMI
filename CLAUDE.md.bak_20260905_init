@@ -1,0 +1,405 @@
+# CLAUDE.md
+
+This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+
+## Project Overview
+
+ALPHA HMI — Samsung 디스플레이 Glass 검사 자동화 설비 제어 소프트웨어. MFC C++ Dialog-based 애플리케이션.
+이 디렉토리에서 Claude Code를 실행하는 경우, HMI 코드 자체의 분석·수정·빌드·운용이 목적이다.
+
+상세 분석: `docs/` 폴더 (핵심 아키텍처 분석 문서 00~12번 + 기능별 포팅/이슈 문서) 및 `PROJECT_INDEX.md` 참조.
+
+## Build System
+
+- **IDE:** Visual Studio 2022 Community (toolset v143), MFC Dynamic DLL, **Unicode** character set
+- **Platform:** x64
+- **Solution:** `Source/ALPHA/ALPHA.sln` (8 projects: ALPHA EXE + 6 DLLs + FDCSense EXE)
+- **Output:** `Source/Bin/ALPHA.exe`
+- **DLL Projects:** Alarm, dSACC, dResult, dfcRecipe, dMCCSpec, ProbeHistory
+- **EXE Project (embedded):** FDCSense (`CoreFunction/EX_FDC/FDCSense/`) — separate FDC data-collection process, built alongside ALPHA but launched independently
+- **Repo path:** active checkout is `D:\0.SW\HMI` (sln at `Source\ALPHA\ALPHA.sln`). Older docs referenced `D:\OCP\0.SW_Matching\HMI` (stale) — use the current path. Sibling folders like `D:\0.SW\HMI_20260831` / `D:\0.SW\merge\HMI_*.zip` are dated backups, not the working tree.
+- **MSBuild caveat:** the command below assumes VS2022 Community CLI MSBuild. Some build PCs have only the **VS2022 IDE** (devenv) without the CLI MSBuild component (e.g. only VS2019's `MSBuild.exe` exists under `Program Files (x86)`). Verify the actual `MSBuild.exe` path before scripting a build, or build from the IDE.
+
+```bash
+# Debug build
+"/c/Program Files/Microsoft Visual Studio/2022/Community/MSBuild/Current/Bin/MSBuild.exe" \
+  "D:\\0.SW\\HMI\\Source\\ALPHA\\ALPHA.sln" //p:Configuration=Debug //p:Platform=x64 //m //nologo //v:minimal
+
+# Release build
+"/c/Program Files/Microsoft Visual Studio/2022/Community/MSBuild/Current/Bin/MSBuild.exe" \
+  "D:\\0.SW\\HMI\\Source\\ALPHA\\ALPHA.sln" //p:Configuration=Release //p:Platform=x64 //m //nologo //v:minimal
+
+# Clean
+"/c/Program Files/Microsoft Visual Studio/2022/Community/MSBuild/Current/Bin/MSBuild.exe" \
+  "D:\\0.SW\\HMI\\Source\\ALPHA\\ALPHA.sln" //t:Clean //p:Configuration=Debug //p:Platform=x64 //nologo
+```
+
+## Runtime Dependencies & Deployment (`Source/Bin`)
+
+`ALPHA.exe` is x64 and **statically imports** several third-party DLLs not built by the solution. A wrong-bitness or missing copy kills the process in the OS loader **before any code runs** — `0xc000007b` (STATUS_INVALID_IMAGE_FORMAT = wrong bitness) or `0xc0000135` (DLL not found). No app logging fires; it looks like "nothing happens" / instant exit.
+
+| Dependency | Kind | Source |
+|---|---|---|
+| `ACSCL_x64.dll` | ACS SPiiPlus motion | shipped in `Source/Bin` (x64) |
+| `SPR64DU80.dll` | FarPoint Spread grid (x64) | shipped in `Source/Bin` |
+| `imaq.dll` / `NIIMAQDX.dll` / `nivision.dll` | NI Vision runtime | NI install → `C:\Windows\System32` (x64); SysWOW64 holds the x86 copies — don't confuse them |
+| `olch2du8.dll` | ComponentOne/Olectra **Chart 2D, DLL edition** (used only by `UIMeasPathDlg`) | **must be x64**; links via `Source/Lib/olch2du8.lib` (x64 import lib). Deploy the x64 runtime to `Source/Bin` |
+| `mfc140ud.dll`, `VCRUNTIME140*D`, `ucrtbased` | VS **Debug** CRT/MFC | Debug builds need the VS debug runtime on the run PC |
+
+**DLL search order:** for a non-KnownDLL static import, Windows searches the **application directory (`Source/Bin`) before `System32`** — so drop the correct DLL next to `ALPHA.exe` to override a bad system copy (no admin, no risk to other apps). Diagnose bitness via the PE machine word (`e_lfanew` @ 0x3C, machine @ PE+4: `8664`=x64, `014c`=x86) or `dumpbin /dependents ALPHA.exe`.
+
+**Known 0xc000007b incident (2026-08):** a 32-bit `olch2du8.dll` (from extracting `Downloads\Util.zip`'s `System32\` folder into System32) overwrote the correct x64 runtime → x64 process loaded a 32-bit DLL → crash. Fix: put a verified x64 `olch2du8.dll` in `Source/Bin`. See memory `olch2du8-0xc000007b`.
+
+## Encoding & Source File Editing Rules (Critical)
+
+HMI는 Unicode 프로젝트이며 파일은 대부분 **BOM 없는 ANSI/UTF-8** (`ALPHA.cpp`는 UTF-8 BOM).
+
+**한글 텍스트 손상 방지:** 소스 파일에 한글 주석/문자열 리터럴이 다수 포함. 수정 시 반드시 준수:
+
+1. **한글 포함 소스 파일(.cpp/.h)은 Edit 도구 사용 금지.** Edit 도구는 파일 전체를 UTF-8로 재인코딩하여 기존 한글(EUC-KR/ANSI)을 `\xEF\xBF\xBD`(U+FFFD)로 손상시킨다. 반드시 Perl raw byte 편집을 사용할 것.
+2. **Perl raw byte 편집 방법:**
+   ```bash
+   perl -e '
+     open(my $in, "<:raw", "file.cpp") or die;
+     my $data = do { local $/; <$in> }; close $in;
+     my $old = "exact ASCII string to find";
+     my $pos = index($data, $old);
+     die "not found" if $pos < 0;
+     my $new = "replacement string";
+     substr($data, $pos, length($old), $new);
+     open(my $out, ">:raw", "file.cpp") or die;
+     print $out $data; close $out;
+   '
+   ```
+3. **수정 후 검증 (필수):** `perl -e 'open(F,"<:raw",$ARGV[0]);$d=do{local $/;<F>};$c=()=$d=~/\xef\xbf\xbd/g;print"damaged=$c\n"' file.cpp` — `damaged=0`이 아니면 백업에서 복원 후 재작업.
+4. **손상 복구:** 백업 `D:\0.SW\HMI_20260831\`(또는 `D:\0.SW\merge\HMI_20260831.zip` 추출)에서 원본 복사 후 Perl로 변경사항 재적용. (구 경로 `D:\OCP\0.SW_Matching\HMI_20260716\HMI\`는 더 이상 없음.)
+5. **새 한글 주석은 "그 파일의 기존 한글 인코딩"에 맞춰 넣을 것 (핵심 — 파일마다 다름).** 이 저장소는 인코딩이 섞여 있다: `Manager/MotorControlMgr.cpp`는 **CP949**, `DlgSubMaint_MotionFile.cpp`·`CD_PopUp_Motion_Move.cpp` 등은 **BOM 없는 UTF-8**. 인코딩을 틀리면(예: UTF-8 파일에 CP949 주석) 깨지는데 **`damaged=0`(U+FFFD) 검사로는 못 잡는다** (CP949 바이트는 U+FFFD가 아님). 2026-09-02 실제로 UTF-8 파일에 CP949를 넣어 깨진 전례.
+   - **① 인코딩 판별:** 대상 파일의 기존 한글 리드 바이트 확인 — `EA~ED`(3바이트)=UTF-8, `B0~C8`(2바이트)=CP949. 빠른 판별: `perl -e 'open(F,"<:raw",$ARGV[0]);$d=do{local $/;<F>};$u=()=$d=~/[\xea-\xed][\x80-\xbf]{2}/g;print "utf8han=$u\n"' file.cpp` — `utf8han`이 크면 UTF-8, 0이면 CP949.
+   - **② 삽입:** Perl에 `use utf8; use Encode;` 후, **UTF-8 파일이면 `Encode::encode("utf-8","한글")`, CP949 파일이면 `Encode::encode("cp949","한글")`**. Edit/Write 도구로 한글을 직접 넣으면 항상 UTF-8 바이트가 들어가므로 CP949 파일에서 깨진다.
+   - **③ 삽입 후 검증(필수):** 넣은 주석 바이트를 그 파일 인코딩으로 되디코딩해 원문이 복원되는지 확인 — `Encode::decode("utf-8"|"cp949", $bytes)`. `damaged=0`만 믿지 말 것.
+   - 기존 한글 주석/문자열은 절대 삭제·변경하지 말 것.
+6. **수정 주석 형식:** `// LYS yyyy-mm-dd brief description` — 모든 소스코드 수정 시 반드시 추가.
+7. **신규 사용자 메시지는 영어로 작성.** 일부 파일(`DlgSubManual_AgingTest.cpp` 등)은 한글이 BOM 없는 UTF-8인데 vcxproj에 `/utf-8`이 없어 CP949로 컴파일됨 → 해당 파일의 한글 리터럴은 런타임 표시가 깨짐. 파일별 인코딩 확인: 한글 리터럴 헥사 덤프(EC/EB 시작=UTF-8, B0~C8 대역=CP949, A2AA=EUC-KR 도 기호 °).
+
+## OCP Option Branching (Runtime Equipment Type)
+
+HMI는 `SystemConfig.ini`의 `[EQUIP_TYPE] MACHINE_TYPE` 값으로 런타임 설비 타입을 결정한다.
+- `HMI` (기본값): 기존 5-Probe 동작 100% 유지
+- `OCP`: 1-Probe(P5 MEAS only), Probe Rotate, Stage 이동 방식
+
+### 접근 패턴
+```cpp
+// Manager 클래스에서 (m_pSystemConfigMgrPtr 보유)
+bool bIsOCP = m_pSystemConfigMgrPtr->IsOCP();
+
+// DoWork Step 클래스에서 (주의: GetSystemConfigMgrPtr() 직접 호출 불가)
+bool bIsOCP = m_pShareItem->GetSystemConfigMgrPtr()->IsOCP();
+
+// MotorControlMgr (자체 플래그 보유)
+bool bIsOCP = m_pMotorControlMgr->IsOCP();
+```
+
+### OCP 핵심 차이
+| 항목 | HMI | OCP |
+|------|-----|-----|
+| Probe Gantry | 5개 (P1~P4 AGING + P5 MEAS) | 1개 (P5 MEAS only) |
+| Probe X축 | AXIS_PROBE_X9/X10 (Master/Slave) | **동일** — 2026-08-25 HW 컨셉 변경으로 가동. `AXIS_R1`은 미사용 |
+| Probe Y축 | AXIS_PROBE_Y5 | 사용 안 함 (config는 `USE[1]`이나 코드에서 비활성) |
+| 측정 이동 | Probe X 이동 → Contact → Head 측정 | Stage(AXIS_X) 이동 → Contact → Head 측정 |
+| ANGLE Head | X2 주 제어 → X3 종속 | X3 주 제어 → X2 종속 |
+| AGING | P1~P4 수행 | **P5에서 ODD 라운드만 수행** (EVEN 미수행, 리뷰 스냅 1회) |
+
+**Stick 간 이송은 OCP에서도 계속 Stage Y가 담당한다** (2026-08-25 확정). Probe X(X9/X10)가 움직이게 된 것은 인터락·얼라인·Safety 경로 때문이며, stick 이송 주체가 바뀐 것이 아니다. 따라서 `DoWorkGlassMeasureStep`(stick 루프 / Probe X 이동 skip), `DoWorkGlassPreMeasStep`, `DlgSubManual_Meas::ManualMoveStick`의 OCP 분기는 **유지**한다.
+
+상세: [docs/OCP_Option_ChangeHistory.md](docs/OCP_Option_ChangeHistory.md)
+
+## Glass 방향/좌표 체계 (2026-08-07 확정 — 수정 시 반드시 준수)
+
+Stage Rotate H/W 축 = `AXIS_LOADER_R`. 도면: `Doc/07_설계문서/HMI 설비 Contact 방향.pdf`, 상세: [docs/Glass_Rotation_Change_Plan.md](docs/Glass_Rotation_Change_Plan.md)
+
+| 자세 | 각도 | 비고 |
+|------|------|------|
+| Load / Unload / Align | 0° | Position.ini LOAD_R/UNLOAD_R, Align 레시피(.alg) StageRotate |
+| 장변 측정 | 90° | `m_nGlsRotate=1`, 레시피 스틱별 `m_fStageR` |
+| 단변 측정 | 180° | `m_nGlsRotate=2` (신규값 — 기존 분기는 0/1만 처리, ==1 여부로 판정됨) |
+| MEASURE 전환(흡착) | 270° | Position.ini MEAS_R |
+
+- **측정 회전각 = 스틱 `m_fStageR` + USER OFFSET `m_fStageRotate` 합산** — 각도 이상 시 두 곳 모두 확인
+- **스틱 인덱스 규약**: `MakeCellID` 기준 — rotate==1만 직행, **그 외 전부 `nMaxStick-iStick-1` 반전**. nCellStatus/AGING 스틱 슬롯(`m_nAgingStartStick`) 등 셀 상태 인덱싱은 모두 이 규약을 따라야 함
+- **셀 좌표 = 헤드 Y1~Y4 목표 직결** (변환 없음). 셀 분배는 A01(첫 셀) 앵커 = **+Y측**에서 −Y 방향 (MakeCellDlg). 셀 라벨(A01..)은 제품 도면 기준 고정 — 방향 문제는 좌표를 고칠 것, 라벨을 뒤집지 말 것
+- R축 DEGREE 센서: `PLC_R_MOTION_LOADER_DEGREE_0~3` = M4400~4403 (0/90/180/270)
+- 경로 UI 컷 코너: Config.ini `[GLASS EDGECUT]` = {0°:4, 90°:3, 180°:2, 270°:1} (1=우상/2=좌상/3=좌하/4=우하, 회전 표현은 화면상 시계 방향)
+- X 이동 인터록: R이 스테이션 각 {0,90,180,270}±2 이내일 때만 허용 (MotorControlMgr)
+
+## Architecture
+
+### Layer Structure
+
+```
+CALPHAApp::InitInstance()                          [ALPHA.cpp]
+  → CAuroraMgr (Central Orchestrator)              [AuroraMgr.cpp]
+    → stAuroraMgrPool (28+ manager pointers)       [AuroraMgrPool.h]
+      → 15 CAuroraSubMgr-derived managers          [Manager/]
+      → 4 Singleton managers                       [Manager/]
+  → CDlgALPHA::DoModal() (MFC Message Loop)        [DlgALPHA.cpp]
+    → CDlgMainForm                                 [DlgMainForm.cpp]
+      → CDlgNaviBar → 8 DlgSub* pages             [DlgNaviBar.cpp, DlgSub*.cpp]
+      → 4 CDlgAlignCCD instances                   [DlgAlignCCD.cpp]
+```
+
+### Core Components
+
+| Component | Key Class | File | Role |
+|-----------|-----------|------|------|
+| **Orchestrator** | `CAuroraMgr` | `Source/ALPHA/AuroraMgr.cpp/.h` | 전체 매니저 생성/접근 |
+| **Sequence Engine** | `CSequenceManager` (Singleton) | `Manager/SequenceManager.cpp/.h` | 초기화 22단계 + Glass 9단계 시퀀스 |
+| **Glass Engine** | `CDoWorkGlassSequenceEngine` | `DoWork/DoWorkGlassSequenceEngine.cpp/.h` | 9개 시퀀스 아이템 실행 Thread |
+| **Global State** | `CSystemParamShare` (Singleton) | `SystemParamShare.cpp/.h` | Auto mode, Glass ID, Cycle state |
+| **Event Router** | `CWindowEventHandler` (Singleton) | `WindowEventHandler.cpp/.h` | Cross-layer WM_USER 메시지 라우팅 |
+| **Alarm** | `CAlarmController` (Singleton) | `Alarm/AlarmController.cpp/.h` | Alarm DLL facade |
+| **Equipment State** | `CFunctionModuleEQState` | `FunctionModule/FunctionModuleEQState.cpp/.h` | READY↔LOAD↔MEASURE 상태 머신 |
+| **Interlock** | `CFunctionModuleEQInterlock` | `FunctionModule/FunctionModuleEQInterlock.cpp/.h` | 안전 인터록 |
+
+### Auto Sequence (9-Step Glass Inspection)
+
+각 단계: `DoWork/DoWorkGlass{Name}.cpp` (상태 머신) + `DoWorkGlass{Name}Step.cpp` (단계 구현)
+기반 클래스: `BaseSequenceImpl` (Thread + Event) → `BaseSequenceBody` (Step/Pause/Resume)
+상세: [docs/03_AutoSequence.md](docs/03_AutoSequence.md)
+
+### System Initialize (22-Step)
+
+구현: `DoWork/SystemInitialize.cpp`, `DoWork/SystemInitializeStep.cpp` (~2,000줄)
+
+### Motion (ACS SPiiPlus)
+
+- **Controller:** ACS SPiiPlus TCP/IP (10.0.0.100:701), ACSCL_x64.dll v7.1.1.0
+- **Axes:** 90 logical axes (`axis_type_t` enum in `CoreFunction/MotorFunction/AxisType.h`)
+- **Speed grades:** HIGH/MID/LOW/HOME/LATCH/MULTI (per-axis velocity, acceleration, S-curve)
+- **Probe Gantry:** 5개 (P1~P4 AGING, P5 MEAS), master/slave X-axis pairs
+- **Interlock:** gantry/head/probe/loader collision 체크가 `MoveCmdPosA_Sub()`(절대) / `MoveCmdPosR_Sub()`(상대) / `MoveCmdPosMulti_Sub()`(멀티) **3벌로 복제**되어 있다. 한 곳만 고치면 나머지 경로로 빠져나가므로 인터락 수정은 항상 3벌을 함께 볼 것 (게이트 조건은 미묘하게 다르다 — 예: Z1 Down이 A/R_Sub는 `> 1`, Multi_Sub는 `> 10`). **게이트가 실동작 범위를 덮는지 호출부까지 추적할 것** — 시퀀스 계층(`MoveCmdPosWAD` 등)이 Z1 목표를 `>1 → 0`으로 클램프하는 바람에 모션 계층의 `dPos > 1` 게이트가 한 번도 열리지 않아 그 안의 인터락 전체가 죽은 코드였던 전례가 있다(2026-08-26 발견, Z1은 안전 -600 → 측정 0으로 상승하며 하강)
+- **Homing:** ACSPL+ buffer 프로그램 실행 (`acsc_RunBuffer`), HomeFlag 변수로 완료 확인
+- **Thread safety:** 5 critical sections (move/get/set/done/stop 분리)
+- **Simulation:** `OUT_OF_SERVICE` 플래그로 하드웨어 없이 소프트웨어 테스트 가능
+
+- **Dual Controller (OCP mode):** `df_MAX_CTRL=2` (defined in `MotorControl_ACS.h`), each axis maps to controller via `m_cAxis[iAxis].m_iACSMap` (0 or 1). Dispatch pattern: `m_hAcs[m_cAxis[iAxis].m_iACSMap]`. HMI mode uses `df_MAX_CTRL=1`.
+
+Layer: `CMaintControlMgr` → `CMotorControlMgr` → `CMotorFunction` → `CMotorControl_ACS`
+상세: [docs/04_Motion.md](docs/04_Motion.md), [docs/ACS_Dual_Controller_Plan.md](docs/ACS_Dual_Controller_Plan.md)
+
+#### 비활성 축(`bUse == FALSE`) 취급 — 래퍼마다 다름
+
+기종에 따라 장착되지 않은 축은 `Config_Motion_ACS.dat`의 `USE[0]`이나 `CMotorControlMgr::DisableAxesForOCP()`(런타임에 config를 덮어씀)로 꺼진다. **`CMaintControlMgr` 래퍼의 반환값이 함수마다 갈린다:**
+
+| 함수 | `bUse == FALSE`일 때 |
+|---|---|
+| `MoveHome`, `CheckHomeDone` | `df_MOTION_RV_SUCCESSED` |
+| `MoveCmdPosA/R`, `MoveOrgPosA/R` | **`df_MOTION_RV_ERROR`** |
+
+축을 순회하며 첫 에러에 `break`/`continue`하는 루프(`SystemInitializeStep` case 6의 프로브 호밍·M/S 정렬 루프가 대표)는 미장착 축 하나에서 통째로 중단된다. **순회 전에 `GetAxisProperty(iAxis)->bUse`로 거를 것.**
+
+**멀티 이동은 `bUse`를 보지 않는다.** ACS `MoveCmdPosMulti()`에 검사가 없고 `SetSpeed()`가 비활성 축에 0(성공)을 반환해 정상 취급되므로, 미장착 축이 자기 `HW[]` 번호를 달고 컨트롤러로 나간다. `CMaintControlMgr::MoveCmdPosMulti`/`MoveOrgPosMulti` 진입부의 `PackUsedAxes()`가 이를 걸러내니 **새 멀티 이동은 반드시 이 두 함수를 경유**할 것 (`CMotorControlMgr`을 직접 호출하지 말 것).
+
+#### 헤드 갠트리 ↔ Z축 짝
+
+| 갠트리 | Z축 | P5 프로브 유닛 간섭 |
+|---|---|---|
+| `AXIS_X2` BACK GANTRY | `AXIS_Z1` BACK Z(특성) | **있음** → `CMotorControlMgr::IsProbeUnitOverlapX()` 인터락 |
+| `AXIS_X3` FRONT GANTRY | `AXIS_Z2` FRONT Z(화질+시야각) | 없음 (인터락 불필요) |
+
+기존 인터락 코드에 이 짝이 **교차된 사례가 4곳 있었다**(2026-08-25 정리). 헤드 Z 관련 인터락을 손대기 전에 짝부터 확인할 것. Z2 분기에 남은 이동 범위 체크(`X2 < GetMinSWLimit(AXIS_X2) + 35`)도 X2를 보고 있어 교차 의심이 있으나 미확인.
+
+**P5 프로브 유닛 인터락 체계 (2026-08-26 구축 / 2026-09-02 Z1→Z3/Z4 전환).** P5 유닛은 X9 위치에서 X방향 `INTERLOCKPROBESIZEX`(300mm) 폭을 차지하는 구조물이며, 보호는 두 겹이다. **AXIS_Z1은 OCP에서 미사용(USE0)이므로 2026-09-02에 두 보호를 모두 Sub Z RIGHT/LEFT(`AXIS_Z3`/`AXIS_Z4`)로 교체**했다 (Z3/Z4는 값이 클수록 하강, 0이 안전):
+- **Z3/Z4 하강 거부** — `IsProbeUnitOverlapX(GetOrgPos(AXIS_X2))` 점 판정. 모션 계층 3벌(A/R/Multi_Sub)에서 SW리밋 체크 직후, **하강(=목표 > 현재)인데 겹치면** 거부. A/R_Sub은 `MOTION_INTERLOCK_CHECK_ALARM + iAxis`를 반환→래퍼가 `SetAlarm`, Multi_Sub은 SW루프 안에서 직접 `SetAlarm(MOTION_INTERLOCK_CHECK_ALARM + nSwAxis)`. 기존 `else if(iAxis==AXIS_Z1)` 하강거부 3벌은 **dead code로 남겨둠**(Z1 USE0라 무해). 시퀀스 계층 `MoveCmdPosWAD/Review/Aging`의 조기거부와 `MoveCmdPosAngle/Vision`의 Z1 지령 제거는 FRONT 갠트리 기반이라 그대로 둠.
+- **X2 이동 시 Z3/Z4 선상승** — `RetractHeadZForProbeUnit()`. 목표점이 아니라 **[현재..목표] 경로**가 밴드와 겹치면 Z3/Z4를 `INTERLOCKSUBZSAFETY`(0, Position.ini `[SUBZ_SAFETY]` 미러)로 `MoveCmdPosMulti`로 먼저 올리고(둘 다 이미 ≤safety면 skip), 상승 실패 시 X2 이동을 포기한다. 각 X2 분기의 말미(기존 인터락 전부 통과 후)에서 호출.
+
+인터락 임계값은 `Bin/Config/CoreFunction/CoreFunction.ini`의 `[MOTOR_CONTROL_MGR]` 섹션에 있다 — `INTERLOCKPOS` / `GANGAP` / `HEADGAP` / `HEADGAPB` / `PROBEGAP` / `LIFTPIN` / `PROBESIZEX` / `PROBEZSAFETY` / `INTERLOCKSUBZSAFETY`. **키가 없으면 `CMotorControlMgr::LinkIniFile()`의 기본값이 조용히 적용**되므로(`LIFTPIN`=575, `PROBESIZEX`=300, `PROBEZSAFETY`=-600, `INTERLOCKSUBZSAFETY`=0 등 ini에 없는 키가 실제로 있다), 값을 확인할 때 ini만 보지 말 것.
+
+### PLC (Mitsubishi MELSEC MC Protocol)
+
+- **Protocol:** MC Protocol over TCP/IP
+- **Memory:** M4000~4499 (PLC→PC read), M4500~4999 (PC→PLC write), F0~F1999 (alarms), D-area (FDC/sensor data)
+- **Address mapping:** `PLCMAdress.csv` → ~500 logical enum (`plc_MBIT_t`) → 물리 M-address (9999 = unused)
+- **Scanner threads:** M/F/D/PACC/ProbeCard/GlassSensor 영역별 독립 폴링 Thread
+- **Thread safety:** 4 critical sections (bit/word/multiBit/actionDone)
+- **Simulation:** `OUT_OF_SERVICE` 플래그로 가상 비트 동작
+
+Layer: `CIOMapControlMgr` → `CIOFunction` → `CMcProtocolManager` → `CMcAddressScannerImpl` subclasses
+상세: [docs/05_PLC.md](docs/05_PLC.md)
+
+#### PLCMAdress.csv ↔ plc_MBIT_t enum = positional 바인딩 (오매핑 최고위험)
+
+`ReadAdressFileCSV`가 CSV를 **행 순서대로** `m_piPLCMAdr[nNext++] = 주소`로 채운다 → **CSV 행 순서 = `plc_MBIT_t` enum 선언 순서**가 계약(ABI). Description 컬럼은 라벨일 뿐 바인딩과 무관.
+- **해석 공식**: enum값 = `4000 + (그 enum의 advancing 슬롯 인덱스)`. 실주소 = `m_piPLCMAdr[enum값 - 4000]`. 읽기 `CIOMapControlMgr::GetParam_DIOMapMemoryBitImport(enum)`이 이 변환 후 M 스캐너 read데이터를 조회.
+- **alias 6개**(`X = 다른enum`, 예 `PLC_BIT_W_MUTIONG_ON = PLC_BIT_W_SR_51_ON`)는 값을 공유하고 **슬롯을 소비하지 않음** → 개수/슬롯 계산 시 제외 (advancing 슬롯 = 이름 수 − alias 수).
+- **시작 검증은 개수만 본다**: `nNext + 4000 == PLC_MBIT_COUNT`(`IOMapControlMgr.cpp` verification)만 확인. **CSV 중간에 행을 삽입하고 enum엔 같은 위치로 안 넣으면 개수는 맞아 검증 통과하지만 삽입점 이후 전 매핑이 한 칸씩 밀려 조용히 오매핑**된다 → 팝업 없이 엉뚱한 비트 read/write. 실제 사고: 2026-09-03 `EMS SWITCH 17,4426`을 CSV 중간(SWITCH16 뒤)에 삽입했는데 enum엔 꼬리에 있어 154행 이후 438개 오매핑, `PLC_AUTO_CHANGE_X0_POSITION_04`가 M4343 대신 M4344를 읽어 항상 0.
+- **주소 추가 규칙**: PLCMAdress.csv와 **enum 2사본에 같은 위치로 동시** 추가. **꼬리 추가(tail-append)가 가장 안전**(기존 슬롯 불변). 개수만 맞추지 말고 "advancing 슬롯 인덱스 ↔ CSV 행 인덱스"가 각 주소에서 일치하는지 검증할 것.
+- **enum은 2사본**: 컴파일 대상은 `Source/ALPHA/Manager/IOMapAddressDefine.h`(`..\Manager\` include). `Source/Include/IOMapAddressDefine.h` 사본과 **동기 필수**(ODR). Manager 사본엔 `#ifdef _USE_NOT`(라인 721~2432) **비활성 enum 블록**이 있어 `enum plc_MBIT_t {`가 파일에 2번 등장 — **활성은 2번째(2436~)**. 카운트/편집 시 비활성 블록을 반드시 제외.
+- `IOMapAddressDefine.h`는 pch 경유 → **수정 시 전체 리빌드**. CoreFunction(`McProtocolManager`)은 enum을 안 쓰고 `PLC_MBIT_MAX=2000` 배열만 사용(현재 1092 슬롯 < 2000, 여유 있음).
+
+#### M.csv / F.csv = 표시용(주소-키), 스캐너 범위 주의
+- `M.csv`/`F.csv`는 `CMcM/FaddressScanner::ReadFileCSV`가 **주소-키**(`vecRData.vecData[주소-RD_START].strDescription`)로 읽는 **표시 라벨 전용**. 실제 값은 `M*004000` 블록 리드로 전체 스캔 → 행 순서/추가는 **표시에만 영향, 제어 로직 무관** (PLCMAdress.csv의 positional 계약과 완전히 별개).
+- **M.csv는 `dfMADDRESS_RD_START(4000) ≤ 주소 < dfMADDRESS_LIMIT_COUNT` 만 허용**(`CoreFunction/IOMapFunction/DataStructure.h`). 범위 밖 주소는 `"There are 'N' MAddress Numbers Out of range"` 팝업. **M3900대(PACC/EQ)는 M.csv가 아니라 PACC/ProbeCard 스캐너(SACC.csv 등) 담당** — M.csv에 넣으면 out-of-range 팝업(2026-09-03 M39xx 50개 넣어 발생).
+
+#### 비트 쓰기 오버로드 (수동 On/Off — 주의)
+`SetMemoryNBitToDevice`는 2종 오버로드가 **의미가 반대**: `(int index)`는 index≥4000이면 **enum 인덱스로 해석**(`m_piPLCMAdr[index-4000]` lookup), `(CString "M4509")`는 **첫 글자(M) 떼고 raw M-주소로 직접** 쓴다. write 주소(4500~4999)는 항상 ≥4000이라 int 오버로드로는 raw 쓰기가 불가 → **수동 M-주소 On/Off는 반드시 CString 오버로드** `SetMemoryNBitToDevice(_T("M")+주소문자열, val, 1)` 사용.
+
+### Vision (NI Vision + Basler GigE)
+
+- **Camera:** 4 Basler GigE cameras via NI-IMAQdx (`CAlignCameraMgr` x4)
+- **Pattern matching:** `imaqMatchPattern3()` — MATCH_SCORE/DISTANCE/POSITION modes
+- **Glass Align:** 3-phase (Search → TZero theta correction → XYZero position correction), 25-position x 6-theta grid, centering retry
+- **Probe Align:** 5 probe gantry 지원, dynamic camera/axis selection
+- **Image format:** U8 → RGB → BGRA 4-byte/pixel, PNG 저장
+
+Layer: `CAlignCameraMgr` → `CFrameGrabberFunction` → `CFrameGrabber_BS4M` (IMAQdx)
+상세: [docs/06_Vision.md](docs/06_Vision.md)
+
+### Communication (TCP/IP Factory)
+
+14종 장비 통신 — Factory 패턴 (`CCommTcpIpFactoryMgr`, `Source/ALPHA/Manager/CommTcpIpFactoryMgr.cpp`, ~2,400줄):
+Vision, Color, WAD, Angle, PG, AgingPG, LCR, TSP, CIM, SysTime, Motion, UTG(x2), **PGMon**(ELP ElecBox 모니터링, 2026-07-29 추가)
+모두 `CCommEthFunction` 상속, 개별 send/receive 프로토콜 구현.
+
+- **팩토리 분기 = `MEAS_TYPE`** (PARA 번호도 NAME도 아님): `Network.ini`의 `NETWORK_PARA_N_TCPIP_MEAS_TYPE` 값이 `enumTCPIpFactorytID_*`([CommTcpIpDefine.h])와 대응. `CreateComm(nID)`/`CCommTcpIPMgr` 루프 모두 `GetParam_MeasType(nID)`로 `switch`. `NAME`(예 `SYSTIME`)은 `SetName()` 라벨(로그 폴더/태그)일 뿐 분기에 안 쓰임. PARA 번호는 `m_vecParam[]` 배열 인덱스로 IP/Port를 읽을 때만 사용. (예: `NETWORK_PARA_7 NAME=SYSTIME, MEAS_TYPE=10` → `enumTCPIpFactorytID_TIME` → `CCommTcpIpObjectSysTime`.)
+- `OUT_OF_SERVICE=1`이면 `Cmd_Send`가 실제 송신을 **SKIP**(시뮬). `MODE`는 `bRunMode`로 전달(예: SysTime MODE=1 = HMI가 서버).
+
+상세: [docs/02_CallGraph.md](docs/02_CallGraph.md)
+
+### Alarm System
+
+- **3-layer:** Alarm DLL (`CAlarmManager`) → `CAlarmController` (Singleton facade) → `CAlarmMonitorMgr` (120+ 모니터 스레드)
+- **Monitor groups:** Emergency(16), MC_OFF(10), Sensor(73+), TeachKEY(1), DoorOpen(7)
+- **Alarm flow:** Monitor thread → `SetAlarm(id)` → Heavy: 블로킹 대화상자 / Light: 비블로킹 알림
+- **Alarm codes:** `enumAlarmID` (1000~10000) in `Source/Include/AlarmIDList.h`
+- **Limit alarms — 센서 vs SW 분리 (2026-09-02):** HW 리밋 **센서** 감지 = `MOTION_OVER_LIMIT_POS=3501` / `..._NEG=3601` (기존 유지, `DoWork_MotionDone`에서 `GetHWLimit()` 실패 시 발생). **SW 리밋**(목표값이 `GetMax/MinSWLimit` 초과) = `MOTION_SW_OVER_LIMIT_POS=3901` / `..._NEG=3902` (신규, A/R/Multi_Sub 진입부에서 목표 검사). **새 알람 ID는 반드시 `Alarm.xls`에 행을 추가**해야 표시된다 — `FindAlarmTable(id)==FALSE`면 level/text 미초기화로 조용히 안 뜬다.
+
+상세: [docs/08_Alarm.md](docs/08_Alarm.md)
+
+## Thread Structure (~120-180 threads at runtime)
+
+| Category | Count | Pattern | Key Files |
+|----------|-------|---------|-----------|
+| Alarm monitors | 75-107 | 개별 센서 폴링 (200ms~1s) | `Alarm/AlarmMonitorTo*.cpp` |
+| Sequence | 6+9+N | Event-driven WaitForMultipleObjects | `DoWork/*.cpp` |
+| PLC scanners | 6 | 주기적 폴링 | `CoreFunction/IOMapFunction/McProtocol/` |
+| TCP/IP comm | 14+ | 수신 대기 Thread | `CommTcpIpObject*.cpp` |
+| UI worker | 1+ | 50ms 주기 모니터링 | `DlgMainForm.cpp` |
+
+동기화: `CCriticalSection` + `CCriticalSectionSync` (RAII), `CEvent`, `WaitForSingleObject/Multiple`
+상세: [docs/09_Thread.md](docs/09_Thread.md)
+
+## Global State (Singletons & Shared Memory)
+
+**8 Singletons:** CSystemParamShare, CSequenceManager, CWindowEventHandler, CAlarmController, CRecipeMgr, CResultMgr, CSACCMgr, CMCCLogMgr — 모두 `GetInstance()`/`DelInstance()` 패턴
+
+**4 Shared Memory:** VTM_SYSTEM (메인 시스템 상태, "CCLINK"), VTM_RECIPE (레시피, "HBS_RECIPE_SHARED_MEMORY"), VTM_FOR_FDC (FDC 센서), VTM_MCC (MCC 로깅)
+
+**Extern globals:** `g_sAppPath` (CString), `g_csQuery` (CCriticalSection), `theApp` (CALPHAApp)
+
+상세: [docs/10_GlobalState.md](docs/10_GlobalState.md)
+
+## Recipe File Versioning (Critical)
+
+Recipe Save/Load uses sequential `ReadString`/`ReadDouble`/`ReadInt` — **order must match exactly** between Save (`RecipeMgrDlg.cpp`) and both Load files (`OutRecipeFunc.cpp`, `InRecipeFunc.cpp`).
+
+- **Version enum:** `RCP_VERSION` in `Source/Include/preDefine.h` (also mirrored in `CoreFunction/dll_Recipe/dfcRecipe/preDefine.h`)
+- **Pattern:** New fields go at FILE END (before `File.Close()`), guarded by `if (nVersion > RECIPE_FILE_Vxxxx)`
+- **RECIPE_FILE_END** doubles as the current version number written during Save
+- **Backward compat:** Old files without new fields hit the `else` branch which calls `.Clear()` on the new struct
+- **Three-file sync rule:** Any Save/Load field addition must be updated in all 3 files simultaneously with identical ordering
+- **Gate direction is `>`, not `>=`.** Since Save writes `RECIPE_FILE_END`, adding a field means adding `RECIPE_FILE_V100n` (END becomes n+1) and gating with `if (nVersion > RECIPE_FILE_V100n)`. `>=` would make already-saved files parse data they do not contain.
+- **The two `preDefine.h` copies are an ABI contract, not just a convention.** `CRecipeEditMgr::GetRecipeInfo()` (`Recipe/RecipeEditMgr.cpp`) returns `&m_pRecipeFunc->m_recipeMgr.m_sInfo` — a raw pointer into the dfcRecipe DLL's own struct. A struct present in only one copy compiles fine and reads past the DLL's allocation at runtime. Diff both files after any `S_RecipeInfo` change; only comments should differ.
+- **UI grids:** `InitGridUI(grid, id, nRow, nCol, bSmall, bHeader, PIX_UNIFORMITY)` pins every column to **61px** regardless of the control's width, leaving any excess as a blank strip that reads as one extra cell. `.rc` widths run ≈1.48px per dialog unit, so N columns need ≥ N×61/1.48 units — or re-spread the widths after `InitGridUI`.
+- **resource.h 중복 ID (버튼 오작동 주의):** `resource.h`에 **같은 값의 IDC_ 다수 중복**(예 `1202`가 3개). MFC는 `ON_BN_CLICKED`을 **커맨드 ID로** 디스패치하므로 중복 시 **메시지맵에서 먼저 나온 핸들러가 선점** → 버튼을 눌러도 엉뚱한 핸들러 실행(뒤에 있는 진짜 핸들러는 죽은 코드). 증상 발견 시 해당 버튼에 **유일 ID 부여**(관례상 `21003`부터). `.rc`는 심볼을 참조하므로 `resource.h` `#define`만 고치면 `.rc`도 함께 갱신되지만 **전체 리빌드 필요**. (2026-09-03 `IDC_BTN_MANUAL_PLC_BIT_OFF` 사고.)
+
+## Resume Inspection
+
+Allows resuming an interrupted Glass inspection from where it stopped (e.g., after Alarm/Stop).
+
+- **ResumeInfo.ini:** Persisted via `CResumeInfoMgr` (owned by `CAuroraMgr`'s manager pool, not a singleton — access via `m_pAuroraMgr->GetResumeInfoMgrPtr()` / `m_pShareItem->GetResumeInfoMgrPtr()`) — saves InnerID, last completed step, measurement index
+- **Entry points:** Manual start (`DlgSubOperate.cpp`) and CIM Online (`TO_SERVER_MEAS_START`) both call `CheckAndApplyResumeMode()`
+- **Recipe step:** In Resume mode, skips `ResultClear` and reloads previous raw data files into FPSpread via `Updata_Data()`
+- 상세: [docs/Resume_Inspection_Plan.md](docs/Resume_Inspection_Plan.md)
+
+## Key Rules for Modification
+
+### 고위험 수정 영역
+
+1. **`pch.h` 수정** — 전체 프로젝트 리빌드 유발 (`AlarmIDList.h`, `WindowEventHandler.h` 포함)
+2. **`ShareMem.h` (VTM_SYSTEM)** — 멤버 추가 시 반드시 struct 끝에 추가 (공유 메모리 오프셋 보존)
+3. **`AlarmIDList.h` 수정** — pch.h에 포함되어 있어 전체 리빌드
+4. **`IOMapAddressDefine.h` (plc_MBIT_t enum)** — PLC 주소 상수는 물리 I/O에 직접 매핑, 변경 시 하드웨어 영향
+5. **`AxisType.h` 수정** — 모든 모션 코드의 기반, 축 추가/변경 시 Position.ini와 Config_Motion_ACS.dat도 함께 수정.
+   - `.dat`의 `HW[]`는 ACS 컨트롤러 축 번호이고, **`USE[0]` 축과 `USE[1]` 축이 같은 번호를 공유하는 경우가 있다** (예: `PBY3`/`PBY4`가 ACS0의 30/31을 `Z3`/`Z4`와 공유). `USE` 플래그를 우회해 축 배열을 컨트롤러로 넘기면 엉뚱한 축이 움직인다. 충돌 확인은 `ACS[]`+`HW[]` 조합으로 `USE[1]`끼리만 비교할 것.
+   - **`stMotorPosition` 배열을 `ZeroMemory`로 초기화하지 말 것.** `AXIS_X == 0`이라 채우지 않은 슬롯이 "Stage Gantry를 0으로 이동"이라는 유효한 지령이 된다. `CMaintControlMgr::ClearMotorPos(pPos, n)`(슬롯을 `AXIS_NONE`으로 채움)을 쓰면 배열 길이를 그대로 넘겨도 `PackUsedAxes()`가 범위 밖 id(`< 0` 또는 `>= AXIS_TYPE_END`)를 버린다. 실제 사고: `MoveCmd_SafetyAll`이 P1~P4 슬롯 채움을 주석 처리하면서 카운트 5와 무초기화 상태를 유지해 쓰레기 슬롯이 전달, 초기화 중 크래시(2026-08-26). **슬롯 채움을 주석 처리할 때는 반드시 `ClearMotorPos`를 남길 것.** 참고로 `CMotorImpl::GetAxisProperty()`는 상한만 검사하고 enum 밖 id에는 `nullptr`를 반환한다.
+6. **`preDefine.h` (Recipe 구조체)** — App(`Source/Include/`)과 DLL(`CoreFunction/dll_Recipe/dfcRecipe/`) 양쪽에 동일 파일 존재, 구조체 변경 시 반드시 양쪽 동기화. `RCP_VERSION` enum과 `S_RecipeInfo` struct 포함
+7. **`FDCSheardDefine.h` / `SheardDefineMCC.h` (FDC/MCC 공유메모리 계약)** — `Source/Include/`와 DLL 프로젝트 내부에 수기 사본 존재, 배포된 외부 프로세스(FDCSense.exe, MCCLog.exe)와 struct 레이아웃이 바이트 단위로 일치해야 함. 필드 추가는 반드시 struct 끝에만
+
+### 수정 영향도 (Impact Matrix)
+
+| 수정 대상 | 주요 영향 파일 |
+|-----------|---------------|
+| Motion | MotorControlMgr → MaintControlMgr → SystemInitializeStep → DoWork/*(전체) → UI(Manual/Maint) |
+| PLC | IOMapControlMgr → FunctionModule/*(전체) → AlarmMonitor*(전체) → DoWork/*(전체) |
+| Vision | AlignCameraMgr → DlgAlignCCD → DoWorkGlassSWAlign/ProbeSWAlign → FrameGrabber*(CoreFunction) |
+| Recipe | RecipeData → RecipeEditMgr → CommTcpIpFactoryMgr(배포) → DoWorkGlassRecipe → 49개 소스 파일 |
+| Alarm | AlarmController → AlarmMonitorMgr → 120+ 모니터 스레드 → DlgSubAlarm → Alarm.dll |
+| Sequence | BaseSequenceImpl → DoWork/*(전체) → SequenceManager → FunctionModule/*(전체) |
+
+상세: [docs/12_ImpactAnalysis.md](docs/12_ImpactAnalysis.md)
+
+### 대용량 파일 (반드시 특정 라인 범위만 읽을 것)
+
+| File | Path | Lines |
+|------|------|-------|
+| MaintControlMgr.cpp | `Source/ALPHA/Manager/` | ~8,400 |
+| MotorControlMgr.cpp | `Source/ALPHA/Manager/` | ~2,900 |
+| SystemInitializeStep.cpp | `Source/ALPHA/DoWork/` | ~2,000 |
+| DlgMainForm.cpp | `Source/ALPHA/` | ~2,240 |
+| ShareMem.h | `Source/Include/` | ~2,000 |
+| DefinesPLC.h | `Source/Include/` | 1,000+ |
+| preDefine.h | `Source/Include/` + `CoreFunction/dll_Recipe/dfcRecipe/` | ~770 (dual copy, kept in sync) |
+
+`CommTcpIpFactoryMgr.cpp` (`Source/ALPHA/Manager/`) was previously ~26,000 lines but has since been refactored down to ~2,400 — no longer needs line-range-only reads.
+
+## Knowledge Base (docs/)
+
+| Document | Content |
+|----------|---------|
+| [00_ProjectOverview.md](docs/00_ProjectOverview.md) | Solution 구조, 폴더, 레이어, Dependencies, Entry Point |
+| [01_ClassArchitecture.md](docs/01_ClassArchitecture.md) | 100+ 클래스 상세 (역할, 상속, 인터페이스, 생명주기) |
+| [02_CallGraph.md](docs/02_CallGraph.md) | Entry Point → UI → Manager → Device 전체 호출 흐름 |
+| [03_AutoSequence.md](docs/03_AutoSequence.md) | 초기화 22단계 + Glass 9단계 자동 검사 상세 |
+| [04_Motion.md](docs/04_Motion.md) | ACS SPiiPlus, 90축, 속도 등급, 호밍, 인터록 |
+| [05_PLC.md](docs/05_PLC.md) | MC Protocol, M/F/D/P/C/G 스캐너, 주소 매핑 |
+| [06_Vision.md](docs/06_Vision.md) | Basler GigE, NI Vision, 패턴 매칭, Glass/Probe Align |
+| [07_Recipe.md](docs/07_Recipe.md) | Recipe 구조체, DLL/App 이중 레이어, 공유 메모리 |
+| [08_Alarm.md](docs/08_Alarm.md) | Alarm DLL, 120+ 모니터 스레드, 알람 코드 1000~10000 |
+| [09_Thread.md](docs/09_Thread.md) | 120-180 스레드 분류, 동기화 패턴, Safety 주의사항 |
+| [10_GlobalState.md](docs/10_GlobalState.md) | 8 Singleton, 4 Shared Memory, extern 전역 변수 |
+| [11_DataFlow.md](docs/11_DataFlow.md) | Start → PLC → Motion → Vision → Result → CIM 데이터 흐름 |
+| [12_ImpactAnalysis.md](docs/12_ImpactAnalysis.md) | 10개 서브시스템별 수정 영향도 매트릭스 |
+| [OCP_Option_ChangeHistory.md](docs/OCP_Option_ChangeHistory.md) | OCP 옵션 분개 전체 작업 히스토리 (7 Step + 추가 작업) |
+| [ACS_Dual_Controller_Plan.md](docs/ACS_Dual_Controller_Plan.md) | OCP 모드 Dual ACS Controller 설계 |
+| [Resume_Inspection_Plan.md](docs/Resume_Inspection_Plan.md) | 검사 재개(Resume) 설계 |
+| [PROJECT_INDEX.md](PROJECT_INDEX.md) | 마스터 인덱스 (주요 클래스, Manager, 파일 목록) |
+
+### 기능별 포팅/이슈 문서 (docs/)
+
+| Document | Content |
+|----------|---------|
+| [FDC_Structure_Comparison.md](docs/FDC_Structure_Comparison.md) | HMI vs GMI FDC(Factory Data Collection) 구조 비교 |
+| [ELP_ElecBox_Porting_Plan.md](docs/ELP_ElecBox_Porting_Plan.md) | ELP ElecBox 모니터링(PGMon) 이식 계획 |
+| [ELP_FDC_MCC_Upload_Plan.md](docs/ELP_FDC_MCC_Upload_Plan.md) | ELP 데이터의 FDC/MCC 업로드 경로 통합 계획 |
+| [ELP_Upload_Confirmation_Requests.md](docs/ELP_Upload_Confirmation_Requests.md) | ELP 데이터 매핑 관련 미확정 항목(고객사/담당자 확인 필요) |
+| [MCC_GMI_HMI_Comparison.md](docs/MCC_GMI_HMI_Comparison.md) | MCC(Machine Condition Check) GMI 기준 vs HMI 구조 비교 |
+| [MCC_Implementation_Plan.md](docs/MCC_Implementation_Plan.md) | MCC 기능 이식 구현 계획 |
+| [MCC_GMI_TO_HMI_IMPLEMENTATION_REPORT.md](docs/MCC_GMI_TO_HMI_IMPLEMENTATION_REPORT.md) | MCC 이식 결과 보고서 (파일 목록, 검증 결과, 미확정 항목) |
+| [WAD_MultiMeas_Porting_Plan.md](docs/WAD_MultiMeas_Porting_Plan.md) | WAD 다점측정 이식 계획 |
+| [AgingSet_Porting_Plan.md](docs/AgingSet_Porting_Plan.md) | OCP AgingSet 다이얼로그(Aging 목표값 알람) 기능 완성 이식 계획 |
+| [AgingTest_Porting_Plan.md](docs/AgingTest_Porting_Plan.md) | OCP AgingTest 다이얼로그(Aging 시퀀스 레시피/셀맵/Cycle Test) 완성 이식 계획 |
+| [AgingCycleEngine_Design_Plan.md](docs/AgingCycleEngine_Design_Plan.md) | OCP DoWorkStartMeasOCP_A(6,743줄) 대응 에이징 리스트 측정 엔진 설계 |
+| [Glass_Rotation_Change_Plan.md](docs/Glass_Rotation_Change_Plan.md) | Glass 방향(Stage Rotate 각도 체계 -90°) 변경 플랜 |
+| [Angle_Porting_Plan.md](docs/Angle_Porting_Plan.md) | OCP ANGLE 다이얼로그(특성 각도 스케줄러) 이식 플랜 — **보류** (Angle 조작 통신 사양서 부재) |
+| [AutoContact_Porting_Plan.md](docs/AutoContact_Porting_Plan.md) | OCP↔HMI AutoContact(프로브 자동 컨택) 비교 및 스텁 완성 이식 플랜 |
+| [HW_Verification_Checklist.md](docs/HW_Verification_Checklist.md) | HW 연동 검증 체크리스트 — Probe Gantry X/P5 인터록/시퀀스/통신별 확인 항목, 로그 grep 문구·알람 번호 부록 |

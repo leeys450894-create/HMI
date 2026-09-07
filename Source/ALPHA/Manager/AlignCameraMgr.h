@@ -23,6 +23,7 @@ class CAlignCameraMgr : public CAuroraSubMgr
 	int						m_iCCDNum;
 	Rect					m_rectROI;
 	bool					m_bShowROI;
+	bool					m_bSimImageMissingLogged;	// LYS 2026-09-05 미연결 시 시뮬 이미지(Pattern/AlignN.png) 부재 WARN 1회 로그 플래그
 
 public:
 	bool	m_bClose;

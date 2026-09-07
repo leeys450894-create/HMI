@@ -89,6 +89,7 @@ int CDoWorkProbeSWAlignStep::Align_MovePosition(int nHead, int nIndex)
 
 	// Position
 	double dPosX = 0., dPosX2 = 0, dPosY1 = 700, dPosY2 = -700, dPosR = 0, dPosZ = 0;
+	double dPosZR = 0., dPosZL = 0.;	// LYS 2026-09-05 Sub Z RIGHT/LEFT(Z3/Z4) 목표 - 구 BACK Z(Z1) 대체
 	double dProbeX = 0, dProbeY = 0;
 
 	// LYS 2026-08-24 Move Probe Align Position TEMP
@@ -97,9 +98,11 @@ int CDoWorkProbeSWAlignStep::Align_MovePosition(int nHead, int nIndex)
 		dProbeX = pAlignInfo->m_sProbeAlign.m_fProbeY;
 		dProbeY = pAlignInfo->m_sProbeAlign.m_fProbeX;
 		dPosX2 = pAlignInfo->m_sProbeAlign.m_fBackY;
-		dPosY2 = pAlignInfo->m_sProbeAlign.m_fBackLeft;
-		dPosY1 = pAlignInfo->m_sProbeAlign.m_fBackRight;
+		dPosY2 = pAlignInfo->m_sProbeAlign.m_fBackRight;
+		dPosY1 = pAlignInfo->m_sProbeAlign.m_fBackLeft;
 		dPosZ = pAlignInfo->m_sProbeAlign.m_fBackZ;
+		dPosZR = pAlignInfo->m_sProbeAlign.m_fSubZRight;	// LYS 2026-09-05 Align 레시피 Sub Z RIGHT(Z3)
+		dPosZL = pAlignInfo->m_sProbeAlign.m_fSubZLeft;	// LYS 2026-09-05 Align 레시피 Sub Z LEFT(Z4)
 		dPosX = pAlignInfo->m_sProbeAlign.m_fStageY;
 	}
 
@@ -111,37 +114,44 @@ int CDoWorkProbeSWAlignStep::Align_MovePosition(int nHead, int nIndex)
 
 		if (pImpl != nullptr)
 		{
-			if (nRet == df_MOTION_RV_SUCCESSED)
-			{
-				if (bProbeChange == true)
-				{
-					double dPos = 0.0;
-					dPos = pImpl->GetMinSWLimit(AXIS_Z2) + 10;
-					if (pImpl->GetCurPos(AXIS_Z2) > dPos )
-					{
-						nRet = pImpl->MoveOrgPosA(AXIS_Z2, dPos, true, SPEED_HIGH, -1, -1);
-					}
-				}
-				else
-				{
-					if (pImpl->GetCurPos(AXIS_Z2) > 0)
-					{
-						nRet = pImpl->MoveOrgPosA(AXIS_Z2, 0, true, SPEED_HIGH, -1, -1);
-					}
-				}
-			}
+			// LYS 2026-09-05 AXIS_Z2(FRONT Z) 후퇴 이동 제거 - Probe Align은 Glass Align과 동일하게 X2 / Y1,Y2 / Sub Z(Z3,Z4)만 사용 (AXIS_Z1/Z2 미사용)
+			//if (nRet == df_MOTION_RV_SUCCESSED)
+			//{
+				//if (bProbeChange == true)
+				//{
+					//double dPos = 0.0;
+					//dPos = pImpl->GetMinSWLimit(AXIS_Z2) + 10;
+					//if (pImpl->GetCurPos(AXIS_Z2) > dPos )
+					//{
+						//nRet = pImpl->MoveOrgPosA(AXIS_Z2, dPos, true, SPEED_HIGH, -1, -1);
+					//}
+				//}
+				//else
+				//{
+					//if (pImpl->GetCurPos(AXIS_Z2) > 0)
+					//{
+						//nRet = pImpl->MoveOrgPosA(AXIS_Z2, 0, true, SPEED_HIGH, -1, -1);
+					//}
+				//}
+			//}
 
 			// Probe Zero
 			if (nRet == VTM_RV_SUCCESSED)
 			{
-				for (size_t i = df_PROBE_AGING1; i <= df_PROBE_MEAS; i++)
+				//for (size_t i = df_PROBE_AGING1; i <= df_PROBE_MEAS; i++)
+				//{
+				//	bRet = CSequenceManager::GetInstance()->GetFunctionModuleEQState()->IsProbeUnContactSensorOn(i);
+				//	if (bRet != true)
+				//	{
+				//		nRet = MOTION_INTERLOCK_6;
+				//		break;
+				//	}
+				//}
+				// LYS 2026-09-05 Probe Align P5만 감지
+				bRet = CSequenceManager::GetInstance()->GetFunctionModuleEQState()->IsProbeUnContactSensorOn(df_PROBE_MEAS);
+				if (bRet != true)
 				{
-					bRet = CSequenceManager::GetInstance()->GetFunctionModuleEQState()->IsProbeUnContactSensorOn(i);
-					if (bRet != true)
-					{
-						nRet = MOTION_INTERLOCK_6;
-						break;
-					}
+					nRet = MOTION_INTERLOCK_6;
 				}
 
 				if (nRet == MOTION_INTERLOCK_6)
@@ -183,7 +193,7 @@ int CDoWorkProbeSWAlignStep::Align_MovePosition(int nHead, int nIndex)
 
 			if (nRet == VTM_RV_SUCCESSED)
 			{
-				bRet = pImpl->GetIOMapControlMgrPtr()->GetParam_DIOMapMemoryBitImport(PLC_AUTO_CHANGE_X0_POSITION_03);
+				bRet = pImpl->GetIOMapControlMgrPtr()->GetParam_DIOMapMemoryBitImport(PLC_AUTO_CHANGE_X0_POSITION_04);
 				if (bRet != true)
 				{
 					nRet = MOTION_INTERLOCK_9;
@@ -192,14 +202,21 @@ int CDoWorkProbeSWAlignStep::Align_MovePosition(int nHead, int nIndex)
 
 			if (nRet == VTM_RV_SUCCESSED)
 			{
-				for (size_t i = df_PROBE_AGING1; i <= df_PROBE_MEAS; i++)
+				//for (size_t i = df_PROBE_AGING1; i <= df_PROBE_MEAS; i++)
+				//{
+				//	bRet = CSequenceManager::GetInstance()->GetFunctionModuleEQState()->IsProbeUnContactSensorOn(i);
+				//	if (bRet != true)
+				//	{
+				//		nRet = MOTION_INTERLOCK_6;
+				//		break;
+				//	}
+				//}
+
+				// LYS 2026-09-05 Probe Align P5만 감지
+				bRet = CSequenceManager::GetInstance()->GetFunctionModuleEQState()->IsProbeUnContactSensorOn(df_PROBE_MEAS);
+				if (bRet != true)
 				{
-					bRet = CSequenceManager::GetInstance()->GetFunctionModuleEQState()->IsProbeUnContactSensorOn(i);
-					if (bRet != true)
-					{
-						nRet = MOTION_INTERLOCK_6;
-						break;
-					}
+					nRet = MOTION_INTERLOCK_6;
 				}
 			} 
 
@@ -497,19 +514,11 @@ int CDoWorkProbeSWAlignStep::Align_MovePosition(int nHead, int nIndex)
 				}
 			}
 
-			if (bProbeChange == true)	// jsyoon 2022.05.10 add 
+			// LYS 2026-09-05 분기 없이 Sub Z RIGHT/LEFT(Z3/Z4) 이동 - Glass Align과 동일(갠트리 MotionDone 후 하강). AXIS_Z1/Z2 미사용
+			if (nRet == df_MOTION_RV_SUCCESSED)
 			{
-				if (nRet == df_MOTION_RV_SUCCESSED)
-				{
-					nRet = pImpl->MoveOrgPosA(AXIS_Z1, dPosZ, true, SPEED_HIGH, -1, -1);	//  화질
-				}
-			}
-			else
-			{
-				if (nRet == df_MOTION_RV_SUCCESSED)
-				{
-					nRet = pImpl->MoveOrgPosA(AXIS_Z2, dPosZ, true, SPEED_HIGH, -1, -1);	// 시야각
-				}
+				nRet = pImpl->MoveOrgPosA(AXIS_Z3, dPosZR, true, SPEED_HIGH, -1, -1);	// LYS 2026-09-05 Sub Z RIGHT(Z3)
+				if (nRet == df_MOTION_RV_SUCCESSED) nRet = pImpl->MoveOrgPosA(AXIS_Z4, dPosZL, true, SPEED_HIGH, -1, -1);	// LYS 2026-09-05 Z3 성공 시 Sub Z LEFT(Z4)
 			}
 		}
 	}
@@ -708,6 +717,7 @@ int CDoWorkProbeSWAlignStep::Align_ProbeTZero(int iProbe, double* pdMovR)
 	int iReTry = 0, nRetrylimit = 5;
 	double dAlignMargin = 1;
 	bool bAlignDone = false;
+	bool bCentered = false;	// LYS 2026-09-05 마진 통과 여부 - 루프 내 DoWork_MotionDone이 nRet의 CENTERING_FAIL을 덮어쓰는 문제 보완
 	double dStartX = 0.;
 
 	dAlignMargin = pAlignInfo->m_sMargin.m_sProbeMargin.m_fR;
@@ -902,11 +912,13 @@ int CDoWorkProbeSWAlignStep::Align_ProbeTZero(int iProbe, double* pdMovR)
 
 			if (pImpl->IsOutOfServiceMC() == true)
 			{
+				bCentered = true;	// LYS 2026-09-05 시뮬 모드는 통과 처리
 				break;
 			}
 
 			if (fabs(dPixely[1] - dPixely[0]) < dAlignMargin)
 			{
+				bCentered = true;	// LYS 2026-09-05 마진 통과
 				break;
 			}
 			else
@@ -960,6 +972,13 @@ int CDoWorkProbeSWAlignStep::Align_ProbeTZero(int iProbe, double* pdMovR)
 
 	} while (iReTry < nRetrylimit); 
 
+	// LYS 2026-09-05 재시도 한도 내에 마진을 못 맞추면 실패로 반환 (구 코드는 마지막 MotionDone 성공이 실패 상태를 지워 발산한 오프셋이 그대로 적용됨)
+	if (nRet == df_MOTION_RV_SUCCESSED && bCentered == false)
+	{
+		nRet = VISION_ALIGN_CENTERING_FAIL;
+		m_pShareItem->GetLogFileAccessorPtr()->KMLOG(WARN, _T("Align_ProbeTZero centering NOT converged within retry limit - align FAIL"));
+	}
+
 	if (nRet == df_MOTION_RV_SUCCESSED)
 	{
 		*pdMovR = pImpl->GetOrgPos(iAxisT) - dStartX;
@@ -999,6 +1018,7 @@ int CDoWorkProbeSWAlignStep::Align_ProbeXYZero(int iProbe, double* pdMovX, doubl
 	int iReTry = 0, nRetrylimit = 3;
 	double dAlignMarginX = 1, dAlignMarginY = 1;
 	bool bAlignDone = false;
+	bool bCentered = false;	// LYS 2026-09-05 마진 통과 여부 - 루프 내 DoWork_MotionDone이 nRet의 CENTERING_FAIL을 덮어쓰는 문제 보완
 
 	dAlignMarginX = pAlignInfo->m_sMargin.m_sProbeMargin.m_fX;
 	dAlignMarginY = pAlignInfo->m_sMargin.m_sProbeMargin.m_fY;
@@ -1145,7 +1165,7 @@ int CDoWorkProbeSWAlignStep::Align_ProbeXYZero(int iProbe, double* pdMovX, doubl
 
 
 		// 센터링
-		int iDirX = -1, iDirY = 1;
+		int iDirX = 1, iDirY = -1;	// LYS 2026-09-05 부호 반전 - 14:33 실측에서 X9/PBY5 모두 측정 오프셋 방향 이동 시 오프셋이 커짐(발산). Probe는 대상(크로스/갠트리)을 움직이므로 Glass(카메라 이동)와 반대 부호
 		double dDistanceX = 0., dDistanceY = 0;
 		double dX = 0, dY = 0;
 		// 
@@ -1184,11 +1204,13 @@ int CDoWorkProbeSWAlignStep::Align_ProbeXYZero(int iProbe, double* pdMovX, doubl
 
 			if (pImpl->IsOutOfServiceMC() == true)
 			{
+				bCentered = true;	// LYS 2026-09-05 시뮬 모드는 통과 처리
 				break;
 			}
 
 			if (fabs(dX) < dAlignMarginX && fabs(dY) < dAlignMarginY)
 			{
+				bCentered = true;	// LYS 2026-09-05 마진 통과
 				break;
 			}
 			else
@@ -1202,9 +1224,15 @@ int CDoWorkProbeSWAlignStep::Align_ProbeXYZero(int iProbe, double* pdMovX, doubl
 				if (pImpl != nullptr)
 				{
 					pImpl->MoveOrgPosR(iAxisX, dX, false, SPEED_MID);
+					pImpl->MoveOrgPosR(iAxisX + 1, dX, false, SPEED_MID);	// LYS 2026-09-05 슬레이브(X10)도 같은 양 이동 - 마스터만 움직이면 갠트리 한쪽만 이동해 마크가 절반(0.48)만 이동(14:33 실측). 수동 조그(CD_PopUp_Motion_Move nAxis+1)와 동일. TZero 스큐는 보존
 					pImpl->MoveOrgPosR(iAxisY, dY, false, SPEED_MID);
 
 					nRet = pImpl->DoWork_MotionDone(iAxisX);
+					if (nRet != df_MOTION_RV_SUCCESSED)
+					{
+						break;
+					}
+					nRet = pImpl->DoWork_MotionDone(iAxisX + 1);	// LYS 2026-09-05 슬레이브(X10) 완료 대기
 					if (nRet != df_MOTION_RV_SUCCESSED)
 					{
 						break;
@@ -1239,11 +1267,22 @@ int CDoWorkProbeSWAlignStep::Align_ProbeXYZero(int iProbe, double* pdMovX, doubl
 
 	} while (iReTry < nRetrylimit);
 
+	// LYS 2026-09-05 재시도 한도 내에 마진을 못 맞추면 실패로 반환 (구 코드는 마지막 MotionDone 성공이 실패 상태를 지워 발산한 오프셋이 그대로 적용됨)
+	if (nRet == VTM_RV_SUCCESSED && bCentered == false)
+	{
+		nRet = VISION_ALIGN_CENTERING_FAIL;
+		m_pShareItem->GetLogFileAccessorPtr()->KMLOG(WARN, _T("Align_ProbeXYZero centering NOT converged within retry limit - align FAIL"));
+	}
+
 	if (nRet == VTM_RV_SUCCESSED)
 	{
 		*pdMovX = pImpl->GetOrgPos(iAxisX) - dStartX;
 	//	*pdMovY = pImpl->GetOrgPos(iAxisY) - dStartY;
-		*pdMovY = pImpl->GetOrgPos(iAxisY) - 0;		// jsyoon 2022.08.16 change
+		*pdMovY = pImpl->GetOrgPos(iAxisY) - dStartY;	// LYS 2026-09-05 잔차(최종-시작)로 복원. jsyoon 2022.08.16의 "- 0"은 절대위치를 반환해 Glass-Probe 차분이 깨짐
+		CString strRes;
+		strRes.Format(_T("CDoWorkProbeSWAlignStep, XYZero residual X:%.4f (%.3f->%.3f)  Y:%.4f (%.3f->%.3f)"),
+			*pdMovX, dStartX, pImpl->GetOrgPos(iAxisX), *pdMovY, dStartY, pImpl->GetOrgPos(iAxisY));
+		m_pShareItem->GetLogFileAccessorPtr()->KMLOG(SYST, strRes);
 
 		/**pdMovX = pImpl->GetCurPos(AXIS_PROBE_X9) - dStartX;
 		*pdMovY = pImpl->GetCurPos(AXIS_PROBE_Y5) - 0;*/

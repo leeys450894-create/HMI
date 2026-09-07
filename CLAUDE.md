@@ -17,20 +17,53 @@ ALPHA HMI — Samsung 디스플레이 Glass 검사 자동화 설비 제어 소�
 - **Output:** `Source/Bin/ALPHA.exe`
 - **DLL Projects:** Alarm, dSACC, dResult, dfcRecipe, dMCCSpec, ProbeHistory
 - **EXE Project (embedded):** FDCSense (`CoreFunction/EX_FDC/FDCSense/`) — separate FDC data-collection process, built alongside ALPHA but launched independently
+- **Repo path:** active checkout is `D:\0.SW\HMI` (sln at `Source\ALPHA\ALPHA.sln`). Older docs referenced `D:\OCP\0.SW_Matching\HMI` (stale) — use the current path. Sibling folders like `D:\0.SW\HMI_20260831` / `D:\0.SW\merge\HMI_*.zip` are dated backups, not the working tree.
+- **MSBuild caveat:** the command below assumes VS2022 Community CLI MSBuild. Some build PCs have only the **VS2022 IDE** (devenv) without the CLI MSBuild component (e.g. only VS2019's `MSBuild.exe` exists under `Program Files (x86)`). Verify the actual `MSBuild.exe` path before scripting a build, or build from the IDE. **이 PC(2026-09 기준)는 `2022/Professional/MSBuild/Current/Bin/MSBuild.exe`가 실제 경로**다 — 아래 예시의 `Community`를 그대로 쓰면 없는 경로.
+
+- **빌드 전 `ALPHA.exe`가 떠 있는지 확인할 것 (`tasklist | grep -i ALPHA`).** 실행 중이면 DLL 프로젝트의 post-build `copy → Source\Bin`이 잠긴 DLL 때문에 `MSB3073`으로 실패하고 ALPHA 링크가 건너뛰어진다 — 컴파일 오류처럼 보이지만 원인은 파일 잠금. `FDCSense.exe`/`MCCLog.exe`는 ALPHA의 자식이라 함께 내려간다. 사용자 설비 앱이므로 임의로 kill하지 말고 종료를 요청할 것.
 
 ```bash
 # Debug build
 "/c/Program Files/Microsoft Visual Studio/2022/Community/MSBuild/Current/Bin/MSBuild.exe" \
-  "D:\\OCP\\0.SW_Matching\\HMI\\Source\\ALPHA\\ALPHA.sln" //p:Configuration=Debug //p:Platform=x64 //m //nologo //v:minimal
+  "D:\\0.SW\\HMI\\Source\\ALPHA\\ALPHA.sln" //p:Configuration=Debug //p:Platform=x64 //m //nologo //v:minimal
 
 # Release build
 "/c/Program Files/Microsoft Visual Studio/2022/Community/MSBuild/Current/Bin/MSBuild.exe" \
-  "D:\\OCP\\0.SW_Matching\\HMI\\Source\\ALPHA\\ALPHA.sln" //p:Configuration=Release //p:Platform=x64 //m //nologo //v:minimal
+  "D:\\0.SW\\HMI\\Source\\ALPHA\\ALPHA.sln" //p:Configuration=Release //p:Platform=x64 //m //nologo //v:minimal
 
 # Clean
 "/c/Program Files/Microsoft Visual Studio/2022/Community/MSBuild/Current/Bin/MSBuild.exe" \
-  "D:\\OCP\\0.SW_Matching\\HMI\\Source\\ALPHA\\ALPHA.sln" //t:Clean //p:Configuration=Debug //p:Platform=x64 //nologo
+  "D:\\0.SW\\HMI\\Source\\ALPHA\\ALPHA.sln" //t:Clean //p:Configuration=Debug //p:Platform=x64 //nologo
 ```
+
+## Runtime Dependencies & Deployment (`Source/Bin`)
+
+`ALPHA.exe` is x64 and **statically imports** several third-party DLLs not built by the solution. A wrong-bitness or missing copy kills the process in the OS loader **before any code runs** — `0xc000007b` (STATUS_INVALID_IMAGE_FORMAT = wrong bitness) or `0xc0000135` (DLL not found). No app logging fires; it looks like "nothing happens" / instant exit.
+
+| Dependency | Kind | Source |
+|---|---|---|
+| `ACSCL_x64.dll` | ACS SPiiPlus motion | shipped in `Source/Bin` (x64) |
+| `SPR64DU80.dll` | FarPoint Spread grid (x64) | shipped in `Source/Bin` |
+| `imaq.dll` / `NIIMAQDX.dll` / `nivision.dll` | NI Vision runtime | NI install → `C:\Windows\System32` (x64); SysWOW64 holds the x86 copies — don't confuse them |
+| `olch2du8.dll` | ComponentOne/Olectra **Chart 2D, DLL edition** (used only by `UIMeasPathDlg`) | **must be x64**; links via `Source/Lib/olch2du8.lib` (x64 import lib). Deploy the x64 runtime to `Source/Bin` |
+| `mfc140ud.dll`, `VCRUNTIME140*D`, `ucrtbased` | VS **Debug** CRT/MFC | Debug builds need the VS debug runtime on the run PC |
+
+**DLL search order:** for a non-KnownDLL static import, Windows searches the **application directory (`Source/Bin`) before `System32`** — so drop the correct DLL next to `ALPHA.exe` to override a bad system copy (no admin, no risk to other apps). Diagnose bitness via the PE machine word (`e_lfanew` @ 0x3C, machine @ PE+4: `8664`=x64, `014c`=x86) or `dumpbin /dependents ALPHA.exe`.
+
+**Known 0xc000007b incident (2026-08):** a 32-bit `olch2du8.dll` (from extracting `Downloads\Util.zip`'s `System32\` folder into System32) overwrote the correct x64 runtime → x64 process loaded a 32-bit DLL → crash. Fix: put a verified x64 `olch2du8.dll` in `Source/Bin`. See memory `olch2du8-0xc000007b`.
+
+## Runtime Logs (분석 시 첫 확인 위치)
+
+로그 루트 = `SystemConfig.ini [OUTPUT_PATH] LOG_PATH` + `\Logs\` → 현재 **`D:\HBS\Logs\`** (`Source/Bin` 밑에는 로그가 없다). 파일명은 `<이름>_yyyymmdd.log`, 날짜 바뀌면 자동 롤오버.
+
+| 로그 | 경로 | 내용 |
+|---|---|---|
+| 메인 SYST/WARN/ERRO | `OCP_yyyymmdd.log` (시스템명 = `OCP`) | `m_pShareItem->GetLogFileAccessorPtr()->KMLOG(SYST, ...)` 전부. 시퀀스 디버깅용 임시 로그는 이 API로 넣는다 |
+| Glass SW Align 전용 | `LogFile/GLASS 3_GLASS_ALIGN_*.log` | Step Start/End, `AlignGlassTZero`/`XYZero` 잔차, 최종 `AlignGlass (XYR:...)` |
+| Glass 시퀀스 스텝 | `LogFile/GLASS Sequence_Step_*.log` | 9단계 전이 |
+| 모션 | `Control/Motion/Motion_*.log` | 축 지령/완료/알람 |
+| PLC | `Control/IOControl/LogFile/PLC_READ_*.log`, `PLC_WRITE_*.log`, `F_Address_*.log` | 비트 read/write, F알람 |
+| 센서/이벤트 | `Event/*.log` (알람 모니터별 파일) | |
 
 ## Encoding & Source File Editing Rules (Critical)
 
@@ -54,10 +87,16 @@ HMI는 Unicode 프로젝트이며 파일은 대부분 **BOM 없는 ANSI/UTF-8** 
    '
    ```
 3. **수정 후 검증 (필수):** `perl -e 'open(F,"<:raw",$ARGV[0]);$d=do{local $/;<F>};$c=()=$d=~/\xef\xbf\xbd/g;print"damaged=$c\n"' file.cpp` — `damaged=0`이 아니면 백업에서 복원 후 재작업.
-4. **손상 복구:** 백업 `D:\OCP\0.SW_Matching\HMI_20260716\HMI\` 에서 원본 복사 후 Perl로 변경사항 재적용.
-5. **새 코드 주석은 한글 가능 — 단 CP949 바이트로만.** Perl 스크립트에 `use utf8;` + `Encode::encode("cp949", "한글...")` 조합으로 삽입할 것(2026-08-26 검증, 빌드 정상). Edit/Write 도구로 한글을 직접 넣으면 UTF-8 바이트가 들어가 깨진다. 기존 한글 주석/문자열은 절대 삭제·변경하지 말 것.
+4. **손상 복구:** 백업 `D:\0.SW\HMI_20260831\`(또는 `D:\0.SW\merge\HMI_20260831.zip` 추출)에서 원본 복사 후 Perl로 변경사항 재적용. (구 경로 `D:\OCP\0.SW_Matching\HMI_20260716\HMI\`는 더 이상 없음.)
+5. **새 한글 주석은 "그 파일의 기존 한글 인코딩"에 맞춰 넣을 것 (핵심 — 파일마다 다름).** 이 저장소는 인코딩이 섞여 있다: `Manager/MotorControlMgr.cpp`는 **CP949**, `DlgSubMaint_MotionFile.cpp`·`CD_PopUp_Motion_Move.cpp` 등은 **BOM 없는 UTF-8**. 인코딩을 틀리면(예: UTF-8 파일에 CP949 주석) 깨지는데 **`damaged=0`(U+FFFD) 검사로는 못 잡는다** (CP949 바이트는 U+FFFD가 아님). 2026-09-02 실제로 UTF-8 파일에 CP949를 넣어 깨진 전례.
+   - **① 인코딩 판별:** 대상 파일의 기존 한글 리드 바이트 확인 — `EA~ED`(3바이트)=UTF-8, `B0~C8`(2바이트)=CP949. 빠른 판별: `perl -e 'open(F,"<:raw",$ARGV[0]);$d=do{local $/;<F>};$u=()=$d=~/[\xea-\xed][\x80-\xbf]{2}/g;print "utf8han=$u\n"' file.cpp` — `utf8han`이 크면 UTF-8, 0이면 CP949.
+   - **② 삽입:** Perl에 `use utf8; use Encode;` 후, **UTF-8 파일이면 `Encode::encode("utf-8","한글")`, CP949 파일이면 `Encode::encode("cp949","한글")`**. Edit/Write 도구로 한글을 직접 넣으면 항상 UTF-8 바이트가 들어가므로 CP949 파일에서 깨진다.
+   - **③ 삽입 후 검증(필수):** 넣은 주석 바이트를 그 파일 인코딩으로 되디코딩해 원문이 복원되는지 확인 — `Encode::decode("utf-8"|"cp949", $bytes)`. `damaged=0`만 믿지 말 것.
+   - 기존 한글 주석/문자열은 절대 삭제·변경하지 말 것.
 6. **수정 주석 형식:** `// LYS yyyy-mm-dd brief description` — 모든 소스코드 수정 시 반드시 추가.
 7. **신규 사용자 메시지는 영어로 작성.** 일부 파일(`DlgSubManual_AgingTest.cpp` 등)은 한글이 BOM 없는 UTF-8인데 vcxproj에 `/utf-8`이 없어 CP949로 컴파일됨 → 해당 파일의 한글 리터럴은 런타임 표시가 깨짐. 파일별 인코딩 확인: 한글 리터럴 헥사 덤프(EC/EB 시작=UTF-8, B0~C8 대역=CP949, A2AA=EUC-KR 도 기호 °).
+
+8. **Perl 편집은 인라인 one-liner 대신 `.pl` 파일로 작성해 실행할 것.** C++ 내용의 `{`, `//`, `$`, `@`가 Bash 인라인 인용과 충돌해 반복적으로 실패한다(2026-09 다수 사례). 스크래치패드에 Write 도구로 `.pl`을 만들고(`use utf8; use Encode;`, 패턴은 `s{...}{...}` 또는 `q{}`), 치환 횟수를 세어 기대값과 다르면 `die`, 편집 전후 한글 바이트 카운트(`[\xb0-\xc8][\xa1-\xfe]` 또는 `[\xea-\xed][\x80-\xbf]{2}`)가 같은지 출력한다. 대상 파일은 편집 전에 `.bak_yyyymmdd_<topic>` 백업.
 
 ## OCP Option Branching (Runtime Equipment Type)
 
@@ -82,7 +121,7 @@ bool bIsOCP = m_pMotorControlMgr->IsOCP();
 |------|-----|-----|
 | Probe Gantry | 5개 (P1~P4 AGING + P5 MEAS) | 1개 (P5 MEAS only) |
 | Probe X축 | AXIS_PROBE_X9/X10 (Master/Slave) | **동일** — 2026-08-25 HW 컨셉 변경으로 가동. `AXIS_R1`은 미사용 |
-| Probe Y축 | AXIS_PROBE_Y5 | 사용 안 함 (config는 `USE[1]`이나 코드에서 비활성) |
+| Probe Y축 | AXIS_PROBE_Y5 | **동일 — 2026-09-05 활성화** (`PBY5` "PROBE CROSS", ACS0/HW28, ±50mm). Probe Align XYZero의 Y 센터링이 이 축을 움직인다. `DisableAxesForOCP()`는 이제 P1~P4 + BACK Z(Z1)만 끈다 |
 | 측정 이동 | Probe X 이동 → Contact → Head 측정 | Stage(AXIS_X) 이동 → Contact → Head 측정 |
 | ANGLE Head | X2 주 제어 → X3 종속 | X3 주 제어 → X2 종속 |
 | AGING | P1~P4 수행 | **P5에서 ODD 라운드만 수행** (EVEN 미수행, 리뷰 스냅 1회) |
@@ -186,11 +225,11 @@ Layer: `CMaintControlMgr` → `CMotorControlMgr` → `CMotorFunction` → `CMoto
 
 기존 인터락 코드에 이 짝이 **교차된 사례가 4곳 있었다**(2026-08-25 정리). 헤드 Z 관련 인터락을 손대기 전에 짝부터 확인할 것. Z2 분기에 남은 이동 범위 체크(`X2 < GetMinSWLimit(AXIS_X2) + 35`)도 X2를 보고 있어 교차 의심이 있으나 미확인.
 
-**P5 프로브 유닛 인터락 체계 (2026-08-26 구축).** P5 유닛은 X9 위치에서 X방향 `INTERLOCKPROBESIZEX`(300mm) 폭을 차지하는 구조물이며, 보호는 두 겹이다:
-- **Z1 하강 거부** — `IsProbeUnitOverlapX(X2)` 점 판정. 모션 계층 3벌(A/R/Multi_Sub, 하강 = 목표 > 현재) + 시퀀스 계층 `MoveCmdPosWAD/Review/Aging`이 모션 시작 전에 조기 거부. `MoveCmdPosAngle/Vision`은 FRONT 갠트리 기반이라 **Z1 지령 자체를 제거**했다(pPos의 Z1 항목은 무시됨).
-- **X2 이동 시 Z1 선상승** — `RetractHeadZForProbeUnit()`. 목표점이 아니라 **[현재..목표] 경로**가 밴드와 겹치면 Z1을 `INTERLOCKPROBEZSAFETY`(-600)로 먼저 올리고, 상승 실패 시 X2 이동을 포기한다. 각 X2 분기의 말미(기존 인터락 전부 통과 후)에서 호출.
+**P5 프로브 유닛 인터락 체계 (2026-08-26 구축 / 2026-09-02 Z1→Z3/Z4 전환).** P5 유닛은 X9 위치에서 X방향 `INTERLOCKPROBESIZEX`(300mm) 폭을 차지하는 구조물이며, 보호는 두 겹이다. **AXIS_Z1은 OCP에서 미사용(USE0)이므로 2026-09-02에 두 보호를 모두 Sub Z RIGHT/LEFT(`AXIS_Z3`/`AXIS_Z4`)로 교체**했다 (Z3/Z4는 값이 클수록 하강, 0이 안전):
+- **Z3/Z4 하강 거부** — `IsProbeUnitOverlapX(GetOrgPos(AXIS_X2))` 점 판정. 모션 계층 3벌(A/R/Multi_Sub)에서 SW리밋 체크 직후, **하강(=목표 > 현재)인데 겹치면** 거부. A/R_Sub은 `MOTION_INTERLOCK_CHECK_ALARM + iAxis`를 반환→래퍼가 `SetAlarm`, Multi_Sub은 SW루프 안에서 직접 `SetAlarm(MOTION_INTERLOCK_CHECK_ALARM + nSwAxis)`. 기존 `else if(iAxis==AXIS_Z1)` 하강거부 3벌은 **dead code로 남겨둠**(Z1 USE0라 무해). 시퀀스 계층 `MoveCmdPosWAD/Review/Aging`의 조기거부와 `MoveCmdPosAngle/Vision`의 Z1 지령 제거는 FRONT 갠트리 기반이라 그대로 둠.
+- **X2 이동 시 Z3/Z4 선상승** — `RetractHeadZForProbeUnit()`. 목표점이 아니라 **[현재..목표] 경로**가 밴드와 겹치면 Z3/Z4를 `INTERLOCKSUBZSAFETY`(0, Position.ini `[SUBZ_SAFETY]` 미러)로 `MoveCmdPosMulti`로 먼저 올리고(둘 다 이미 ≤safety면 skip), 상승 실패 시 X2 이동을 포기한다. 각 X2 분기의 말미(기존 인터락 전부 통과 후)에서 호출.
 
-인터락 임계값은 `Bin/Config/CoreFunction/CoreFunction.ini`의 `[MOTOR_CONTROL_MGR]` 섹션에 있다 — `INTERLOCKPOS` / `GANGAP` / `HEADGAP` / `HEADGAPB` / `PROBEGAP` / `LIFTPIN` / `PROBESIZEX` / `PROBEZSAFETY`. **키가 없으면 `CMotorControlMgr::LinkIniFile()`의 기본값이 조용히 적용**되므로(`LIFTPIN`=575, `PROBESIZEX`=300, `PROBEZSAFETY`=-600 등 ini에 없는 키가 실제로 있다), 값을 확인할 때 ini만 보지 말 것.
+인터락 임계값은 `Bin/Config/CoreFunction/CoreFunction.ini`의 `[MOTOR_CONTROL_MGR]` 섹션에 있다 — `INTERLOCKPOS` / `GANGAP` / `HEADGAP` / `HEADGAPB` / `PROBEGAP` / `LIFTPIN` / `PROBESIZEX` / `PROBEZSAFETY` / `INTERLOCKSUBZSAFETY`. **키가 없으면 `CMotorControlMgr::LinkIniFile()`의 기본값이 조용히 적용**되므로(`LIFTPIN`=575, `PROBESIZEX`=300, `PROBEZSAFETY`=-600, `INTERLOCKSUBZSAFETY`=0 등 ini에 없는 키가 실제로 있다), 값을 확인할 때 ini만 보지 말 것.
 
 ### PLC (Mitsubishi MELSEC MC Protocol)
 
@@ -203,6 +242,23 @@ Layer: `CMaintControlMgr` → `CMotorControlMgr` → `CMotorFunction` → `CMoto
 
 Layer: `CIOMapControlMgr` → `CIOFunction` → `CMcProtocolManager` → `CMcAddressScannerImpl` subclasses
 상세: [docs/05_PLC.md](docs/05_PLC.md)
+
+#### PLCMAdress.csv ↔ plc_MBIT_t enum = positional 바인딩 (오매핑 최고위험)
+
+`ReadAdressFileCSV`가 CSV를 **행 순서대로** `m_piPLCMAdr[nNext++] = 주소`로 채운다 → **CSV 행 순서 = `plc_MBIT_t` enum 선언 순서**가 계약(ABI). Description 컬럼은 라벨일 뿐 바인딩과 무관.
+- **해석 공식**: enum값 = `4000 + (그 enum의 advancing 슬롯 인덱스)`. 실주소 = `m_piPLCMAdr[enum값 - 4000]`. 읽기 `CIOMapControlMgr::GetParam_DIOMapMemoryBitImport(enum)`이 이 변환 후 M 스캐너 read데이터를 조회.
+- **alias 6개**(`X = 다른enum`, 예 `PLC_BIT_W_MUTIONG_ON = PLC_BIT_W_SR_51_ON`)는 값을 공유하고 **슬롯을 소비하지 않음** → 개수/슬롯 계산 시 제외 (advancing 슬롯 = 이름 수 − alias 수).
+- **시작 검증은 개수만 본다**: `nNext + 4000 == PLC_MBIT_COUNT`(`IOMapControlMgr.cpp` verification)만 확인. **CSV 중간에 행을 삽입하고 enum엔 같은 위치로 안 넣으면 개수는 맞아 검증 통과하지만 삽입점 이후 전 매핑이 한 칸씩 밀려 조용히 오매핑**된다 → 팝업 없이 엉뚱한 비트 read/write. 실제 사고: 2026-09-03 `EMS SWITCH 17,4426`을 CSV 중간(SWITCH16 뒤)에 삽입했는데 enum엔 꼬리에 있어 154행 이후 438개 오매핑, `PLC_AUTO_CHANGE_X0_POSITION_04`가 M4343 대신 M4344를 읽어 항상 0.
+- **주소 추가 규칙**: PLCMAdress.csv와 **enum 2사본에 같은 위치로 동시** 추가. **꼬리 추가(tail-append)가 가장 안전**(기존 슬롯 불변). 개수만 맞추지 말고 "advancing 슬롯 인덱스 ↔ CSV 행 인덱스"가 각 주소에서 일치하는지 검증할 것.
+- **enum은 2사본**: 컴파일 대상은 `Source/ALPHA/Manager/IOMapAddressDefine.h`(`..\Manager\` include). `Source/Include/IOMapAddressDefine.h` 사본과 **동기 필수**(ODR). Manager 사본엔 `#ifdef _USE_NOT`(라인 721~2432) **비활성 enum 블록**이 있어 `enum plc_MBIT_t {`가 파일에 2번 등장 — **활성은 2번째(2436~)**. 카운트/편집 시 비활성 블록을 반드시 제외.
+- `IOMapAddressDefine.h`는 pch 경유 → **수정 시 전체 리빌드**. CoreFunction(`McProtocolManager`)은 enum을 안 쓰고 `PLC_MBIT_MAX=2000` 배열만 사용(현재 1092 슬롯 < 2000, 여유 있음).
+
+#### M.csv / F.csv = 표시용(주소-키), 스캐너 범위 주의
+- `M.csv`/`F.csv`는 `CMcM/FaddressScanner::ReadFileCSV`가 **주소-키**(`vecRData.vecData[주소-RD_START].strDescription`)로 읽는 **표시 라벨 전용**. 실제 값은 `M*004000` 블록 리드로 전체 스캔 → 행 순서/추가는 **표시에만 영향, 제어 로직 무관** (PLCMAdress.csv의 positional 계약과 완전히 별개).
+- **M.csv는 `dfMADDRESS_RD_START(4000) ≤ 주소 < dfMADDRESS_LIMIT_COUNT` 만 허용**(`CoreFunction/IOMapFunction/DataStructure.h`). 범위 밖 주소는 `"There are 'N' MAddress Numbers Out of range"` 팝업. **M3900대(PACC/EQ)는 M.csv가 아니라 PACC/ProbeCard 스캐너(SACC.csv 등) 담당** — M.csv에 넣으면 out-of-range 팝업(2026-09-03 M39xx 50개 넣어 발생).
+
+#### 비트 쓰기 오버로드 (수동 On/Off — 주의)
+`SetMemoryNBitToDevice`는 2종 오버로드가 **의미가 반대**: `(int index)`는 index≥4000이면 **enum 인덱스로 해석**(`m_piPLCMAdr[index-4000]` lookup), `(CString "M4509")`는 **첫 글자(M) 떼고 raw M-주소로 직접** 쓴다. write 주소(4500~4999)는 항상 ≥4000이라 int 오버로드로는 raw 쓰기가 불가 → **수동 M-주소 On/Off는 반드시 CString 오버로드** `SetMemoryNBitToDevice(_T("M")+주소문자열, val, 1)` 사용.
 
 ### Vision (NI Vision + Basler GigE)
 
@@ -220,6 +276,10 @@ Layer: `CAlignCameraMgr` → `CFrameGrabberFunction` → `CFrameGrabber_BS4M` (I
 14종 장비 통신 — Factory 패턴 (`CCommTcpIpFactoryMgr`, `Source/ALPHA/Manager/CommTcpIpFactoryMgr.cpp`, ~2,400줄):
 Vision, Color, WAD, Angle, PG, AgingPG, LCR, TSP, CIM, SysTime, Motion, UTG(x2), **PGMon**(ELP ElecBox 모니터링, 2026-07-29 추가)
 모두 `CCommEthFunction` 상속, 개별 send/receive 프로토콜 구현.
+
+- **팩토리 분기 = `MEAS_TYPE`** (PARA 번호도 NAME도 아님): `Network.ini`의 `NETWORK_PARA_N_TCPIP_MEAS_TYPE` 값이 `enumTCPIpFactorytID_*`([CommTcpIpDefine.h])와 대응. `CreateComm(nID)`/`CCommTcpIPMgr` 루프 모두 `GetParam_MeasType(nID)`로 `switch`. `NAME`(예 `SYSTIME`)은 `SetName()` 라벨(로그 폴더/태그)일 뿐 분기에 안 쓰임. PARA 번호는 `m_vecParam[]` 배열 인덱스로 IP/Port를 읽을 때만 사용. (예: `NETWORK_PARA_7 NAME=SYSTIME, MEAS_TYPE=10` → `enumTCPIpFactorytID_TIME` → `CCommTcpIpObjectSysTime`.)
+- `OUT_OF_SERVICE=1`이면 `Cmd_Send`가 실제 송신을 **SKIP**(시뮬). `MODE`는 `bRunMode`로 전달(예: SysTime MODE=1 = HMI가 서버).
+
 상세: [docs/02_CallGraph.md](docs/02_CallGraph.md)
 
 ### Alarm System
@@ -228,6 +288,7 @@ Vision, Color, WAD, Angle, PG, AgingPG, LCR, TSP, CIM, SysTime, Motion, UTG(x2),
 - **Monitor groups:** Emergency(16), MC_OFF(10), Sensor(73+), TeachKEY(1), DoorOpen(7)
 - **Alarm flow:** Monitor thread → `SetAlarm(id)` → Heavy: 블로킹 대화상자 / Light: 비블로킹 알림
 - **Alarm codes:** `enumAlarmID` (1000~10000) in `Source/Include/AlarmIDList.h`
+- **Limit alarms — 센서 vs SW 분리 (2026-09-02):** HW 리밋 **센서** 감지 = `MOTION_OVER_LIMIT_POS=3501` / `..._NEG=3601` (기존 유지, `DoWork_MotionDone`에서 `GetHWLimit()` 실패 시 발생). **SW 리밋**(목표값이 `GetMax/MinSWLimit` 초과) = `MOTION_SW_OVER_LIMIT_POS=3901` / `..._NEG=3902` (신규, A/R/Multi_Sub 진입부에서 목표 검사). **새 알람 ID는 반드시 `Alarm.xls`에 행을 추가**해야 표시된다 — `FindAlarmTable(id)==FALSE`면 level/text 미초기화로 조용히 안 뜬다.
 
 상세: [docs/08_Alarm.md](docs/08_Alarm.md)
 
@@ -266,6 +327,30 @@ Recipe Save/Load uses sequential `ReadString`/`ReadDouble`/`ReadInt` — **order
 - **Gate direction is `>`, not `>=`.** Since Save writes `RECIPE_FILE_END`, adding a field means adding `RECIPE_FILE_V100n` (END becomes n+1) and gating with `if (nVersion > RECIPE_FILE_V100n)`. `>=` would make already-saved files parse data they do not contain.
 - **The two `preDefine.h` copies are an ABI contract, not just a convention.** `CRecipeEditMgr::GetRecipeInfo()` (`Recipe/RecipeEditMgr.cpp`) returns `&m_pRecipeFunc->m_recipeMgr.m_sInfo` — a raw pointer into the dfcRecipe DLL's own struct. A struct present in only one copy compiles fine and reads past the DLL's allocation at runtime. Diff both files after any `S_RecipeInfo` change; only comments should differ.
 - **UI grids:** `InitGridUI(grid, id, nRow, nCol, bSmall, bHeader, PIX_UNIFORMITY)` pins every column to **61px** regardless of the control's width, leaving any excess as a blank strip that reads as one extra cell. `.rc` widths run ≈1.48px per dialog unit, so N columns need ≥ N×61/1.48 units — or re-spread the widths after `InitGridUI`.
+- **resource.h 중복 ID (버튼 오작동 주의):** `resource.h`에 **같은 값의 IDC_ 다수 중복**(예 `1202`가 3개). MFC는 `ON_BN_CLICKED`을 **커맨드 ID로** 디스패치하므로 중복 시 **메시지맵에서 먼저 나온 핸들러가 선점** → 버튼을 눌러도 엉뚱한 핸들러 실행(뒤에 있는 진짜 핸들러는 죽은 코드). 증상 발견 시 해당 버튼에 **유일 ID 부여**(관례상 `21003`부터). `.rc`는 심볼을 참조하므로 `resource.h` `#define`만 고치면 `.rc`도 함께 갱신되지만 **전체 리빌드 필요**. (2026-09-03 `IDC_BTN_MANUAL_PLC_BIT_OFF` 사고.)
+
+## Align Recipe (`.alg`) — 메인 레시피 버저닝과 별개 (2026-09-04 정리)
+
+Glass/Probe SW Align 위치·CCD 설정은 메인 `.rcp`가 아니라 **`D:\HBS\Recipe\ALIGN_RECIPE\*.alg`** (버전 없는 순차 텍스트)에 저장된다. 저장 `AlignRcpDlg::SaveMntFile`, 로드는 `InRecipeFunc.cpp`/`OutRecipeFunc.cpp`의 align 로드 함수(2벌 동기). UI 그리드 `m_gridGlassAlignData`/`m_gridProbeAlignData`, CCD 설정은 `m_gridCcdSetMntData`(IDC_GRID_6: EXP.TIME/GAIN/LED/MAT.SCORE × GLASS L/R, PROBE L/R).
+
+- **블록 순서**: `_GLASS_ALIGN_` → `_PROBE_ALIGN_` → `_CCD_SET_`(수치) → `_CCD_SET_`(패턴 파일명) → `_CENTERING_MARGIN_` → `_SUB_Z_`(꼬리). **필드 추가는 버전 게이트가 아니라 꼬리 블록 + 헤더 문자열 EOF 감지**(`ReadString`이 `_SUB_Z_`를 못 읽으면 구파일 → 구 `m_fFrontZ/m_fBackZ`를 양쪽 SubZ에 복사). 새 블록도 이 방식으로 꼬리에 붙일 것.
+- **Glass 블록 인덱스**: [3]`m_fStageY`→AXIS_X, [4]`m_fStageRotate`→R, [5]`m_fFrontY`→X2, [6]`m_fFrontRight`→**AXIS_Y1**, [7]`m_fFrontLeft`→AXIS_Y2, [8]`m_fFrontZ`(구 Z1, 이제 미사용). Probe도 동형이며 [7]이 `m_fStageY`(SUB Z 추가로 한 칸 밀림).
+- **SUB Z 매핑(고정)**: `AXIS_Z3` = SUB Z RIGHT = `m_fSubZRight`, `AXIS_Z4` = SUB Z LEFT = `m_fSubZLeft`. 구 `AXIS_Z1`(BACK Z, OCP USE0) 자리는 GET_POS/MOVE(`RecipeEditMgr`, `MaintControlMgr::MoveCmdAlignPos_*`), `DoWorkGlassSWAlignStep::MoveAlignPosition`, `DoWorkProbeSWAlignStep::Align_MovePosition` 모두 Z3+Z4 순차 이동으로 교체됨. Probe 쪽은 2026-09-05에 분기(화상/시야각) 없이 갠트리 MotionDone 후 Z3→Z4로 통일했고, 진입부의 `AXIS_Z2`(FRONT Z) 후퇴 이동도 제거 — Probe Align 이동은 Glass와 동일하게 **X2 / Y1,Y2 / Z3,Z4만 사용**(Z1/Z2 미사용). 단 `bProbeChange==true`(프로브 교체 자세) 분기는 여전히 X3/Y3/Y4를 쓴다(미확인).
+- **Y1/Y2**: GET(현재값 읽기)과 MOVE의 Y1/Y2가 교차되어 있던 것을 `MoveCmdAlignPos_*`의 `stPosition[].dPosition`을 바꿔 맞춤(2026-09-04). 축 NAME은 그리드 라벨만 바꾸고 `Config_Motion_ACS.dat` NAME은 손대지 않는다.
+- **CCD_SET 함정**: exposure `0`은 16µs로 클램프되어 **거의 검은 영상 → 패턴 서치 실패**. gain은 [300,850] 클램프. 라이브 영상이 보이는데 align이 안 되면 먼저 이 값을 본다(기본 참고값 exp 9000 / gain 400 / score 700). 레시피 `MatchScore`는 실제 판정에 안 쓰이고 코드 하드코딩(500/1000)이 적용된다.
+- **Align XYR 오프셋은 "잔차"여야 한다 (2026-09-05 수정).** `SetGlassAlignXYR(X,Y,R)`은 `m_dAlignOffset[AXIS_X]`, `[AXIS_Y1..Y4]`, `[AXIS_LOADER_R]`에 들어가 **모든 `MoveCmdPosA/Multi` 목표에 더해지고 `GetCurPos`에서 빠진다**(`MaintControlMgr` 301/552/589행). 측정 레시피 셀 좌표(`m_fCellX` = Y1/Y2 목표)는 글래스 중심=0인 **절대 기계좌표**(±641 등)이므로 오프셋은 센터링 이동량(수십 µm~수 mm)이어야 한다. 구 코드는 `GetOrgPos(AXIS_Y1) - m_fBase_FrontRight`(base는 어디서도 set/load 안 되는 죽은 필드=0)라 Y1 **절대위치 556.4**가 그대로 오프셋이 되어 셀 목표가 +556mm 밀렸다(Y1 MX 950 초과). 2026-09-05에 `AlignGlassXYZero`/`Align_ProbeXYZero` 진입 시 `GetOrgPos` 캡처 → `최종-시작` 잔차로 교체(R·probe X는 원래 잔차였음). Probe Y용 `m_dGlassAlignOffset[1]-m_dProbeAlignOffset[1]` 차분식은 잔차−잔차로 그대로 유효. 정렬 실행 후 `AlignGlassXYZero residual` 로그의 절대값이 마진(0.1) 수준인지 확인할 것.
+
+- **센터링 방향 부호는 실측 기준 (2026-09-05).** Glass `AlignGlassXYZero`는 `iDirX=iDirY=-1`, `AlignGlassTZero`(R)는 `iDir=-1`(11:46 실측 −0.008→−0.020→−0.045° 발산으로 확인), Probe `Align_ProbeXYZero`는 `iDirX=+1, iDirY=-1`(14:33 실측으로 반전 — Probe는 대상을 움직이므로 Glass와 반대). **X 보정은 X9와 X10(슬레이브)을 같은 양 이동**해야 한다: 모션 계층에 슬레이브 자동 추종이 없어 X9만 보내면 갠트리 한쪽만 움직여 마크가 절반(비율 0.48)만 이동한다(수동 조그도 `nAxis+1`로 둘 다 보냄). Probe TZero(R)는 `GetSys_ProbeChange()==1`일 때만 호출되어 정상 모드에선 R 미계산. 10:35 실측에서 Glass `+1`은 +d 이동이 오프셋을 정확히 1:1로 키워 3회 발산(0.2→0.4→0.8mm)했다 — 이 "1:1 발산"이 부호 반대의 서명이며, 비율이 1이 아니면 `mmPerPixel`(3.78µm 하드코딩, `AlignCameraMgr.cpp`) 배율 문제다. 마진 첫 회 통과 시엔 이동이 없어 부호 오류가 드러나지 않으니 검증은 마진을 좁히거나 글래스를 일부러 어긋나게 놓고 재시도 로그의 수렴을 볼 것.
+- **센터링 루프의 실패 상태 덮어쓰기 (2026-09-05 수정).** XYZero/TZero 4곳 모두 `nRet = VISION_ALIGN_CENTERING_FAIL; MoveCmdPosR(...); nRet = DoWork_MotionDone(...)` 구조라 마지막 MotionDone 성공이 실패를 지워 **발산한 오프셋이 정렬 성공으로 적용**되던 것을 `bCentered` 플래그 + 루프 후 검사로 보완. 같은 패턴을 새 루프에 복제하지 말 것. 레시피 `_CENTERING_MARGIN_` 0.005mm(≈1.3px)는 노이즈(±0.03mm) 대비 과도 — 0.02~0.05 권장.
+
+## Probe Align 보상 경로 (2026-09-05 정리)
+
+- **결과 저장은 모드에 따라 두 갈래.** 정상(`GetSys_ProbeChange()!=1`) → `SetProbeAlignXYR(…, 0)` → `m_dProbeAlignOffset[0..2]`; 프로브 교체 모드 → `SetProbeAlignXYR(…, iProbe=5)` → `m_dAlignOffset[AXIS_PROBE_X9/Y5/X10]`. 적용(`MaintControlMgr` 303~311/555~563/591~599행): X → `PROBE_X9`(+X1/3/5/7)에 `[0]` 가산, Y → `PROBE_Y1~Y5`에 **`m_dGlassAlignOffset[1] − m_dProbeAlignOffset[1]`** 차분 가산, **R(`[2]`)은 읽는 곳이 없다.**
+- **R(θ)은 오프셋이 아니라 물리 상태.** `Align_ProbeTZero`가 슬레이브 X10만 상대이동해 갠트리를 비틀고, 측정은 X9만 지령하므로 그 스큐가 유지된다. 단 프로브 자동교체(`Move_SelectProbe` → `MoveCmdPos_CompareMS`가 X10:=X9 동기화 → `MoveCmdPos_ProbeOffset`이 Position.ini T오프셋 상대 가산)가 이를 지우므로 **교체 후 Probe Align 재실행 필수.** 또한 TZero는 `GetSys_ProbeChange()==1`일 때만 호출(`Align_Probe` 1332행)돼 정상 모드에선 R 미계산.
+- **X9/X10은 컨트롤러 커플링이 없다.** 모션 계층의 `m_dMovePos[iAxis+1]`은 시뮬 기록용일 뿐이라 X9만 보내면 갠트리 한쪽만 움직인다(M/S 갭 5mm 초과 시 `MOTION_INTERLOCK_7`). X9를 상대이동하는 코드는 반드시 X10도 같은 양 보낼 것(수동 조그 `CD_PopUp_Motion_Move.cpp:873`, `Align_ProbeXYZero` 1227행 방식). 정렬 실패 후엔 X10−X9 잔여 스큐를 M/S 동기화로 정리하고 다음 동작.
+- **`GetOrgPos`/`MoveOrgPosA`는 "원시좌표"가 아니다 — Probe 축 예외.** Stage X/Head Y/R엔 오프셋이 없지만 `PROBE_X*`/`PROBE_Y*`에는 Org 계열에서도 `m_dAlignOffset`이 붙는다(6868/6967행, jsyoon 2022.08.16). 정렬 잔차 계산에 Org를 쓸 때 프로브 축은 오프셋 리셋(`SetProbeAlignXYR(0,0,0)`) 후여야 한다.
+- **Align 카메라 인덱스 ↔ ini 섹션**: `GetAlignCameraMgr(0..3)` = `[ALIGN_CAMERA1_MGR]`(review_1), `[ALIGN_CAMERA2_MGR]`(review_2), `[ALIGN_CAMERA3_MGR]`(cam2, OUT_OF_SERVICE=1), `[ALIGN_CAMERA4_MGR]`(cam1, OUT_OF_SERVICE=1). Glass/Probe align은 index 0/1만 쓴다(`iCCD={0,1}`, 교체 모드는 `{2,3}`). 미연결 카메라의 `SnapImage()`는 `D:\HBS\Recipe\Pattern\Align<N>.png` 시뮬 이미지를 찾으며 없으면(현재 `Pattern\` 비어 있음) 2026-09-05부터 파일 존재 확인 후 skip + WARN 1회(`AlignCameraMgr.cpp:229`). `DlgAlignCCD` 라이브는 타이머가 아니라 100ms 루프 스레드다.
+- **임시 강제 코드 (양산 전 제거):** `DoWorkGlassSWAlignStep.cpp:1576` `bGlassExist = true;` — Glass 유무 센서 판정을 무조건 통과시키는 테스트용 코드(`// LYS 2026-09-05 임시`).
 
 ## Resume Inspection
 

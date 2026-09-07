@@ -205,6 +205,8 @@ BEGIN_MESSAGE_MAP(CDlgSubManual_Meas, CDialogEx)
 	ON_BN_CLICKED(IDC_BTN_MANUAL_MEAS_RECIPE_OPEN8, &CDlgSubManual_Meas::OnBnClickedBtnManualMeasRecipeOpen8)
 	ON_BN_CLICKED(IDC_BTN_MANUAL_PLC_RESET, &CDlgSubManual_Meas::OnBnClickedBtnManualPlcReset)
 	ON_MESSAGE(WM_MSG_UPDATE_CUR_STICK, &CDlgSubManual_Meas::OnUpdateCurStick)	// LYS 2026-08-24
+	ON_BN_CLICKED(IDC_BTN_MANUAL_PLC_BIT_ON, &CDlgSubManual_Meas::OnBnClickedBtnManualPlcBitOn)
+	ON_BN_CLICKED(IDC_BTN_MANUAL_PLC_BIT_OFF, &CDlgSubManual_Meas::OnBnClickedBtnManualPlcBItOff)
 END_MESSAGE_MAP()
 
 
@@ -2379,12 +2381,12 @@ UINT CDlgSubManual_Meas::ThreadFunc()
 	// Test Code
 	case enumStepID_MANUAL_CMD_08:
 	{
-		nRet = m_pAuroraMgr->GetCommTcpIpFactoryMgrPtr()->DoWorkInspectStart(enumTCPIpFactorytID_PG, enumTCPIpFactoryt_PG_TP_1);  
-
-		if(nRet != VTM_RV_SUCCESSED)
-		{
-			nRet = VTM_RV_SUCCESSED;
-		}
+		//nRet = m_pAuroraMgr->GetCommTcpIpFactoryMgrPtr()->DoWorkInspectStart(enumTCPIpFactorytID_PG, enumTCPIpFactoryt_PG_TP_1);  
+		//
+		//if(nRet != VTM_RV_SUCCESSED)
+		//{
+		//	nRet = VTM_RV_SUCCESSED;
+		//}
 
 	//	if (CSequenceManager::GetInstance()->GetFunctionModuleEQState()->WaitActionDone(PLC_BIT_XIONIZER_REMOTE_STATE_01, 1, 1, true, PLC_IO_ACTION_DONE_TIME_03) == true)
 	////	if( false )
@@ -2420,8 +2422,8 @@ UINT CDlgSubManual_Meas::ThreadFunc()
 		//m_pAuroraMgr->GetMaintControlMgr()->DoWork_Probe_Zero(df_PROBE_AGING4, false);
 	//	m_pAuroraMgr->GetMaintControlMgr()->DoWork_Probe_Zero(df_PROBE_MEAS, false);
 
-		TCHAR sz[100];
-		ZeroMemory(&sz, sizeof(sz));
+		//TCHAR sz[100];
+		//ZeroMemory(&sz, sizeof(sz));
 
 		//nRet = m_pAuroraMgr->GetMaintControlMgr()->GetIOMapControlMgrPtr()->SetMemoryNStrToDevice(_T("D2110"), _T("TEST1"), 10);
 		//Sleep(200);
@@ -4247,6 +4249,28 @@ UINT CDlgSubManual_Meas::ThreadFunc()
 	}
 	break;
 
+	case enumStepID_MANUAL_CMD_ON:
+	{
+		bool bRet = false;
+		CString strAddr;
+		GetDlgItemText(IDC_EDIT_MANUAL_TEST_ADDR, strAddr);
+		int nAddr = _ttoi(strAddr);
+		CString strM;	strM.Format(_T("M%d"), nAddr);	// LYS 2026-09-03 raw M-주소 쓰기(CString 오버로드). int 오버로드는 4000이상을 enum 인덱스로 오해석해 엉뚱한 비트를 write함
+		bRet = m_pAuroraMgr->GetIOMapControlMgrPtr()->SetMemoryNBitToDevice(strM, 1, 1);
+	}
+	break;
+
+
+	case enumStepID_MANUAL_CMD_OFF:
+	{
+		bool bRet = false;
+		CString strAddr;
+		GetDlgItemText(IDC_EDIT_MANUAL_TEST_ADDR, strAddr);
+		int nAddr = _ttoi(strAddr);
+		CString strM;	strM.Format(_T("M%d"), nAddr);	// LYS 2026-09-03 raw M-주소 쓰기(CString 오버로드). int 오버로드는 4000이상을 enum 인덱스로 오해석해 엉뚱한 비트를 write함
+		bRet = m_pAuroraMgr->GetIOMapControlMgrPtr()->SetMemoryNBitToDevice(strM, 0, 1);
+	}
+	break;
 	}
 
 
@@ -5059,5 +5083,27 @@ void CDlgSubManual_Meas::OnBnClickedBtnManualPlcReset()
 {
 	// TODO: 여기에 컨트롤 알림 처리기 코드를 추가합니다.
 	m_iStep = enumStepID_MANUAL_PLC_RESET;
+	DoWorkManual();
+}
+
+void CDlgSubManual_Meas::OnBnClickedBtnManualPlcBitOn()
+{
+	// TODO: 여기에 컨트롤 알림 처리기 코드를 추가합니다.
+	CString str, strAddr;
+	GetDlgItemText(IDC_EDIT_MANUAL_TEST_ADDR, strAddr);
+	str.Format(_T("%s bit를 On 합니다.\n 계속 하시겠습니까?"), strAddr);
+	if (AfxMessageBox(str, MB_YESNO | MB_ICONQUESTION) != IDYES) return;
+	m_iStep = enumStepID_MANUAL_CMD_ON;
+	DoWorkManual();
+}
+
+void CDlgSubManual_Meas::OnBnClickedBtnManualPlcBItOff()
+{
+	// TODO: 여기에 컨트롤 알림 처리기 코드를 추가합니다.
+	CString str, strAddr;
+	GetDlgItemText(IDC_EDIT_MANUAL_TEST_ADDR, strAddr);
+	str.Format(_T("%s bit를 Off 합니다.\n 계속 하시겠습니까?"), strAddr);
+	if (AfxMessageBox(str, MB_YESNO | MB_ICONQUESTION) != IDYES) return;
+	m_iStep = enumStepID_MANUAL_CMD_OFF;
 	DoWorkManual();
 }

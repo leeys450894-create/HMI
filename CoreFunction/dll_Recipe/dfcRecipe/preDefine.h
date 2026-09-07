@@ -96,6 +96,7 @@ const enum RCP_VERSION{
 	RECIPE_FILE_V1005,		// LYS 2026-07-08 Add
 	RECIPE_FILE_V1006,		// LYS 2026-08-06 Add
 	RECIPE_FILE_V1007,		// LYS 2026-08-19 Add
+	RECIPE_FILE_V1008,		// LYS 2026-09-04 Align SUB Z RIGHT/LEFT
 	RECIPE_FILE_END,
 };
 
@@ -492,6 +493,8 @@ struct S_GlsAlign {
 	double	m_fFrontLeft;
 	double	m_fFrontRight;
 	double	m_fFrontZ;
+	double	m_fSubZRight;	// LYS 2026-09-04 SUB Z RIGHT(AXIS_Z3)
+	double	m_fSubZLeft;	// LYS 2026-09-04 SUB Z LEFT(AXIS_Z4)
 
 	S_GlsAlign () {
 		Clear ();
@@ -508,6 +511,8 @@ struct S_GlsAlign {
 		m_fFrontLeft		= 0.0;
 		m_fFrontRight		= 0.0;
 		m_fFrontZ			= 0.0;
+		m_fSubZRight		= 0.0;
+		m_fSubZLeft			= 0.0;
 	}
 };
 
@@ -524,6 +529,8 @@ struct S_ProbeAlign {
 	double	m_fBackRight;
 	double	m_fBackZ;
 	double	m_fStageY;
+	double	m_fSubZRight;	// LYS 2026-09-04 SUB Z RIGHT(AXIS_Z3)
+	double	m_fSubZLeft;	// LYS 2026-09-04 SUB Z LEFT(AXIS_Z4)
 
 	S_ProbeAlign () {
 		Clear ();
@@ -541,6 +548,8 @@ struct S_ProbeAlign {
 		m_fBackRight		= 0.0;
 		m_fBackZ			= 0.0;
 		m_fStageY			= 0.0;
+		m_fSubZRight		= 0.0;
+		m_fSubZLeft			= 0.0;
 	}
 };
 

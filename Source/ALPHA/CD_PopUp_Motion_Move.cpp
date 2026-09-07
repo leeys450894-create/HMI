@@ -867,6 +867,12 @@ UINT CD_PopUp_Motion_Move::ThreadFunc1()
 
 			if (nRet == df_MOTION_RV_SUCCESSED)
 			{
+				// LYS 2026-09-02 프로브 X 마스터/슬레이브: 슬레이브(nAxis+1)도 동일 값 이동
+				if (nAxis == AXIS_PROBE_X1 || nAxis == AXIS_PROBE_X3 || nAxis == AXIS_PROBE_X5 || nAxis == AXIS_PROBE_X7 || nAxis == AXIS_PROBE_X9)
+				{
+					pImpl->MoveCmdPosR(nAxis + 1, dPos * -1, false, SPEED_LOW);
+					pImpl->DoWork_MotionDone(nAxis + 1);
+				}
 				nRet = pImpl->DoWork_MotionDone(nAxis);
 			}
 			else
@@ -903,6 +909,12 @@ UINT CD_PopUp_Motion_Move::ThreadFunc2()
 		nRet = pImpl->MoveCmdPosR(nAxis, dPos * 1, false, SPEED_LOW);
 		if (nRet == df_MOTION_RV_SUCCESSED)
 		{
+			// LYS 2026-09-02 프로브 X 마스터/슬레이브: 슬레이브(nAxis+1)도 동일 값 이동
+			if (nAxis == AXIS_PROBE_X1 || nAxis == AXIS_PROBE_X3 || nAxis == AXIS_PROBE_X5 || nAxis == AXIS_PROBE_X7 || nAxis == AXIS_PROBE_X9)
+			{
+				pImpl->MoveCmdPosR(nAxis + 1, dPos * 1, false, SPEED_LOW);
+				pImpl->DoWork_MotionDone(nAxis + 1);
+			}
 			nRet = pImpl->DoWork_MotionDone(nAxis);
 		}
 		else

@@ -378,10 +378,16 @@ void CDlgTitleBar::SetConnectStatus()
 		}
 		else
 		{
-			if (pCommMaintControlMgrPtr->IsInitializedMC())
+			// LYS 2026-08-31 MOTION lamp 3-state: Yellow=both ACS connected, Green=init/home done, Red=not connected
+			if (pCommMaintControlMgrPtr->IsConnectedMC()) 
 			{
 				fgColor = CLR_BLACK;
-				bkColor = CLR_GREEN; //  RGB(128, 255, 128);
+				bkColor = CLR_YELLOW;
+				if (pCommMaintControlMgrPtr->IsInitializedMC())
+				{
+					fgColor = CLR_BLACK;
+					bkColor = CLR_GREEN; //  RGB(128, 255, 128);
+				}
 			}
 		}
 
@@ -841,14 +847,29 @@ void CDlgTitleBar::__RefreshListData()
 		m_pAuroraMgr->GetPositionConfigMgrPtr()->GetSafetyPosition(&dSafetyStageX, &dSafetyHeadX1, &dSafetyHeadX2, &dSafetyHeadY1, &dSafetyHeadY2, &dSafetyZ, &dSafetyZ2);
 
 		double dPosZ1 = 0.0, dPosZ2 = 0.0;
-		dPosZ2 = m_pAuroraMgr->GetMaintControlMgr()->GetCurPos(AXIS_Z1);
-		dPosZ1 = m_pAuroraMgr->GetMaintControlMgr()->GetCurPos(AXIS_Z2);
-		if ( fabs(dSafetyZ - dPosZ1) > 0.1 )
-		{
-			bIOInfo[5] = false;
-		}
+		dPosZ1 = m_pAuroraMgr->GetMaintControlMgr()->GetCurPos(AXIS_Z1);
+		dPosZ2 = m_pAuroraMgr->GetMaintControlMgr()->GetCurPos(AXIS_Z2);
+		//if ( fabs(dSafetyZ - dPosZ1) > 0.1 )
+		//{
+		//	bIOInfo[5] = false;
+		//}
 
-		if (fabs(dSafetyZ2 - dPosZ2) > 0.1 )
+		// LYS 2026-09-04 Sub Z Ãà Safety Pos È®ÀÎ
+		double dWAD_SUB_Z_RIGHT = 0.0;
+		double dWAD_SUB_Z_LEFT = 0.0;
+		double dANG_VIS_SUB_Z_RIGHT = 0.0;
+		double dANG_VIS_SUB_Z_LEFT = 0.0;
+
+		m_pAuroraMgr->GetPositionConfigMgrPtr()->GetSubZSafetyPosition(&dWAD_SUB_Z_RIGHT, &dWAD_SUB_Z_LEFT, &dANG_VIS_SUB_Z_RIGHT, &dANG_VIS_SUB_Z_LEFT);
+
+		double dPosZ3 = 0.0, dPosZ4 = 0.0, dPosZ5 = 0.0, dPosZ6 = 0.0;
+		dPosZ3 = m_pAuroraMgr->GetMaintControlMgr()->GetCurPos(AXIS_Z3);
+		dPosZ4 = m_pAuroraMgr->GetMaintControlMgr()->GetCurPos(AXIS_Z4);
+		dPosZ5 = m_pAuroraMgr->GetMaintControlMgr()->GetCurPos(AXIS_Z5);
+		dPosZ6 = m_pAuroraMgr->GetMaintControlMgr()->GetCurPos(AXIS_Z6);
+
+		if (fabs(dSafetyZ2 - dPosZ2) > 0.1 && 
+			fabs(dWAD_SUB_Z_RIGHT - dPosZ3) > 0.1 && fabs(dWAD_SUB_Z_LEFT - dPosZ4) > 0.1 && fabs(dANG_VIS_SUB_Z_RIGHT - dPosZ5) > 0.1 && fabs(dANG_VIS_SUB_Z_LEFT - dPosZ6) > 0.1)
 		{
 			bIOInfo[5] = false;
 		}
@@ -857,7 +878,7 @@ void CDlgTitleBar::__RefreshListData()
 
 		bIOInfo[6] = pImpl->GetParam_DIOMapMemoryBitImport(PLC_R_PROBE_UNIT01_SAFETY_POS) | pImpl->GetParam_DIOMapMemoryBitImport(PLC_R_PROBE_UNIT02_SAFETY_POS);
 
-		nBit = pImpl->GetParam_DIOMapMemoryBitImport(PLC_AUTO_CHANGE_X0_POSITION_03);
+		nBit = pImpl->GetParam_DIOMapMemoryBitImport(PLC_AUTO_CHANGE_X0_POSITION_04);
 		if (nBit != -1)
 		{
 			if (nBit == 1)

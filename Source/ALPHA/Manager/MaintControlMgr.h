@@ -60,6 +60,7 @@ public:
 	static void ClearMotorPos(stMotorPosition* pPos, int nCount);
 
 	long SetAmpEnable(int iAxis, bool bOn);
+	bool GetAmpEnable(int iAxis);
 	long MoveHome(int iAxis);
 	long MoveCmdPosA(int iAxis, double dPos, bool bBlockMode, int iSpeed = 0, bool bUseOffset = false, int iLens = -1, int iTube = -1);
 	long MoveCmdPosR(int iAxis, double dPos, bool bBlockMode, int iSpeed = 0);
@@ -83,6 +84,7 @@ public:
 	void SetInitializeMC(bool value);
 	bool InitDeviceMC();
 	bool IsInitializedMC();
+	bool IsConnectedMC();	// LYS 2026-08-31 both-controller ACS connect status for MOTION lamp
 	long DoWork_LPPreMove();
 	long DoWork_LPMove(bool bUp);
 	long DoWork_RotateMove(double dPos, int nType = 0);

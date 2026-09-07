@@ -200,21 +200,37 @@ bool CFunctionModuleEQState::IsGlassSensorOn()
 {
 	bool bRet = false;
 	int nRet = 0;
-	for (int i = 0; i < 4; i++)
-	{
-		int nAddress = PLC_BIT_GLASS_EXIST_01 + i;
+	//for (int i = 0; i < 4; i++)
+	//{
+	//	int nAddress = PLC_BIT_GLASS_EXIST_01 + i;
+	//
+	//	nRet = GetIOMapControlMgrPtr()->GetParam_DIOMapMemoryBitImport(nAddress);
+	//	if (nRet != -1)
+	//	{
+	//		if (nRet == 1)
+	//		{
+	//			bRet |= true;
+	//		}
+	//		else
+	//		{
+	//			bRet |= false;
+	//		}
+	//	}
+	//}
 
-		nRet = GetIOMapControlMgrPtr()->GetParam_DIOMapMemoryBitImport(nAddress);
-		if (nRet != -1)
+	// LYS 2026-09-05 Sample On Glass Check
+	int nAddress = PLC_BIT_GLASS_EXIST_05;
+
+	nRet = GetIOMapControlMgrPtr()->GetParam_DIOMapMemoryBitImport(nAddress);
+	if (nRet != -1)
+	{
+		if (nRet == 1)
 		{
-			if (nRet == 1)
-			{
-				bRet |= true;
-			}
-			else
-			{
-				bRet |= false;
-			}
+			bRet |= true;
+		}
+		else
+		{
+			bRet |= false;
 		}
 	}
 
@@ -664,7 +680,8 @@ bool CFunctionModuleEQState::IsProbeUnContactSensorOn(int iProbeUnit)
 		nProbeUnit = PLC_R_MOTION_PROBE_UNIT04_POS_04;
 		break;
 	case df_PROBE_MEAS:
-		nProbeUnit = PLC_R_MOTION_PROBE_UNIT05_POS_04;
+		//nProbeUnit = PLC_R_MOTION_PROBE_UNIT05_POS_04;
+		nProbeUnit = PLC_R_MOTION_PROBE_UNIT01_POS_01;		// LYS 2026-09-05 Contact sensor 프로브 변경
 		break;
 	default:
 		break;
@@ -1299,7 +1316,7 @@ bool CFunctionModuleEQState::IsPositionOnAC(int iPos)
 {
 	bool bRet = false;
 
-	int nProbeUnit = PLC_AUTO_CHANGE_X0_POSITION_03;
+	int nProbeUnit = PLC_AUTO_CHANGE_X0_POSITION_04;
 
 	switch (iPos)
 	{

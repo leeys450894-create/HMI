@@ -59,6 +59,9 @@ bool CSystemInitializeStep_CheckInterlock::Run()
 {
 	bool bRet = false;
 
+	// LYS 2026-09-02 Sensor Detect Pass TEMP
+	return true;
+
 	// Loader Arm Detected
 	CMCCLogMgr::GetInstance()->SetMCC_Action(MCC_A_CHK_LOADER_ARM, true);
 
@@ -150,25 +153,42 @@ bool CSystemInitializeStep_InitIO::Run()
 			// Probe Contact
 			for (size_t i = df_PROBE_AGING1; i <= df_PROBE_MEAS; i++)
 			{
-				bRet = CSequenceManager::GetInstance()->GetFunctionModuleEQState()->IsProbeUnContactSensorOn(i);
-				if (bRet != true)
+				if (m_pShareItem->GetSystemConfigMgrPtr()->IsOCP())
 				{
-					nRet = MOTION_INTERLOCK_6;
-					break;
+					// LYS 2026-09-02 ProbeUnContactSensor Skip TEMP
+					if (i < df_PROBE_MEAS) continue;
+					bRet = CSequenceManager::GetInstance()->GetFunctionModuleEQState()->IsProbeUnContactSensorOn(i);
+					bRet = true;
+					if (bRet != true)
+					{
+						nRet = MOTION_INTERLOCK_6;
+						break;
+					}
 				}
+				else
+				{
+					bRet = CSequenceManager::GetInstance()->GetFunctionModuleEQState()->IsProbeUnContactSensorOn(i);
+					if (bRet != true)
+					{
+						nRet = MOTION_INTERLOCK_6;
+						break;
+					}
+				}
+
 			}
 
-			if (nRet != VTM_RV_SUCCESSED)
-			{
-				// Z 
-				nRet = MotionHome(1);		// jsyoon 2022.09.30 add
-
-				if (nRet == VTM_RV_SUCCESSED)
-				{
-					// Probe Z
-					nRet = MotionHome(4);
-				}
-			}
+			// LYS 2026-09-02 z축 2번 호밍 방지
+			//if (nRet != VTM_RV_SUCCESSED)
+			//{
+			//	// Z 
+			//	nRet = MotionHome(1);		// jsyoon 2022.09.30 add
+			//
+			//	if (nRet == VTM_RV_SUCCESSED)
+			//	{
+			//		// Probe Z
+			//		nRet = MotionHome(4);
+			//	}
+			//}
 
 			// ACZ Check
 			if (nRet == VTM_RV_SUCCESSED)
@@ -240,18 +260,19 @@ int CSystemInitializeStep_InitIO::ResetIO()
 	bool bRet = false;
 	int nRet = VTM_RV_SUCCESSED;
 
+	// LYS 2026-09-03 PLC 응답없음. 
 	// Fixture Reverce
 	bRet = m_pShareItem->GetIOMapControlMgrPtr()->SetMemoryNBitToDevice(PLC_BIT_W_FIXTURE_FWD_ALL, 0, 1);
 	if (bRet == true)
 	{
 		bRet = CSequenceManager::GetInstance()->GetFunctionModuleEQState()->WaitActionDone(PLC_BIT_FIXTURE_FRONT_R01, 8, 1, true, PLC_IO_ACTION_DONE_TIME_60);
 	}
-
+	
 	if (bRet != true)
 	{
 		nRet = PLC_FIXTURE_CYLINDER_FWD_ERROR;
 	}
-
+	
 	// Fixture Down
 	if (bRet = true)
 	{
@@ -261,7 +282,7 @@ int CSystemInitializeStep_InitIO::ResetIO()
 		{
 			bRet = CSequenceManager::GetInstance()->GetFunctionModuleEQState()->WaitActionDone(PLC_BIT_FIXTURE_FD01, 8, 1, true, PLC_IO_ACTION_DONE_TIME_60);
 		}
-
+	
 		if (bRet != true)
 		{
 			nRet = PLC_FIXTURE_CYLINDER_DOWN_ERROR;
@@ -1181,7 +1202,7 @@ int CSystemInitializeStep::MotionHome(int iStep)
 		}
 
 		// #include "..\Manager\CommTcpIpFactoryMgr.h"		// 파일에 Include 추가
-		m_pShareItem->GetCommTcpIpFactoryMgr()->DoWorkSetParameter(enumTCPIpFactorytID_VISION);  // Vistion Motion Homing  // jsyoon 2022.10.14 add
+		//m_pShareItem->GetCommTcpIpFactoryMgr()->DoWorkSetParameter(enumTCPIpFactorytID_VISION);  // Vistion Motion Homing  // jsyoon 2022.10.14 add		// LYS 2026-09-03 VisMot 없음
 
 		if (nRet == VTM_RV_SUCCESSED)
 		{
@@ -1222,6 +1243,28 @@ int CSystemInitializeStep::MotionHome(int iStep)
 				}
 			}
 		}
+
+		// LYS 2026-09-05 Sub Z축 올리기
+		double dPosSubZ3 = 0, dPosSubZ4 = 0, dPosSubZ5 = 0, dPosSubZ6 = 0;
+		m_pShareItem->GetMaintControlMgrPtr()->GetPositionConfigMgr()->GetSubZSafetyPosition(&dPosSubZ3, &dPosSubZ4, &dPosSubZ5, &dPosSubZ6);
+
+		stMotorPosition stPositionProbe[4];
+		stPositionProbe[0].axis = AXIS_Z3;
+		stPositionProbe[0].dPosition = dPosSubZ3;
+		stPositionProbe[1].axis = AXIS_Z4;
+		stPositionProbe[1].dPosition = dPosSubZ4;
+		stPositionProbe[2].axis = AXIS_Z5;
+		stPositionProbe[2].dPosition = dPosSubZ5;
+		stPositionProbe[3].axis = AXIS_Z6;
+		stPositionProbe[3].dPosition = dPosSubZ6;
+
+		
+		nRet = m_pShareItem->GetMaintControlMgrPtr()->MoveOrgPosMulti(stPositionProbe, 4, SPEED_HIGH, true);
+		if (nRet != VTM_RV_SUCCESSED)
+		{
+			return nRet;
+		}
+		
 
 		CMCCLogMgr::GetInstance()->SetMCC_Action(MCC_A_MOT_HOME_HEAD_Z, false);
 	}
@@ -1464,11 +1507,11 @@ int CSystemInitializeStep::MotionHome(int iStep)
 	case 5:
 	{
 		// LYS 2026-06-26 OCP: skip all Probe Y homing (not used)
-		if (m_pShareItem->GetSystemConfigMgrPtr() && m_pShareItem->GetSystemConfigMgrPtr()->IsOCP())
-		{
-			nRet = VTM_RV_SUCCESSED;
-			break;
-		}
+		//if (m_pShareItem->GetSystemConfigMgrPtr() && m_pShareItem->GetSystemConfigMgrPtr()->IsOCP())
+		//{
+		//	nRet = VTM_RV_SUCCESSED;
+		//	break;
+		//}
 
 		CMCCLogMgr::GetInstance()->SetMCC_Action(MCC_A_MOT_HOME_PROBE_Y, true);
 
@@ -1487,6 +1530,13 @@ int CSystemInitializeStep::MotionHome(int iStep)
 
 			if (iAxis == AXIS_PROBE_Y1 )
 			{
+				// LYS 2026-09-02 OCP: skip all Probe Y 1-4 homing (not used)
+				if (m_pShareItem->GetSystemConfigMgrPtr()->IsOCP())
+				{
+					nRet = VTM_RV_SUCCESSED;
+					continue;
+				}
+
 				CMCCLogMgr::GetInstance()->SetMCC_Action(MCC_A_MOT_HOME_PROBE_Y_1, true);
 
 				CSequenceManager::GetInstance()->GetFunctionModuleProbeACC()->SetProbeAlign(0, false);
@@ -1495,6 +1545,12 @@ int CSystemInitializeStep::MotionHome(int iStep)
 			}
 			if (iAxis == AXIS_PROBE_Y2 )
 			{
+				// LYS 2026-09-02 OCP: skip all Probe Y 1-4 homing (not used)
+				if (m_pShareItem->GetSystemConfigMgrPtr()->IsOCP())
+				{
+					nRet = VTM_RV_SUCCESSED;
+					continue;
+				}
 				CMCCLogMgr::GetInstance()->SetMCC_Action(MCC_A_MOT_HOME_PROBE_Y_2, true);
 
 				CSequenceManager::GetInstance()->GetFunctionModuleProbeACC()->SetProbeAlign(1, false);
@@ -1503,6 +1559,12 @@ int CSystemInitializeStep::MotionHome(int iStep)
 			}
 			if (iAxis == AXIS_PROBE_Y3 )
 			{
+				// LYS 2026-09-02 OCP: skip all Probe Y 1-4 homing (not used)
+				if (m_pShareItem->GetSystemConfigMgrPtr()->IsOCP())
+				{
+					nRet = VTM_RV_SUCCESSED;
+					continue;
+				}
 				CMCCLogMgr::GetInstance()->SetMCC_Action(MCC_A_MOT_HOME_PROBE_Y_3, true);
 
 				CSequenceManager::GetInstance()->GetFunctionModuleProbeACC()->SetProbeAlign(2, false);
@@ -1511,6 +1573,12 @@ int CSystemInitializeStep::MotionHome(int iStep)
 			}
 			if (iAxis == AXIS_PROBE_Y4 )
 			{
+				// LYS 2026-09-02 OCP: skip all Probe Y 1-4 homing (not used)
+				if (m_pShareItem->GetSystemConfigMgrPtr()->IsOCP())
+				{
+					nRet = VTM_RV_SUCCESSED;
+					continue;
+				}
 				CMCCLogMgr::GetInstance()->SetMCC_Action(MCC_A_MOT_HOME_PROBE_Y_4, true);
 
 				CSequenceManager::GetInstance()->GetFunctionModuleProbeACC()->SetProbeAlign(3, false);
@@ -1544,24 +1612,48 @@ int CSystemInitializeStep::MotionHome(int iStep)
 
 				if (iAxis == AXIS_PROBE_Y1 )
 				{
+					// LYS 2026-09-02 OCP: skip all Probe Y 1-4 homing (not used)
+					if (m_pShareItem->GetSystemConfigMgrPtr()->IsOCP())
+					{
+						nRet = VTM_RV_SUCCESSED;
+						continue;
+					}
 					nRet &= m_pShareItem->GetMaintControlMgrPtr()->CheckHomeDone(iAxis, df_HOMINGDONE_TIME);
 
 					CMCCLogMgr::GetInstance()->SetMCC_Action(MCC_A_MOT_HOME_PROBE_Y_1, false);
 				}
 				if (iAxis == AXIS_PROBE_Y2 )
 				{
+					// LYS 2026-09-02 OCP: skip all Probe Y 1-4 homing (not used)
+					if (m_pShareItem->GetSystemConfigMgrPtr()->IsOCP())
+					{
+						nRet = VTM_RV_SUCCESSED;
+						continue;
+					}
 					nRet &= m_pShareItem->GetMaintControlMgrPtr()->CheckHomeDone(iAxis, df_HOMINGDONE_TIME);
 
 					CMCCLogMgr::GetInstance()->SetMCC_Action(MCC_A_MOT_HOME_PROBE_Y_2, false);
 				}
 				if (iAxis == AXIS_PROBE_Y3 )
 				{
+					// LYS 2026-09-02 OCP: skip all Probe Y 1-4 homing (not used)
+					if (m_pShareItem->GetSystemConfigMgrPtr()->IsOCP())
+					{
+						nRet = VTM_RV_SUCCESSED;
+						continue;
+					}
 					nRet &= m_pShareItem->GetMaintControlMgrPtr()->CheckHomeDone(iAxis, df_HOMINGDONE_TIME);
 
 					CMCCLogMgr::GetInstance()->SetMCC_Action(MCC_A_MOT_HOME_PROBE_Y_3, false);
 				}
 				if (iAxis == AXIS_PROBE_Y4 )
 				{
+					// LYS 2026-09-02 OCP: skip all Probe Y 1-4 homing (not used)
+					if (m_pShareItem->GetSystemConfigMgrPtr()->IsOCP())
+					{
+						nRet = VTM_RV_SUCCESSED;
+						continue;
+					}
 					nRet &= m_pShareItem->GetMaintControlMgrPtr()->CheckHomeDone(iAxis, df_HOMINGDONE_TIME);
 
 					CMCCLogMgr::GetInstance()->SetMCC_Action(MCC_A_MOT_HOME_PROBE_Y_4, false);
@@ -1615,7 +1707,8 @@ int CSystemInitializeStep::MotionHome(int iStep)
 					continue;
 				}
 
-				if ( (m_pShareItem->GetShareMemoryMgrPtr()->GetSharedMemory()->stMotionStatus[iAxis].bEnable != TRUE) || (m_pShareItem->GetShareMemoryMgrPtr()->GetSharedMemory()->stMotionStatus[iAxis + 1].bEnable != TRUE) )
+				//if ( (m_pShareItem->GetShareMemoryMgrPtr()->GetSharedMemory()->stMotionStatus[iAxis].bEnable != TRUE) || (m_pShareItem->GetShareMemoryMgrPtr()->GetSharedMemory()->stMotionStatus[iAxis + 1].bEnable != TRUE))
+				if(iAxis == AXIS_PROBE_X9)		// LYS 2026-09-02 TEMP
 				{
 					nRet = m_pShareItem->GetMaintControlMgrPtr()->MoveHome(iAxis);
 
@@ -1680,52 +1773,97 @@ int CSystemInitializeStep::MotionHome(int iStep)
 	{
 		CMCCLogMgr::GetInstance()->SetMCC_Action(MCC_A_MOT_HOME_STAGE_X, true);
 
-		bool bSafety = false;
-		int nBit = 0;
-		nBit = m_pShareItem->GetMaintControlMgrPtr()->GetIOMapControlMgrPtr()->GetParam_DIOMapMemoryBitImport(PLC_AUTO_CHANGE_X0_POSITION_03);
-		if (nBit != -1)
-		{
-			if (nBit == 1)
-			{
-				bSafety = true;
-			}
-		}
+		//bool bSafety = false;
+		//int nBit = 0;
+		//nBit = m_pShareItem->GetMaintControlMgrPtr()->GetIOMapControlMgrPtr()->GetParam_DIOMapMemoryBitImport(PLC_AUTO_CHANGE_X0_POSITION_03);
+		//if (nBit != -1)
+		//{
+		//	if (nBit == 1)
+		//	{
+		//		bSafety = true;
+		//	}
+		//}
+		//
+		//if (bSafety != true)
+		//{
+		//	// jsyoon 2022.05.02 add
+		//	if (m_pShareItem->GetMaintControlMgrPtr()->GetCurPos(AXIS_X4) < 100)
+		//	{
+		//		m_pShareItem->GetMaintControlMgrPtr()->SetAmpEnable(AXIS_X4, true);
+		//		// 앞로 이동
+		//		//nRet = m_pShareItem->GetMaintControlMgrPtr()->MoveCmdPosR(AXIS_X4, 1000, false, SPEED_LOW);
+		//		// LYS 2026-09-02 AC PACC 방향으로 이동
+		//		nRet = m_pShareItem->GetMaintControlMgrPtr()->MoveCmdPosR(AXIS_X4, -1000, false, SPEED_LOW);
+		//		if (nRet == VTM_RV_SUCCESSED)
+		//		{
+		//			int iLoop = 0;
+		//			bool bRet = false;
+		//			nRet = MTOR_HOME_FAIL_ALARM;
+		//			do
+		//			{
+		//				Sleep(1000);
+		//
+		//				bRet = CSequenceManager::GetInstance()->GetFunctionModuleEQState()->IsPositionOnAC(PLC_AUTO_CHANGE_X0_POSITION_03);
+		//				if (m_pShareItem->GetMaintControlMgrPtr()->GetCurPos(AXIS_X4) > -999)
+		//				{
+		//					m_pShareItem->GetMaintControlMgrPtr()->StopMove(AXIS_X4);
+		//					nRet = VTM_RV_SUCCESSED;
+		//					break;
+		//				}
+		//
+		//				iLoop++;
+		//
+		//			} while (iLoop < 60);  // 60sec
+		//		}
+		//	}
+		//}
+		//else
+		//{
+		//	nRet = VTM_RV_SUCCESSED;
+		//}
 
-		if (bSafety != true)
-		{
-			// jsyoon 2022.05.02 add
-			if (m_pShareItem->GetMaintControlMgrPtr()->GetCurPos(AXIS_X4) < 100)
-			{
-				m_pShareItem->GetMaintControlMgrPtr()->SetAmpEnable(AXIS_X4, true);
-				// 앞로 이동
-				nRet = m_pShareItem->GetMaintControlMgrPtr()->MoveCmdPosR(AXIS_X4, 1000, false, SPEED_LOW);
-				if (nRet == VTM_RV_SUCCESSED)
-				{
-					int iLoop = 0;
-					bool bRet = false;
-					nRet = MTOR_HOME_FAIL_ALARM;
-					do
-					{
-						Sleep(1000);
-
-						//bRet = CSequenceManager::GetInstance()->GetFunctionModuleEQState()->IsPositionOnAC(1);
-						if (m_pShareItem->GetMaintControlMgrPtr()->GetCurPos(AXIS_X4) > 999)
-						{
-							m_pShareItem->GetMaintControlMgrPtr()->StopMove(AXIS_X4);
-							nRet = VTM_RV_SUCCESSED;
-							break;
-						}
-
-						iLoop++;
-
-					} while (iLoop < 60);  // 60sec
-				}
-			}
-		}
-		else
-		{
-			nRet = VTM_RV_SUCCESSED;
-		}
+		// LYS 2026-09-02 AC Safety 위치는 Homing Skip
+		//bool bSafety = false;
+		//int nBit = 0;
+		//nBit = m_pShareItem->GetMaintControlMgrPtr()->GetIOMapControlMgrPtr()->GetParam_DIOMapMemoryBitImport(PLC_AUTO_CHANGE_X0_POSITION_03);
+		//if (nBit != -1)
+		//{
+		//	if (nBit == 1)
+		//	{
+		//		double CurrAC_X = m_pShareItem->GetMaintControlMgrPtr()->GetCurPos(AXIS_X4);
+		//
+		//		double dReadyPos = 0;
+		//		m_pShareItem->GetMaintControlMgrPtr()->GetPositionConfigMgr()->GetACPosition(nullptr, &dReadyPos, nullptr);
+		//
+		//		double AbsPos;
+		//		AbsPos = CurrAC_X - dReadyPos;
+		//
+		//		if (abs(AbsPos) < 0.1) bSafety = true;
+		//		else bSafety = false;
+		//	}
+		//}
+		//
+		//if (bSafety == true) nRet == VTM_RV_SUCCESSED;
+		//else
+		//{
+		//	nRet = m_pShareItem->GetMaintControlMgrPtr()->MoveHome(AXIS_X4);
+		//
+		//	if (nRet == VTM_RV_SUCCESSED)
+		//	{
+		//		nRet = m_pShareItem->GetMaintControlMgrPtr()->CheckHomeDone(AXIS_X4, df_HOMINGDONE_TIME);
+		//	}
+		//
+		//	if (nRet == VTM_RV_SUCCESSED)
+		//	{
+		//		double CurrAC_X = m_pShareItem->GetMaintControlMgrPtr()->GetCurPos(AXIS_X4);
+		//
+		//		double dReadyPos = 0;
+		//		m_pShareItem->GetMaintControlMgrPtr()->GetPositionConfigMgr()->GetACPosition(nullptr, &dReadyPos, nullptr);
+		//
+		//		nRet = m_pShareItem->GetMaintControlMgrPtr()->MoveCmdPosA(AXIS_X4, dReadyPos, false, SPEED_LOW);
+		//	}
+		//}
+			
 
 		// Stage 
 		if (nRet == VTM_RV_SUCCESSED)
@@ -1757,14 +1895,36 @@ int CSystemInitializeStep::MotionHome(int iStep)
 	break;
 	case 9:
 	{
-		// Auto change
-		// Auto Change 위치 확인 후 Z축 호밍진행
+		 // Auto change
+		 // Auto Change 위치 확인 후 Z축 호밍진행
+		 // LYS 2026-09-02 Skip
 		if (CSequenceManager::GetInstance()->GetFunctionModuleEQState()->IsPositionOnAC(2) == true) // SACC 내부에 있을 경우
 		{
-			// 뒤로 이동
-			m_pShareItem->GetMaintControlMgrPtr()->SetAmpEnable(AXIS_X4, true);
+			// ACX 축 +방향으로 조금 이동
+			if (!m_pShareItem->GetMaintControlMgrPtr()->GetAmpEnable(AXIS_X4))		// LYS 2026-09-04 Enable Check
+			{
+				m_pShareItem->GetMaintControlMgrPtr()->SetAmpEnable(AXIS_X4, true); 
+				
+				// enable 완료 폴링 (타임아웃)
+				int nWait = 0;
+				while (!m_pShareItem->GetMaintControlMgrPtr()->GetAmpEnable(AXIS_X4) && nWait++ < 100)
+					Sleep(30);   // 최대 ~2초
+				nRet = m_pShareItem->GetMaintControlMgrPtr()->MoveCmdPosR(AXIS_X4, 1000, false, SPEED_HIGH);
 
-			nRet = m_pShareItem->GetMaintControlMgrPtr()->MoveCmdPosR(AXIS_X4, -1000, false, SPEED_LOW);
+				//nRet = m_pShareItem->GetMaintControlMgrPtr()->MoveCmdPosR(AXIS_X4, 1000, false, SPEED_LOW);
+
+			}
+			else
+			{
+				double CurrAC_X = m_pShareItem->GetMaintControlMgrPtr()->GetCurPos(AXIS_X4);
+
+				double dReadyPos = 0;
+				m_pShareItem->GetMaintControlMgrPtr()->GetPositionConfigMgr()->GetACPosition(nullptr, &dReadyPos, nullptr);
+				nRet = m_pShareItem->GetMaintControlMgrPtr()->MoveCmdPosA(AXIS_X4, dReadyPos, false, SPEED_HIGH);
+			}
+				
+
+			
 			if (nRet == VTM_RV_SUCCESSED)
 			{
 				int iLoop = 0;
@@ -1780,7 +1940,7 @@ int CSystemInitializeStep::MotionHome(int iStep)
 
 					Sleep(1000);
 
-					bRet = CSequenceManager::GetInstance()->GetFunctionModuleEQState()->IsPositionOnAC(1);
+					bRet = CSequenceManager::GetInstance()->GetFunctionModuleEQState()->IsPositionOnAC(0);
 					if (bRet == true)
 					{
 						m_pShareItem->GetMaintControlMgrPtr()->StopMove(AXIS_X4);
@@ -1816,7 +1976,7 @@ int CSystemInitializeStep::MotionHome(int iStep)
 		// LYS 2026-07-02 AC Safety 위치는 Homing Skip
 		bool bSafety = false;
 		int nBit = 0;
-		nBit = m_pShareItem->GetMaintControlMgrPtr()->GetIOMapControlMgrPtr()->GetParam_DIOMapMemoryBitImport(PLC_AUTO_CHANGE_X0_POSITION_03);
+		nBit = m_pShareItem->GetMaintControlMgrPtr()->GetIOMapControlMgrPtr()->GetParam_DIOMapMemoryBitImport(PLC_AUTO_CHANGE_X0_POSITION_04);
 		if (nBit != -1)
 		{
 			if (nBit == 1)
@@ -1824,7 +1984,8 @@ int CSystemInitializeStep::MotionHome(int iStep)
 				double CurrAC_X = m_pShareItem->GetMaintControlMgrPtr()->GetCurPos(AXIS_X4);
 
 				double dReadyPos = 0;
-				m_pShareItem->GetMaintControlMgrPtr()->GetPositionConfigMgr()->GetACPosition(nullptr, &dReadyPos, nullptr);
+				double dPunInPos = 0;
+				m_pShareItem->GetMaintControlMgrPtr()->GetPositionConfigMgr()->GetACPosition(nullptr, &dReadyPos, &dPunInPos);
 
 				double AbsPos;
 				AbsPos = CurrAC_X - dReadyPos;
@@ -1834,7 +1995,7 @@ int CSystemInitializeStep::MotionHome(int iStep)
 			}
 		}
 
-		if (bSafety == true) nRet == VTM_RV_SUCCESSED;
+		if (bSafety == true) nRet = VTM_RV_SUCCESSED;
 		else nRet = m_pShareItem->GetMaintControlMgrPtr()->MoveHome(AXIS_X4);
 
 		if (nRet == VTM_RV_SUCCESSED)

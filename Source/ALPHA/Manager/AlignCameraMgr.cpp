@@ -14,6 +14,7 @@ CAlignCameraMgr::CAlignCameraMgr(CString strConfigPath, CString strParamPath, CS
     : m_pIniHelper(new CIniHelper)
 	, m_pimaqctrlROI(nullptr)
 	, m_bShowROI(false)
+	, m_bSimImageMissingLogged(false)	// LYS 2026-09-05
 	, m_strRecipePath(strParamPath)
 	, m_strResultPath(strResultPath)
 {
@@ -225,8 +226,23 @@ int CAlignCameraMgr::SnapImage(Image* pImage, bool bDisplay)
 		{
 			CString strFilePath;
 			sFileName.Format(_T("%s%sAlign%d.png"), m_strRecipePath, STR_DIR_PATTERN, m_iCCDNum + 1);
-			if (m_pimaqctrlROI->LoadPattern(sFileName, pSnapImage) == TRUE)
+			// LYS 2026-09-05 시뮬 이미지 파일이 없으면 imaqReadFile을 호출하지 않는다.
+			//   라이브 스레드(DlgAlignCCD)가 100ms마다 호출하므로 파일 부재 시 IMAQImageCtrl.cpp(861) "File not found" TRACE가 초당 10회 쏟아지던 문제.
+			if (GetFileAttributes(sFileName) == INVALID_FILE_ATTRIBUTES)
+			{
+				if (m_bSimImageMissingLogged == false)
+				{
+					m_bSimImageMissingLogged = true;
+					CString strLog;
+					strLog.Format(_T("AlignCamera%d not connected and sim image not found: %s (live view stays blank)"), m_iCCDNum + 1, sFileName);
+					CLogWrapper::GetInstance()->KMLOG(WARN, strLog);
+				}
+			}
+			else if (m_pimaqctrlROI->LoadPattern(sFileName, pSnapImage) == TRUE)
+			{
+				m_bSimImageMissingLogged = false;
 				ret = true;
+			}
 		}
 	}
 	else

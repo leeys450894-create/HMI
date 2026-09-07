@@ -33,6 +33,7 @@ class CMotorControlMgr : public CAuroraSubMgr
 	double				m_dInterlockLifePinPos;
 	double				m_dInterlockProbeSizeX;	// LYS 2026-08-25 P5 probe unit width in X
 	double				m_dInterlockProbeZSafety;	// LYS 2026-08-26 P5 유닛을 피하는 BACK Z 안전 높이
+	double				m_dInterlockSubZSafety;	// LYS 2026-09-02 Z3/Z4 Sub Z 안전위치 (SUBZ_SAFETY 미러)
 
 	double				m_dMovePos[100];	// 가상테스트에서 사용
 	double				m_dMoveOffset[100];	// Head Offset

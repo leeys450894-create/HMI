@@ -6,7 +6,7 @@
 #include "..\AuroraFuncDefine.h"
 //#include "Alarm\AlarmIDList.h"
 //#include "AlarmIDList.h"  // jsyoon 2022.01,.19 change
-//#include "..\Alarm\AlarmController.h"
+#include "..\Alarm\AlarmController.h"
 
 #ifdef _DEBUG
 #define new DEBUG_NEW
@@ -25,6 +25,7 @@ CMotorControlMgr::CMotorControlMgr(CString strAppPath, CString strConfigPath, CS
 	, m_dInterlockLifePinPos(575)
 	, m_dInterlockProbeSizeX(300)
 	, m_dInterlockProbeZSafety(-600)
+	, m_dInterlockSubZSafety(0)
 {
     SetName(_T("MOTOR_CONTROL_MGR"));
 
@@ -69,6 +70,7 @@ bool CMotorControlMgr::LinkIniFile(bool bSave)
 	m_pIniHelper->Link(bSave, GetName(), _T("INTERLOCKLIFTPIN"),    &m_dInterlockLifePinPos, 575.000);
 	m_pIniHelper->Link(bSave, GetName(), _T("INTERLOCKPROBESIZEX"), &m_dInterlockProbeSizeX, 300.000);	// LYS 2026-08-25
 	m_pIniHelper->Link(bSave, GetName(), _T("INTERLOCKPROBEZSAFETY"), &m_dInterlockProbeZSafety, -600.000);	// LYS 2026-08-26
+	m_pIniHelper->Link(bSave, GetName(), _T("INTERLOCKSUBZSAFETY"), &m_dInterlockSubZSafety, 0.000);	// LYS 2026-09-02 Z3/Z4 Sub Z 안전위치 (SUBZ_SAFETY=0 미러)
 
 	CString strLog;
 	strLog.Format(_T("USE:%d, OUT_OF_SERVICE:%d, DEVICE_TYPE:%s, INTERLOCKPOS:%.3f, INTERLOCKGANGAP:%.3f, INTERLOCKHEADGAP:%.3f, INTERLOCKHEADGAPB:%.3f, INTERLOCKPROBEGAP:%.3f"), m_bUse, m_bOutOfService, m_strControlType, m_dInterlockPos, m_dInterlockGantryGap, m_dInterlockHeadGap, m_dInterlockHeadGapB, m_dInterlockProbeGap);
@@ -91,10 +93,10 @@ void CMotorControlMgr::DisableAxesForOCP()
 		AXIS_PROBE_X5, AXIS_PROBE_X6, AXIS_PROBE_X7, AXIS_PROBE_X8,
 		AXIS_PROBE_Y1, AXIS_PROBE_Y2, AXIS_PROBE_Y3, AXIS_PROBE_Y4,
 		AXIS_PROBE_Z1, AXIS_PROBE_Z2, AXIS_PROBE_Z3, AXIS_PROBE_Z4,
-		// LYS 2026-08-25 X9/X10을 목록에서 제외 - HW 컨셉 변경으로 P5 갠트리 X가 움직여야 한다.
-		// Config_Motion_ACS.dat은 이미 PBX9/PBX10을 USE[1]로 두는데 이 함수가 기동 시 덮어쓰고 있었다.
-		// PBY5도 USE[1]이지만 프로브 크로스 활성화는 별도 HW 판단이라 Y5는 계속 비활성으로 둔다.
-		AXIS_PROBE_Y5
+		AXIS_Z1,	// LYS 2026-09-02 OCP에서 head BACK Z(AXIS_Z1) 미사용 처리
+		// LYS 2026-08-25 X9/X10은 목록에서 제외 - HW 컨셉 변경으로 P5 유닛은 X로 움직여야 한다.
+		// LYS 2026-09-05 AXIS_PROBE_Y5(PBY5, PROBE CROSS)도 목록에서 제외 - Probe Align Y 센터링은 PBY5를 움직여야 함(HW 확인됨).
+		//   Config_Motion_ACS.dat PBY5 USE[1]/ACS0/HW28 그대로 사용. 이 함수는 P1~P4 + BACK Z(Z1)만 끈다.
 	};
 
 	for (int i = 0; i < _countof(nDisableAxes); i++)
@@ -105,7 +107,7 @@ void CMotorControlMgr::DisableAxesForOCP()
 	}
 
 	CString strLog;
-	strLog.Format(_T("OCP Mode: Disabled %d probe axes (P1-P4 all + P5 Y)"), _countof(nDisableAxes));
+	strLog.Format(_T("OCP Mode: Disabled %d axes (P1-P4 probe all + BACK Z); P5 X9/X10/Y5 active"), _countof(nDisableAxes));
 	m_pLogFileAccessor->KMLOG(SYST, strLog);
 }
 
@@ -209,11 +211,12 @@ long CMotorControlMgr::MoveCmdPosA_Move(int iAxis, double dPos, bool bBlockMode,
 
 	long lRet = 0;
 	lRet = m_pFunction->MoveCmdPosA(iAxis, dPos, bBlockMode, iSpeed, iLens, iTube);
-	if (nRet == 1)
+	// LYS 2026-09-02 check lRet (was nRet) so a failed absolute move is reported
+	if (lRet == 1)
 	{
 		nRet = df_MOTION_RV_SUCCESSED;
 	}
-	else if (nRet == -1)
+	else if (lRet == -1)
 	{
 		nRet = MEI_NOT_CREATED;
 	}
@@ -259,27 +262,33 @@ long CMotorControlMgr::RetractHeadZForProbeUnit(double dTargetX2, LPCTSTR pszFro
 	if (dPathMax < dProbeX - 1.0 || dProbeX + m_dInterlockProbeSizeX < dPathMin)
 		return df_MOTION_RV_SUCCESSED;
 
-	double dCurZ1 = 0.;
-	dCurZ1 = GetOrgPos(AXIS_Z1);
+	// LYS 2026-09-02 Z1 미사용 -> Z3/Z4(Sub Z RIGHT/LEFT)를 SUBZ_SAFETY(0)로 리트랙트
+	double dCurZ3 = GetOrgPos(AXIS_Z3);
+	double dCurZ4 = GetOrgPos(AXIS_Z4);
 
-	if (dCurZ1 <= m_dInterlockProbeZSafety)
+	if (dCurZ3 <= m_dInterlockSubZSafety && dCurZ4 <= m_dInterlockSubZSafety)
 		return df_MOTION_RV_SUCCESSED;
 
 	CString strLog;
-	strLog.Format(_T("%s X2 path crosses PROBE UNIT band(X9:%.3f, SIZE:%.1f), X2 %.3f -> %.3f - retract Z1 %.3f -> %.3f"),
+	strLog.Format(_T("%s X2 path crosses PROBE UNIT band(X9:%.3f, SIZE:%.1f), X2 %.3f -> %.3f - retract Z3/Z4(%.3f,%.3f) -> %.3f"),
 		pszFrom, dProbeX, m_dInterlockProbeSizeX, dCurX2, dTargetX2,
-		dCurZ1, m_dInterlockProbeZSafety);
+		dCurZ3, dCurZ4, m_dInterlockSubZSafety);
 	m_pLogFileAccessor->KMLOG(SYST, strLog, true);
 
 	long nRet = df_MOTION_RV_SUCCESSED;
 
-	nRet = MoveCmdPosA(AXIS_Z1, m_dInterlockProbeZSafety, true, SPEED_HIGH, -1, -1);
-	if (nRet == df_MOTION_RV_SUCCESSED)
-		nRet = DoWork_MotionDone(AXIS_Z1);
+	stMotorPosition stRetractSubZ[2];
+	ZeroMemory(&stRetractSubZ, sizeof(stRetractSubZ));
+	stRetractSubZ[0].axis = AXIS_Z3;
+	stRetractSubZ[0].dPosition = m_dInterlockSubZSafety;
+	stRetractSubZ[1].axis = AXIS_Z4;
+	stRetractSubZ[1].dPosition = m_dInterlockSubZSafety;
+
+	nRet = MoveCmdPosMulti(stRetractSubZ, 2, SPEED_HIGH, true);
 
 	if (nRet != df_MOTION_RV_SUCCESSED)
 	{
-		strLog.Format(_T("%s Z1 retract FAIL(RET:%d) - X2 move abandoned"), pszFrom, nRet);
+		strLog.Format(_T("%s Z3/Z4 retract FAIL(RET:%d) - X2 move abandoned"), pszFrom, nRet);
 		m_pLogFileAccessor->KMLOG(WARN, strLog, true);
 	}
 
@@ -291,6 +300,27 @@ long CMotorControlMgr::MoveCmdPosA_Sub(int iAxis, double dPos, bool bBlockMode, 
 	long nRet = df_MOTION_RV_SUCCESSED;
 
 	bool bDir = true;
+
+	// LYS 2026-09-02 ABS 목표값 SW 리밋 체크 (초과 시 SW 리밋 알람 → 래퍼 SetAlarm)
+	{
+		if (dPos > GetMaxSWLimit(iAxis))
+			return MOTION_SW_OVER_LIMIT_POS;
+		else if (dPos < GetMinSWLimit(iAxis))
+			return MOTION_SW_OVER_LIMIT_NEG;
+	}
+
+	// LYS 2026-09-02 Z3/Z4 하강 시 프로브유닛 겹침이면 거부 (Z1 미사용 대체)
+	// // LYS 2026-09-05 인터락 임시 해제
+	//if ((iAxis == AXIS_Z3 || iAxis == AXIS_Z4) && dPos > GetOrgPos(iAxis))
+	//{
+	//	if (IsProbeUnitOverlapX(GetOrgPos(AXIS_X2)) == true)
+	//	{
+	//		CString strLogZ34;
+	//		strLogZ34.Format(_T("MoveCmdPosA_Sub Z%d DOWN NG - PROBE UNIT(X9:%.3f, SIZE:%.1f) vs X2:%.3f, %.3f -> %.3f"), iAxis, GetOrgPos(AXIS_PROBE_X9), m_dInterlockProbeSizeX, GetOrgPos(AXIS_X2), GetOrgPos(iAxis), dPos);
+	//		m_pLogFileAccessor->KMLOG(WARN, strLogZ34, true);
+	//		return MOTION_INTERLOCK_CHECK_ALARM + iAxis;
+	//	}
+	//}
 
 	// Stage
 	if (iAxis == AXIS_X)
@@ -458,11 +488,11 @@ long CMotorControlMgr::MoveCmdPosA_Sub(int iAxis, double dPos, bool bBlockMode, 
 			//if (dCurZ > 10)
 			//{
 			//	// Z
-			//	if (GetOrgPos(AXIS_PROBE_Z1) < -5.1 ||
-			//		GetOrgPos(AXIS_PROBE_Z2) < -5.1 ||
-			//		GetOrgPos(AXIS_PROBE_Z3) < -5.1 ||
-			//		GetOrgPos(AXIS_PROBE_Z4) < -5.1 ||
-			//		GetOrgPos(AXIS_PROBE_Z5) < -5.1)
+			//	if ((GetAxisProperty(AXIS_PROBE_Z1)->bUse && GetOrgPos(AXIS_PROBE_Z1) < -5.1) ||
+			//		(GetAxisProperty(AXIS_PROBE_Z2)->bUse && GetOrgPos(AXIS_PROBE_Z2) < -5.1) ||
+			//		(GetAxisProperty(AXIS_PROBE_Z3)->bUse && GetOrgPos(AXIS_PROBE_Z3) < -5.1) ||
+			//		(GetAxisProperty(AXIS_PROBE_Z4)->bUse && GetOrgPos(AXIS_PROBE_Z4) < -5.1) ||
+			//		(GetAxisProperty(AXIS_PROBE_Z5)->bUse && GetOrgPos(AXIS_PROBE_Z5) < -5.1))
 			//	{
 			//		nRet = MOTION_INTERLOCK_7;
 			//	}
@@ -809,11 +839,12 @@ long CMotorControlMgr::MoveCmdPosA_Sub(int iAxis, double dPos, bool bBlockMode, 
 			// Head Z 이동 시 Probe Unit 충돌 인터락
 			if (nRet == VTM_RV_SUCCESSED)
 			{
-				if (GetOrgPos(AXIS_PROBE_Z1) < -5.1 ||
-					GetOrgPos(AXIS_PROBE_Z2) < -5.1 ||
-					GetOrgPos(AXIS_PROBE_Z3) < -5.1 ||
-					GetOrgPos(AXIS_PROBE_Z4) < -5.1 ||
-					GetOrgPos(AXIS_PROBE_Z5) < -5.1)
+				// LYS 2026-09-02 미사용 프로브 Z축은 인터락에서 제외 (bUse 가드)
+				if ((GetAxisProperty(AXIS_PROBE_Z1)->bUse && GetOrgPos(AXIS_PROBE_Z1) < -5.1) ||
+					(GetAxisProperty(AXIS_PROBE_Z2)->bUse && GetOrgPos(AXIS_PROBE_Z2) < -5.1) ||
+					(GetAxisProperty(AXIS_PROBE_Z3)->bUse && GetOrgPos(AXIS_PROBE_Z3) < -5.1) ||
+					(GetAxisProperty(AXIS_PROBE_Z4)->bUse && GetOrgPos(AXIS_PROBE_Z4) < -5.1) ||
+					(GetAxisProperty(AXIS_PROBE_Z5)->bUse && GetOrgPos(AXIS_PROBE_Z5) < -5.1))
 				{
 					nRet = MOTION_INTERLOCK_7;
 				}
@@ -828,11 +859,12 @@ long CMotorControlMgr::MoveCmdPosA_Sub(int iAxis, double dPos, bool bBlockMode, 
 			// Head Z 이동 시 Probe Unit 충돌 인터락
 			if (nRet == VTM_RV_SUCCESSED)
 			{
-				if (GetOrgPos(AXIS_PROBE_Z1) < -5.1 ||
-					GetOrgPos(AXIS_PROBE_Z2) < -5.1 ||
-					GetOrgPos(AXIS_PROBE_Z3) < -5.1 ||
-					GetOrgPos(AXIS_PROBE_Z4) < -5.1 ||
-					GetOrgPos(AXIS_PROBE_Z5) < -5.1)
+				// LYS 2026-09-02 미사용 프로브 Z축은 인터락에서 제외 (bUse 가드)
+				if ((GetAxisProperty(AXIS_PROBE_Z1)->bUse && GetOrgPos(AXIS_PROBE_Z1) < -5.1) ||
+					(GetAxisProperty(AXIS_PROBE_Z2)->bUse && GetOrgPos(AXIS_PROBE_Z2) < -5.1) ||
+					(GetAxisProperty(AXIS_PROBE_Z3)->bUse && GetOrgPos(AXIS_PROBE_Z3) < -5.1) ||
+					(GetAxisProperty(AXIS_PROBE_Z4)->bUse && GetOrgPos(AXIS_PROBE_Z4) < -5.1) ||
+					(GetAxisProperty(AXIS_PROBE_Z5)->bUse && GetOrgPos(AXIS_PROBE_Z5) < -5.1))
 				{
 					nRet = MOTION_INTERLOCK_7;
 				}
@@ -941,11 +973,12 @@ long CMotorControlMgr::MoveCmdPosA_Sub(int iAxis, double dPos, bool bBlockMode, 
 			dPROBE_Z4 = GetOrgPos(AXIS_PROBE_Z4);
 			dPROBE_Z5 = GetOrgPos(AXIS_PROBE_Z5);
 
-			if (dPROBE_Z1 > 0.1 ||
-				dPROBE_Z2 > 0.1 ||
-				dPROBE_Z3 > 0.1 ||
-				dPROBE_Z4 > 0.1 ||
-				dPROBE_Z5 > 0.1 )
+			// LYS 2026-09-02 미사용 프로브 Z축은 인터락에서 제외 (bUse 가드)
+			if ((GetAxisProperty(AXIS_PROBE_Z1)->bUse && dPROBE_Z1 > 0.1) ||
+				(GetAxisProperty(AXIS_PROBE_Z2)->bUse && dPROBE_Z2 > 0.1) ||
+				(GetAxisProperty(AXIS_PROBE_Z3)->bUse && dPROBE_Z3 > 0.1) ||
+				(GetAxisProperty(AXIS_PROBE_Z4)->bUse && dPROBE_Z4 > 0.1) ||
+				(GetAxisProperty(AXIS_PROBE_Z5)->bUse && dPROBE_Z5 > 0.1) )
 			{
 				stMotorPosition stPositionProbe[5];
 				stPositionProbe[0].axis = AXIS_PROBE_Z1;
@@ -982,7 +1015,8 @@ long CMotorControlMgr::MoveCmdPosA_Sub(int iAxis, double dPos, bool bBlockMode, 
 				dFront_Z = GetOrgPos(AXIS_Z1);
 				dBack_Z = GetOrgPos(AXIS_Z2);
 
-				if (dFront_Z > 1 || dBack_Z > 1)
+				// LYS 2026-09-02 미사용 헤드 Z축은 인터락에서 제외 (bUse 가드)
+				if ((GetAxisProperty(AXIS_Z1)->bUse && dFront_Z > 1) || (GetAxisProperty(AXIS_Z2)->bUse && dBack_Z > 1))
 				{
 					nRet = MOTION_INTERLOCK_8;
 
@@ -1165,7 +1199,10 @@ long CMotorControlMgr::MoveCmdPosA(int iAxis, double dPos, bool bBlockMode, int 
 	if (nRet == VTM_RV_SUCCESSED)
 		m_pLogFileAccessor->KMLOG(SYST, strLog, true);
 	else
+	{
 		m_pLogFileAccessor->KMLOG(WARN, strLog, true);
+		CAlarmController::GetInstance()->SetAlarm(nRet);	// LYS 2026-09-02 raise alarm on move failure
+	}
 
 	return nRet;
 }
@@ -1182,6 +1219,29 @@ long CMotorControlMgr::MoveCmdPosR_Sub(int iAxis, double dPos, bool bBlockMode, 
 {
 	long nRet = df_MOTION_RV_SUCCESSED;
 	bool bDir = true;
+
+	// LYS 2026-09-02 REL 목표값 SW 리밋 체크 (초과 시 SW 리밋 알람 → 래퍼 SetAlarm)
+	if(iAxis != AXIS_X4)
+	{
+		double dSwTarget = GetCurPos(iAxis) + dPos;
+		 dSwTarget = GetOrgPos(iAxis) + dPos;
+		if (dSwTarget > GetMaxSWLimit(iAxis))
+			return MOTION_SW_OVER_LIMIT_POS;
+		else if (dSwTarget < GetMinSWLimit(iAxis))
+			return MOTION_SW_OVER_LIMIT_NEG;
+	}
+
+	// LYS 2026-09-02 Z3/Z4 하강 시 프로브유닛 겹침이면 거부 (Z1 미사용 대체)
+	//if ((iAxis == AXIS_Z3 || iAxis == AXIS_Z4) && dPos > 0.)
+	//{
+	//	if (IsProbeUnitOverlapX(GetOrgPos(AXIS_X2)) == true)
+	//	{
+	//		CString strLogZ34;
+	//		strLogZ34.Format(_T("MoveCmdPosR_Sub Z%d DOWN NG - PROBE UNIT(X9:%.3f, SIZE:%.1f) vs X2:%.3f, %.3f -> +%.3f"), iAxis, GetOrgPos(AXIS_PROBE_X9), m_dInterlockProbeSizeX, GetOrgPos(AXIS_X2), GetOrgPos(iAxis), dPos);
+	//		m_pLogFileAccessor->KMLOG(WARN, strLogZ34, true);
+	//		return MOTION_INTERLOCK_CHECK_ALARM + iAxis;
+	//	}
+	//}
 
 	// jsyoon 20210825 add Rotate Interlock
 	if (iAxis == AXIS_X)
@@ -1264,15 +1324,15 @@ long CMotorControlMgr::MoveCmdPosR_Sub(int iAxis, double dPos, bool bBlockMode, 
 		}
 
 		// Probe unit 충동 방지
-		if (nRet == VTM_RV_SUCCESSED)
-		{
-			dCur = GetOrgPos(AXIS_PROBE_X9);
-
-			if (dMove < (dCur - 5))		// Probe Unit을 넘어가는 경우
-			{
-				nRet = MOTION_INTERLOCK_5;
-			}
-		}
+		//if (nRet == VTM_RV_SUCCESSED)
+		//{
+		//	dCur = GetOrgPos(AXIS_PROBE_X9);
+		//
+		//	if (dMove < (dCur - 5))		// Probe Unit을 넘어가는 경우
+		//	{
+		//		nRet = MOTION_INTERLOCK_5;
+		//	}
+		//}
 
 		// Head Z축 이동 시 X2 이동 금지 WAD 기구물 충동 방지
 		if (nRet == VTM_RV_SUCCESSED)
@@ -1673,11 +1733,12 @@ long CMotorControlMgr::MoveCmdPosR_Sub(int iAxis, double dPos, bool bBlockMode, 
 			// Head Z 이동 시 Probe Unit 충돌 인터락
 			if (nRet == VTM_RV_SUCCESSED)
 			{
-				if (GetOrgPos(AXIS_PROBE_Z1) < -5.1 ||
-					GetOrgPos(AXIS_PROBE_Z2) < -5.1 ||
-					GetOrgPos(AXIS_PROBE_Z3) < -5.1 ||
-					GetOrgPos(AXIS_PROBE_Z4) < -5.1 ||
-					GetOrgPos(AXIS_PROBE_Z5) < -5.1)
+				// LYS 2026-09-02 미사용 프로브 Z축은 인터락에서 제외 (bUse 가드)
+				if ((GetAxisProperty(AXIS_PROBE_Z1)->bUse && GetOrgPos(AXIS_PROBE_Z1) < -5.1) ||
+					(GetAxisProperty(AXIS_PROBE_Z2)->bUse && GetOrgPos(AXIS_PROBE_Z2) < -5.1) ||
+					(GetAxisProperty(AXIS_PROBE_Z3)->bUse && GetOrgPos(AXIS_PROBE_Z3) < -5.1) ||
+					(GetAxisProperty(AXIS_PROBE_Z4)->bUse && GetOrgPos(AXIS_PROBE_Z4) < -5.1) ||
+					(GetAxisProperty(AXIS_PROBE_Z5)->bUse && GetOrgPos(AXIS_PROBE_Z5) < -5.1))
 				{
 					nRet = MOTION_INTERLOCK_7;
 				}
@@ -1694,11 +1755,12 @@ long CMotorControlMgr::MoveCmdPosR_Sub(int iAxis, double dPos, bool bBlockMode, 
 			// Head Z 이동 시 Probe Unit 충돌 인터락
 			if (nRet == VTM_RV_SUCCESSED)
 			{
-				if (GetOrgPos(AXIS_PROBE_Z1) < -5.1 ||
-					GetOrgPos(AXIS_PROBE_Z2) < -5.1 ||
-					GetOrgPos(AXIS_PROBE_Z3) < -5.1 ||
-					GetOrgPos(AXIS_PROBE_Z4) < -5.1 ||
-					GetOrgPos(AXIS_PROBE_Z5) < -5.1)
+				// LYS 2026-09-02 미사용 프로브 Z축은 인터락에서 제외 (bUse 가드)
+				if ((GetAxisProperty(AXIS_PROBE_Z1)->bUse && GetOrgPos(AXIS_PROBE_Z1) < -5.1) ||
+					(GetAxisProperty(AXIS_PROBE_Z2)->bUse && GetOrgPos(AXIS_PROBE_Z2) < -5.1) ||
+					(GetAxisProperty(AXIS_PROBE_Z3)->bUse && GetOrgPos(AXIS_PROBE_Z3) < -5.1) ||
+					(GetAxisProperty(AXIS_PROBE_Z4)->bUse && GetOrgPos(AXIS_PROBE_Z4) < -5.1) ||
+					(GetAxisProperty(AXIS_PROBE_Z5)->bUse && GetOrgPos(AXIS_PROBE_Z5) < -5.1))
 				{
 					nRet = MOTION_INTERLOCK_7;
 				}
@@ -1771,11 +1833,12 @@ long CMotorControlMgr::MoveCmdPosR_Sub(int iAxis, double dPos, bool bBlockMode, 
 			iAxis == AXIS_PROBE_X1 || iAxis == AXIS_PROBE_X2 || iAxis == AXIS_PROBE_X3 || iAxis == AXIS_PROBE_X4 || iAxis == AXIS_PROBE_X5 || iAxis == AXIS_PROBE_X6 || iAxis == AXIS_PROBE_X7 || iAxis == AXIS_PROBE_X8 || iAxis == AXIS_PROBE_X9 || iAxis == AXIS_PROBE_X10 ||
 			iAxis == AXIS_PROBE_Y1 || iAxis == AXIS_PROBE_Y2 || iAxis == AXIS_PROBE_Y3 || iAxis == AXIS_PROBE_Y4 || iAxis == AXIS_PROBE_Y5)
 		{
-			if (GetOrgPos(AXIS_PROBE_Z1) > 0.1 ||
-				GetOrgPos(AXIS_PROBE_Z2) > 0.1 ||
-				GetOrgPos(AXIS_PROBE_Z3) > 0.1 ||
-				GetOrgPos(AXIS_PROBE_Z4) > 0.1 ||
-				GetOrgPos(AXIS_PROBE_Z5) > 0.1)
+			// LYS 2026-09-02 미사용 프로브 Z축은 인터락에서 제외 (bUse 가드)
+			if ((GetAxisProperty(AXIS_PROBE_Z1)->bUse && GetOrgPos(AXIS_PROBE_Z1) > 0.1) ||
+				(GetAxisProperty(AXIS_PROBE_Z2)->bUse && GetOrgPos(AXIS_PROBE_Z2) > 0.1) ||
+				(GetAxisProperty(AXIS_PROBE_Z3)->bUse && GetOrgPos(AXIS_PROBE_Z3) > 0.1) ||
+				(GetAxisProperty(AXIS_PROBE_Z4)->bUse && GetOrgPos(AXIS_PROBE_Z4) > 0.1) ||
+				(GetAxisProperty(AXIS_PROBE_Z5)->bUse && GetOrgPos(AXIS_PROBE_Z5) > 0.1))
 			{
 				double dPos = 0;
 
@@ -1810,7 +1873,8 @@ long CMotorControlMgr::MoveCmdPosR_Sub(int iAxis, double dPos, bool bBlockMode, 
 				dFront_Z = GetOrgPos(AXIS_Z1);
 				dBack_Z  = GetOrgPos(AXIS_Z2);
 
-				if (dFront_Z > 1 || dBack_Z > 1)
+				// LYS 2026-09-02 미사용 헤드 Z축은 인터락에서 제외 (bUse 가드)
+				if ((GetAxisProperty(AXIS_Z1)->bUse && dFront_Z > 1) || (GetAxisProperty(AXIS_Z2)->bUse && dBack_Z > 1))
 				{
 					nRet = MOTION_INTERLOCK_8;
 
@@ -1872,14 +1936,16 @@ long CMotorControlMgr::MoveCmdPosR_Sub(int iAxis, double dPos, bool bBlockMode, 
 	{
 		long lRet = 0;
 		lRet = m_pFunction->MoveCmdPosR(iAxis, dPos, bBlockMode, iSpeed);
-		if (nRet == 1)
+
+		// LYS 2026-09-02 상대이동 false 처리
+		if (lRet == 1)
 		{
 			nRet = df_MOTION_RV_SUCCESSED;
 		}
-		else if (nRet == -1)
-		{
-			nRet = MEI_NOT_CREATED;
-		}
+		//else if (nRet == -1) 
+		//{
+		//	nRet = MEI_NOT_CREATED;
+		//}
 		else
 		{
 			nRet = MOTION_CMDPOS_ERROR; // MOTION_MOVE_ALARM + iAxis;
@@ -1975,7 +2041,10 @@ long CMotorControlMgr::MoveCmdPosR(int iAxis, double dPos, bool bBlockMode, int 
 	if( nRet == VTM_RV_SUCCESSED)
 		m_pLogFileAccessor->KMLOG(SYST, strLog, true);
 	else
+	{
 		m_pLogFileAccessor->KMLOG(WARN, strLog, true);
+		CAlarmController::GetInstance()->SetAlarm(nRet);	// LYS 2026-09-02 raise alarm on move failure
+	}
 		
 
 	return nRet;
@@ -2012,6 +2081,36 @@ long CMotorControlMgr::MoveCmdPosMulti_Sub(stMotorPosition *pPos, int iAxis, int
 {
 	long nRet = df_MOTION_RV_SUCCESSED;
 	bool bDir = true;
+
+	// LYS 2026-09-02 멀티 이동 각 축 목표값 SW 리밋 체크 (절대좌표, 초과 시 SW 리밋 알람)
+	for (int iSw = 0; iSw < iAxis; iSw++)
+	{
+		int nSwAxis = pPos[iSw].axis;
+		if (nSwAxis < 0 || nSwAxis >= AXIS_TYPE_END) continue;
+		if (pPos[iSw].dPosition > GetMaxSWLimit(nSwAxis))
+		{
+			CAlarmController::GetInstance()->SetAlarm(MOTION_SW_OVER_LIMIT_POS);
+			return MOTION_SW_OVER_LIMIT_POS;
+		}
+		else if (pPos[iSw].dPosition < GetMinSWLimit(nSwAxis))
+		{
+			CAlarmController::GetInstance()->SetAlarm(MOTION_SW_OVER_LIMIT_NEG);
+			return MOTION_SW_OVER_LIMIT_NEG;
+		}
+
+		// LYS 2026-09-02 Z3/Z4 하강 시 프로브유닛 겹침이면 거부 (Z1 미사용 대체)
+		if ((nSwAxis == AXIS_Z3 || nSwAxis == AXIS_Z4) && pPos[iSw].dPosition > GetOrgPos(nSwAxis))
+		{
+			if (IsProbeUnitOverlapX(GetOrgPos(AXIS_X2)) == true)
+			{
+				CString strLogZ34;
+				strLogZ34.Format(_T("MoveCmdPosMulti_Sub Z%d DOWN NG - PROBE UNIT(X9:%.3f, SIZE:%.1f) vs X2:%.3f, %.3f -> %.3f"), nSwAxis, GetOrgPos(AXIS_PROBE_X9), m_dInterlockProbeSizeX, GetOrgPos(AXIS_X2), GetOrgPos(nSwAxis), pPos[iSw].dPosition);
+				m_pLogFileAccessor->KMLOG(WARN, strLogZ34, true);
+				CAlarmController::GetInstance()->SetAlarm(MOTION_INTERLOCK_CHECK_ALARM + nSwAxis);
+				return MOTION_INTERLOCK_CHECK_ALARM + nSwAxis;
+			}
+		}
+	}
 
 	// jsyoon 20210825 add Rotate Interlock
 	for (size_t i = 0; i < iAxis; i++)
@@ -2188,11 +2287,12 @@ long CMotorControlMgr::MoveCmdPosMulti_Sub(stMotorPosition *pPos, int iAxis, int
 		{
 			if (pPos[i].dPosition > 10)
 			{
-				if (GetOrgPos(AXIS_PROBE_Z1) < -5.1 ||
-					GetOrgPos(AXIS_PROBE_Z2) < -5.1 ||
-					GetOrgPos(AXIS_PROBE_Z3) < -5.1 ||
-					GetOrgPos(AXIS_PROBE_Z4) < -5.1 ||
-					GetOrgPos(AXIS_PROBE_Z5) < -5.1)
+				// LYS 2026-09-02 미사용 프로브 Z축은 인터락에서 제외 (bUse 가드)
+				if ((GetAxisProperty(AXIS_PROBE_Z1)->bUse && GetOrgPos(AXIS_PROBE_Z1) < -5.1) ||
+					(GetAxisProperty(AXIS_PROBE_Z2)->bUse && GetOrgPos(AXIS_PROBE_Z2) < -5.1) ||
+					(GetAxisProperty(AXIS_PROBE_Z3)->bUse && GetOrgPos(AXIS_PROBE_Z3) < -5.1) ||
+					(GetAxisProperty(AXIS_PROBE_Z4)->bUse && GetOrgPos(AXIS_PROBE_Z4) < -5.1) ||
+					(GetAxisProperty(AXIS_PROBE_Z5)->bUse && GetOrgPos(AXIS_PROBE_Z5) < -5.1))
 				{
 					nRet = MOTION_INTERLOCK_7;
 					break;
@@ -2286,11 +2386,12 @@ long CMotorControlMgr::MoveCmdPosMulti_Sub(stMotorPosition *pPos, int iAxis, int
 
 		if(bProbeZMove == true)
 		{
-			if (GetOrgPos(AXIS_PROBE_Z1) > 0.1 ||
-				GetOrgPos(AXIS_PROBE_Z2) > 0.1 ||
-				GetOrgPos(AXIS_PROBE_Z3) > 0.1 ||
-				GetOrgPos(AXIS_PROBE_Z4) > 0.1 ||
-				GetOrgPos(AXIS_PROBE_Z5) > 0.1)
+			// LYS 2026-09-02 미사용 프로브 Z축은 인터락에서 제외 (bUse 가드)
+			if ((GetAxisProperty(AXIS_PROBE_Z1)->bUse && GetOrgPos(AXIS_PROBE_Z1) > 0.1) ||
+				(GetAxisProperty(AXIS_PROBE_Z2)->bUse && GetOrgPos(AXIS_PROBE_Z2) > 0.1) ||
+				(GetAxisProperty(AXIS_PROBE_Z3)->bUse && GetOrgPos(AXIS_PROBE_Z3) > 0.1) ||
+				(GetAxisProperty(AXIS_PROBE_Z4)->bUse && GetOrgPos(AXIS_PROBE_Z4) > 0.1) ||
+				(GetAxisProperty(AXIS_PROBE_Z5)->bUse && GetOrgPos(AXIS_PROBE_Z5) > 0.1))
 				//		if (GetCurPos(AXIS_PROBE_Z1) > 0 || GetCurPos(AXIS_PROBE_Z2) > 0 || GetCurPos(AXIS_PROBE_Z3) > 0 || GetCurPos(AXIS_PROBE_Z4) > 0 || GetCurPos(AXIS_PROBE_Z5) > 0)
 			{
 			/*	stMotorPosition stPositionProbe[5];
@@ -2317,7 +2418,8 @@ long CMotorControlMgr::MoveCmdPosMulti_Sub(stMotorPosition *pPos, int iAxis, int
 				dFront_Z = GetOrgPos(AXIS_Z1);
 				dBack_Z  = GetOrgPos(AXIS_Z2);
 
-				if (dFront_Z > 1 || dBack_Z > 1)
+				// LYS 2026-09-02 미사용 헤드 Z축은 인터락에서 제외 (bUse 가드)
+				if ((GetAxisProperty(AXIS_Z1)->bUse && dFront_Z > 1) || (GetAxisProperty(AXIS_Z2)->bUse && dBack_Z > 1))
 				{
 					nRet = MOTION_INTERLOCK_8;
 
@@ -2983,6 +3085,18 @@ int CMotorControlMgr::DoWork_MotionDone(int iAxis)
 			if (!bRet)
 			{
 				nRet = MOTION_MOVE_DONE_ALARM + iAxis;
+			}
+
+			// LYS 2026-09-02 Move 중 HW 리밋 센서 감지
+			if (GetHWLimit(iAxis, TRUE) != true)
+			{
+				CAlarmController::GetInstance()->SetAlarm(MOTION_OVER_LIMIT_POS);
+				nRet = MOTION_OVER_LIMIT_POS;
+			}
+			else if (GetHWLimit(iAxis, FALSE) != true)
+			{
+				CAlarmController::GetInstance()->SetAlarm(MOTION_OVER_LIMIT_NEG);
+				nRet = MOTION_OVER_LIMIT_NEG;
 			}
 
 			if (nRet == df_MOTION_RV_SUCCESSED)

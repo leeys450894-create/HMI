@@ -275,7 +275,7 @@ void	C_AlignRcpDlg::InitGlassAlign ()
 	m_gridGlassAlignHead.EnableWindow	 (FALSE);
 
 	//InitGridUI (m_gridGlassAlignData, IDC_GRID_2, 4, 8, TRUE, FALSE, PIX_UNIFORMITY);
-	InitAlignGridUI (m_gridGlassAlignData, IDC_GRID_2, 4, 8, 0);
+	InitAlignGridUI (m_gridGlassAlignData, IDC_GRID_2, 4, 9, 0);
 	//m_gridGlassAlignData.SetItemText (0, 0, _T("BASE STAGE Y"));
 	//m_gridGlassAlignData.SetItemText (0, 1, _T("BASE FRONT LEFT"));
 	//m_gridGlassAlignData.SetItemText (0, 2, _T("BASE FRONT RIGHT"));
@@ -295,9 +295,10 @@ void	C_AlignRcpDlg::InitGlassAlign ()
 	m_gridGlassAlignData.SetItemText(2, 0, _T("STAGE Y"));
 	m_gridGlassAlignData.SetItemText(2, 1, _T("STAGE ROTATE"));
 	m_gridGlassAlignData.SetItemText(2, 2, _T("BACK Y"));
-	m_gridGlassAlignData.SetItemText(2, 3, _T("BACK LEFT"));
-	m_gridGlassAlignData.SetItemText(2, 4, _T("BACK RIGHT"));
-	m_gridGlassAlignData.SetItemText(2, 5, _T("BACK Z"));
+	m_gridGlassAlignData.SetItemText(2, 3, _T("BACK RIGHT"));
+	m_gridGlassAlignData.SetItemText(2, 4, _T("BACK LEFT"));
+	m_gridGlassAlignData.SetItemText(2, 5, _T("SUB Z RIGHT"));
+	m_gridGlassAlignData.SetItemText(2, 6, _T("SUB Z LEFT"));
 
 	for (int i = 0; i < 4; i++) {
 		if (i == 3) continue;
@@ -322,16 +323,16 @@ void	C_AlignRcpDlg::InitGlassAlign ()
 	}
 
 	////버튼
-	m_gridGlassAlignData.SetCellType  (3, 6, RUNTIME_CLASS(CGridCellButton));
-	m_gridGlassAlignData.SetItemState (3, 6, m_gridGlassAlignData.GetItemState (3, 6) | GVIS_READONLY);
 	m_gridGlassAlignData.SetCellType  (3, 7, RUNTIME_CLASS(CGridCellButton));
 	m_gridGlassAlignData.SetItemState (3, 7, m_gridGlassAlignData.GetItemState (3, 7) | GVIS_READONLY);
+	m_gridGlassAlignData.SetCellType  (3, 8, RUNTIME_CLASS(CGridCellButton));
+	m_gridGlassAlignData.SetItemState (3, 8, m_gridGlassAlignData.GetItemState (3, 8) | GVIS_READONLY);
 
 	//버튼 이름
 	CGridCellButton* pCell = NULL;
-	pCell = (CGridCellButton*)m_gridGlassAlignData.GetCell (3, 6);
-	pCell->SetText (_T("GET"));
 	pCell = (CGridCellButton*)m_gridGlassAlignData.GetCell (3, 7);
+	pCell->SetText (_T("GET"));
+	pCell = (CGridCellButton*)m_gridGlassAlignData.GetCell (3, 8);
 	pCell->SetText (_T("MOVE"));
 }
 
@@ -346,7 +347,8 @@ void	C_AlignRcpDlg::SetGlassAlignData ()
 	m_gridGlassAlignData.SetItemText (3, 2, dfcStr (g_inRcpInfo.m_recipeMgr.m_sAlign.m_sGlsAlign.m_fFrontY));
 	m_gridGlassAlignData.SetItemText (3, 3, dfcStr (g_inRcpInfo.m_recipeMgr.m_sAlign.m_sGlsAlign.m_fFrontLeft));
 	m_gridGlassAlignData.SetItemText (3, 4, dfcStr (g_inRcpInfo.m_recipeMgr.m_sAlign.m_sGlsAlign.m_fFrontRight));
-	m_gridGlassAlignData.SetItemText (3, 5, dfcStr (g_inRcpInfo.m_recipeMgr.m_sAlign.m_sGlsAlign.m_fFrontZ));
+	m_gridGlassAlignData.SetItemText (3, 5, dfcStr (g_inRcpInfo.m_recipeMgr.m_sAlign.m_sGlsAlign.m_fSubZRight));
+	m_gridGlassAlignData.SetItemText (3, 6, dfcStr (g_inRcpInfo.m_recipeMgr.m_sAlign.m_sGlsAlign.m_fSubZLeft));
 }
 
 BOOL	C_AlignRcpDlg::GetGlassAlignData (BOOL bShare, S_GlsAlign *pAlignShare)
@@ -364,7 +366,8 @@ BOOL	C_AlignRcpDlg::GetGlassAlignData (BOOL bShare, S_GlsAlign *pAlignShare)
 	pAlign->m_fFrontY			= _wtof (m_gridGlassAlignData.GetItemText (3, 2));
 	pAlign->m_fFrontLeft		= _wtof (m_gridGlassAlignData.GetItemText (3, 3));
 	pAlign->m_fFrontRight		= _wtof (m_gridGlassAlignData.GetItemText (3, 4));
-	pAlign->m_fFrontZ			= _wtof (m_gridGlassAlignData.GetItemText (3, 5));
+	pAlign->m_fSubZRight			= _wtof (m_gridGlassAlignData.GetItemText (3, 5));
+	pAlign->m_fSubZLeft			= _wtof (m_gridGlassAlignData.GetItemText (3, 6));
 
 	return TRUE;
 }
@@ -384,7 +387,7 @@ void	C_AlignRcpDlg::InitProbeAlign ()
 	m_gridProbeAlignHead.SetItemText (0, 0, _T("PROBE ALIGN"));
 	m_gridProbeAlignHead.EnableWindow	 (FALSE);
 
-	InitAlignGridUI (m_gridProbeAlignData, IDC_GRID_4, 4, 9, 1);
+	InitAlignGridUI (m_gridProbeAlignData, IDC_GRID_4, 4, 10, 1);
 	m_gridProbeAlignData.SetItemText (0, 0, _T("BASE PROBE Y"));
 	m_gridProbeAlignData.SetItemText (0, 1, _T("BASE BACK LEFT"));
 	m_gridProbeAlignData.SetItemText (0, 2, _T("BASE BACK RIGHT"));
@@ -392,10 +395,11 @@ void	C_AlignRcpDlg::InitProbeAlign ()
 	m_gridProbeAlignData.SetItemText (2, 0, _T("PROBE Y"));
 	m_gridProbeAlignData.SetItemText (2, 1, _T("PROBE X"));
 	m_gridProbeAlignData.SetItemText (2, 2, _T("BACK Y"));
-	m_gridProbeAlignData.SetItemText (2, 3, _T("BACK LEFT"));
-	m_gridProbeAlignData.SetItemText (2, 4, _T("BACK RIGHT"));
-	m_gridProbeAlignData.SetItemText (2, 5, _T("BACK Z"));
-	m_gridProbeAlignData.SetItemText (2, 6, _T("STAGE Y"));
+	m_gridProbeAlignData.SetItemText (2, 3, _T("BACK RIGHT"));
+	m_gridProbeAlignData.SetItemText (2, 4, _T("BACK LEFT"));
+	m_gridProbeAlignData.SetItemText (2, 5, _T("SUB Z RIGHT"));
+	m_gridProbeAlignData.SetItemText (2, 6, _T("SUB Z LEFT"));
+	m_gridProbeAlignData.SetItemText (2, 7, _T("STAGE Y"));
 
 	for (int i = 0; i < 4; i++) {
 		if (i == 3) continue;
@@ -409,16 +413,16 @@ void	C_AlignRcpDlg::InitProbeAlign ()
 	}
 
 	////버튼
-	m_gridProbeAlignData.SetCellType  (3, 7, RUNTIME_CLASS(CGridCellButton));
-	m_gridProbeAlignData.SetItemState (3, 7, m_gridProbeAlignData.GetItemState (3, 7) | GVIS_READONLY);
 	m_gridProbeAlignData.SetCellType  (3, 8, RUNTIME_CLASS(CGridCellButton));
 	m_gridProbeAlignData.SetItemState (3, 8, m_gridProbeAlignData.GetItemState (3, 8) | GVIS_READONLY);
+	m_gridProbeAlignData.SetCellType  (3, 9, RUNTIME_CLASS(CGridCellButton));
+	m_gridProbeAlignData.SetItemState (3, 9, m_gridProbeAlignData.GetItemState (3, 9) | GVIS_READONLY);
 
 	//버튼 이름
 	CGridCellButton* pCell = NULL;
-	pCell = (CGridCellButton*)m_gridProbeAlignData.GetCell (3, 7);
-	pCell->SetText (_T("GET"));
 	pCell = (CGridCellButton*)m_gridProbeAlignData.GetCell (3, 8);
+	pCell->SetText (_T("GET"));
+	pCell = (CGridCellButton*)m_gridProbeAlignData.GetCell (3, 9);
 	pCell->SetText (_T("MOVE"));
 }
 
@@ -433,8 +437,9 @@ void	C_AlignRcpDlg::SetProbeAlignData ()
 	m_gridProbeAlignData.SetItemText (3, 2, dfcStr (g_inRcpInfo.m_recipeMgr.m_sAlign.m_sProbeAlign.m_fBackY));
 	m_gridProbeAlignData.SetItemText (3, 3, dfcStr (g_inRcpInfo.m_recipeMgr.m_sAlign.m_sProbeAlign.m_fBackLeft));
 	m_gridProbeAlignData.SetItemText (3, 4, dfcStr (g_inRcpInfo.m_recipeMgr.m_sAlign.m_sProbeAlign.m_fBackRight));
-	m_gridProbeAlignData.SetItemText (3, 5, dfcStr (g_inRcpInfo.m_recipeMgr.m_sAlign.m_sProbeAlign.m_fBackZ));
-	m_gridProbeAlignData.SetItemText (3, 6, dfcStr (g_inRcpInfo.m_recipeMgr.m_sAlign.m_sProbeAlign.m_fStageY));
+	m_gridProbeAlignData.SetItemText (3, 5, dfcStr (g_inRcpInfo.m_recipeMgr.m_sAlign.m_sProbeAlign.m_fSubZRight));
+	m_gridProbeAlignData.SetItemText (3, 6, dfcStr (g_inRcpInfo.m_recipeMgr.m_sAlign.m_sProbeAlign.m_fSubZLeft));
+	m_gridProbeAlignData.SetItemText (3, 7, dfcStr (g_inRcpInfo.m_recipeMgr.m_sAlign.m_sProbeAlign.m_fStageY));
 }
 
 BOOL	C_AlignRcpDlg::GetProbeAlignData (BOOL bShare, S_ProbeAlign *pProbeShare)
@@ -452,8 +457,9 @@ BOOL	C_AlignRcpDlg::GetProbeAlignData (BOOL bShare, S_ProbeAlign *pProbeShare)
 	pProbe->m_fBackY	      = _wtof (m_gridProbeAlignData.GetItemText (3, 2));
 	pProbe->m_fBackLeft		  = _wtof (m_gridProbeAlignData.GetItemText (3, 3));
 	pProbe->m_fBackRight	  = _wtof (m_gridProbeAlignData.GetItemText (3, 4));
-	pProbe->m_fBackZ		  = _wtof (m_gridProbeAlignData.GetItemText (3, 5));
-	pProbe->m_fStageY		  = _wtof (m_gridProbeAlignData.GetItemText (3, 6));
+	pProbe->m_fSubZRight		  = _wtof (m_gridProbeAlignData.GetItemText (3, 5));
+	pProbe->m_fSubZLeft		  = _wtof (m_gridProbeAlignData.GetItemText (3, 6));
+	pProbe->m_fStageY		  = _wtof (m_gridProbeAlignData.GetItemText (3, 7));
 
 	return TRUE;
 }
@@ -725,14 +731,16 @@ void	C_AlignRcpDlg::InitAlignGridUI (C_GridCtrl &Grid, int nDlgItem, int nRow, i
 		Grid.SetFixedRowCol (0, 0);
 		for (int i = 0; i < 6; i++) Grid.SetColumnWidth (i, 90);
 
-		if (nType == 0) {
-			Grid.SetColumnWidth (6, 60);
-			Grid.SetColumnWidth (7, 60);
-		}
-		else {
-			Grid.SetColumnWidth (6, 90);
+		if (nType == 0) {					// LYS 2026-09-04 GLASS: data 0-6, buttons 7-8
+			Grid.SetColumnWidth (6, 90);		// SUB Z LEFT
 			Grid.SetColumnWidth (7, 60);
 			Grid.SetColumnWidth (8, 60);
+		}
+		else {								// LYS 2026-09-04 PROBE: data 0-7, buttons 8-9
+			Grid.SetColumnWidth (6, 90);		// SUB Z LEFT
+			Grid.SetColumnWidth (7, 90);		// STAGE Y
+			Grid.SetColumnWidth (8, 60);
+			Grid.SetColumnWidth (9, 60);
 		}
 	}
 	else  if (nType == 2 || nType == 3) {
@@ -901,6 +909,13 @@ BOOL	C_AlignRcpDlg::SaveAlignFile (CString strRcpName)
 	WriteInt    (&File, g_inRcpInfo.m_recipeMgr.m_sAlign.m_sMargin.m_sProbeMargin.m_nCentering);
 	WriteInt    (&File, g_inRcpInfo.m_recipeMgr.m_sAlign.m_sMargin.m_sProbeMargin.m_nFindPtn);
 
+	// LYS 2026-09-04 SUB Z trailing block (versionless-safe) : Z3 RIGHT / Z4 LEFT
+	WriteString (&File, _T("_SUB_Z_"));
+	WriteDouble (&File, g_inRcpInfo.m_recipeMgr.m_sAlign.m_sGlsAlign.m_fSubZRight);
+	WriteDouble (&File, g_inRcpInfo.m_recipeMgr.m_sAlign.m_sGlsAlign.m_fSubZLeft);
+	WriteDouble (&File, g_inRcpInfo.m_recipeMgr.m_sAlign.m_sProbeAlign.m_fSubZRight);
+	WriteDouble (&File, g_inRcpInfo.m_recipeMgr.m_sAlign.m_sProbeAlign.m_fSubZLeft);
+
 	File.Close ();
 
 	return TRUE;
@@ -1009,8 +1024,8 @@ void	C_AlignRcpDlg::OnSelGlassAlign (NMHDR *pNMHDR, LRESULT *pResult)
 {
 	NM_GRIDVIEW*	pNMLV = reinterpret_cast<NM_GRIDVIEW*>(pNMHDR);
 
-	if (pNMLV->iRow != 3 || pNMLV->iColumn < 6) return;
-	if (pNMLV->iColumn == 6) { //Glass Pos Get
+	if (pNMLV->iRow != 3 || pNMLV->iColumn < 7) return;
+	if (pNMLV->iColumn == 7) { //Glass Pos Get
 		if (AfxMessageBox (_T("Glass Align 현재 위치 값을 가져 옵니다.\n 계속 하시겠습니까?"), MB_YESNO|MB_ICONQUESTION) != IDYES) return;
 		::PostMessage (m_hWnd->m_hWnd, WM_RECIPE_EVENT, (WPARAM)M_ALIGN_GLASS_GET_POS, NULL);
 	}
@@ -1024,8 +1039,8 @@ void	C_AlignRcpDlg::OnSelProbeAlign (NMHDR *pNMHDR, LRESULT *pResult)
 {
 	NM_GRIDVIEW*	pNMLV = reinterpret_cast<NM_GRIDVIEW*>(pNMHDR);
 
-	if (pNMLV->iRow != 3 || pNMLV->iColumn < 7) return;
-	if (pNMLV->iColumn == 7) { //Probe Pos Get
+	if (pNMLV->iRow != 3 || pNMLV->iColumn < 8) return;
+	if (pNMLV->iColumn == 8) { //Probe Pos Get
 		if (AfxMessageBox (_T("Probe Align 현재 위치 값을 가져 옵니다.\n 계속 하시겠습니까?"), MB_YESNO|MB_ICONQUESTION) != IDYES) return;
 		::PostMessage (m_hWnd->m_hWnd, WM_RECIPE_EVENT, (WPARAM)M_ALIGN_PROBE_GET_POS, NULL);
 	}
@@ -1176,7 +1191,8 @@ void	C_AlignRcpDlg::GetAlignPos (double *fData)
 	fData[2] = _wtof (m_gridGlassAlignData.GetItemText (3, 2)); //Front Y
 	fData[3] = _wtof (m_gridGlassAlignData.GetItemText (3, 3)); //Front Left
 	fData[4] = _wtof (m_gridGlassAlignData.GetItemText (3, 4)); //Front Right
-	fData[5] = _wtof (m_gridGlassAlignData.GetItemText (3, 5)); //Front Z
+	fData[5] = _wtof (m_gridGlassAlignData.GetItemText (3, 5)); //SUB Z RIGHT
+	fData[6] = _wtof (m_gridGlassAlignData.GetItemText (3, 6)); //SUB Z LEFT
 }
 
 void	C_AlignRcpDlg::SetAlignPos (double *fData)
@@ -1186,7 +1202,8 @@ void	C_AlignRcpDlg::SetAlignPos (double *fData)
 	m_gridGlassAlignData.SetItemText (3, 2, dfcStr (fData[2])); //Front Y
 	m_gridGlassAlignData.SetItemText (3, 3, dfcStr (fData[3])); //Front Left
 	m_gridGlassAlignData.SetItemText (3, 4, dfcStr (fData[4])); //Front Right
-	m_gridGlassAlignData.SetItemText (3, 5, dfcStr (fData[5])); //Front Z
+	m_gridGlassAlignData.SetItemText (3, 5, dfcStr (fData[5])); //SUB Z RIGHT
+	m_gridGlassAlignData.SetItemText (3, 6, dfcStr (fData[6])); //SUB Z LEFT
 }
 
 int		C_AlignRcpDlg::GetProbeSel ()
@@ -1202,7 +1219,8 @@ void	C_AlignRcpDlg::GetProbePos (double *fData)
 	fData[3] = _wtof (m_gridProbeAlignData.GetItemText (3, 3)); //Back Left
 	fData[4] = _wtof (m_gridProbeAlignData.GetItemText (3, 4)); //Back Right
 	fData[5] = _wtof (m_gridProbeAlignData.GetItemText (3, 5)); //Back Z
-	fData[6] = _wtof (m_gridProbeAlignData.GetItemText (3, 6)); //Stage Y
+	fData[6] = _wtof (m_gridProbeAlignData.GetItemText (3, 6)); //SUB Z LEFT
+	fData[7] = _wtof (m_gridProbeAlignData.GetItemText (3, 7)); //Stage Y
 }
 
 void	C_AlignRcpDlg::SetProbePos (double *fData)
@@ -1213,7 +1231,8 @@ void	C_AlignRcpDlg::SetProbePos (double *fData)
 	m_gridProbeAlignData.SetItemText (3, 3, dfcStr (fData[3])); //Back Left
 	m_gridProbeAlignData.SetItemText (3, 4, dfcStr (fData[4])); //Back Right
 	m_gridProbeAlignData.SetItemText (3, 5, dfcStr (fData[5])); //Back Z
-	m_gridProbeAlignData.SetItemText (3, 6, dfcStr (fData[6])); //Stage Y
+	m_gridProbeAlignData.SetItemText (3, 6, dfcStr (fData[6])); //SUB Z LEFT
+	m_gridProbeAlignData.SetItemText (3, 7, dfcStr (fData[7])); //Stage Y
 }
 
 void	C_AlignRcpDlg::SetAlignEndPos (double *fData, int nItem)

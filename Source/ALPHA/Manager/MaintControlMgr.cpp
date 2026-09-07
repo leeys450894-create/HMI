@@ -106,6 +106,29 @@ long CMaintControlMgr::SetAmpEnable(int iAxis, bool bOn)
 	return nRet;
 }
 
+bool CMaintControlMgr::GetAmpEnable(int iAxis)
+{
+	// TODO: 여기에 구현 코드 추가.
+	long nRet = df_MOTION_RV_ERROR;
+
+	if (m_pMotorControlMgr != nullptr)
+	{
+		if (m_pMotorControlMgr->GetAxisProperty(iAxis)->bUse)
+		{
+			if (m_pMotorControlMgr != nullptr)
+			{
+				nRet = m_pMotorControlMgr->GetAmpEnable(iAxis);
+			}
+		}
+		else
+		{
+			nRet = df_MOTION_RV_ERROR;
+		}
+	}
+
+	return nRet;
+}
+
 long CMaintControlMgr::MoveHome(int iAxis)
 {
 	// TODO: 여기에 구현 코드 추가.
@@ -228,7 +251,7 @@ long CMaintControlMgr::MoveCmdPosA(int iAxis, double dPos, bool bBlockMode, int 
 						{
 							if (iAxis == AXIS_X || iAxis == AXIS_R)
 							{
-								nBit = GetIOMapControlMgrPtr()->GetParam_DIOMapMemoryBitImport(PLC_AUTO_CHANGE_X0_POSITION_03);
+								nBit = GetIOMapControlMgrPtr()->GetParam_DIOMapMemoryBitImport(PLC_AUTO_CHANGE_X0_POSITION_04);
 								if (nBit != -1)
 								{
 									if (nBit != 1)
@@ -352,7 +375,7 @@ long CMaintControlMgr::MoveCmdPosR(int iAxis, double dPos, bool bBlockMode, int 
 							{
 								if (iAxis == AXIS_X || iAxis == AXIS_R)
 								{
-									nBit = GetIOMapControlMgrPtr()->GetParam_DIOMapMemoryBitImport(PLC_AUTO_CHANGE_X0_POSITION_03);
+									nBit = GetIOMapControlMgrPtr()->GetParam_DIOMapMemoryBitImport(PLC_AUTO_CHANGE_X0_POSITION_04);
 									if (nBit != -1)
 									{
 										if (nBit != 1)
@@ -750,6 +773,17 @@ bool CMaintControlMgr::IsInitializedMC()
 		bRet = (bool)m_pMotorControlMgr->IsInitialized();
 	}
 
+	return bRet;
+}
+
+// LYS 2026-08-31 both-controller ACS connect status for MOTION lamp
+bool CMaintControlMgr::IsConnectedMC()
+{
+	bool bRet = false;
+	if (m_pMotorControlMgr != nullptr)
+	{
+		bRet = (bool)m_pMotorControlMgr->IsConnected();
+	}
 	return bRet;
 }
 
@@ -5491,6 +5525,7 @@ long CMaintControlMgr::MoveCmdAlignPos_Glass(double* pPos)
 	dPosY2 = pPos[3];
 	dPosY1 = pPos[4];
 	dPosZ  = pPos[5];
+	double dPosZL = pPos[6];	// LYS 2026-09-04 SUB Z LEFT(Z4)
 
 	double dGantryGap = 0, dProbeGap = 0;
 	GetInterlockPos(&dGantryGap, nullptr, &dProbeGap);
@@ -5537,9 +5572,9 @@ long CMaintControlMgr::MoveCmdAlignPos_Glass(double* pPos)
 				stMotorPosition stPosition[2];
 				ZeroMemory(&stPosition, sizeof(stPosition));
 				stPosition[0].axis = AXIS_Y1;
-				stPosition[0].dPosition = dPosY1;
+				stPosition[0].dPosition = dPosY2;
 				stPosition[1].axis = AXIS_Y2;
-				stPosition[1].dPosition = dPosY2;
+				stPosition[1].dPosition = dPosY1;
 
 				nRet = MoveCmdPosMulti(stPosition, 2, SPEED_HIGH);
 			}
@@ -5568,7 +5603,8 @@ long CMaintControlMgr::MoveCmdAlignPos_Glass(double* pPos)
 
 			if (nRet == df_MOTION_RV_SUCCESSED)
 			{
-				nRet = MoveCmdPosA(AXIS_Z1, dPosZ, false, SPEED_HIGH, -1, -1);
+				nRet = MoveCmdPosA(AXIS_Z3, dPosZ, false, SPEED_HIGH, -1, -1); // LYS 2026-09-04 SUB Z RIGHT
+				if (nRet == df_MOTION_RV_SUCCESSED) nRet = MoveCmdPosA(AXIS_Z4, dPosZL, false, SPEED_HIGH, -1, -1); // LYS 2026-09-04 SUB Z LEFT
 			}
 		}
 		else
@@ -5609,7 +5645,8 @@ long CMaintControlMgr::MoveCmdAlignPos_Glass(double* pPos)
 
 			if (nRet == df_MOTION_RV_SUCCESSED)
 			{
-				nRet = MoveCmdPosA(AXIS_Z1, dPosZ, false, SPEED_HIGH, -1, -1);
+				nRet = MoveCmdPosA(AXIS_Z3, dPosZ, false, SPEED_HIGH, -1, -1); // LYS 2026-09-04 SUB Z RIGHT
+				if (nRet == df_MOTION_RV_SUCCESSED) nRet = MoveCmdPosA(AXIS_Z4, dPosZL, false, SPEED_HIGH, -1, -1); // LYS 2026-09-04 SUB Z LEFT
 			}
 		}
 
@@ -5661,7 +5698,8 @@ long CMaintControlMgr::MoveCmdAlignPos_Probe(double* pPos)
 	dPosY2 = pPos[3];
 	dPosY1 = pPos[4];
 	dPosZ  = pPos[5];
-	dPosX  = pPos[6];
+	double dPosZL = pPos[6];	// LYS 2026-09-04 SUB Z LEFT(Z4)
+	dPosX  = pPos[7];	// LYS 2026-09-04 STAGE Y (reindex 6->7)
 
 
 	int iProbe = CSequenceManager::GetInstance()->GetFunctionModuleProbeACC()->GetProbe();
@@ -5711,9 +5749,9 @@ long CMaintControlMgr::MoveCmdAlignPos_Probe(double* pPos)
 					stMotorPosition stPosition[2];
 					ZeroMemory(&stPosition, sizeof(stPosition));
 					stPosition[0].axis = AXIS_Y1;
-					stPosition[0].dPosition = dPosY1;
+					stPosition[0].dPosition = dPosY2;
 					stPosition[1].axis = AXIS_Y2;
-					stPosition[1].dPosition = dPosY2;
+					stPosition[1].dPosition = dPosY1;
 
 					nRet = MoveCmdPosMulti(stPosition, 2, SPEED_HIGH);
 				}*/
@@ -5782,9 +5820,9 @@ long CMaintControlMgr::MoveCmdAlignPos_Probe(double* pPos)
 					stMotorPosition stPosition[2];
 					ZeroMemory(&stPosition, sizeof(stPosition));
 					stPosition[0].axis = AXIS_Y1;
-					stPosition[0].dPosition = dPosY1;
+					stPosition[0].dPosition = dPosY2;
 					stPosition[1].axis = AXIS_Y2;
-					stPosition[1].dPosition = dPosY2;
+					stPosition[1].dPosition = dPosY1;
 
 					nRet = MoveCmdPosMulti(stPosition, 2, SPEED_HIGH);
 				}
@@ -5813,7 +5851,8 @@ long CMaintControlMgr::MoveCmdAlignPos_Probe(double* pPos)
 
 				if (nRet == df_MOTION_RV_SUCCESSED)
 				{
-					nRet = MoveCmdPosA(AXIS_Z2, dPosZ, false, SPEED_HIGH, -1, -1);
+					nRet = MoveCmdPosA(AXIS_Z3, dPosZ, false, SPEED_HIGH, -1, -1); // LYS 2026-09-04 SUB Z RIGHT
+					if (nRet == df_MOTION_RV_SUCCESSED) nRet = MoveCmdPosA(AXIS_Z4, dPosZL, false, SPEED_HIGH, -1, -1); // LYS 2026-09-04 SUB Z LEFT
 				}
 			}
 			else
@@ -5882,7 +5921,8 @@ long CMaintControlMgr::MoveCmdAlignPos_Probe(double* pPos)
 
 				if (nRet == df_MOTION_RV_SUCCESSED)
 				{
-					nRet = MoveCmdPosA(AXIS_Z1, dPosZ, false, SPEED_HIGH, -1, -1);
+					nRet = MoveCmdPosA(AXIS_Z3, dPosZ, false, SPEED_HIGH, -1, -1); // LYS 2026-09-04 SUB Z RIGHT
+					if (nRet == df_MOTION_RV_SUCCESSED) nRet = MoveCmdPosA(AXIS_Z4, dPosZL, false, SPEED_HIGH, -1, -1); // LYS 2026-09-04 SUB Z LEFT
 				}
 			}
 
@@ -6882,7 +6922,7 @@ long CMaintControlMgr::MoveOrgPosA(int iAxis, double dPos, bool bBlockMode, int 
 						{
 							if (iAxis == AXIS_X || iAxis == AXIS_R)
 							{
-								nBit = GetIOMapControlMgrPtr()->GetParam_DIOMapMemoryBitImport(PLC_AUTO_CHANGE_X0_POSITION_03);
+								nBit = GetIOMapControlMgrPtr()->GetParam_DIOMapMemoryBitImport(PLC_AUTO_CHANGE_X0_POSITION_04);
 								if (nBit != -1)
 								{
 									if (nBit != 1)
@@ -7000,7 +7040,7 @@ long CMaintControlMgr::MoveOrgPosR(int iAxis, double dPos, bool bBlockMode, int 
 							{
 								if (iAxis == AXIS_X || iAxis == AXIS_R)
 								{
-									nBit = GetIOMapControlMgrPtr()->GetParam_DIOMapMemoryBitImport(PLC_AUTO_CHANGE_X0_POSITION_03);
+									nBit = GetIOMapControlMgrPtr()->GetParam_DIOMapMemoryBitImport(PLC_AUTO_CHANGE_X0_POSITION_04);
 									if (nBit != -1)
 									{
 										if (nBit != 1)
@@ -7178,48 +7218,22 @@ long CMaintControlMgr::MoveCmd_SafetyAll(bool bInit)
 			CMCCLogMgr::GetInstance()->SetMCC_Action(MCC_A_MOT_SAFETY_PROBE_Z, false);
 		}
 
-		if (nRet == VTM_RV_SUCCESSED)
-		{
-			for (size_t i = (m_pMotorControlMgr->IsOCP() ? df_PROBE_MEAS : df_PROBE_AGING1); i <= df_PROBE_MEAS; i++)  // LYS 2026-06-26 OCP
-			{
-				bRet = CSequenceManager::GetInstance()->GetFunctionModuleEQState()->IsProbeUnContactSensorOn(i); 
-				if (bRet != true)
-				{
-					nRet = MOTION_INTERLOCK_6;
-					break;
-				}
-			}
-		}
+		// LYS 2026-09-02 Skip TEMP
+		//if (nRet == VTM_RV_SUCCESSED)
+		//{
+		//	for (size_t i = (m_pMotorControlMgr->IsOCP() ? df_PROBE_MEAS : df_PROBE_AGING1); i <= df_PROBE_MEAS; i++)  // LYS 2026-06-26 OCP
+		//	{
+		//		bRet = CSequenceManager::GetInstance()->GetFunctionModuleEQState()->IsProbeUnContactSensorOn(i); 
+		//		if (bRet != true)
+		//		{
+		//			nRet = MOTION_INTERLOCK_6;
+		//			break;
+		//		}
+		//	}
+		//}
 
-		// Auto Change Move
-		if (nRet == df_MOTION_RV_SUCCESSED)
-		{
-			double dACXPos[3];
-			ZeroMemory(&dACXPos, sizeof(dACXPos));
-
-			GetPositionConfigMgr()->GetACPosition(&dACXPos[0], &dACXPos[1], &dACXPos[2]);
-
-			if (nRet == df_MOTION_RV_SUCCESSED)
-			{
-				CMCCLogMgr::GetInstance()->SetMCC_Action(MCC_A_MOT_SAFETY_AC_Z, true);
-
-				nRet = MoveOrgPosA(AXIS_Z9, 0, true, SPEED_HIGH, 0, 0);
-
-				CMCCLogMgr::GetInstance()->SetMCC_Action(MCC_A_MOT_SAFETY_AC_Z, false);
-			}
-
-			if (nRet == df_MOTION_RV_SUCCESSED)
-			{
-				CMCCLogMgr::GetInstance()->SetMCC_Action(MCC_A_MOT_SAFETY_AC_X, true);
-
-				nRet = MoveOrgPosA(AXIS_X4, dACXPos[1], true, SPEED_HIGH, 0, 0);
-
-				if(GetIOMapControlMgrPtr()->IsOutOfService() == true)  // jsyoon 2022.07.06 add
-					GetIOMapControlMgrPtr()->SetMemoryBitToDevice(PLC_AUTO_CHANGE_X0_POSITION_03, true);
-
-				CMCCLogMgr::GetInstance()->SetMCC_Action(MCC_A_MOT_SAFETY_AC_X, false);
-			}
-		}
+			// Auto Change Move
+			// LYS 2026-09-05 Move
 
 		// Probe X
 		if (nRet == df_MOTION_RV_SUCCESSED)
@@ -7254,16 +7268,16 @@ long CMaintControlMgr::MoveCmd_SafetyAll(bool bInit)
 		double dSafetyHeadY2 = 0.0;
 		double dSafetyZ = 0.0;
 		double dSafetyZ2 = 0.0;
-		GetPositionConfigMgr()->GetSafetyPosition(&dSafetyStageX, &dSafetyHeadX1, &dSafetyHeadX2, &dSafetyHeadY1, &dSafetyHeadY2, &dSafetyZ, &dSafetyZ2);
+		GetPositionConfigMgr()->GetSafetyPosition(&dSafetyStageX, &dSafetyHeadX1, &dSafetyHeadX2, &dSafetyHeadY1, &dSafetyHeadY2, nullptr, &dSafetyZ2);
 
 		if (nRet == df_MOTION_RV_SUCCESSED)
 		{
 			stMotorPosition stPositionZ[2];
 			ZeroMemory(&stPositionZ, sizeof(stPositionZ));
 			stPositionZ[0].axis = AXIS_Z1;
-			stPositionZ[0].dPosition = dSafetyZ2;
+			stPositionZ[0].dPosition = dSafetyZ;
 			stPositionZ[1].axis = AXIS_Z2;
-			stPositionZ[1].dPosition = dSafetyZ;
+			stPositionZ[1].dPosition = dSafetyZ2;
 
 			CMCCLogMgr::GetInstance()->SetMCC_Action(MCC_A_MOT_SAFETY_HEAD_Z, true);
 
@@ -7868,6 +7882,42 @@ long CMaintControlMgr::MoveCmd_SafetyAll(bool bInit)
 				}
 
 				CMCCLogMgr::GetInstance()->SetMCC_Action(MCC_A_SAFETY_MOVE_STEP4, false);
+			}
+
+			// Auto Change Move
+			// LYS 2026-09-05 Move
+			if (nRet == df_MOTION_RV_SUCCESSED)
+			{
+				double dACXPos[3];
+				ZeroMemory(&dACXPos, sizeof(dACXPos));
+
+				GetPositionConfigMgr()->GetACPosition(&dACXPos[0], &dACXPos[1], &dACXPos[2]);
+
+				if (nRet == df_MOTION_RV_SUCCESSED)
+				{
+					CMCCLogMgr::GetInstance()->SetMCC_Action(MCC_A_MOT_SAFETY_AC_Z, true);
+
+					nRet = MoveOrgPosA(AXIS_Z9, 0, true, SPEED_HIGH, 0, 0);
+
+					CMCCLogMgr::GetInstance()->SetMCC_Action(MCC_A_MOT_SAFETY_AC_Z, false);
+				}
+
+				if (nRet == df_MOTION_RV_SUCCESSED)
+				{
+					CMCCLogMgr::GetInstance()->SetMCC_Action(MCC_A_MOT_SAFETY_AC_X, true);
+
+					double dReadyPos = 0;
+					double dPunInPos = 0;
+					GetPositionConfigMgr()->GetACPosition(nullptr, &dReadyPos, &dPunInPos);
+
+					//nRet = MoveOrgPosA(AXIS_X4, dACXPos[1], true, SPEED_HIGH, 0, 0);
+					nRet = MoveOrgPosA(AXIS_X4, dPunInPos, true, SPEED_HIGH, 0, 0);		// LYS 2026-09-04 Safety Pos -> Put in Pos
+
+					if (GetIOMapControlMgrPtr()->IsOutOfService() == true)  // jsyoon 2022.07.06 add
+						GetIOMapControlMgrPtr()->SetMemoryBitToDevice(PLC_AUTO_CHANGE_X0_POSITION_04, true);
+
+					CMCCLogMgr::GetInstance()->SetMCC_Action(MCC_A_MOT_SAFETY_AC_X, false);
+				}
 			}
 
 
