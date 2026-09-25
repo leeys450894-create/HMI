@@ -83,3 +83,8 @@ Glass/Probe SW Align 위치·CCD 설정은 메인 `.rcp`가 아니라 **`D:\HBS\
 - **X-2 목표는 엔코더 원값 기준으로 계산한다**: `m_pMotorControlMgr->GetCurPos(X10) + 이동량 − m_dAlignOffset[X10]`. 이유 — Maint `MoveCmdPosMulti` 는 `m_dProbeAlignOffset[0]` 을 **마스터(X1/3/5/7/9)에만** 더하는데 `GetCurPos` 는 **X10 에서도** 그 값을 빼서, X10 을 `GetCurPos` 기준으로 계산하면 프로브 X 잔차만큼 어긋난다. (`m_dAlignOffset` 은 `bUseOffset` 과 무관하게 항상 더해진다 — `bUseOffset` 은 헤드 오프셋만 끈다.)
 - Maint `MoveCmdPosA` 는 슬레이브(X2/4/6/8/10) 단독 지령을 `df_MOTION_RV_ERROR` 로 거부하지만 `MoveCmdPosMulti` 는 막지 않고, M/S 5mm 갭 인터락(`MOTION_INTERLOCK_7`)도 A/R_Sub 에만 있어 한 배열 링크는 걸리지 않는다. HMI 모드 동작은 그대로.
 - **PROC(`DoWorkProbeSWAlignStep::Align_MovePosition` 정상 분기)도 X9 만 보낸다**(`MoveOrgPosA(AXIS_PROBE_X9, …)` / `GetCmdPos_ProbeX` 는 마스터만 채운다). 2026-09-21 요청 범위(MOVE 버튼) 밖이라 손대지 않았다.
+
+### HMI 패턴 매칭 코어는 OCP 사본과 다르다 (2026-09-21)
+
+- HMI `CoreFunction/common/IMAQImageCtrl/IMAQImageCtrl.cpp` `SearchPattern`은 `imaqLearnPattern3`(1644) + `imaqMatchPattern3(..., roi, ...)`(1855, ROI = 이미지 크기 − margin 20)이고 디버그 JPEG 저장은 `#if _DEBUG`(1865)로 가드돼 있다. OCP `NI/IMAQImageCtrl.cpp`는 이름만 같은 다른 버전(레거시 `imaqMatchPattern`+`IMAQ_NO_RECT`, Release에서 JPEG 저장)이라 **OCP 코드를 이쪽으로 복사해 오지 말 것** — HMI Align이 빠른 주원인이다(memory `project_align_perf_comparison`).
+- `CAlignCameraMgr::PtrnMatch`(352)는 패턴명이 지정되면 **1개만** 검색하고 멀티패턴 루프도 성공 시 break한다 — OCP 이식본 `CAlignVision::SnapAndMatch`처럼 전 패턴을 순회하는 구조로 바꾸지 말 것.

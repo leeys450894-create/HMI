@@ -17,8 +17,10 @@ ALPHA HMI — Samsung 디스플레이 Glass 검사 자동화 설비 제어 소�
 - **Output:** `Source/Bin/ALPHA.exe`
 - **DLL Projects:** Alarm, dSACC, dResult, dfcRecipe, dMCCSpec, ProbeHistory
 - **EXE Project (embedded):** FDCSense (`CoreFunction/EX_FDC/FDCSense/`) — separate FDC data-collection process, built alongside ALPHA but launched independently
-- **Repo path:** active checkout is `D:\0.SW\HMI` (sln at `Source\ALPHA\ALPHA.sln`). Older docs referenced `D:\OCP\0.SW_Matching\HMI` (stale) — use the current path. Dated backups live in `D:\0.SW\Backup\` and as `D:\0.SW\HMI_<yyyymmdd>.zip` snapshots (newest: `HMI_20260916.zip`) — never the working tree.
-- **MSBuild 경로는 PC마다 다르다.** 이 PC(2026-09 기준)의 실제 경로는 **`2022/Professional/MSBuild/Current/Bin/MSBuild.exe`** (아래 명령은 이 경로 기준). 다른 빌드 PC에는 **VS2022 IDE(devenv)만 있고 CLI MSBuild 컴포넌트가 없는 경우**가 있다(그런 PC엔 `Program Files (x86)` 밑 VS2019 `MSBuild.exe`만 존재). 스크립트로 빌드하기 전에 실제 경로를 확인하거나 IDE에서 빌드할 것.
+- **Repo path와 MSBuild 경로는 PC마다 다르다 — 작업 PC가 두 대다. 문서의 경로를 그대로 믿지 말고 빌드 전에 존재를 확인할 것.**
+  - **PC-A**(이 파일의 빌드 명령 기준): 실사용 트리 `D:\0.SW\HMI` (sln `Source\ALPHA\ALPHA.sln`), MSBuild **`2022/Professional/MSBuild/Current/Bin/MSBuild.exe`**. 백업은 `D:\0.SW\Backup\`과 `D:\0.SW\HMI_<yyyymmdd>.zip` 스냅샷(최신 `HMI_20260916.zip`) — 작업 트리가 아니다.
+  - **PC-B**(Claude Code 세션 워크스페이스 `D:\OCP\0.SW_Matching\`, 2026-09-25 확인): `D:\0.SW\HMI`가 **없고** 실사용 트리는 `D:\OCP\0.SW_Matching\HMI`, MSBuild는 **`2022/Community`만** 있다. 여기서는 루트 `D:\OCP\0.SW_Matching\CLAUDE.md`의 HMI 빌드 명령을 쓴다.
+  - 확인 명령: `ls "/c/Program Files/Microsoft Visual Studio/2022/"` 와 sln 경로 `ls`. 다른 빌드 PC에는 **VS2022 IDE(devenv)만 있고 CLI MSBuild 컴포넌트가 없는 경우**가 있다(그런 PC엔 `Program Files (x86)` 밑 VS2019 `MSBuild.exe`만 존재). 스크립트로 빌드하기 전에 실제 경로를 확인하거나 IDE에서 빌드할 것.
 
 - **빌드 전 `ALPHA.exe`가 떠 있는지 확인할 것 (`tasklist | grep -i ALPHA`).** 실행 중이면 DLL 프로젝트의 post-build `copy → Source\Bin`이 잠긴 DLL 때문에 `MSB3073`으로 실패하고 ALPHA 링크가 건너뛰어진다 — 컴파일 오류처럼 보이지만 원인은 파일 잠금. `FDCSense.exe`/`MCCLog.exe`는 ALPHA의 자식이라 함께 내려간다. 사용자 설비 앱이므로 임의로 kill하지 말고 종료를 요청할 것.
 - **Visual Studio(`devenv.exe`)가 열려 있으면 CLI 컴파일이 `error C1041`로 막힌다** — `vc143.idb`(컴파일러 중간 DB)를 VS가 쥐고 있어서이며, `cl.exe`가 안 떠 있어도 발생한다. **VS를 닫으라고 요구하지 말고 중간 디렉토리를 따로 주면 된다**(문법 검증 용도):

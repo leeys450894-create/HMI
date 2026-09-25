@@ -41,3 +41,10 @@ description: ALPHA HMI PLC 주소 매핑 — PLCMAdress.csv↔plc_MBIT_t enum po
 #### 비트 쓰기 오버로드 (수동 On/Off — 주의)
 `SetMemoryNBitToDevice`는 2종 오버로드가 **의미가 반대**: `(int index)`는 index≥4000이면 **enum 인덱스로 해석**(`m_piPLCMAdr[index-4000]` lookup), `(CString "M4509")`는 **첫 글자(M) 떼고 raw M-주소로 직접** 쓴다. write 주소(4500~4999)는 항상 ≥4000이라 int 오버로드로는 raw 쓰기가 불가 → **수동 M-주소 On/Off는 반드시 CString 오버로드** `SetMemoryNBitToDevice(_T("M")+주소문자열, val, 1)` 사용.
 
+
+#### IOMap 표시 라벨 조회의 빈 벡터 크래시 (2026-09-11 분석, 미수정)
+- `CMcProtocolManager::GetParam_DIOMapAddressBitImport/BitImportName/WordImport/WordImportName`(McProtocolManager.cpp 585/600/687/702)은 `GetAddressImportDataPtr(dev)->vecData[nAddress]`를 **크기 검사 없이** 인덱싱한다. 2023.12.22의 null 가드는 스캐너가 없을 때만 걸린다 — 스캐너 쪽 `GetAddressImportDataPtr()`는 `&m_vecRData`(멤버 주소)를 돌려주므로 **절대 null이 아니다**.
+- `SADDRESSMAPDATA` 생성자가 `vecData.clear()`하고 `resize`는 **`ReadFileCSV`/`ReadFileXLS` 안에만** 있다(스캐너 생성자의 `ReadFileCSV` 호출은 주석 처리). `InitDevice`가 그 스캐너의 CSV를 읽지 못하면 벡터가 size 0으로 남고 Release(`operator[]` 무검사)에서 null 역참조 → **Maint IO File 화면의 F 그리드가 `nStart=0`에서 죽는다**(F 영역만 `dfFADDRESS_RD_START=0`이라 첫 반복이 곧 index 0).
+- 트리거: ① `CoreFunction.ini` `F_ADDRESS_USE=0` → F 스캐너 skip → 영구 empty. ② `CStdioFile File(strFileName, CFile::modeRead)`(McFaddressScanner.cpp:186, M/P/C 스캐너 동일)가 파일 부재·잠김에 `CFileException*`을 **던지는데 try/catch가 없어** `InitDevice` for 루프가 통째로 중단 — M.csv(i=0)에서 던지면 F 포함 이후 스캐너가 전부 empty.
+- 곁가지 두 건: `GetAddressBitType`(336)의 default가 READ_M이라 2000~3899·5000 이상 인덱스는 `nAddress = index − 4000`이 **음수**가 된다(`CD_PopUp_Alarm_F.cpp`, `DlgMainForm.cpp`도 같은 함수를 쓴다). `m_vecpAddressScanner`는 ProbeCard/PACC를 **조건부 push_back**하는데 접근은 전부 `[enumIO_DEVICE_XXX]`라 `C_ADDRESS_USE=0, P_ADDRESS_USE=1`이면 PACC가 위치 3에 들어가 조회가 nullptr → 조용히 빈 값(현재 ini는 둘 다 1이라 우연히 일치).
+- 수정안: 스캐너 생성자에서 `vecData.resize(총개수)`, 접근자 4개에 `nAddress` 범위 검사(없으면 `_T("")`), CSV open을 `File.Open(..., &fe)` 반환값 처리로. 1·2번은 부작용 없음(빈 값은 기존 `IsEmpty()→continue`가 흡수).

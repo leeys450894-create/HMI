@@ -34,3 +34,11 @@ SACC 페이지는 **`CoreFunction/dSACC/CDlgSACC.cpp`(DLL)** 이고 PLC/D영역 
   - **⚠ ANGLE 은 두 레시피 모두 '인터락은 통과하지만 근접센서 실측 569.1 미만' 구간이 있다.** `INTERLOCKHEADGAP`=400 이 실측보다 작아 생기는 기존 위험이며(hmi-measure-grouping 의 경고와 같은 원인) TestMode 가 Cycle 과 같아지면서 그대로 재현된다: 90도 J01(41.8)→442.8, K01(−39.3)→457.3 / 180도 U02(156.7)→557.7, U03(0)→418.0. ANGLE 오프셋이 `HEAD1_ANGLE_Y`=−359, `HEAD2_ANGLE_Y`=+272 로 비대칭인 점도 같이 볼 것.
   - **`S_MotionOffsetPos::Clear()` 오타 수정 (2026-09-18).** `m_fHeadReviewLeft` 를 두 번 대입해 **`m_fHeadReviewRight` 가 초기화되지 않고 있었다**. `preDefine.h` 두 사본(`Source/Include`, `dfcRecipe`)에 동일하게 고쳤다 — 두 파일은 바이트 단위로 같아야 하는 ABI 계약이라 항상 함께 수정할 것.
 
+
+## PACC 자동 교체 시퀀스 구조 (2026-09-11 정리, 상세 `docs/SACC_ProbeChange_Flow_Comparison.md`)
+
+- 실행체는 `FunctionModule/FunctionModuleProbeACC.cpp` `CFunctionModuleProbeACC` — `m_vecSeqStep_Loding`(Card 비어 있음, 24스텝) / `_Exchange`(기존 프로브 반납 + 장착) / `_GetEQPROBE` / `_PutEQPROBE` / 수동 단발(Lock·Z·위치) 등 **26종 스텝 벡터**를 `SetPACCStatusChangeStep(enumPACCSTATUS_*)`로 골라 `Start()`한다. 자동 사이클 트리거는 글래스 시퀀스 **item 2 `RECIPE_CHANGE`의 `CDoWorkGlassRecipeStep_ProbeCheck`**(DoWorkGlassRecipeStep.cpp:342, Card 프로브 센서로 Loding/Exchange 분기)이고, **MEASURE 전환(`GLASS 1_ADSORPTION`의 `_ChangeMeasStatus`)이 그보다 먼저**라 현행 코드는 MEASURE 상태에서 교체한다(SDC 측정 시나리오 PPT는 반대 순서 — 사양 확정 대기, 2026-09-11).
+- **AC Gantry 축은 `AXIS_X4`(주행)·`AXIS_Z9`(승강)다. 코드 주석의 "AC Y축"은 X4를 뜻한다** — 축 이름으로 grep 하면 못 찾는다. 3위치는 `GetACPosition(change, safety, sacc)` = `ProbeChange.ini [ACXPOS] POS2/POS3/POS4`(값은 hmi-head-gantry-interlock 참조), 위치 센서 `IsPositionOnAC(0/1/2)`도 같은 순서. **SDC PPT의 "Probe Change Position"은 코드의 SACC 위치(POS4)이고 "Probe Loading Position"이 코드의 `ProbeChangePosition`(POS2)** — 같은 단어가 정반대 위치라 티칭·로그 판독 시 혼동 주의.
+- `_ProbeCheck` 성공 경로 말미(2026-09-08 추가, :538-580)는 **교체 여부와 무관하게 매 글래스** `PLC_AUTO_CHANGE_X0_POSITION_03`(Safety)이 ON인지 보고 X4를 SACC 위치로 보낸 뒤 `..._04`를 세운다. Safety 비트가 OFF면 `MOTION_INTERLOCK_9`로 글래스 시퀀스 전체가 실패한다 — 이 비트는 09-03 CSV 삽입 사고로 밀렸던 그 비트다.
+- 카세트에서 레시피 ProbeID를 못 찾으면 `nRet = VTM_RV_FAILED`(:493)가 남아 `SetFail`(:529)로 **사이클 FAIL**한다 — skip이 아니다.
+- 교체가 발생한 글래스는 PACC 말미 `_Align`과 글래스 item `3_PROBE_ALIGN`으로 **Probe Align이 2회** 돈다(택트 검토 대상).
