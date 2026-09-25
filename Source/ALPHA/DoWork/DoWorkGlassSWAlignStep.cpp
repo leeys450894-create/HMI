@@ -37,6 +37,7 @@ int CDoWorkGlassSWAlignStep::MoveAlignPosition(int nHead, int nIndex)
 {
 	int nRet = df_MOTION_RV_SUCCESSED;
 
+	m_pShareItem->GetLogFileAccessorPtr()->KMLOG(SYST, _T("[MoveAlignPos] ENTER"));
 	int nMeasMode = 0;
 	int iLampIntensity[2];
 	int iExposureTime[2];
@@ -64,6 +65,7 @@ int CDoWorkGlassSWAlignStep::MoveAlignPosition(int nHead, int nIndex)
 	// Set CCD and Light
 	int iCh[4] = { 3, 2, 1, 0 };
 
+	m_pShareItem->GetLogFileAccessorPtr()->KMLOG(SYST, _T("[MoveAlignPos] set CCD exposure/gain/LED"));
 	CMCCLogMgr::GetInstance()->SetMCC_Action(MCC_A_CHNG_LAMP, true);
 
 	for (size_t i = 0; i < 2; i++)
@@ -77,6 +79,7 @@ int CDoWorkGlassSWAlignStep::MoveAlignPosition(int nHead, int nIndex)
 
 	// Position
 	double dPosX = 0., dPosX2 = 925 / 2 , dPosY1 = 750, dPosY2 = -750, dPosR = 0, dPosZ = 0;
+	double dPosZR = 0., dPosZL = 0.;	// LYS 2026-09-05 Sub Z RIGHT/LEFT(Z3/Z4) 목표 - 구 BACK Z(Z1) 대체
 	double dGlassSize = 0; // 925 / 2;
 
 	//if (m_pShareItem->GetMaintControlMgrPtr()->GetIOMapControlMgrPtr()->IsOutOfService() != true)
@@ -87,6 +90,8 @@ int CDoWorkGlassSWAlignStep::MoveAlignPosition(int nHead, int nIndex)
 		dPosY2 = pAlignInfo->m_sGlsAlign.m_fFrontLeft;
 		dPosY1 = pAlignInfo->m_sGlsAlign.m_fFrontRight;
 		dPosZ = pAlignInfo->m_sGlsAlign.m_fFrontZ;
+		dPosZR = pAlignInfo->m_sGlsAlign.m_fSubZRight;	// LYS 2026-09-05 Align 레시피 Sub Z RIGHT(Z3)
+		dPosZL = pAlignInfo->m_sGlsAlign.m_fSubZLeft;	// LYS 2026-09-05 Align 레시피 Sub Z LEFT(Z4)
 	}
 
 
@@ -96,47 +101,50 @@ int CDoWorkGlassSWAlignStep::MoveAlignPosition(int nHead, int nIndex)
 
 	if (pImpl != nullptr)
 	{
-		if (nRet == df_MOTION_RV_SUCCESSED)
-		{
-			if (pImpl->GetCurPos(AXIS_Z2) > 0)
-			{
-				nRet = pImpl->MoveOrgPosA(AXIS_Z2, 0, true, SPEED_HIGH, -1, -1);
-			}
-		}
+		//if (nRet == df_MOTION_RV_SUCCESSED)
+		//{
+		//	m_pShareItem->GetLogFileAccessorPtr()->KMLOG(SYST, _T("[MoveAlignPos] Z2 origin check/move"));
+		//	if (pImpl->GetCurPos(AXIS_Z2) > 0)
+		//	{
+		//		nRet = pImpl->MoveOrgPosA(AXIS_Z2, 0, true, SPEED_HIGH, -1, -1);
+		//	}
+		//}
+
+		//if (nRet == VTM_RV_SUCCESSED)
+		//{
+		//	for (size_t i = df_PROBE_AGING1; i <= df_PROBE_MEAS; i++)
+		//	{
+		//		bRet = CSequenceManager::GetInstance()->GetFunctionModuleEQState()->IsProbeUnContactSensorOn(i);
+		//		if (bRet != true)
+		//		{
+		//			nRet = MOTION_INTERLOCK_6;
+		//			break;
+		//		}
+		//	}
+		//
+		//	if (nRet == MOTION_INTERLOCK_6)
+		//	{
+		//		nRet = pImpl->MoveCmdPos_ProbeMove(AXIS_ALL_Z, 0, SPEED_HIGH);
+		//
+		//		if (nRet == VTM_RV_SUCCESSED)
+		//		{
+		//			for (size_t i = df_PROBE_AGING1; i <= df_PROBE_MEAS; i++)
+		//			{
+		//				bRet = CSequenceManager::GetInstance()->GetFunctionModuleEQState()->IsProbeUnContactSensorOn(i);
+		//				if (bRet != true)
+		//				{
+		//					nRet = MOTION_INTERLOCK_6;
+		//					break;
+		//				}
+		//			}
+		//		}
+		//	}
+		//}
+		nRet = pImpl->MoveCmdPos_ProbeMove(AXIS_ALL_Z, 0, SPEED_HIGH);
 
 		if (nRet == VTM_RV_SUCCESSED)
 		{
-			for (size_t i = df_PROBE_AGING1; i <= df_PROBE_MEAS; i++)
-			{
-				bRet = CSequenceManager::GetInstance()->GetFunctionModuleEQState()->IsProbeUnContactSensorOn(i);
-				if (bRet != true)
-				{
-					nRet = MOTION_INTERLOCK_6;
-					break;
-				}
-			}
-
-			if (nRet == MOTION_INTERLOCK_6)
-			{
-				nRet = pImpl->MoveCmdPos_ProbeMove(AXIS_ALL_Z, 0, SPEED_HIGH);
-
-				if (nRet == VTM_RV_SUCCESSED)
-				{
-					for (size_t i = df_PROBE_AGING1; i <= df_PROBE_MEAS; i++)
-					{
-						bRet = CSequenceManager::GetInstance()->GetFunctionModuleEQState()->IsProbeUnContactSensorOn(i);
-						if (bRet != true)
-						{
-							nRet = MOTION_INTERLOCK_6;
-							break;
-						}
-					}
-				}
-			}
-		}
-
-		if (nRet == VTM_RV_SUCCESSED)
-		{
+			m_pShareItem->GetLogFileAccessorPtr()->KMLOG(SYST, _T("[MoveAlignPos] interlock: loader-arm sensor"));
 			CMCCLogMgr::GetInstance()->SetMCC_Action(MCC_A_PROC_ALIGN_CHK_STEP1, true);
 
 			bRet = CSequenceManager::GetInstance()->GetFunctionModuleEQState()->IsLoaderArmSensorOn();
@@ -150,6 +158,7 @@ int CDoWorkGlassSWAlignStep::MoveAlignPosition(int nHead, int nIndex)
 
 		if (nRet == VTM_RV_SUCCESSED)
 		{
+			m_pShareItem->GetLogFileAccessorPtr()->KMLOG(SYST, _T("[MoveAlignPos] interlock: shutter-close sensor"));
 			CMCCLogMgr::GetInstance()->SetMCC_Action(MCC_A_PROC_ALIGN_CHK_STEP2, true);
 
 			bRet = CSequenceManager::GetInstance()->GetFunctionModuleEQState()->IsShutterSensorClose();
@@ -164,20 +173,25 @@ int CDoWorkGlassSWAlignStep::MoveAlignPosition(int nHead, int nIndex)
 		if (nRet == VTM_RV_SUCCESSED)
 		{
 			CMCCLogMgr::GetInstance()->SetMCC_Action(MCC_A_PROC_ALIGN_CHK_STEP3, true);
-
-			for (size_t i = df_PROBE_AGING1; i <= df_PROBE_MEAS; i++)
+		
+			//for (size_t i = df_PROBE_AGING1; i <= df_PROBE_MEAS; i++)
+			//{
+			//	bRet = CSequenceManager::GetInstance()->GetFunctionModuleEQState()->IsProbeUnContactSensorOn(i);
+			//	if (bRet != true)
+			//	{
+			//		nRet = MOTION_INTERLOCK_6;
+			//		break;
+			//	}
+			//}
+			bRet = CSequenceManager::GetInstance()->GetFunctionModuleEQState()->IsProbeUnContactSensorOn(df_PROBE_MEAS);
+			if (bRet != true)
 			{
-				bRet = CSequenceManager::GetInstance()->GetFunctionModuleEQState()->IsProbeUnContactSensorOn(i);
-				if (bRet != true)
-				{
-					nRet = MOTION_INTERLOCK_6;
-					break;
-				}
+				nRet = MOTION_INTERLOCK_6;
 			}
-
+		
 			CMCCLogMgr::GetInstance()->SetMCC_Action(MCC_A_PROC_ALIGN_CHK_STEP3, false);
 		}
-
+		
 		if (nRet == df_MOTION_RV_SUCCESSED)
 		{
 			// Stage R -> Head Y -> Probe -> Head X -> Stage X -> Head Z
@@ -185,20 +199,22 @@ int CDoWorkGlassSWAlignStep::MoveAlignPosition(int nHead, int nIndex)
 			{
 				CMCCLogMgr::GetInstance()->SetMCC_Action(MCC_A_PROC_ALIGN_MOVE_STEP1, true);
 
+				m_pShareItem->GetLogFileAccessorPtr()->KMLOG(SYST, _T("[MoveAlignPos] move Stage R (LOADER_R)"));
 				nRet = pImpl->MoveCmdPosA(AXIS_LOADER_R, dPosR, false, SPEED_HIGH, 0, 0);	
 			}
 
 			if (nRet == df_MOTION_RV_SUCCESSED)
 			{
+				m_pShareItem->GetLogFileAccessorPtr()->KMLOG(SYST, _T("[MoveAlignPos] move Head Y (Y1/Y2)"));
 				CMCCLogMgr::GetInstance()->SetMCC_Action(MCC_A_PROC_ALIGN_MOVE_STEP3, true);
 				CMCCLogMgr::GetInstance()->SetMCC_Action(MCC_A_PROC_ALIGN_MOVE_STEP4, true);
 
 				stMotorPosition stPosition[2];
 				ZeroMemory(&stPosition, sizeof(stPosition));
 				stPosition[0].axis = AXIS_Y1;
-				stPosition[0].dPosition = dPosY1;
+				stPosition[0].dPosition = dPosY2;
 				stPosition[1].axis = AXIS_Y2;
-				stPosition[1].dPosition = dPosY2;
+				stPosition[1].dPosition = dPosY1;
 
 				nRet = pImpl->MoveCmdPosMulti(stPosition, 2, SPEED_HIGH);
 			}
@@ -241,6 +257,7 @@ int CDoWorkGlassSWAlignStep::MoveAlignPosition(int nHead, int nIndex)
 
 			if (nRet == df_MOTION_RV_SUCCESSED)
 			{
+				m_pShareItem->GetLogFileAccessorPtr()->KMLOG(SYST, _T("[MoveAlignPos] move Head X (X2/X3)"));
 				CMCCLogMgr::GetInstance()->SetMCC_Action(MCC_A_PROC_ALIGN_MOVE_STEP5, true);
 
 				double dGantryGap = 0;
@@ -268,6 +285,7 @@ int CDoWorkGlassSWAlignStep::MoveAlignPosition(int nHead, int nIndex)
 
 			if (nRet == df_MOTION_RV_SUCCESSED)
 			{
+				m_pShareItem->GetLogFileAccessorPtr()->KMLOG(SYST, _T("[MoveAlignPos] wait MotionDone (gantry X2/X3/Y1/Y2/R)"));
 				for (int iAxis = AXIS_X; iAxis < AXIS_TYPE_END; iAxis++)
 				{
 					/*if (iAxis == AXIS_X)
@@ -280,7 +298,7 @@ int CDoWorkGlassSWAlignStep::MoveAlignPosition(int nHead, int nIndex)
 					if (iAxis == AXIS_X2)
 					{
 						nRet = m_pShareItem->GetMaintControlMgrPtr()->DoWork_MotionDone(iAxis);
-
+					
 						CMCCLogMgr::GetInstance()->SetMCC_Action(MCC_A_PROC_ALIGN_MOVE_STEP5, false);
 					}
 					else if (iAxis == AXIS_X3)
@@ -319,6 +337,7 @@ int CDoWorkGlassSWAlignStep::MoveAlignPosition(int nHead, int nIndex)
 			{
 				CMCCLogMgr::GetInstance()->SetMCC_Action(MCC_A_PROC_ALIGN_MOVE_STEP2, true);
 
+				m_pShareItem->GetLogFileAccessorPtr()->KMLOG(SYST, _T("[MoveAlignPos] move Stage X"));
 				nRet = pImpl->MoveCmdPosA(AXIS_X, dPosX, false, SPEED_HIGH);
 			}
 
@@ -327,7 +346,17 @@ int CDoWorkGlassSWAlignStep::MoveAlignPosition(int nHead, int nIndex)
 			{
 				CMCCLogMgr::GetInstance()->SetMCC_Action(MCC_A_PROC_ALIGN_MOVE_STEP6, true);
 
-				nRet = pImpl->MoveCmdPosA(AXIS_Z, dPosZ, true, SPEED_HIGH);
+				m_pShareItem->GetLogFileAccessorPtr()->KMLOG(SYST, _T("[MoveAlignPos] move Head Z (SUB Z Z3/Z4, blocking)"));
+				// LYS 2026-09-16 Sub Z RIGHT/LEFT(Z3/Z4) 동시 하강 - Probe Align(09-16)과 같은 방식: 두 축을 대기 없이 연속 지령한 뒤 완료를 함께 기다린다(구 코드는 Z3 완료 후 Z4 시작)
+				//nRet = pImpl->MoveCmdPosA(AXIS_Z3, dPosZR, true, SPEED_HIGH);	// LYS 2026-09-05 Head Z: Z1 대신 Sub Z RIGHT(Z3) 이동
+				//if (nRet == df_MOTION_RV_SUCCESSED) nRet = pImpl->MoveCmdPosA(AXIS_Z4, dPosZL, true, SPEED_HIGH);	// LYS 2026-09-05 Z3 성공 시 Sub Z LEFT(Z4) 이동
+				{
+					long nRetZ3 = pImpl->MoveCmdPosA(AXIS_Z3, dPosZR, false, SPEED_HIGH);	// Sub Z RIGHT(Z3) 지령만
+					long nRetZ4 = pImpl->MoveCmdPosA(AXIS_Z4, dPosZL, false, SPEED_HIGH);	// Sub Z LEFT(Z4) 지령만 - Z3 와 동시 하강
+					if (nRetZ3 == df_MOTION_RV_SUCCESSED) nRetZ3 = pImpl->DoWork_MotionDone(AXIS_Z3);	// 지령이 나간 축은 실패와 무관하게 정지까지 기다린다
+					if (nRetZ4 == df_MOTION_RV_SUCCESSED) nRetZ4 = pImpl->DoWork_MotionDone(AXIS_Z4);
+					nRet = (nRetZ3 != df_MOTION_RV_SUCCESSED) ? nRetZ3 : nRetZ4;
+				}
 
 				CMCCLogMgr::GetInstance()->SetMCC_Action(MCC_A_PROC_ALIGN_MOVE_STEP6, false);
 			}
@@ -335,6 +364,7 @@ int CDoWorkGlassSWAlignStep::MoveAlignPosition(int nHead, int nIndex)
 			// Stage X
 			if (nRet == df_MOTION_RV_SUCCESSED)
 			{
+				m_pShareItem->GetLogFileAccessorPtr()->KMLOG(SYST, _T("[MoveAlignPos] wait Stage X MotionDone"));
 				nRet = m_pShareItem->GetMaintControlMgrPtr()->DoWork_MotionDone(AXIS_X);
 
 				CMCCLogMgr::GetInstance()->SetMCC_Action(MCC_A_PROC_ALIGN_MOVE_STEP2, false);
@@ -342,6 +372,7 @@ int CDoWorkGlassSWAlignStep::MoveAlignPosition(int nHead, int nIndex)
 		}
 	}
 	
+	CString strMapExit; strMapExit.Format(_T("[MoveAlignPos] EXIT nRet=%d"), nRet); m_pShareItem->GetLogFileAccessorPtr()->KMLOG(SYST, strMapExit);
 	return nRet;
 }
 
@@ -418,7 +449,7 @@ int CDoWorkGlassSWAlignStep::AlignGlassMoveShift(double* pdMovOrg, int nFailCnt,
 		pImpl->MoveCmdPosA(AXIS_LOADER_R, dR, false, SPEED_MID);
 		pImpl->MoveCmdPosA(AXIS_X, dX, false, SPEED_MID);
 		pImpl->MoveCmdPosA(AXIS_Y1, dY1, false, SPEED_MID);
-		pImpl->MoveCmdPosA(AXIS_Y2, dR, true, SPEED_MID);
+		pImpl->MoveCmdPosA(AXIS_Y2, dY2, true, SPEED_MID);
 
 		nRtn = pImpl->DoWork_MotionDone(AXIS_LOADER_R);
 		if (nRtn == df_MOTION_RV_SUCCESSED)
@@ -475,9 +506,18 @@ int CDoWorkGlassSWAlignStep::AlignGlassXYZero(double* pdMovX, double* pdMovY)
 	CMaintControlMgr* pImpl = nullptr;
 	pImpl = m_pShareItem->GetMaintControlMgrPtr();
 
+	// LYS 2026-09-05 센터링 시작 위치 캡처 - Align 오프셋은 절대 기계좌표가 아니라 잔차(최종-시작)여야 함
+	double dStartX = 0., dStartY = 0.;
+	if (pImpl != nullptr)
+	{
+		dStartX = pImpl->GetOrgPos(AXIS_X);
+		dStartY = pImpl->GetOrgPos(AXIS_Y1);
+	}
+
 	int iReTry = 0, nRetrylimit = 3;
 	double dAlignMarginX = 1, dAlignMarginY = 1;
 	bool bAlignDone = false;
+	bool bCentered = false;	// LYS 2026-09-05 마진 통과 여부 - 루프 내 DoWork_MotionDone이 nRet의 CENTERING_FAIL을 덮어쓰는 문제 보완
 
 	dAlignMarginX = pAlignInfo->m_sMargin.m_sGlassMargin.m_fX;
 	dAlignMarginY = pAlignInfo->m_sMargin.m_sGlassMargin.m_fY;
@@ -517,6 +557,7 @@ int CDoWorkGlassSWAlignStep::AlignGlassXYZero(double* pdMovX, double* pdMovY)
 			}
 
 			// 이미지 패턴 매칭
+#if 0	// LYS 2026-09-25 구 코드: 첫 성공 패턴에서 break -> 최고 점수 선택이 아니었다. 아래 PtrnMatchBest 로 대체.
 			for (size_t k = 0; k < df_MAX_PTRNINFO; k++)	// Pattern
 			{
 				pPtrnInfo = &ptrnInfo[k];
@@ -534,6 +575,20 @@ int CDoWorkGlassSWAlignStep::AlignGlassXYZero(double* pdMovX, double* pdMovY)
 					break;
 				}
 			}
+#else
+			// LYS 2026-09-25 등록 패턴 전부 매칭해 점수가 가장 높은 패턴 채택 (스냅 1회, 패턴별 점수는 [AlignCCDn] PtrnMatchBest 로그).
+			{
+				int nBestPtrn = -1;
+				nRet = m_pShareItem->GetAlignCameraMgr(j)->PtrnMatchBest(ptrnInfo, df_MAX_PTRNINFO, &Score, &nBestPtrn, LENS_USE_ALIGN);
+				if (nRet == VTM_RV_SUCCESSED && nBestPtrn >= 0)
+				{
+					MaxSorce = Score;
+					iPtrn[j] = nBestPtrn;
+					dPixelx[j] = ptrnInfo[nBestPtrn].m_dRealX;	// 차이값(mm)
+					dPixely[j] = ptrnInfo[nBestPtrn].m_dRealY;	// 차이값(mm)
+				}
+			}
+#endif
 		}
 
 		bAlignDone = true;
@@ -556,7 +611,9 @@ int CDoWorkGlassSWAlignStep::AlignGlassXYZero(double* pdMovX, double* pdMovY)
 
 
 		// 센터링
-		int iDirX = 1, iDirY = 1;
+		// LYS 2026-09-12 CCD 얼라인 카메라 방향이 바뀌어 XYR 보상 부호를 전부 반전. 2026-09-12 16:35 Glass XYZero 실측이 -0.0794→-0.1588→-0.3175 / 0.1436→0.2835→0.5708 로 정확히 2배씩 커지는 1:1 발산(=부호 반대)이었다. 아래 2026-09-05 주석은 방향 변경 전 근거라 참고용으로 남긴다.
+		int iDirX = 1, iDirY = 1;	// LYS 2026-09-12 카메라 방향 변경으로 -1,-1 -> 1,1 반전 
+		// LYS 2026-09-05 부호 반전 - 2026-09-05 10:35 실측에서 +방향 이동이 오프셋을 1:1로 키움(발산). Probe(iDirX=-1)와 동일 방식
 		double dDistanceX = 0., dDistanceY = 0;
 		double dX = 0, dY = 0;
 		// 
@@ -603,6 +660,7 @@ int CDoWorkGlassSWAlignStep::AlignGlassXYZero(double* pdMovX, double* pdMovY)
 
 			if (fabs(dX) < dAlignMarginX && fabs(dY) < dAlignMarginY)
 			{
+				bCentered = true;	// LYS 2026-09-05 마진 통과
 				break;
 			}
 			else
@@ -645,10 +703,23 @@ int CDoWorkGlassSWAlignStep::AlignGlassXYZero(double* pdMovX, double* pdMovY)
 
 	} while (iReTry < nRetrylimit);
 
+	// LYS 2026-09-05 재시도 한도 내에 마진을 못 맞추면 실패로 반환 (구 코드는 마지막 MotionDone 성공이 실패 상태를 지워 발산한 오프셋이 그대로 적용됨)
+	if (nRet == VTM_RV_SUCCESSED && bCentered == false)
+	{
+		nRet = VISION_ALIGN_CENTERING_FAIL;
+		m_pShareItem->GetLogFileAccessorPtr()->KMLOG(WARN, _T("AlignGlassXYZero centering NOT converged within retry limit - align FAIL"));
+	}
+
 	if (nRet == VTM_RV_SUCCESSED)
 	{
-		*pdMovX = pImpl->GetOrgPos(AXIS_X) - 0;
-		*pdMovY = pImpl->GetOrgPos(AXIS_Y1) - pAlignInfo->m_sGlsAlign.m_fBase_FrontRight;
+		// LYS 2026-09-05 잔차(센터링 이동량)로 반환. 구 코드는 X/Y1 절대위치를 반환했음(m_fBase_FrontRight는 어디서도 set/load 안 되는 죽은 필드=0)
+		//   -> Y1=556.4가 m_dAlignOffset[AXIS_Y1..Y4]에 실려 모든 셀 목표가 +556mm 밀림(SW 리밋 초과)
+		*pdMovX = pImpl->GetOrgPos(AXIS_X) - dStartX;
+		*pdMovY = pImpl->GetOrgPos(AXIS_Y1) - dStartY;
+		CString strRes;
+		strRes.Format(_T("AlignGlassXYZero residual X:%.4f (%.3f->%.3f)  Y1:%.4f (%.3f->%.3f)"),
+			*pdMovX, dStartX, pImpl->GetOrgPos(AXIS_X), *pdMovY, dStartY, pImpl->GetOrgPos(AXIS_Y1));
+		m_pShareItem->GetLogFileAccessorPtr()->KMLOG(SYST, strRes);
 	}
 
 	return nRet;
@@ -840,6 +911,7 @@ int CDoWorkGlassSWAlignStep::AlignGlassSearch()
 		}
 
 		// 이미지 패턴 매칭
+#if 0	// LYS 2026-09-25 구 코드: 첫 성공 패턴에서 break -> 최고 점수 선택이 아니었다. 아래 PtrnMatchBest 로 대체.
 		for (size_t k = 0; k < df_MAX_PTRNINFO; k++)	// Pattern
 		{
 			pPtrnInfo = &ptrnInfo[k];
@@ -856,6 +928,20 @@ int CDoWorkGlassSWAlignStep::AlignGlassSearch()
 				break;
 			}
 		}
+#else
+		// LYS 2026-09-25 등록 패턴 전부 매칭해 점수가 가장 높은 패턴 채택 (스냅 1회, 패턴별 점수는 [AlignCCDn] PtrnMatchBest 로그).
+		{
+			int nBestPtrn = -1;
+			nRet = m_pShareItem->GetAlignCameraMgr(j)->PtrnMatchBest(ptrnInfo, df_MAX_PTRNINFO, &Score, &nBestPtrn, LENS_USE_ALIGN);
+			if (nRet == VTM_RV_SUCCESSED && nBestPtrn >= 0)
+			{
+				MaxSorce = Score;
+				iPtrn[j] = nBestPtrn;
+				dPixelx[j] = ptrnInfo[nBestPtrn].m_dRealX;	// 차이값(mm)
+				dPixely[j] = ptrnInfo[nBestPtrn].m_dRealY;	// 차이값(mm)
+			}
+		}
+#endif
 	}
 
 	bAlignDone = true;
@@ -912,6 +998,7 @@ int CDoWorkGlassSWAlignStep::AlignGlassSearch()
 						for (size_t j = 0; j < 2; j++)	// 2 Head
 						{
 							// 이미지 패턴 매칭
+#if 0	// LYS 2026-09-25 구 코드: 첫 성공 패턴에서 break -> 최고 점수 선택이 아니었다. 아래 PtrnMatchBest 로 대체.
 							for (size_t k = 0; k < df_MAX_PTRNINFO; k++)	// Pattern
 							{
 								pPtrnInfo = &ptrnInfo[k];
@@ -928,6 +1015,20 @@ int CDoWorkGlassSWAlignStep::AlignGlassSearch()
 									break;
 								}
 							}
+#else
+							// LYS 2026-09-25 등록 패턴 전부 매칭해 점수가 가장 높은 패턴 채택 (스냅 1회, 패턴별 점수는 [AlignCCDn] PtrnMatchBest 로그).
+							{
+								int nBestPtrn = -1;
+								nRet = m_pShareItem->GetAlignCameraMgr(j)->PtrnMatchBest(ptrnInfo, df_MAX_PTRNINFO, &Score, &nBestPtrn, LENS_USE_ALIGN);
+								if (nRet == VTM_RV_SUCCESSED && nBestPtrn >= 0)
+								{
+									MaxSorce = Score;
+									iPtrn[j] = nBestPtrn;
+									dPixelx[j] = ptrnInfo[nBestPtrn].m_dRealX;	// 차이값(mm)
+									dPixely[j] = ptrnInfo[nBestPtrn].m_dRealY;	// 차이값(mm)
+								}
+							}
+#endif
 						}
 
 						bAlignDone = true;
@@ -1010,6 +1111,7 @@ int CDoWorkGlassSWAlignStep::AlignGlassTZero(double* pdMovR)
 	int iReTry = 0, nRetrylimit = 3;
 	double dAlignMargin = 1;
 	bool bAlignDone = false;
+	bool bCentered = false;	// LYS 2026-09-05 마진 통과 여부 - 루프 내 DoWork_MotionDone이 nRet의 CENTERING_FAIL을 덮어쓰는 문제 보완
 
 	dAlignMargin = pAlignInfo->m_sMargin.m_sGlassMargin.m_fR; 
 
@@ -1049,6 +1151,7 @@ int CDoWorkGlassSWAlignStep::AlignGlassTZero(double* pdMovR)
 			}
 
 			// 이미지 패턴 매칭
+#if 0	// LYS 2026-09-25 구 코드: 첫 성공 패턴에서 break -> 최고 점수 선택이 아니었다. 아래 PtrnMatchBest 로 대체.
 			for (size_t k = 0; k < df_MAX_PTRNINFO; k++)	// Pattern
 			{
 				pPtrnInfo = &ptrnInfo[k];
@@ -1066,6 +1169,20 @@ int CDoWorkGlassSWAlignStep::AlignGlassTZero(double* pdMovR)
 					break;
 				}
 			}
+#else
+			// LYS 2026-09-25 등록 패턴 전부 매칭해 점수가 가장 높은 패턴 채택 (스냅 1회, 패턴별 점수는 [AlignCCDn] PtrnMatchBest 로그).
+			{
+				int nBestPtrn = -1;
+				nRet = m_pShareItem->GetAlignCameraMgr(j)->PtrnMatchBest(ptrnInfo, df_MAX_PTRNINFO, &Score, &nBestPtrn, LENS_USE_ALIGN);
+				if (nRet == VTM_RV_SUCCESSED && nBestPtrn >= 0)
+				{
+					MaxSorce = Score;
+					iPtrn[j] = nBestPtrn;
+					dPixelx[j] = ptrnInfo[nBestPtrn].m_dRealX;	// 차이값(mm)
+					dPixely[j] = ptrnInfo[nBestPtrn].m_dRealY;	// 차이값(mm)
+				}
+			}
+#endif
 
 			
 		}
@@ -1089,7 +1206,9 @@ int CDoWorkGlassSWAlignStep::AlignGlassTZero(double* pdMovR)
 		}
 
 		// 센터링
-		int iDir = 1;
+		// LYS 2026-09-12 CCD 얼라인 카메라 방향이 바뀌어 XYR 보상 부호를 전부 반전. 2026-09-12 16:35 Glass XYZero 실측이 -0.0794→-0.1588→-0.3175 / 0.1436→0.2835→0.5708 로 정확히 2배씩 커지는 1:1 발산(=부호 반대)이었다. 아래 2026-09-05 주석은 방향 변경 전 근거라 참고용으로 남긴다.
+		int iDir = 1;	// LYS 2026-09-12 카메라 방향 변경으로 -1 -> 1 반전 (R)
+		// LYS 2026-09-05 부호 반전 - 11:46 실측에서 측정각 방향으로 R 이동 시 각도가 -0.008→-0.020→-0.045°로 발산(같은 부호). XYZero와 동일 현상
 		double dDistanceX = 0., dDistanceY = 0., dRadian = 0.;
 
 		// 
@@ -1144,6 +1263,7 @@ int CDoWorkGlassSWAlignStep::AlignGlassTZero(double* pdMovR)
 			
 			if (fabs(dRadian) < dAlignMargin)
 			{
+				bCentered = true;	// LYS 2026-09-05 마진 통과
 				break;
 			}
 			else
@@ -1169,6 +1289,13 @@ int CDoWorkGlassSWAlignStep::AlignGlassTZero(double* pdMovR)
 		iReTry++;
 
 	} while (iReTry < nRetrylimit);
+
+	// LYS 2026-09-05 재시도 한도 내에 마진을 못 맞추면 실패로 반환 (구 코드는 마지막 MotionDone 성공이 실패 상태를 지워 발산한 오프셋이 그대로 적용됨)
+	if (nRet == VTM_RV_SUCCESSED && bCentered == false)
+	{
+		nRet = VISION_ALIGN_CENTERING_FAIL;
+		m_pShareItem->GetLogFileAccessorPtr()->KMLOG(WARN, _T("AlignGlassTZero centering NOT converged within retry limit - align FAIL"));
+	}
 
 	if (nRet == VTM_RV_SUCCESSED)
 	{
@@ -1196,8 +1323,10 @@ int CDoWorkGlassSWAlignStep::AlignGlass()
 	// 패턴 Search
 	CMCCLogMgr::GetInstance()->SetMCC_Action(MCC_A_PROC_ALIGN_PATTERN_SEARCH, true);
 //	Sleep(1000);
+	m_pShareItem->GetLogFileAccessorPtr()->KMLOG(SYST, _T("[AlignGlass] >>> Pattern SEARCH begin"));
 	nRet = AlignGlassSearch();
 
+	CString strSrch; strSrch.Format(_T("[AlignGlass] SEARCH done nRet=%d"), nRet); m_pShareItem->GetLogFileAccessorPtr()->KMLOG(SYST, strSrch);
 	CMCCLogMgr::GetInstance()->SetMCC_Action(MCC_A_PROC_ALIGN_PATTERN_SEARCH, false);
 
 	// 센터링
@@ -1209,11 +1338,13 @@ int CDoWorkGlassSWAlignStep::AlignGlass()
 		{
 			if (nRet == VTM_RV_SUCCESSED)
 			{
+				m_pShareItem->GetLogFileAccessorPtr()->KMLOG(SYST, _T("[AlignGlass] >>> TZero (theta) begin"));
 				nRet = AlignGlassTZero(&dMovR);
 			}
 
 			if (nRet == VTM_RV_SUCCESSED)
 			{
+				m_pShareItem->GetLogFileAccessorPtr()->KMLOG(SYST, _T("[AlignGlass] >>> XYZero (position) begin"));
 				nRet = AlignGlassXYZero(&dMovX, &dMovY);
 			}
 		}
@@ -1240,6 +1371,7 @@ int CDoWorkGlassSWAlignStep::AlignGlass()
 			m_pShareItem->GetLogFileAccessorPtr()->KMLOG(SYST, strLog);
 
 			pImpl->SetGlassAlignXYR(dMovX, dMovY, dMovR);
+			pImpl->SetGlassAlignDone(true);	// LYS 2026-09-15 Glass Align 완료 표시(타이틀바 파랑)
 		}
 			
 	}
@@ -1537,7 +1669,7 @@ bool CDoWorkGlassSWAlignStep_MoveAlignPosistion::Run()
 	}
 	
 	bool bRet = true;
-
+	//bGlassExist = true;		// LYS 2026-09-05 임시 - Glass 유무 센서 판정 강제 통과(테스트용, 양산 전 제거)
 	if (bGlassExist != true)
 	{
 		m_pShareItem->GetLogFileAccessorPtr()->KMLOG(SYST, _T("CDoWorkGlassSWAlignStep_MoveAlignPosistion Glass Exist NG."));

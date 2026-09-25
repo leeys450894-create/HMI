@@ -73,8 +73,8 @@ CSystemInitialize::CSystemInitialize(stAuroraMgrPool &MgrPool)
 	m_vecSeqStep.push_back(dynamic_cast<CSystemInitializeStep*>(new CSystemInitializeStep_InitIO(this)));						// PLC 연결 및 출력 초기화
 	m_vecSeqStep.push_back(dynamic_cast<CSystemInitializeStep*>(new CSystemInitializeStep_Safety(this)));						// Move Safety
 	m_vecSeqStep.push_back(dynamic_cast<CSystemInitializeStep*>(new CSystemInitializeStep_InitComplete(this)));					// 이니셜 완료 확인
-	m_vecSeqStep.push_back(dynamic_cast<CSystemInitializeStep*>(new CSystemInitializeStep_ProbeAlign(this)));					// ProbeAlign
-	m_vecSeqStep.push_back(dynamic_cast<CSystemInitializeStep*>(new CSystemInitializeStep_Safety(this)));						// Move Safety 
+	//m_vecSeqStep.push_back(dynamic_cast<CSystemInitializeStep*>(new CSystemInitializeStep_ProbeAlign(this)));					// ProbeAlign
+	//m_vecSeqStep.push_back(dynamic_cast<CSystemInitializeStep*>(new CSystemInitializeStep_Safety(this)));						// Move Safety 
 	m_vecSeqStep.push_back(dynamic_cast<CSystemInitializeStep*>(new CSystemInitializeStep_Idle(this)));
 
     SetTotalStepCount((long)m_vecSeqStep.size());

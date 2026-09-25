@@ -178,7 +178,11 @@ void CMyLabelTimer::DefaultTimer()
 	{
 //		CTimeSpan spanCur = CTime::GetCurrentTime() - m_timeStart;
 		m_spanCur = m_spanStart;
-		if( m_iLamp == 14 )
+		if (!m_strLabel.IsEmpty())	// LYS 2026-09-25 caller-given label (ALIGN CCD1/2) instead of CH<n>
+		{
+			str.Format(_T("%s:%05d:%02d:%02d"), m_strLabel, (LONG)m_spanCur.GetTotalHours(), m_spanCur.GetMinutes(), m_spanCur.GetSeconds());
+		}
+		else if( m_iLamp == 14 )
 		{
 			str.Format(_T("SE A:%05d:%02d:%02d"), (LONG)m_spanCur.GetTotalHours(), m_spanCur.GetMinutes(), m_spanCur.GetSeconds());	
 		}
@@ -239,7 +243,11 @@ void CMyLabelTimer::RefreshTimer()
 	{
 		CTimeSpan spanCur = CTime::GetCurrentTime() - m_timeStart;
 		m_spanCur = m_spanStart + spanCur;
-		if( m_iLamp == 14 )
+		if (!m_strLabel.IsEmpty())	// LYS 2026-09-25 caller-given label (ALIGN CCD1/2) instead of CH<n>
+		{
+			m_strTimeText.Format(_T("%s:%05d:%02d:%02d"), m_strLabel, (LONG)m_spanCur.GetTotalHours(), m_spanCur.GetMinutes(), m_spanCur.GetSeconds());
+		}
+		else if( m_iLamp == 14 )
 		{
 			m_strTimeText.Format(_T("SE A:%05d:%02d:%02d"),
 				(LONG)m_spanCur.GetTotalHours(), m_spanCur.GetMinutes(), m_spanCur.GetSeconds());	

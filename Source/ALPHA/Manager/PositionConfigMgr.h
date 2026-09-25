@@ -97,6 +97,11 @@ struct stPositionParam
 	// Head Offset
 	stPositionAxis dHeadOffset[2][4];  // 0:WAD, 1:Vision, 2:Color, 3;Angle
 
+	// LYS 2026-09-14 FRONT 헤드(Y3/Y4) Safety 분리 - Position.ini [SAFETY] SafetyHeadY3/Y4.
+	//   기존엔 Y3/Y4 도 SafetyHeadY1/Y2 를 같이 썼다. 키가 없으면 SafetyHeadY1/Y2 값을 그대로 따른다(LinkIniFile).
+	double dSafetyHeadY3;
+	double dSafetyHeadY4;
+
 	stPositionParam()
 	{
 		dSafetyStageX = 0.0;
@@ -106,6 +111,8 @@ struct stPositionParam
 		dSafetyHeadX2 = 0.0;
 		dSafetyZ = 0.0;
 		dSafetyZ2 = 0.0;
+		dSafetyHeadY3 = 0.0;	// LYS 2026-09-14
+		dSafetyHeadY4 = 0.0;	// LYS 2026-09-14
 
 		dLoaderZUp = 0.0;
 		dLoaderZMiddle = 0.0;
@@ -191,6 +198,8 @@ public:
 	stPositionParam GetPositionParam() const;
 
 	void GetSafetyPosition(double *dSafetyStageX, double* dSafetyHeadX1, double* dSafetyHeadX2, double *dSafetyHeadY1, double *dSafetyHeadY2, double *dSafetyZ, double* dSafetyZ2) const;
+	// LYS 2026-09-14 FRONT 헤드 Safety (Y3 = FRONT RIGHT, Y4 = FRONT LEFT). BACK 헤드 Y1/Y2 는 GetSafetyPosition.
+	void GetFrontHeadSafetyPosition(double* dSafetyHeadY3, double* dSafetyHeadY4) const;
 	void SetSafetyPosition(double dSafetyStageX, double dSafetyHeadX1, double dSafetyHeadX2, double dSafetyHeadY1, double dSafetyHeadY2, double dSafetyZ, double dSafetyZ2);
 
 	void GetSubZSafetyPosition(double* dWadRight, double* dWadLeft, double* dVisionAngleRight, double* dVisionAngleLeft) const;

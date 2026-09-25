@@ -143,7 +143,9 @@ void CMySpreadDll::InitMySpread_SACCID(int nFilter)
 {
 	//
 	SetMaxCols(3);
-	SetMaxRows(5);
+	// LYS 2026-09-16 Probe Cassette 5 -> 7 slots (CDlgSACC re-reads [PROBESLOT] MAXPROBE and calls SetMaxRows again)
+	//SetMaxRows(5);
+	SetMaxRows(7);
 	SetColWidth(SS_HEADER, 5.1);
 	SetColWidth(1, 23);
 	SetColWidth(2, 7);
@@ -152,10 +154,11 @@ void CMySpreadDll::InitMySpread_SACCID(int nFilter)
 
 	SetRowHeight(SS_HEADER, 25);
 	SetRowHeight(SS_ALLROWS, 12.8);
+	//SetRowHeight(SS_ALLROWS, 12.0);	// LYS 2026-09-16 7 rows must fit the (enlarged) control without scrolling
 
 	SetData(1, SS_HEADER, _T("PROBE ID"));
-	SetData(2, SS_HEADER, _T("LOAD \n선택"));
-	SetData(3, SS_HEADER, _T("UNLOAD \n선택"));
+	SetData(2, SS_HEADER, _T("LOAD"));
+	SetData(3, SS_HEADER, _T("UNLOAD"));
 //	SetData(4, SS_HEADER, _T("SACC \n현위치"));
 }
 

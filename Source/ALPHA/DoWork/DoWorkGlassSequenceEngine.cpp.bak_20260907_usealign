@@ -1,0 +1,1000 @@
+#include "pch.h"
+#include "DoWorkGlassSequenceEngine.h"
+
+#include "LogFunction\LogAccessor\LogFileAccessor.h"
+
+#include "..\Recipe\RecipeEditMgr.h"
+#include "..\Manager\CommTcpIPMgr.h"
+#include "..\Manager\SeqTactTimeMgr.h"
+#include "..\SystemParamShare.h"
+
+#include "DoWorkGlassReady.h"
+//#include "DoWorkGlassPreAlign.h"
+#include "DoWorkGlassAdsorption.h"
+#include "DoWorkGlassRecipe.h"
+#include "DoWorkGlassSWAlign.h"
+#include "DoWorkProbeSWAlign.h"
+#include "DoWorkGlassPreMeas.h"
+#include "DoWorkGlassAging.h"
+#include "DoWorkGlassMeasure.h"
+#include "DoWorkGlassResult.h"
+#include "DoWorkGlassUnload.h"
+#include "..\AuroraFuncDefine.h"
+#include "Alarm\AlarmController.h"
+#include "Manager/MCCLogMgr.h"
+#include "Manager/ResumeInfoMgr.h"
+
+#include "Manager/SystemConfigMgr.h"
+//#include "D_MeasureCycleWait.h"
+
+#ifdef _DEBUG
+#define new DEBUG_NEW
+#endif
+
+CDoWorkGlassSequenceEngine::CDoWorkGlassSequenceEngine(stAuroraMgrPool &MgrPool)
+    : m_bEngineBreak(false)
+	, m_pLogFileAccessor(new CLogFileAccessor)
+	, m_MgrPool_link(MgrPool) 
+{
+    const CString strFolderPath	= MgrPool.strLogPath + _T("\\LogFile\\");
+    const CString strLogFile	= strFolderPath + _T("GLASS Sequence_Step.log");
+    MakeDir(strFolderPath);
+    m_pLogFileAccessor->Initialize(strLogFile);
+
+    // sequence step -
+	m_vecItems.clear();
+    m_vecItems.push_back(dynamic_cast<CDoWorkGlassSequenceImpl*>(new CDoWorkGlassAdsorption(MgrPool)));     // Stage Measure
+    m_vecItems.push_back(dynamic_cast<CDoWorkGlassSequenceImpl*>(new CDoWorkGlassRecipe(MgrPool)));         // Glass Recipe 
+	m_vecItems.push_back(dynamic_cast<CDoWorkGlassSequenceImpl*>(new CDoWorkGlassSWAlign(MgrPool)));        // Glass Align
+    m_vecItems.push_back(dynamic_cast<CDoWorkGlassSequenceImpl*>(new CDoWorkProbeSWAlign(MgrPool)));        // Probe Align
+    m_vecItems.push_back(dynamic_cast<CDoWorkGlassSequenceImpl*>(new CDoWorkGlassPreMeas(MgrPool)));        // 사전 검사
+    m_vecItems.push_back(dynamic_cast<CDoWorkGlassSequenceImpl*>(new CDoWorkGlassAGING(MgrPool)));          // Aging 검사
+	m_vecItems.push_back(dynamic_cast<CDoWorkGlassSequenceImpl*>(new CDoWorkGlassMeasure(MgrPool)));        // 측정 검사
+    m_vecItems.push_back(dynamic_cast<CDoWorkGlassSequenceImpl*>(new CDoWorkGlassResult(MgrPool)));         // Result
+    m_vecItems.push_back(dynamic_cast<CDoWorkGlassSequenceImpl*>(new CDoWorkGlassUnload(MgrPool)));         // Glass Unload
+
+    //----------------------------------------------------------------------
+    // Thread 생성
+    //----------------------------------------------------------------------
+    m_bThreadLive	= false;
+    m_pThread		= AfxBeginThread(ThreadRun, this);
+    m_hStartEvent	= CreateEvent(NULL, FALSE, FALSE, NULL);	// auto reset, initial reset
+	m_hExitsEvent	= CreateEvent(NULL, FALSE, FALSE, NULL);	// auto reset, initial reset
+    m_hCloseEvent	= CreateEvent(NULL, FALSE, FALSE, NULL);	// auto reset, initial reset
+    m_hWaitsEvent	= CreateEvent(NULL, FALSE, FALSE, NULL);	// auto reset, initial reset
+    m_hBreakEvent_link = NULL;	// 연동용 - 생성/삭제 하지 않아야 한다.
+    m_hMultiEvent[0] = m_hStartEvent;
+	m_hMultiEvent[1] = m_hExitsEvent;
+    m_hMultiEvent[2] = m_hCloseEvent;
+}
+
+CDoWorkGlassSequenceEngine::~CDoWorkGlassSequenceEngine()
+{
+    //----------------------------------------------------------------------
+    // Thread 종료
+    //----------------------------------------------------------------------
+    ResetEvent(m_hStartEvent);
+    ResetEvent(m_hExitsEvent);
+    SetEvent(m_hCloseEvent);
+    ResetEvent(m_hWaitsEvent);
+    if (m_pThread && m_bThreadLive)
+    {
+        WaitForSingleObject(m_pThread->m_hThread, INFINITE);
+    }
+    if(m_hStartEvent)CloseHandle(m_hStartEvent);
+    if(m_hExitsEvent)CloseHandle(m_hExitsEvent);
+    if(m_hCloseEvent)CloseHandle(m_hCloseEvent);
+    if(m_hWaitsEvent)CloseHandle(m_hWaitsEvent);
+
+    //----------------------------------------------------------------------
+    // Data 삭제
+    //----------------------------------------------------------------------
+	for(size_t i = 0; i < m_vecItems.size(); ++i)
+	{	
+		if(m_vecItems[i])
+		{
+			delete m_vecItems[i];
+			m_vecItems[i] = nullptr;
+		}
+	}
+
+	if(m_pLogFileAccessor)
+    {
+        delete m_pLogFileAccessor;
+        m_pLogFileAccessor = nullptr;
+    }
+}
+
+
+bool CDoWorkGlassSequenceEngine::LinkDataBase(CBinaryHelper *pBinaryHelper, bool bSave)
+{
+    bool ret = true;
+    for (size_t i = 0; i < m_vecItems.size(); ++i)
+    {
+        if (m_vecItems[i])
+        {
+			ret &= m_vecItems[i]->LinkDataBase(pBinaryHelper, bSave);
+		}
+	}
+
+    return ret;
+}
+
+void CDoWorkGlassSequenceEngine::UpdateLinkParamInformation(CCommTcpIPMgr *pCommTcpIPMgr)
+{
+    for (size_t i = 0; i < m_vecItems.size(); ++i)
+    {
+        if (m_vecItems[i])
+        {
+             m_vecItems[i]->UpdateLinkParamInformation(pCommTcpIPMgr);
+        }
+    }
+}
+
+
+
+
+
+
+//=========================================================================
+// Item 관련
+//=========================================================================
+bool CDoWorkGlassSequenceEngine::ItemInitialize()
+{
+    bool bRet = true;
+    for (size_t i = 0; i < m_vecItems.size(); ++i)
+    {
+        if (m_vecItems[i])
+        {
+            bRet &= m_vecItems[i]->CreateDoWorkSeq();
+        }
+    }
+
+    return bRet;
+}
+
+void CDoWorkGlassSequenceEngine::ItemFinalize()
+{
+    for (size_t i = 0; i < m_vecItems.size(); ++i)
+    {
+        if (m_vecItems[i])
+        {
+            m_vecItems[i]->DeleteDoWorkSeq();
+            delete m_vecItems[i];
+            m_vecItems[i] = nullptr;
+        }
+    }
+}
+
+
+bool CDoWorkGlassSequenceEngine::ItemStart(CString strType, bool bCompleteCheck)
+{
+    CBaseSequenceImpl *pItem = FindItem(strType);
+
+	m_bEngineBreak = false;
+	ResetEvent(m_hBreakEvent_link);
+
+
+    if(pItem)
+    {
+        pItem->Start();
+
+        CString strLog;
+        strLog.Format(_T("Seq Item : %s - Start"), pItem->GetName().GetString());
+        m_pLogFileAccessor->KMLOG(OPER, strLog);
+
+        if(bCompleteCheck == true)
+        {
+            m_hBreakEvent_link = pItem->GetCompleteEventHandle();
+
+            if(WaitForSingleObject(m_hBreakEvent_link, INFINITE) == WAIT_OBJECT_0)
+            {
+                // 멈추기를 원하는 경우
+                if(m_bEngineBreak == true)
+                {
+                    pItem->Stop();
+                    pItem->Exit();	// exit 시켜줘야 한다.
+
+                    CString strLog;
+                    strLog.Format(_T("Seq Item : %s - User Force Exit"), pItem->GetName().GetString());
+                    m_pLogFileAccessor->KMLOG(OPER, strLog);
+                    //return;
+                }
+            }
+
+            strLog.Format(_T("Seq Item : %s - End"), pItem->GetName().GetString());
+            m_pLogFileAccessor->KMLOG(OPER, strLog);
+
+            CWindowEventHandler::GetInstance()->PostMessageToUI((enumSeqItemID)pItem->GetSeqItemNumber(), WM_MSG_SEQ_ITEM_COMPLTE, NULL, NULL);
+        }
+
+        return true;
+    }
+
+    return false;
+}
+
+void CDoWorkGlassSequenceEngine::ItemStopAndSkip(CString strType)
+{
+    CBaseSequenceImpl *pItem = FindItem(strType);
+
+    if(pItem)
+    {
+        pItem->Stop();
+        pItem->Skip();	// exit 시켜줘야 한다.
+
+        CString strLog;
+        strLog.Format(_T("Seq Item : %s - User Force Skip"), pItem->GetName().GetString());
+        m_pLogFileAccessor->KMLOG(OPER, strLog);
+    }
+}
+
+void CDoWorkGlassSequenceEngine::ItemStopAndExit(CString strType)
+{
+    CBaseSequenceImpl *pItem = FindItem(strType);
+
+    if(pItem)
+    {
+        pItem->Stop();
+        pItem->Exit();	// exit 시켜줘야 한다.
+
+        CString strLog;
+        strLog.Format(_T("Seq Item : %s - User Force Exit"), pItem->GetName().GetString());
+        m_pLogFileAccessor->KMLOG(OPER, strLog);
+    }
+}
+
+void CDoWorkGlassSequenceEngine::ItemPause(int index)
+{
+    if ((0 <= index) && (index < GetItemCount()))
+    {
+        m_vecItems[index]->Pause();
+    }
+}
+
+void CDoWorkGlassSequenceEngine::ItemResume(int index)
+{
+    if ((0 <= index) && (index < GetItemCount()))
+    {
+        m_vecItems[index]->Resume();
+    }
+}
+
+bool CDoWorkGlassSequenceEngine::Is_CompleteAll()
+{
+    bool ret = true;
+    for(int i = 0; i < GetItemCount(); ++i)
+    {
+        ret &= m_vecItems[i]->Is_Complete();
+    }
+
+    return ret;
+}
+
+bool CDoWorkGlassSequenceEngine::Is_Complete(int index)
+{
+    if ((0 <= index) && (index < GetItemCount()))
+    {
+        return m_vecItems[index]->Is_Complete();
+    }
+
+    return true;
+}
+
+
+
+
+
+std::vector<CString> CDoWorkGlassSequenceEngine::GetItemType()
+{
+	std::vector<CString> vecData;
+
+    for(size_t seq = 0; seq < m_vecItems.size(); ++seq)
+	{
+		vecData.push_back(m_vecItems[seq]->GetType());
+	}
+    
+	return vecData;
+}
+
+std::vector<CString> CDoWorkGlassSequenceEngine::GetItemDesc()
+{
+	std::vector<CString> vecData;
+
+    for(size_t seq = 0; seq < m_vecItems.size(); ++seq)
+	{
+		vecData.push_back(m_vecItems[seq]->GetDesc());
+	}
+    
+	return vecData;
+}
+
+int CDoWorkGlassSequenceEngine::GetItemCount() const
+{
+    return (int)m_vecItems.size();
+}
+
+void CDoWorkGlassSequenceEngine::SetItemVisible(int index)
+{
+    for(int i = 0; i < GetItemCount(); ++i)
+    {
+        m_vecItems[i]->SetVisible(false);
+    }
+
+    if ((0 <= index) && (index < GetItemCount()))
+    {
+        m_vecItems[index]->SetVisible(true);
+    }
+}
+
+void CDoWorkGlassSequenceEngine::AddItem(CString strType, CString strName)
+{
+   //CBaseSequenceImpl *ptempImpl = m_pItemFactory->GetItem(strType, strName);
+   //
+   //if (ptempImpl)
+   //{
+   //    ptempImpl->SetType(strType);
+   //    ptempImpl->SetName(strName);
+   //
+   //    m_vecItems.push_back(ptempImpl);
+   //}
+}
+
+void CDoWorkGlassSequenceEngine::DelItem(int index)
+{
+    if ((0 <= index) && (index < GetItemCount()))
+    {
+        m_vecItems[index]->DeleteDoWorkSeq();
+        delete m_vecItems[index];
+        m_vecItems[index] = nullptr;
+
+        m_vecItems.erase(m_vecItems.begin() + index);
+    }
+}
+
+CDoWorkGlassSequenceImpl *CDoWorkGlassSequenceEngine::GetItem(int index)
+{
+    if ((0 <= index) && (index < GetItemCount()))
+    {
+        return m_vecItems[index];
+    }
+
+    return nullptr;
+}
+
+CDoWorkGlassSequenceImpl *CDoWorkGlassSequenceEngine::FindItem(CString strSeq)
+{
+    for(size_t seq = 0; seq < m_vecItems.size(); ++seq)
+    {
+        if( (strSeq == m_vecItems[seq]->GetType()) ||
+            (strSeq == m_vecItems[seq]->GetGUID()))
+        {
+            return m_vecItems[seq];
+        }
+    }
+
+    for(size_t seq = 0; seq < m_vecItems.size(); ++seq)
+    {
+        if( 0 <= m_vecItems[seq]->GetType().Find(strSeq))
+        {
+            return m_vecItems[seq];
+        }
+    }
+
+    return nullptr;
+}
+
+void CDoWorkGlassSequenceEngine::ChangeItemState()
+{
+    for (size_t i = 0; i < m_vecItems.size(); ++i)
+    {
+        if (m_vecItems[i])
+        {
+            m_vecItems[i]->ChangeState();
+        }
+    }
+}
+
+void CDoWorkGlassSequenceEngine::UpdateItemState()
+{
+    for (size_t i = 0; i < m_vecItems.size(); ++i)
+    {
+        if (m_vecItems[i])
+        {
+            m_vecItems[i]->UpdateState();
+        }
+    }
+}
+
+void CDoWorkGlassSequenceEngine::UpdateDataBaseInformation()
+{
+    // Item 쪽에 Recipe 정보를 Update 해준다.
+    for (size_t i = 0; i < m_vecItems.size(); ++i)
+    {
+        if (m_vecItems[i])
+        {
+            m_vecItems[i]->UpdateDataBaseInformation();
+        }
+    }
+}
+
+void CDoWorkGlassSequenceEngine::ResetResumeState()
+{
+    // Item 쪽에 Recipe 정보를 Update 해준다.
+    for (size_t i = 0; i < m_vecItems.size(); ++i)
+    {
+        if (m_vecItems[i])
+        {
+            m_vecItems[i]->ResetEvtPause();
+        }
+    }
+}
+
+void CDoWorkGlassSequenceEngine::UserResumeState()
+{
+    // Item 쪽에 Recipe 정보를 Update 해준다.
+    for (size_t i = 0; i < m_vecItems.size(); ++i)
+    {
+        if (m_vecItems[i])
+        {
+            m_vecItems[i]->SetEvtResume();
+        }
+    }
+}
+
+void CDoWorkGlassSequenceEngine::UserPauseState()
+{
+    // Item 쪽에 Recipe 정보를 Update 해준다.
+    for (size_t i = 0; i < m_vecItems.size(); ++i)
+    {
+        if (m_vecItems[i])
+        {
+            m_vecItems[i]->SetEvtPause();
+        }
+    }
+}
+
+void CDoWorkGlassSequenceEngine::UserStopState(bool bSet)
+{
+    // Item 쪽에 Recipe 정보를 Update 해준다.
+    for (size_t i = 0; i < m_vecItems.size(); ++i)
+    {
+        if (m_vecItems[i])
+        {
+            m_vecItems[i]->SetStopUser(bSet);
+        }
+    }
+}
+
+
+
+
+void CDoWorkGlassSequenceEngine::EngineStart()
+{
+    m_bEngineBreak = false;
+
+    ResetResumeState();
+    UserStopState(false);    // add
+
+	ResetEvent(m_hBreakEvent_link);
+    SetEvent(m_hStartEvent);
+}
+void CDoWorkGlassSequenceEngine::EngineResume()
+{
+	// 엔진의 thread 를 재시작 시킨다.
+    m_pThread->ResumeThread();
+
+    UserResumeState();
+
+	// 시퀀스의 thread 를 재시작 시킨다.
+	for(int index = 0; index < GetRecipeEditMgrPtr()->GetRecipeDataPtr()->GetParam_MeasAreaItemCount(); ++index)
+    {
+        const CString strSeq = GetRecipeEditMgrPtr()->GetRecipeDataPtr()->GetParam_MeasAreaItem(index);
+
+        CBaseSequenceImpl *pItem = FindItem(strSeq);
+        if(pItem)
+        {
+			pItem->Resume();
+        }
+    }
+}
+void CDoWorkGlassSequenceEngine::EnginePause()
+{
+	// 엔진의 thread 를 중지 시킨다.
+    m_pThread->SuspendThread();
+
+    UserPauseState();
+
+	// 시퀀스의 thread 를 중지 시킨다.
+	for(int index = 0; index < GetRecipeEditMgrPtr()->GetRecipeDataPtr()->GetParam_MeasAreaItemCount(); ++index)
+    {
+        const CString strSeq = GetRecipeEditMgrPtr()->GetRecipeDataPtr()->GetParam_MeasAreaItem(index);
+
+        CBaseSequenceImpl *pItem = FindItem(strSeq);
+        if(pItem)
+        {
+			pItem->Pause();
+        }
+    }
+}
+void CDoWorkGlassSequenceEngine::EngineStop()
+{
+    m_bEngineBreak = true;
+
+    UserResumeState();
+    UserStopState(true);    // add
+
+	ResetEvent(m_hStartEvent);
+    SetEvent(m_hBreakEvent_link);
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+//=========================================================================
+// Item Run Thread
+//=========================================================================
+UINT CDoWorkGlassSequenceEngine::ThreadRun(LPVOID p1)
+{
+    CDoWorkGlassSequenceEngine *pThis = (CDoWorkGlassSequenceEngine *)p1;
+
+    pThis->m_bThreadLive = true;
+
+    while (1)
+    {
+        DWORD dw = WaitForMultipleObjects(3, pThis->m_hMultiEvent, FALSE, INFINITE);
+
+        if (dw == WAIT_OBJECT_0) // Start Event 가 set될 때까지 기다린다.
+        {
+            pThis->ThreadRun();
+        }
+        else if (dw == (WAIT_OBJECT_0 + 1)) // Close Event 가 set될 때까지 기다린다.
+        {
+            pThis->ThreadRunExit();
+        }
+        else if (dw == (WAIT_OBJECT_0 + 2)) // Close Event 가 set될 때까지 기다린다.
+        {
+            break;
+        }
+        else // timeout, error state
+        {
+        }
+    }
+
+    pThis->m_bThreadLive = false;
+
+    return 0;
+}
+
+void CDoWorkGlassSequenceEngine::ThreadRun()
+{
+#ifdef _USE_NOT
+    // Top and Bottom
+    bool bCheckGlassMeas[2];
+    ZeroMemory(&bCheckGlassMeas, sizeof(bCheckGlassMeas));
+
+    stRecipeUTGParam* pstRecipeUTG;
+    pstRecipeUTG = &GetRecipeEditMgrPtr()->GetRecipeDataPtr()->GetParam_RecipeInfo()->stRecipeUTG;
+    if (pstRecipeUTG->nUseMeasTopBtm == 0)
+    {
+        bCheckGlassMeas[0] = true;
+        bCheckGlassMeas[1] = true;
+    }
+    else if (pstRecipeUTG->nUseMeasTopBtm == 1)
+    {
+        bCheckGlassMeas[0] = true;
+        bCheckGlassMeas[1] = false;
+    }
+    else if (pstRecipeUTG->nUseMeasTopBtm == 2)
+    {
+        bCheckGlassMeas[1] = true;
+        bCheckGlassMeas[0] = false;
+    }
+
+    // Glass 0 and 180
+    bool bCheckMeas[2];
+    ZeroMemory(&bCheckMeas, sizeof(bCheckMeas));
+    if (pstRecipeUTG->nUseMeasMode == 0)
+    {
+        bCheckMeas[0] = true;
+        bCheckMeas[1] = true;
+    }
+    else if (pstRecipeUTG->nUseMeasMode == 1)
+    {
+        bCheckMeas[0] = true;
+        bCheckMeas[1] = false;
+    }
+    else if (pstRecipeUTG->nUseMeasMode == 2)
+    {
+        bCheckMeas[1] = true;
+        bCheckMeas[0] = false;
+    }
+#endif // _USE_NOT
+
+	
+	bool bRet = false;
+
+    CMCCLogMgr::GetInstance()->SetMCC_Action(MCC_A_AUTO_CYCLE, true);
+
+	// LYS 2026-07-03 Resume Save: inspection start
+	if (m_MgrPool_link.pResumeInfoMgr && m_MgrPool_link.pSystemConfigMgr->IsUseResumeInspection())
+	{
+		S_RecipeData* pRD = GetRecipeEditMgrPtr()->GetRecipeData();
+		int nStickTotal = pRD ? (int)pRD->m_vecStick.size() : 0;
+		// LYS 2026-07-21 Save glass rotation for resume validation
+		S_RecipeInfo* pRI = GetRecipeEditMgrPtr()->GetRecipeInfo();
+		int nGlsRotate = pRI ? pRI->m_sOptionItem.m_nGlsRotate : -1;
+		m_MgrPool_link.pResumeInfoMgr->SaveResumeInfo(
+			CSystemParamShare::GetInstance()->GetGlassID(),
+			GetRecipeEditMgrPtr()->GetRecipeID(),
+			-1, true, false,
+			nStickTotal,
+			CSystemParamShare::GetInstance()->GetLotID(),
+			CSystemParamShare::GetInstance()->GetInnerID(),
+			CSystemParamShare::GetInstance()->GetResultFolderPath(),
+			nGlsRotate);
+	}
+
+	// GLASS ID
+	CString strGlassID, strRecipeID;
+	strGlassID = CSystemParamShare::GetInstance()->GetGlassID();
+	strRecipeID = GetRecipeEditMgrPtr()->GetRecipeID();
+
+	int nCycleCount = 1;
+	if (m_MgrPool_link.pShareMemoryMgr->GetSys_MachineMode() == df_HOST_OFFLINE)
+	{
+		nCycleCount = CSystemParamShare::GetInstance()->GetCycleCount();
+	}
+
+	for (int index = 0; index < nCycleCount; ++index)	// jsyoon 2022.08.18 change
+ //   for(int index = 0; index < CSystemParamShare::GetInstance()->GetCycleCount(); ++index)
+    {
+        if (index > 0)
+        {
+            // cycle 을 돌려주기 위해서는 2s 정도 기다려주자.
+            WaitForSingleObject(m_hWaitsEvent, 2000);
+        }
+
+		if (m_MgrPool_link.pShareMemoryMgr->GetSys_MachineMode() != df_HOST_ONLINE_REMOTE)	// jsyoon 2022.06.13 add
+		{
+			// tact time 기록을 위해서
+			GetSeqTactTimeMgrPtr()->SetDataClear();
+			GetSeqTactTimeMgrPtr()->SetTotalSeqTimeST();
+		}
+		
+		if (index > 0)
+		{
+			CString str;
+			SYSTEMTIME st;
+			::GetLocalTime(&st);
+			str.Format(_T("%02d%02d%02d"), st.wHour, st.wMinute, st.wSecond);
+			CSystemParamShare::GetInstance()->SetInnerID(str);
+
+			//// GLASS ID
+			//CString strGlassID;
+			strGlassID.Format(_T("GLASSID%s"), str);
+			CSystemParamShare::GetInstance()->SetGlassID(strGlassID);
+
+		//	CWindowEventHandler::GetInstance()->PostMessageToUI(enumWndID_TITLE, WM_MSG_UPDATE_RECIPE_INFORMATION, NULL, NULL);
+            CWindowEventHandler::GetInstance()->PostMessageToUI(enumWndID_FRAME, WM_MSG_UPDATE_RECIPE_INFORMATION, NULL, NULL);
+
+ //         WaitForSingleObject(m_hWaitsEvent, 1000);
+		}
+
+		const int cycle_index = index + 1;
+		if (m_MgrPool_link.pShareMemoryMgr->GetSys_MachineMode() != df_HOST_ONLINE_REMOTE)
+		{
+			GetSeqTactTimeMgrPtr()->SetCycleTimeST(cycle_index, strGlassID, strRecipeID);
+		}
+        
+
+		bool bFirst = true;
+        int i = 0, j = 0;
+        bRet = ThreadRu_nSequence(cycle_index, bFirst);
+       
+	//	WaitForSingleObject(m_hWaitsEvent, 1000);
+
+		CWindowEventHandler::GetInstance()->SendMessageToUI(enumWndID_FRAME, WM_MSG_CCD_LIVE, enumSeqItemID_CCD_LIVE_START, NULL);
+
+
+		if (m_MgrPool_link.pShareMemoryMgr->GetSys_MachineMode() != df_HOST_ONLINE_REMOTE)	// jsyoon 2022.06.13 add
+		{
+			GetSeqTactTimeMgrPtr()->SetCycleTimeED(cycle_index);
+			GetSeqTactTimeMgrPtr()->SetTotalSeqTimeED();
+		}
+        
+        if (bRet != true)
+        {
+            break;
+        }
+
+        bFirst = false;
+
+        //// 시퀀스를 멈춰야 하는 경우
+        //if (IsThreadStopState() == true)
+        //{
+        //    GetSeqTactTimeMgrPtr()->SetCycleTimeED(cycle_index);
+        //    break;
+        //}
+
+#ifdef _USE_NOT
+	//	for (size_t i = 0; i < 2; i++)	// Glass Top and Bottom
+		{
+			if (bCheckGlassMeas[i] != true)
+				continue;
+
+			if (index == 0)
+			{
+				//// POPUP wait change Glass
+				//if (i > 0)
+				//{
+				//	CD_MeasureCycleWait dlg(GetIOMapControlMgrPtr());
+				//	if (dlg.DoModal() != IDOK)
+				//	{
+				//		break;
+				//	}
+				//}
+			}
+			else
+			{
+				WaitForSingleObject(m_hWaitsEvent, 1000);
+			}
+			
+	//		for (size_t j = 0; j < 2; j++)	// 0, 180 Measure
+			{
+				if (bCheckMeas[j] != true)
+				{
+					continue;
+				}
+				else
+				{
+					if (j == 0)	// 0
+					{
+						pstRecipeUTG->stCoordMeasPos[0] = pstRecipeUTG->stCoordTopMeasPos[0];
+						pstRecipeUTG->stCoordMeasPos[1] = pstRecipeUTG->stCoordTopMeasPos[1];
+					}
+					else // 180
+					{
+						pstRecipeUTG->stCoordMeasPos[0] = pstRecipeUTG->stCoordBottomMeasPos[0];
+						pstRecipeUTG->stCoordMeasPos[1] = pstRecipeUTG->stCoordBottomMeasPos[1];
+					}
+
+					// Set MeasMode
+					if (i == 0)  // Top
+					{
+						pstRecipeUTG->stCoordMeasPos[1].nAFCh = pstRecipeUTG->nAFChannel[0];	// Side
+
+						if (j == 0)	// 0
+						{
+							pstRecipeUTG->nMeasMode = 1;
+						}
+						else		// 180
+						{
+							pstRecipeUTG->nMeasMode = 2;
+						}
+					}
+					else // Bottom
+					{
+						pstRecipeUTG->stCoordMeasPos[1].nAFCh = pstRecipeUTG->nAFChannel[1];	// Side
+
+						if (j == 0)	// 0
+						{
+							pstRecipeUTG->nMeasMode = 3;
+						}
+						else  // 180
+						{
+							pstRecipeUTG->nMeasMode = 4;
+						}
+					}
+				}
+
+				bRet = ThreadRu_nSequence(cycle_index, bFirst);
+
+				if (bRet != true)
+				{
+					break;
+				}
+
+				bFirst = false;
+
+				// 시퀀스를 멈춰야 하는 경우
+				if (IsThreadStopState() == true)
+				{
+					break;
+				}
+			}
+		}
+#endif // _USE_NOT
+
+
+  //      GetSeqTactTimeMgrPtr()->SetCycleTimeED(cycle_index);
+
+  //  //   // cycle 을 돌려주기 위해서는 5s 정도 기다려주자.
+  //  //   WaitForSingleObject(m_hWaitsEvent, 5000);
+
+		//GetSeqTactTimeMgrPtr()->SetTotalSeqTimeED();
+
+		// 시퀀스를 멈춰야 하는 경우
+		if (IsThreadStopState() == true)
+		{
+			break;
+		}
+    }
+
+	//--------------------------------------------------------------
+	// 시퀀스를 멈춰야 하는 경우
+	//--------------------------------------------------------------
+    if(IsThreadStopState() == true)
+	{
+		SetEvent(m_hExitsEvent);
+	}
+	else
+	{
+		// LYS 2026-07-03 Resume Clear: inspection completed
+		if (m_MgrPool_link.pResumeInfoMgr && m_MgrPool_link.pSystemConfigMgr->IsUseResumeInspection())
+		{
+			if (bRet == true)
+				m_MgrPool_link.pResumeInfoMgr->ClearResumeInfo();
+			// Cancel/NG: keep Running=true for resume next time
+		}
+
+		if( bRet == true)
+			CWindowEventHandler::GetInstance()->PostMessageToUI(enumWndID_FRAME, WM_MSG_UPDATE_CYCLE_INSPECTION_COMPLETE, NULL, NULL);
+		else
+			CWindowEventHandler::GetInstance()->PostMessageToUI(enumWndID_FRAME, WM_MSG_UPDATE_CYCLE_INSPECTION_COMPLETE, NULL, true);
+	}
+
+    CMCCLogMgr::GetInstance()->SetMCC_Action(MCC_A_AUTO_CYCLE, false);
+}
+
+bool CDoWorkGlassSequenceEngine::ThreadRu_nSequence(int cycle_index, bool bFirst)
+{
+	int i = 0, nStart = 0, nEnd = 0;
+	if (bFirst != true)
+	{
+		nStart = 1;
+	}
+
+	CString strLog;
+	strLog.Format(_T("ThreadRu_nSequence : %d - Start"), cycle_index);
+	m_pLogFileAccessor->KMLOG(OPER, strLog);
+
+	nEnd = m_vecItems.size();
+    for ( i = nStart; i < nEnd; ++i)
+    {
+        if (m_vecItems[i])
+        {
+            // 동작 시작
+			m_vecItems[i]->Start();			
+			GetSeqTactTimeMgrPtr()->SetCycleIndex(cycle_index);
+
+            // 측정 Skip 개수 셋팅(측정 동작 반복하기 위해서)
+            S_RecipeData* pRecipeData;
+            pRecipeData = GetRecipeEditMgrPtr()->GetRecipeData();
+            int nStick = 0;
+            nStick = pRecipeData->m_vecStick.size();
+            m_vecItems[i]->SetLoopStepIndex(nStick);
+            ///
+
+			strLog.Format(_T("Cycle Seq Item : %s - Start"), m_vecItems[i]->GetName().GetString());
+			m_pLogFileAccessor->KMLOG(OPER, strLog);
+			
+			// 시퀀스를 멈춰야 하는 경우
+            if(IsThreadStopState() == true)
+            {
+				// 사용자에 의해서 강제로 종료 되었다.
+				if(m_bEngineBreak == true) 
+				{
+					CSystemParamShare::GetInstance()->SetForceStopByUser(true);						
+				}
+			
+                m_vecItems[i]->Stop();
+                m_vecItems[i]->Exit();	// exit 시켜줘야 한다.
+			
+                CString strLog;
+                strLog.Format(_T("Cycle Seq Item : %s - User Force Exit"), m_vecItems[i]->GetName().GetString());
+                m_pLogFileAccessor->KMLOG(OPER, strLog);
+                return true;
+            }
+
+            // 시퀀스 완료 이벤트 대기 
+			if(WaitForSingleObject(m_vecItems[i]->GetCompleteEventHandle(), INFINITE) == WAIT_OBJECT_0)
+			{
+				if (m_vecItems[i]->GetFail() == true)
+				{
+					strLog.Format(_T("Cycle Seq Item : %s - Fail Exit"), m_vecItems[i]->GetName().GetString());
+					m_pLogFileAccessor->KMLOG(OPER, strLog);
+                
+                    int iAlarmID = m_vecItems[i]->GetFailNum();
+                    CAlarmController::GetInstance()->SetAlarm(iAlarmID);
+
+                    m_vecItems[i]->SetComplete(true);   // 2023.08.23 add
+					return false;
+				}
+
+                // 사용자 정지시 중지
+                if (m_vecItems[i]->GetStopUser() == true)
+                {
+                    CSystemParamShare::GetInstance()->SetForceStopByUser(true);
+
+                    strLog.Format(_T("Cycle Seq Item : %s - Stop User Exit"), m_vecItems[i]->GetName().GetString());
+                    m_pLogFileAccessor->KMLOG(OPER, strLog);
+
+                    m_vecItems[i]->SetComplete(true);   // 2023.08.23 add
+                    return false;
+                }
+
+                // 완료 실패시 중지
+				if (m_vecItems[i]->GetComplete() != true)
+				{
+					
+					strLog.Format(_T("Cycle Seq Item : %s - Fail Exit"), m_vecItems[i]->GetName().GetString());
+					m_pLogFileAccessor->KMLOG(OPER, strLog);
+
+                    m_vecItems[i]->SetComplete(true);   // 2023.08.23 add
+					return false;
+				}
+
+				strLog.Format(_T("Cycle Seq Item : %s - End"), m_vecItems[i]->GetName().GetString());
+				m_pLogFileAccessor->KMLOG(OPER, strLog);
+			}
+		}
+	}
+
+	strLog.Format(_T("ThreadRu_nSequence : %d - End"), cycle_index);
+	m_pLogFileAccessor->KMLOG(OPER, strLog);
+
+	return true;
+}
+
+
+                
+
+void CDoWorkGlassSequenceEngine::ThreadRunExit()
+{
+	// 시퀀스를 종료하기 위해서는 500ms 정도 기다려주자.
+    WaitForSingleObject(m_hWaitsEvent, 500);
+
+	for(int index = 0; index < GetRecipeEditMgrPtr()->GetRecipeDataPtr()->GetParam_MeasAreaItemCount(); ++index)
+    {
+        const CString strSeq = GetRecipeEditMgrPtr()->GetRecipeDataPtr()->GetParam_MeasAreaItem(index);
+
+        CBaseSequenceImpl *pItem = FindItem(strSeq);
+        if(pItem)
+        {
+            pItem->Stop();
+            pItem->Exit();	// exit 시켜줘야 한다.
+        }
+    }
+
+	CWindowEventHandler::GetInstance()->PostMessageToUI(enumWndID_FRAME, WM_MSG_UPDATE_CYCLE_INSPECTION_COMPLETE, NULL, NULL);
+}
+
+
+bool CDoWorkGlassSequenceEngine::IsThreadStopState()
+{
+	// 센서 감지로 사이클이 멈춰야 하는 상황
+	if(CSystemParamShare::GetInstance()->IsCycleState() == false)
+	{
+		return true;
+	}
+
+    // 사용자에 의해서 강제로 종료 되었다.
+    if(m_bEngineBreak == true) 
+    {
+        return true;
+    }
+
+	return false;
+}
+

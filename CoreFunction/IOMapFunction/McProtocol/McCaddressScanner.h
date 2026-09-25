@@ -23,7 +23,10 @@ class CMcCaddressScanner : public CMcAddressScannerImpl
 
 	bool SendCommand();
 	int m_nReadType;
+	bool m_bDisconnectCleared;	// LYS 2026-09-16 disconnect: arrays cleared + WARN logged once (ThreadRun spins every ~10ms while disconnected)
+	CString m_strLastParseWarn;	// LYS 2026-09-16 last header-mismatch WARN text (log only when it changes)
 	void UpdateProbeID(CString strCommand, int iType);
+	void LogProbeIDValues(int iType);	// LYS 2026-09-16 OPER log of parsed IDs (after UpdateProbeID)
 
 
 	//------------------------------------------------------------------

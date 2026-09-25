@@ -96,6 +96,9 @@ const enum RCP_VERSION{
 	RECIPE_FILE_V1005,		// LYS 2026-07-08 Add
 	RECIPE_FILE_V1006,		// LYS 2026-08-06 Add
 	RECIPE_FILE_V1007,		// LYS 2026-08-19 Add
+	RECIPE_FILE_V1008,		// LYS 2026-09-04 Align SUB Z RIGHT/LEFT
+	RECIPE_FILE_V1009,		// LYS 2026-09-09 Stick별 PROBE Z CONTACT OFFSET (_STICK_CONTACT_OFFSET_ 꼬리 블록)
+	RECIPE_FILE_V1010,		// LYS 2026-09-18 ANGLE Sub Z RIGHT/LEFT (_ANGLE_SUBZ_ 꼬리 블록)
 	RECIPE_FILE_END,
 };
 
@@ -247,7 +250,7 @@ struct S_MotionOffsetPos {
 		
 		m_fHeadReviewY 		= 0.0;
 		m_fHeadReviewLeft 	= 0.0;
-		m_fHeadReviewLeft   = 0.0;
+		m_fHeadReviewRight  = 0.0;	// LYS 2026-09-18 오타 수정 - m_fHeadReviewLeft 를 두 번 대입해 Right 가 초기화되지 않았다
 		
 		m_nQualityRotate 	= 1;
 		m_fQualityLeftRot 	= 0.0;
@@ -264,8 +267,10 @@ struct S_MotionSubZ {
 	double m_fVisionSubzRight;
 	double m_fVisionSubzLeft;
 
-	//double m_fAngleSubzRight;
-	//double m_fAngleSubzLeft;
+	// LYS 2026-09-18 ANGLE 전용 Sub Z 복구. VISION 과 같은 축(Z5/Z6)을 쓰지만 목표 높이는 따로 둔다 -
+	//                화질(VISION)과 시야각(ANGLE)은 광학계가 달라 초점 거리가 같지 않다.
+	double m_fAngleSubzRight;
+	double m_fAngleSubzLeft;
 
 	S_MotionSubZ() {
 		Clear();
@@ -278,8 +283,8 @@ struct S_MotionSubZ {
 		m_fVisionSubzRight = 0.0;
 		m_fVisionSubzLeft = 0.0;
 
-		//m_fAngleSubzRight = 0.0;
-		//m_fAngleSubzLeft = 0.0;
+		m_fAngleSubzRight = 0.0;	// LYS 2026-09-18
+		m_fAngleSubzLeft = 0.0;
 	}
 };
 
@@ -380,6 +385,7 @@ struct S_StickInfo {
 	int		m_nStickNum;
 	double	m_fStageY;
 	double	m_fStageR;
+	double	m_fProbeZOffset;	// LYS 2026-09-09 Stick별 PROBE Z CONTACT OFFSET(mm, +=하강). End Contact 목표에만 가산
 	
 	vector <S_CellInfo>	m_vecCell; //Cell 정보
 
@@ -391,6 +397,7 @@ struct S_StickInfo {
 		m_nStickNum = 0;
 		m_fStageY	= 0.0;
 		m_fStageR	= 0.0;
+		m_fProbeZOffset = 0.0;	// LYS 2026-09-09
 		
 		if (!m_vecCell.empty())  m_vecCell.clear ();
 	}
@@ -492,6 +499,8 @@ struct S_GlsAlign {
 	double	m_fFrontLeft;
 	double	m_fFrontRight;
 	double	m_fFrontZ;
+	double	m_fSubZRight;	// LYS 2026-09-04 SUB Z RIGHT(AXIS_Z3)
+	double	m_fSubZLeft;	// LYS 2026-09-04 SUB Z LEFT(AXIS_Z4)
 
 	S_GlsAlign () {
 		Clear ();
@@ -508,6 +517,8 @@ struct S_GlsAlign {
 		m_fFrontLeft		= 0.0;
 		m_fFrontRight		= 0.0;
 		m_fFrontZ			= 0.0;
+		m_fSubZRight		= 0.0;
+		m_fSubZLeft			= 0.0;
 	}
 };
 
@@ -524,6 +535,8 @@ struct S_ProbeAlign {
 	double	m_fBackRight;
 	double	m_fBackZ;
 	double	m_fStageY;
+	double	m_fSubZRight;	// LYS 2026-09-04 SUB Z RIGHT(AXIS_Z3)
+	double	m_fSubZLeft;	// LYS 2026-09-04 SUB Z LEFT(AXIS_Z4)
 
 	S_ProbeAlign () {
 		Clear ();
@@ -541,6 +554,8 @@ struct S_ProbeAlign {
 		m_fBackRight		= 0.0;
 		m_fBackZ			= 0.0;
 		m_fStageY			= 0.0;
+		m_fSubZRight		= 0.0;
+		m_fSubZLeft			= 0.0;
 	}
 };
 

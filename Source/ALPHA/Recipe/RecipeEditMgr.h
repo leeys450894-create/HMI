@@ -67,6 +67,7 @@ public:
 	S_RecipeInfo* GetRecipeInfo();
 	S_RecipeData* GetRecipeData();
 	S_RecipeMap* GetRecipeMap();
+	double GetStickProbeZOffset(int iStick);	// LYS 2026-09-09 Stick별 PROBE Z CONTACT OFFSET(mm, +=하강). 범위 밖/미로드=0, |값|>1.0mm 클램프
 
 	void ChangeAreaInfoRecipeToMeas();
 //	std::vector<stGlassMeasAreaInfo>		m_vecGlassMeasAreaHead1;
@@ -105,6 +106,9 @@ public:
 
 private:
 	std::vector<SRECIPE_FILEINFO> m_vecRcpList;
+	// LYS 2026-09-18 TestMode MOVE : 직전 이동에 쓴 스틱 번호 (-1 = 아직 없음).
+	//                같은 스틱에서 셀만 바뀔 때 프로브 UnContact 를 건너뛰는 판정에 쓴다.
+	int		m_iTestModeLastStick;
 public:
 	void	UpdateRecipeList();
 	int		GetRecipeListCount() const;

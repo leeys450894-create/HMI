@@ -191,7 +191,8 @@ struct stMotorPosition
 	int iTube;
 };
 
-#define df_HOMINGDONE_TIME 1800		// 1800 sec
+//#define df_HOMINGDONE_TIME 1800		// 1800 sec
+#define df_HOMINGDONE_TIME 180		// 180 sec  // LYS 2026-09-15 1800초 -> 180초. 초기화·Maint HOME 버튼의 CheckHomeDone 최대 대기
 #define df_MOVINGDONE_TIME 60		// 60 sec
 
 enum speed_type_t 

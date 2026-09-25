@@ -7,7 +7,11 @@
 
 //#include "stdafx.h"
 
-#define		VTM_SHARE_MEM_STRING_FDC	_T("HBS_Shared_Memory_For_FDC_V2")
+// LYS 2026-09-19 이름을 실제 운용 FDC(D:\0.SW\FDC\FDCSense.exe) 에 맞췄다.
+//                _V2 는 HMI 솔루션 안의 FDCSense(CoreFunction\EX_FDC, 미사용) 전용 이름이라
+//                ALPHA 가 운용 FDC 와 다른 메모리를 따로 만들어 쓰고 있었다(값을 하나도 못 받음).
+//#define		VTM_SHARE_MEM_STRING_FDC	_T("HBS_Shared_Memory_For_FDC_V2")
+#define		VTM_SHARE_MEM_STRING_FDC	_T("HBS_Shared_Memory_For_FDC")
 
 const enum NUM_FDC_WDATA{
 	FDC_WDATA_TEMP_1 = 1,
@@ -15,7 +19,32 @@ const enum NUM_FDC_WDATA{
 	FDC_WDATA_TEMP_3,
 	FDC_WDATA_TEMP_4,
 	FDC_WDATA_TEMP_5,
-	
+
+	// LYS 2026-09-19 온도 10 개 슬롯. 순서는 PLCMAdress.csv 의 온도 비트 순서(M 주소 순서)를 따른다.
+	//                i 번째(0 부터) 온도 = stFDCWData[FDC_WDATA_TEMP_1 + i]
+	//                               = PLC_BIT_TEMP_SENSOR_(i+1) (과열 표시기 M4210 + i)
+	//                               = PLC_BIT_TEMP_SENSOR_RESET_SWITCH_(i+1) (리셋 스위치)
+	//                               = 알람 4501 + i (40도) / 4521 + i (+3도)
+	//                ALPHA 의 과열·경고 모니터와 리셋 스위치가 모두 이 i 로 묶이므로, 운용 FDC_LIST 의
+	//                NUM_FDC_WDATA 도 반드시 이 순서로 매겨야 한다(어긋나면 A 박스 리셋 버튼이 B 박스 알람을 끈다).
+	//                위치 이름은 IO List Map(Doc\15_PLC Address\...M-Memory Map_260804_SW2.xlsx) 기준.
+	//                FDC 는 이 열의 숫자를 stFDCWData 인덱스로 그대로 쓴다(±1 보정 없음, 0 번은 비어 있다).
+	//                값은 szData 에 "%.2f" 문자열, nMax/nMin 은 그 행의 MAX/MIN 열 그대로다.
+	//                ※ FDC 의 필터(m_bFilterUse)는 항상 꺼져 있어 MAX/MIN 은 값을 자르지 않는다 -
+	//                  ALPHA 온도 과열 판정(DlgMainForm::GetMonitorIO, dValueMax < dValue)의 기준값으로만 쓰인다.
+	//                  MAX 가 비어 있으면 0 으로 와서 모든 온도가 과열로 판정된다.
+	FDC_WDATA_TEMP_EL_BOX_GPS     = 1,	// M4210 / reset M4260  GPS EL. BOX
+	FDC_WDATA_TEMP_EL_BOX_UPS     = 2,	// M4211 / reset M4261  UPS EL. BOX
+	FDC_WDATA_TEMP_PC_BOX         = 3,	// M4212 / reset M4262  PC BOX
+	FDC_WDATA_TEMP_PC_BOX_FRONT   = 4,	// M4213 / reset M4263  PC E-BOX FRONT
+	FDC_WDATA_TEMP_PC_BOX_REAR    = 5,	// M4214 / reset M4264  PC E-BOX REAR
+	FDC_WDATA_TEMP_IO_PANEL       = 6,	// M4215 / reset M4265  I/O PANEL
+	FDC_WDATA_TEMP_PN_PANEL       = 7,	// M4216 / reset M4266  P/N PANEL
+	FDC_WDATA_TEMP_S_BOX_FRONT    = 8,	// M4217 / reset M4267  FRONT S-BOX
+	FDC_WDATA_TEMP_S_BOX_REAR     = 9,	// M4218 / reset M4256  REAR S-BOX (리셋만 M4256 - 배선 그대로)
+	FDC_WDATA_TEMP_SACC           = 10,	// M4219 / reset M4269  SACC
+	FDC_WDATA_TEMP_LIST_CNT       = 10,
+
 	FDC_WDATA_TEMP_END = 50,
 
 	FDC_WDATA_WT_VACUUM_1,			// VACUUM 
@@ -108,6 +137,8 @@ const enum NUM_FDC_WDATA{
 	FDC_WDATA_ELP_BOX_STRIDE = 20,
 	FDC_WDATA_ELP_END = FDC_WDATA_ELP_START + 40,
 
+	// LYS 2026-09-19 stFDCWData 크기. 운용 FDC 도 [1000] 으로 맞췄다(원래 [100] 이라 이름만 맞으면 크기가 어긋났다).
+	//                FDC 쪽 정본: D:\0.SW\SRC\HBS_FDC_HMI\FDC\Include\FDCSheardDefine.h - 한쪽만 바꾸지 말 것.
 	FDC_WDATA_END = 1000,
 };
 
@@ -131,6 +162,54 @@ const enum NUM_MAIN_WDATA_ELP{
 	MAIN_WDATA_ELP_ITEM_CNT,			// 9
 };
 
+// LYS 2026-09-19 제어 -> FDC (stMainWData) 슬롯. 운용 FDC(D:\0.SW\FDC\FDCSense.exe)는 SOURCE ADDRESS 를 보지 않고
+//                FDC_LIST 의 SHARE 행을 위에서부터 stMainWData[0], [1], [2] ... 순서로 읽는다
+//                (소스 FDCSense\DlgPLC.cpp WriteFDC_Filtering 의 k, 0 부터). 그래서 FDC_LIST SHARE 행 순서가 곧 이 인덱스다.
+//                FDC_LIST 에 SHARE 행을 끼우거나 빼면 그 뒤 슬롯이 전부 밀리므로 여기와 CMCCLogMgr::UpdateSensor 를 같이 고칠 것.
+//                모션 35 축은 AxisType.h 순서(POSI 블록 -> LOAD 블록). 축 대응은 UpdateSensor 의 s_FdcMtr 표.
+//                ※ 위 ELP 400 번대는 운용 FDC 가 읽지 않는다(순서 읽기라 SHARE 행 수 78 을 넘지 않음).
+// LYS 2026-09-24 FDC_LIST 개정(D:\0.SW\FDC\FDC_LIST\FDC_LIST_after.csv) 반영. SHARE 행 78 -> 69.
+//   (1) 2~11 에 PG 전력량 10 행 추가: PG1_I_LEAK, PG2_I_LEAK, PG1_N03_T_PW/I_PW/VOL/CUR, PG2_N04_T_PW/I_PW/VOL/CUR
+//       (출처 ELP ElecBox 모니터 S10F01, CMCCLogMgr::m_dDataToELP - PG1 = 박스 1, PG2 = 박스 2).
+//   (2) MTR_*_LOAD 35 -> 16 (AC_Z, VISION 1/2 ZOOM·ANG·FILTER, LIFT_PIN, PROBE_Z, VIEWING_ANG 1/2 x5 삭제).
+//   POSI 35 축 순서는 그대로. 구 정의는 아래 주석으로 남겼다. 값 채우기는 CMCCLogMgr::UpdateSensor.
+const enum NUM_MAIN_WDATA_SHARE {
+	MAIN_WDATA_SHARE_MCCB_TRIP_GPS    = 0,	// MAIN_GPS_MCCB_TRIP
+	MAIN_WDATA_SHARE_MCCB_TRIP_UPS    = 1,	// MAIN_UPS_MCCB_TRIP
+	MAIN_WDATA_SHARE_PG_START         = 2,	// PG1_I_LEAK, PG2_I_LEAK, PG1_N03_T_PW, I_PW, VOL, CUR, PG2_N04_T_PW, I_PW, VOL, CUR
+	MAIN_WDATA_SHARE_PG_CNT           = 10,
+	MAIN_WDATA_SHARE_MTR_POSI_START   = MAIN_WDATA_SHARE_PG_START + MAIN_WDATA_SHARE_PG_CNT,	// 12, MTR_*_POSI x 35
+	MAIN_WDATA_SHARE_MTR_CNT          = 35,
+	MAIN_WDATA_SHARE_MTR_LOAD_START   = MAIN_WDATA_SHARE_MTR_POSI_START + MAIN_WDATA_SHARE_MTR_CNT,	// 47, MTR_*_LOAD x 16
+	MAIN_WDATA_SHARE_MTR_LOAD_CNT     = 16,
+	MAIN_WDATA_SHARE_LIFT_PIN_FIRST   = MAIN_WDATA_SHARE_MTR_LOAD_START + MAIN_WDATA_SHARE_MTR_LOAD_CNT,	// 63
+	MAIN_WDATA_SHARE_LIFT_PIN_SECOND,	// 64
+	MAIN_WDATA_SHARE_LIFT_PIN_THIRD,	// 65
+	MAIN_WDATA_SHARE_LIFT_PIN_DOWN,		// 66
+	MAIN_WDATA_SHARE_INSPEC_PROBE_OD,	// 67
+	MAIN_WDATA_SHARE_CONTR_SW_VER,		// 68
+	MAIN_WDATA_SHARE_END,				// 69 = 운용 FDC_LIST 의 SHARE 행 수
+};
+static_assert(MAIN_WDATA_SHARE_MTR_POSI_START == 12 && MAIN_WDATA_SHARE_MTR_LOAD_START == 47 && MAIN_WDATA_SHARE_LIFT_PIN_FIRST == 63 && MAIN_WDATA_SHARE_END == 69,
+	"SHARE slot map must follow the FDC_LIST SHARE row order (2026-09-24 list)");
+
+//const enum NUM_MAIN_WDATA_SHARE {
+//	MAIN_WDATA_SHARE_MCCB_TRIP_GPS    = 0,	// MAIN_GPS_MCCB_TRIP
+//	MAIN_WDATA_SHARE_MCCB_TRIP_UPS    = 1,	// MAIN_UPS_MCCB_TRIP
+//	MAIN_WDATA_SHARE_MTR_POSI_START   = 2,	// MTR_*_POSI x 35
+//	MAIN_WDATA_SHARE_MTR_CNT          = 35,
+//	MAIN_WDATA_SHARE_MTR_LOAD_START   = MAIN_WDATA_SHARE_MTR_POSI_START + MAIN_WDATA_SHARE_MTR_CNT,	// 37, MTR_*_LOAD x 35
+//	MAIN_WDATA_SHARE_LIFT_PIN_FIRST   = MAIN_WDATA_SHARE_MTR_LOAD_START + MAIN_WDATA_SHARE_MTR_CNT,	// 72
+//	MAIN_WDATA_SHARE_LIFT_PIN_SECOND,	// 73
+//	MAIN_WDATA_SHARE_LIFT_PIN_THIRD,	// 74
+//	MAIN_WDATA_SHARE_LIFT_PIN_DOWN,		// 75
+//	MAIN_WDATA_SHARE_INSPEC_PROBE_OD,	// 76
+//	MAIN_WDATA_SHARE_CONTR_SW_VER,		// 77
+//	MAIN_WDATA_SHARE_END,				// 78 = 운용 FDC_LIST 의 SHARE 행 수
+//};
+//static_assert(MAIN_WDATA_SHARE_LIFT_PIN_FIRST == 72 && MAIN_WDATA_SHARE_END == 78, "SHARE slot map must follow the FDC_LIST SHARE row order");
+static_assert(MAIN_WDATA_SHARE_END <= MAIN_WDATA_ELP_START, "SHARE slots must not overlap the ELP block");
+
 typedef struct {
 	char		szName[32];
 	char		szData[32];
@@ -150,6 +229,18 @@ typedef struct
 typedef struct  {
 	FDC_For_Shared FDCValue;
 }VTM_FOR_FDC, *PVTM_FOR_FDC;
+
+// LYS 2026-09-19 운용 FDC(Win32, D:\0.SW\SRC\HBS_FDC_HMI\FDC\Include\FDCSheardDefine.h)와 바이트 단위로 같아야 한다.
+//                포인터가 없어 32/64 비트 레이아웃이 같다. 크기가 다르면 먼저 뜬 쪽이 섹션 크기를 정해
+//                나중 쪽의 MapViewOfFile 이 실패하거나(ALPHA 가 클 때) 끝을 넘겨 읽는다.
+//                크기 = 8 + 80*1000(stMainWData) + 8 + 80*1000(stFDCWData) = 160,016 B, stFDCWData 오프셋 80,016.
+//                (2026-09-19 이전 운용 FDC 는 stFDCWData[100] = 88,016 B 였다. 새 FDC 를 먼저 배포할 것 -
+//                 옛 FDC 가 먼저 떠 88,016 B 로 섹션을 잡으면 ALPHA 의 MapViewOfFile(160,016) 이 실패한다.)
+static_assert(sizeof(RDATA) == 80, "RDATA must match the FDC program (80 bytes)");
+static_assert(sizeof(VTM_FOR_FDC) == 160016, "VTM_FOR_FDC must match the FDC program byte for byte (stFDCWData[1000])");
+static_assert(FDC_WDATA_TEMP_1 + 19 < FDC_WDATA_END, "DlgMainForm::GetMonitorIO reads TEMP_1 .. TEMP_1+19");
+static_assert(FDC_WDATA_WT_VACUUM_1 + 4 < FDC_WDATA_END, "CMCCLogMgr::UpdateSensor reads 5 vacuum slots");
+static_assert(FDC_WDATA_ESD < FDC_WDATA_END, "CDlgSubOperate reads FDC_WDATA_ESD");
 
 
 

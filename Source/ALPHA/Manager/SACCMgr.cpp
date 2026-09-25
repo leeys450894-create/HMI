@@ -6,6 +6,7 @@
 #include "..\..\Include\API_ProbeHistory.h"
 #include "Manager/SequenceManager.h"
 #include "FunctionModule/FunctionModuleProbeACC.h"
+#include "FunctionModule/FunctionModuleEQState.h"	// LYS 2026-09-16 SetEQManualProbeID
 #include "SystemParamShare.h"
 
 #ifdef _DEBUG
@@ -301,6 +302,21 @@ void CSACCMgr::OnControlMsgReceive(WPARAM wParam, LPARAM lParam)
 		CSequenceManager::GetInstance()->GetFunctionModuleProbeACC()->SetProbe(iProbe);
 		CSequenceManager::GetInstance()->GetFunctionModuleProbeACC()->SetUnLoadCassette(iUnLoadCassette);
 		CSequenceManager::GetInstance()->GetFunctionModuleProbeACC()->Start();
+		break;
+	}
+	// LYS 2026-09-16 수동 장착 프로브 ID 등록(SACC 화면 SET ID / CLEAR ID) -> 해당 프로브 모듈 워드 블록(P5 = D2150) 직접 쓰기. 시퀀스 스레드 없이 1회 쓰기라 Start() 없음.
+	case SACC_COMMAND_OPERATION_SET_PROBEID:
+	{
+		int iProbe = nData->nWTSequence;
+		CString strID(nData->szText);
+		strID.Trim();
+		bool bOK = CSequenceManager::GetInstance()->GetFunctionModuleEQState()->SetEQManualProbeID(iProbe, strID);
+		CString strLog;
+		strLog.Format(_T("SACC SET_PROBEID probe=%d D%d id=[%s] -> %s"), iProbe, 2100 + 10 * iProbe, strID, bOK ? _T("OK") : _T("NG"));
+		if (CSequenceManager::GetInstance()->GetFunctionModuleProbeACC()->GetLogFileAccessorPtr() != nullptr)
+			CSequenceManager::GetInstance()->GetFunctionModuleProbeACC()->GetLogFileAccessorPtr()->KMLOG(bOK ? SYST : WARN, strLog);	// SEQ SACC 로그
+		// 위에서 보낸 SACC_Start 표시를 되돌린다(시퀀스 명령은 Idle 스텝이 End 를 보낸다)
+		CWindowEventHandler::GetInstance()->SendMessageToUI(enumWndID_FRAME, WM_MSG_UPDATE_POSITION_STATE, enumDoWorkStateID_WORK_SACC_End, NULL);
 		break;
 	}
 	case SACC_COMMAND_OPERATION_EXCHANGE:

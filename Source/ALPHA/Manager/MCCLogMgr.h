@@ -465,6 +465,17 @@ class CMCCLogMgr
 	CString				    m_strVersion;
 	bool					m_bIonizerRun;
 
+	// LYS 2026-09-19 FDC 로 보낼 축 현재 위치/부하 캐시. SetMccMoterInfoCur 가 MCC 사용 여부와 상관없이 채운다.
+	//                (MCC 가 꺼지면(Config_MCC.ini USE=0) m_pSharedMCC 가 nullptr 라 그쪽 사본이 비어 FDC 에 못 보냈다.)
+	enum { FDC_AXIS_CACHE_MAX = 128 };
+	double					m_dFdcAxisPos[FDC_AXIS_CACHE_MAX] = {};
+	double					m_dFdcAxisRMS[FDC_AXIS_CACHE_MAX] = {};
+	// LYS 2026-09-19 FDC SHARE 나머지 칸 - DlgMainForm 모니터 루프가 넘겨준다(여기서는 PLC/레시피에 접근할 수 없다).
+	int						m_nFdcMccbTripGps = 0;	// M4072 PLC_BIT_MAIN_GPS_CIRCUIT_BREAKER_TRIP
+	int						m_nFdcMccbTripUps = 0;	// M4073 PLC_BIT_MAIN_UPS_CIRCUIT_BREAKER_TRIP
+	double					m_dFdcProbeOD = 0.0;	// 레시피 m_sContactPos.m_fAddOD
+	double					m_dLiftPinMoveSec[4] = {};	// LYS 2026-09-19 다단 상승 1/2/3 단계, [3] = 다단 하강 전체 (초)
+
 	// LYS 2026-07-29 ELP ElecBox monitor data cache (written by PGMon socket receive thread)
 	double					m_dDataToELP[MAIN_WDATA_ELP_BOX_MAX][MAIN_WDATA_ELP_ITEM_CNT];
 	CCriticalSection		m_cs_ELP;
@@ -515,6 +526,9 @@ public:
 	void SetLampTime(int iLamp, int Time);
 	void SetLiftPinMoveTime(int iStep, int Time);
 	void SetIonizerRun(bool bRun);
+	void SetFdcMccbTrip(int nGps, int nUps);	// LYS 2026-09-19 FDC SHARE 0/1
+	void SetFdcProbeOD(double dOD);			// LYS 2026-09-19 FDC SHARE 76
+	void SetLiftPinMoveSec(int iStep, double dSec);	// LYS 2026-09-19 FDC SHARE 72~75 (초)
 	void SetDataToELP(int iBox, int iItem, double dData);	// LYS 2026-07-29 ELP ElecBox monitor
 };
 

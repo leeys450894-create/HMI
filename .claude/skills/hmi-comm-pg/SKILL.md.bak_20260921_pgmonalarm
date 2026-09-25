@@ -1,0 +1,22 @@
+---
+name: hmi-comm-pg
+description: ALPHA HMI TCP/IP 통신 팩토리(MEAS_TYPE 분기, switch 23벌)와 PG 패턴발생기 프로토콜(S8F1/S10F3, 로그 검증). 통신 객체 추가나 PG 동작을 다룰 때 읽을 것
+---
+
+# hmi-comm-pg
+
+출처: `CLAUDE.md` (2026-09-17 /doctor 정리로 이동, 백업 `CLAUDE.md.bak_20260917_doctor`). 전체 규칙(인코딩 편집 규칙, 빌드, 3벌 인터락 원칙 등)은 루트 `CLAUDE.md` 가 우선한다.
+
+### Communication (TCP/IP Factory)
+
+14종 장비 통신 — Factory 패턴 (`CCommTcpIpFactoryMgr`, `Source/ALPHA/Manager/CommTcpIpFactoryMgr.cpp`, ~2,400줄):
+Vision, Color, WAD, Angle, PG, AgingPG, LCR, TSP, CIM, SysTime, Motion, UTG(x2), **PGMon**(ELP ElecBox 모니터링, 2026-07-29 추가)
+모두 `CCommEthFunction` 상속, 개별 send/receive 프로토콜 구현.
+
+- **팩토리 분기 = `MEAS_TYPE`** (PARA 번호도 NAME도 아님): `Network.ini`의 `NETWORK_PARA_N_TCPIP_MEAS_TYPE` 값이 `enumTCPIpFactorytID_*`([CommTcpIpDefine.h])와 대응. `CreateComm(nID)`/`CCommTcpIPMgr` 루프 모두 `GetParam_MeasType(nID)`로 `switch`. `NAME`(예 `SYSTIME`)은 `SetName()` 라벨(로그 폴더/태그)일 뿐 분기에 안 쓰임. PARA 번호는 `m_vecParam[]` 배열 인덱스로 IP/Port를 읽을 때만 사용. (예: `NETWORK_PARA_7 NAME=SYSTIME, MEAS_TYPE=10` → `enumTCPIpFactorytID_TIME` → `CCommTcpIpObjectSysTime`.)
+- **새 MEAS_TYPE(통신 객체)을 추가하면 `CommTcpIpFactoryMgr.cpp`의 `switch (lMeasType)` 23벌을 전부 점검할 것.** `CreateComm/DeleteComm/DisConnect/SetTcpConnection`만 채우고 `IsConnected(nID)`·`IsOutOfService(nID)`를 빠뜨리면 `default → false`로 떨어져 **연결돼 있어도 타이틀바 램프(`DlgTitleBar::SetConnectStatus`)가 빨간색**으로 남는다(2026-09-07 PG_MON=19 사고, 알람은 정상 수신 중이었음). 램프 색: 파랑=OUT_OF_SERVICE, 초록=IsConnected, 빨강=그 외.
+- `OUT_OF_SERVICE=1`이면 `Cmd_Send`가 실제 송신을 **SKIP**(시뮬). `MODE`는 `bRunMode`로 전달(예: SysTime MODE=1 = HMI가 서버).
+- **PG(패턴 발생기) 프로토콜 — `CommTcpIpObjectPG.cpp`, 사양서 `Doc/07_설계문서/통신문서/ELP-ICP-PG-Control-LanProtocol(SDC, 160310).pdf` (2026-09-14 정리).** 패킷은 `STX + SS FF [본문] + ETX`(스트림/펑션 각 2자리 ASCII), `SetCommand(stPg, bWait)`가 조립·송신하고 응답은 `xNetCallbackRecieveData`가 `eS<S>F<F>` 접두로 분기해 이벤트를 세운다. 로그 `D:\HBS\Logs\Control\PG\PG_yyyymmdd.log`(SEND/RECV/OPER — **STX/ETX 제어문자가 그대로 들어가므로 grep 은 `: .1003` 처럼 한 글자 띄울 것**). `_ExePGCtrl(iEvent)` 매핑: `PGEvent_0` Model Change(S10F3 → 1초 → S2F1) · `_3` Status(S5F1) · `_5` Turn On(**S8F1 cmd=1 cell=00**, S8F3 완료 대기) · `_6`/`_7` Pattern Next/Prev(S8F1 cmd 3/4) · `_8` Turn Off · `_9~16` 셀 단위(S3F11/13/15/17) · `PG_TEST_1~4` OST/PTP/RTest/Aging(S8F1 cmd 5/6/7, S6F1).
+  - **`PGEvent_8`(Turn Off)은 OCP 에서 S10F3 이 아니라 `S8F1 cmd=2 cell=00` 으로 보낸다 (2026-09-14).** 이 설비의 OCP PG 는 S10F3(`"1003"`, 전체 Turn Off) 에 **한 번도 응답하지 않았다**(PG 로그 09-08~09-14: 1003 송신 후 RECV 없음, 09-12 의 RECV 2건은 전부 S2F10 NAK). Turn On 이 S8F1 cmd=1 로 정상이고 사양서 2.8.1 S8F1 Command 표가 **1 Turn On / 2 Turn Off / 3 Next / 4 Prev / 5 OST / 6 PTP / 7 RTest, Cell 00 = 전체**라 같은 형식으로 바꿨다. 완료(S8F3) 대기는 Turn On 과 동일하며, PG 가 cmd=2 에 S8F3 을 안 주면 PG 로그에 `WaitInspectionComplete, HEAD_ACK_TIMEOUT` 이 남으니 그때는 대기를 빼면 된다. `PGEvent_0`(Model Change) 앞의 선행 Turn Off 도 OCP 면 같은 S8F1 cmd=2 로 보내되 기존처럼 응답 대기 없이(`bWait=false`) 1초 쉰다(뒤 Model 명령에 `iCmd/iCellNum` 잔존값이 섞이지 않게 `ZeroMemory`). HMI 모드는 둘 다 S10F3 유지. 호출부: 수동 화면 PG CMD 04 버튼(`enumStepID_PG_CMD_04`)·CMD 05 시퀀스 말미, `DoWorkGlassUnloadStep`, `DoWorkGlassMeasureStep` AGING_PTN 말미·4416행.
+  - 참고: 오늘(09-14) PG 로그에 RECV 가 0건인데도 PTP/OST 가 100ms 만에 `END` 로 끝난 회차가 있다 — `WaitInspectionComplete` 는 `IsConnected()==false` 면 즉시 false 를 돌려주고 호출부가 로그만 남기므로, **PG 미연결 상태의 사이클은 결과 없이 통과**한다. PG 동작 검증은 반드시 RECV 줄(`0802`/`0803`)로 할 것.
+

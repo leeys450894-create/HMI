@@ -4,6 +4,11 @@
 #include "MotorControlMgr.h"
 #include "IOMapControlMgr.h"
 #include "PositionConfigMgr.h"
+
+// LYS 2026-09-14 2Head 측정에서 짝 없는 셀의 "쉬는 헤드" 표시값.
+//   측정 스텝이 Y1~Y4 목표에 이 값을 넣으면 MoveCmdPosWAD/Vision/Color/Angle 이 그 축을 Position.ini [SAFETY]
+//   SafetyHeadY1(Y1/Y3) / SafetyHeadY2(Y2/Y4) 원시좌표로 바꿔 보낸다 (ApplyIdleHeadSafetyY). 실제 좌표로는 쓰이지 않는 값.
+#define df_HEAD_Y_IDLE_SAFETY	(-99999.0)
 const enum MOT_POS {
 	df_POS_DOWN = 0,
 	df_POS_PRE,
@@ -25,6 +30,8 @@ class CMotorControlMgr;
 class CPositionConfigMgr;
 class CLightControlMgr;
 class CShareMemoryMgr;
+class CMotionProbeToMcOffMove;	// LYS 2026-09-23 MC OFF Probe Z 긴급 후퇴
+class CCommTcpIpFactoryMgr;
 class CMaintControlMgr : public CAuroraSubMgr
 {
 	CIOMapControlMgr* m_pIOMapControlMgr;
@@ -34,9 +41,15 @@ class CMaintControlMgr : public CAuroraSubMgr
 	CLightControlMgr* m_pMgrLightControl;
 
 	double m_dGlassAlignOffset[3];
+	// LYS 2026-09-18 MoveHome 이 마지막으로 낸 알람 코드(0 = 없음).
+	//                초기화는 축 루프에서 같은 인터락을 20번 넘게 만나므로 같은 코드는 한 번만 띄운다.
+	int    m_nLastHomeAlarm;
+	bool m_bGlassAlignDone = false;	// LYS 2026-09-15 Glass Align 성공 후 오프셋이 유효한 동안 true (타이틀바 표시용)
+	bool m_bProbeAlignDone = false;	// LYS 2026-09-15 Probe Align 성공 후 오프셋이 유효한 동안 true
 	double m_dProbeAlignOffset[3];  // Probe Align 보정값
 
 	double m_dAlignOffset[100];		// HW Align 보정값(Probe 장착시 보정값
+	CMotionProbeToMcOffMove* m_pMcOffMove;	// LYS 2026-09-23 MC OFF 시 Probe Z 긴급 후퇴 감시 스레드(StartMotionProbeToMcOffMove 에서 생성)
 
 	//------------------------------------------------------------------
 	// 공통 인터페이스 함수
@@ -59,7 +72,15 @@ public:
 	// ZeroMemory 대신 이것을 쓸 것 - AXIS_X가 0이라 0으로 채운 슬롯은 스테이지 갠트리 이동 지령이 된다.
 	static void ClearMotorPos(stMotorPosition* pPos, int nCount);
 
+	// LYS 2026-09-14 쉬는 헤드 -> [SAFETY]. pPos(호출부 입력)에서 df_HEAD_Y_IDLE_SAFETY 인 Y1~Y4 축을 찾아
+	//   pPosY(오프셋 적용이 끝난 Y 이동 배열)의 같은 축 목표를 Safety 원시좌표로 바꾼다. 헤드 오프셋은 무시하고,
+	//   뒤따르는 MoveCmdPosMulti 가 더할 m_dAlignOffset 은 미리 빼 MoveCmd_SafetyAll 과 같은 위치에 서게 한다. 반환 = 바꾼 축 수.
+	static bool IsIdleHeadSafetyPos(double dPos) { return (dPos < df_HEAD_Y_IDLE_SAFETY + 1.0 && dPos > df_HEAD_Y_IDLE_SAFETY - 1.0); }
+	// LYS 2026-09-14 (추가) FRONT 헤드 Safety 키 분리 - Y3/Y4 는 SafetyHeadY3/Y4 를 쓴다 (없으면 Y1/Y2 값).
+	int ApplyIdleHeadSafetyY(const stMotorPosition* pPos, int nAxis, stMotorPosition* pPosY, int nPosY, LPCTSTR pszWhere);
+
 	long SetAmpEnable(int iAxis, bool bOn);
+	bool GetAmpEnable(int iAxis);
 	long MoveHome(int iAxis);
 	long MoveCmdPosA(int iAxis, double dPos, bool bBlockMode, int iSpeed = 0, bool bUseOffset = false, int iLens = -1, int iTube = -1);
 	long MoveCmdPosR(int iAxis, double dPos, bool bBlockMode, int iSpeed = 0);
@@ -83,19 +104,27 @@ public:
 	void SetInitializeMC(bool value);
 	bool InitDeviceMC();
 	bool IsInitializedMC();
+	bool IsConnectedMC();	// LYS 2026-08-31 both-controller ACS connect status for MOTION lamp
 	long DoWork_LPPreMove();
 	long DoWork_LPMove(bool bUp);
 	long DoWork_RotateMove(double dPos, int nType = 0);
 	long StopMove(int iAxis);
 	int WaitForLiftPinPosComplete(bool bUp, UINT nTimeOut);
 	void ResetAlign();
+	// LYS 2026-09-15 Align 완료 상태 - Set*AlignXYR 가 호출될 때마다(시작 0 대입·리셋 포함) false 가 되고, 정렬 성공 경로에서만 true 로 세운다.
+	void SetGlassAlignDone(bool bDone) { m_bGlassAlignDone = bDone; }
+	void SetProbeAlignDone(bool bDone) { m_bProbeAlignDone = bDone; }
+	bool IsGlassAlignDone() const { return m_bGlassAlignDone; }
+	bool IsProbeAlignDone() const { return m_bProbeAlignDone; }
 	int SetGlassAlignXYR(double dX, double dY, double dR);
 	int SetProbeAlignXYR(double dX, double dY, double dR, int nProbe = 0);
 	int MoveProbeAlignR(double dR);
 	bool IsGlassExist();
 	int WorkReadySACC();
 	long MoveCmdPosAging(stMotorPosition* pPos, int nAxis, int iSpeed = 0, bool bDoneCheck = true);
-	long MoveCmdPosReview(int iStick, stMotorPosition* pPos, int nAxis, int iSpeed = 0, bool bDoneCheck = true);
+	// LYS 2026-09-18 bSkipSubZRetract : XY 앞 Sub Z 안전높이 후퇴를 건너뛴다.
+	//                셀만 바뀌어 글래스가 제자리인 경우(TestMode Review)에 쓴다 - 기본값 false 라 기존 호출부는 그대로.
+	long MoveCmdPosReview(int iStick, stMotorPosition* pPos, int nAxis, int iSpeed = 0, bool bDoneCheck = true, bool bSkipSubZRetract = false);
 	long MoveCmdPosWAD(stMotorPosition* pPos, int nAxis, int iSpeed = 0, bool bDoneCheck = true);
 	long MoveCmdPosVision(stMotorPosition* pPos, int nAxis, int iSpeed = 0, bool bDoneCheck = true);
 	long MoveCmdPosColor(stMotorPosition* pPos, int nAxis, int iSpeed = 0, bool bDoneCheck = true);
@@ -169,5 +198,9 @@ public:
 	long MoveCmdPos_ProbeUnContact(int nAxis, double fContatZ);
 	long MoveCmdPos_ProbeMove(int nAxis, double dMoveZ, int iSpeed);
 	int  Get_ProbeExist();
+
+	// LYS 2026-09-23 MC OFF 시 Probe Z 긴급 후퇴 (IT_8.6G_HBS CMotionProbeToMcOffMove 이식). 알람 모니터 시작 시점에 DlgMainForm 이 부른다.
+	void StartMotionProbeToMcOffMove(CString strLogPath, CString strConfigPath, CCommTcpIpFactoryMgr* pCommTcpIpFactoryMgr);
+	void StopMotionProbeToMcOffMove();
 };
 

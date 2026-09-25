@@ -1,0 +1,191 @@
+#if _MSC_VER > 1000
+#pragma once
+#endif // _MSC_VER > 1000
+
+// LYS 2026-07-30 정본 사본 - ALPHA와 FDCSense가 공유(EX_FDC\Include\FDCSheardDefine.h가 이리로 리다이렉트).
+// 포크 금지 - FDC 쪽 변경도 반드시 여기에 반영해야 양쪽 빌드가 바이트 동일하게 유지된다.
+
+//#include "stdafx.h"
+
+// LYS 2026-09-19 이름을 실제 운용 FDC(D:\0.SW\FDC\FDCSense.exe) 에 맞췄다.
+//                _V2 는 HMI 솔루션 안의 FDCSense(CoreFunction\EX_FDC, 미사용) 전용 이름이라
+//                ALPHA 가 운용 FDC 와 다른 메모리를 따로 만들어 쓰고 있었다(값을 하나도 못 받음).
+//#define		VTM_SHARE_MEM_STRING_FDC	_T("HBS_Shared_Memory_For_FDC_V2")
+#define		VTM_SHARE_MEM_STRING_FDC	_T("HBS_Shared_Memory_For_FDC")
+
+const enum NUM_FDC_WDATA{
+	FDC_WDATA_TEMP_1 = 1,
+	FDC_WDATA_TEMP_2,
+	FDC_WDATA_TEMP_3,
+	FDC_WDATA_TEMP_4,
+	FDC_WDATA_TEMP_5,
+
+	// LYS 2026-09-19 운용 FDC_LIST(D:\0.SW\FDC\FDC_LIST\FDC_LIST.xls) 의 NUM_FDC_WDATA 1~10 = 온도 10개.
+	//                FDC 는 이 열의 숫자를 stFDCWData 인덱스로 그대로 쓴다(±1 보정 없음, 0 번은 비어 있다).
+	//                값은 szData 에 "%.2f" 문자열, nMax/nMin 은 그 행의 MAX/MIN 열 그대로다.
+	//                ※ FDC 의 필터(m_bFilterUse)는 항상 꺼져 있어 MAX/MIN 은 값을 자르지 않는다 -
+	//                  ALPHA 온도 과열 판정(DlgMainForm::GetMonitorIO, dValueMax < dValue)의 기준값으로만 쓰인다.
+	//                  MAX 가 비어 있으면 0 으로 와서 모든 온도가 과열로 판정된다.
+	FDC_WDATA_TEMP_EL_BOX_GPS     = 1,	// SVID 76  TEMP_SENS_EL_BOX_GPS
+	FDC_WDATA_TEMP_EL_BOX_UPS     = 2,	// SVID 77  TEMP_SENS_EL_BOX_UPS
+	FDC_WDATA_TEMP_S_BOX_FRONT    = 3,	// SVID 78  TEMP_SENS_S_BOX_FRONT
+	FDC_WDATA_TEMP_S_BOX_REAR     = 4,	// SVID 79  TEMP_SENS_S_BOX_REAR
+	FDC_WDATA_TEMP_PC_BOX         = 5,	// SVID 80  TEMP_SENS_PC_BOX
+	FDC_WDATA_TEMP_PC_BOX_FRONT   = 6,	// SVID 81  TEMP_SENS_PC_BOX_FRONT
+	FDC_WDATA_TEMP_PC_BOX_REAR    = 7,	// SVID 82  TEMP_SENS_PC_BOX_REAR
+	FDC_WDATA_TEMP_SACC           = 8,	// SVID 83  SACC
+	FDC_WDATA_TEMP_IO_PANEL_LEFT  = 9,	// SVID 84  IO_PANEL_BOX_LEFT
+	FDC_WDATA_TEMP_IO_PANEL_RIGHT = 10,	// SVID 85  IO_PANEL_BOX_RIGHT
+	FDC_WDATA_TEMP_LIST_CNT       = 10,
+
+	FDC_WDATA_TEMP_END = 50,
+
+	FDC_WDATA_WT_VACUUM_1,			// VACUUM 
+	FDC_WDATA_WT_VACUUM_2,
+	FDC_WDATA_WT_VACUUM_3,
+	FDC_WDATA_WT_VACUUM_4,
+	FDC_WDATA_WT_VACUUM_5,
+	FDC_WDATA_WT_VACUUM_6,
+	FDC_WDATA_WT_VACUUM_7,
+	FDC_WDATA_WT_VACUUM_8,
+	FDC_WDATA_WT_VACUUM_9,
+	FDC_WDATA_WT_VACUUM_10,
+
+	// jdm 20190717 add
+	FDC_MAIN_CDA_1,
+	FDC_MAIN_CDA_2,
+	FDC_MAIN_CDA_3,
+	FDC_MAIN_CDA_4,
+	FDC_MAIN_CDA_5,
+	FDC_MAIN_CDA_6,
+	FDC_MAIN_CDA_7,
+	FDC_MAIN_CDA_8,
+	FDC_MAIN_CDA_9,
+	FDC_MAIN_CDA_10,
+
+	FDC_WDATA_ESD,
+
+	// FIXTURE
+	FDC_WDATA_FIXTURE_START = 80,
+	FDC_WDATA_FIXTURE_TIME,
+	FDC_WDATA_FIXTURE_TIME_END = FDC_WDATA_FIXTURE_TIME + 16,
+
+	// jsyoon 20201208 add
+	FDC_WDATA_EFU_START = 100,
+	FDC_WDATA_EFU,
+	FDC_WDATA_EFU_END = FDC_WDATA_EFU + 32,
+	///
+
+	// SEM
+	FDC_WDATA_SEM_START = 160,
+	FDC_WDATA_UPS_1,
+	FDC_WDATA_UPS_2,
+	FDC_WDATA_UPS_3,
+	FDC_WDATA_UPS_4,
+	FDC_WDATA_UPS_5,
+	FDC_WDATA_UPS_6,
+
+	FDC_WDATA_GPS_1,
+	FDC_WDATA_GPS_2,
+	FDC_WDATA_GPS_3,
+	FDC_WDATA_GPS_4,
+	FDC_WDATA_GPS_5,
+	FDC_WDATA_GPS_6,
+
+
+	// CHAMBER 설비
+	FDC_WDATA_CB_START = 180,
+	FDC_WDATA_CB_O2PPM_1,			// CHAMBER 설비
+	FDC_WDATA_CB_O2PPM_2,
+	FDC_WDATA_CB_H20PPM,
+	FDC_WDATA_CB_PRESS,
+
+	FDC_MAIN_N2_1,
+	FDC_MAIN_N2_2,
+
+	FDC_WDATA_PURIFIER_02_50m,	// hk.k 20191209 add
+	FDC_WDATA_PURIFIER_H2O_50m,	// y.yun 20191126
+	FDC_WDATA_PACC_O2PPM,	// y.yun 20191126
+	FDC_WDATA_PURIFIER_02_10m,			// hk.k 20191212 add
+	FDC_WDATA_PURIFIER_H2O_10m,			// hk.k 20191212 add
+
+	//ksm 2010825 add
+	FDC_WDATA_MLAMP_LIMIT_TIME_START = 200,
+	FDC_WDATA_MLAMP_LIMIT_TIME_01,				//MeasLamp
+	FDC_WDATA_ALAMP_LIMIT_TIME_01,				//AlignLamp
+	FDC_WDATA_MLAMP_LIMIT_TIME_02,				//MeasLamp
+	FDC_WDATA_ALAMP_LIMIT_TIME_02,				//AlignLamp
+	FDC_WDATA_MLAMP_LIMIT_TIME_03,				//MeasLamp
+	FDC_WDATA_ALAMP_LIMIT_TIME_03,				//AlignLamp
+	FDC_WDATA_LAMP_LIMIT_TIME_END = FDC_WDATA_MLAMP_LIMIT_TIME_01 + 20,
+
+
+
+	// LYS 2026-07-30 ELP ElecBox 모니터 -> stFDCWData 대역.
+	// Main SW가 발행한 stMainWData[MAIN_WDATA_ELP_START + ...]를 읽는 SHARE 행의
+	// FDC_LIST.xls NUM_FDC_WDATA 열 값으로 쓰인다.
+	// 슬롯 = FDC_WDATA_ELP_START + box(0..1) * FDC_WDATA_ELP_BOX_STRIDE + item.
+	// 항목 순서는 NUM_MAIN_WDATA_ELP(TEMP, SMOKE, VOLT, HARM_VOLT, CURR, HARM_CURR, LEAK_CURR, INST_PW, ACCUM_PW)와 동일.
+	FDC_WDATA_ELP_START = 250,
+	FDC_WDATA_ELP_BOX_STRIDE = 20,
+	FDC_WDATA_ELP_END = FDC_WDATA_ELP_START + 40,
+
+	// LYS 2026-09-19 stFDCWData 크기. 운용 FDC 도 [1000] 으로 맞췄다(원래 [100] 이라 이름만 맞으면 크기가 어긋났다).
+	//                FDC 쪽 정본: D:\0.SW\SRC\HBS_FDC_HMI\FDC\Include\FDCSheardDefine.h - 한쪽만 바꾸지 말 것.
+	FDC_WDATA_END = 1000,
+};
+
+// LYS 2026-07-29 ELP ElecBox 모니터 데이터(Main SW -> FDC, 사양서 2026-07-28).
+// 슬롯 = MAIN_WDATA_ELP_START + box(0..1) * MAIN_WDATA_ELP_BOX_STRIDE + item.
+// FDC는 FDC_LIST의 SOURCE ADDRESS로 직접 인덱싱한다(nMainDataCount 미사용).
+const enum NUM_MAIN_WDATA_ELP{
+	MAIN_WDATA_ELP_START = 400,
+	MAIN_WDATA_ELP_BOX_STRIDE = 20,
+	MAIN_WDATA_ELP_BOX_MAX = 2,
+
+	MAIN_WDATA_ELP_ITEM_TEMP = 0,		// C
+	MAIN_WDATA_ELP_ITEM_SMOKE,			// %
+	MAIN_WDATA_ELP_ITEM_VOLT,			// V
+	MAIN_WDATA_ELP_ITEM_HARM_VOLT,		// V
+	MAIN_WDATA_ELP_ITEM_CURR,			// A
+	MAIN_WDATA_ELP_ITEM_HARM_CURR,		// mA
+	MAIN_WDATA_ELP_ITEM_LEAK_CURR,		// mA
+	MAIN_WDATA_ELP_ITEM_INST_PW,		// kW
+	MAIN_WDATA_ELP_ITEM_ACCUM_PW,		// kWh
+	MAIN_WDATA_ELP_ITEM_CNT,			// 9
+};
+
+typedef struct {
+	char		szName[32];
+	char		szData[32];
+	double		nMax;
+	double		nMin;
+}RDATA, *PRDATA;
+
+typedef struct
+{
+	int				nMainDataCount;			// Main SW에서 올려주는 Data 개수
+	RDATA			stMainWData[1000];		// Main SW에서 올려주는 정보
+
+	DWORD			lLiveCheck;				// FDC SW Tick count
+	RDATA			stFDCWData[FDC_WDATA_END];		// FDC SW에서 올려주는 정보 NUM_FDC_WDATA 순으로 입력
+}FDC_For_Shared, *PFDC_For_Shared;
+
+typedef struct  {
+	FDC_For_Shared FDCValue;
+}VTM_FOR_FDC, *PVTM_FOR_FDC;
+
+// LYS 2026-09-19 운용 FDC(Win32, D:\0.SW\SRC\HBS_FDC_HMI\FDC\Include\FDCSheardDefine.h)와 바이트 단위로 같아야 한다.
+//                포인터가 없어 32/64 비트 레이아웃이 같다. 크기가 다르면 먼저 뜬 쪽이 섹션 크기를 정해
+//                나중 쪽의 MapViewOfFile 이 실패하거나(ALPHA 가 클 때) 끝을 넘겨 읽는다.
+//                크기 = 8 + 80*1000(stMainWData) + 8 + 80*1000(stFDCWData) = 160,016 B, stFDCWData 오프셋 80,016.
+//                (2026-09-19 이전 운용 FDC 는 stFDCWData[100] = 88,016 B 였다. 새 FDC 를 먼저 배포할 것 -
+//                 옛 FDC 가 먼저 떠 88,016 B 로 섹션을 잡으면 ALPHA 의 MapViewOfFile(160,016) 이 실패한다.)
+static_assert(sizeof(RDATA) == 80, "RDATA must match the FDC program (80 bytes)");
+static_assert(sizeof(VTM_FOR_FDC) == 160016, "VTM_FOR_FDC must match the FDC program byte for byte (stFDCWData[1000])");
+static_assert(FDC_WDATA_TEMP_1 + 19 < FDC_WDATA_END, "DlgMainForm::GetMonitorIO reads TEMP_1 .. TEMP_1+19");
+static_assert(FDC_WDATA_WT_VACUUM_1 + 4 < FDC_WDATA_END, "CMCCLogMgr::UpdateSensor reads 5 vacuum slots");
+static_assert(FDC_WDATA_ESD < FDC_WDATA_END, "CDlgSubOperate reads FDC_WDATA_ESD");
+
+
+

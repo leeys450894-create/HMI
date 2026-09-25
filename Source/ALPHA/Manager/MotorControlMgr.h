@@ -33,6 +33,7 @@ class CMotorControlMgr : public CAuroraSubMgr
 	double				m_dInterlockLifePinPos;
 	double				m_dInterlockProbeSizeX;	// LYS 2026-08-25 P5 probe unit width in X
 	double				m_dInterlockProbeZSafety;	// LYS 2026-08-26 P5 유닛을 피하는 BACK Z 안전 높이
+	double				m_dInterlockSubZSafety;	// LYS 2026-09-02 Z3/Z4 Sub Z 안전위치 (SUBZ_SAFETY 미러)
 
 	double				m_dMovePos[100];	// 가상테스트에서 사용
 	double				m_dMoveOffset[100];	// Head Offset
@@ -61,6 +62,20 @@ public:
 	// LYS 2026-08-25 헤드 갠트리가 P5 프로브 유닛 영역 안이면 true
 	// LYS 2026-08-26 시퀀스 계층에서 Z1 하강 전 검사할 수 있게 이동
 	bool		IsProbeUnitOverlapX(double dHeadX);
+	// LYS 2026-09-21 Probe Z 컨택(하강) <-> STAGE X/ROTATE, PROBE X/Y 양방향 인터락. 반환 MOTION_INTERLOCK_12 또는 성공.
+	//   A/R/Multi_Sub 3벌·블로킹 재지령·CMaintControlMgr::MoveHome 이 공용으로 부른다.
+	//long		CheckProbeContactInterlock(int iAxis, double dTarget, LPCTSTR pszWhere);
+	// LYS 2026-09-21 bAlwaysMoves: 목표를 모르는 원점복귀용 - 제자리 판정 없이 '움직인다' 로 본다.
+	long		CheckProbeContactInterlock(int iAxis, double dTarget, LPCTSTR pszWhere, bool bAlwaysMoves = false);
+	// LYS 2026-09-21 Sub Z(Z3/Z4)가 내려가 있으면 SUBZ_SAFETY 로 올린다(이미 안전이면 아무것도 안 함). X2 이동·원점복귀 전에 쓴다.
+	long		RetractSubZToSafety(LPCTSTR pszFrom, LPCTSTR pszWhy);
+	// LYS 2026-09-23 MC OFF Probe Z 긴급 후퇴용 - 인터락·SW리밋·상태검사·완료대기 없이 ACS 로 바로 보낸다. CMotionProbeToMcOffMove 전용.
+	long		MoveToPos(int iAxis, double dPos, int iSpeed = -1);
+	bool		IsProbeContactGuardAxis(int iAxis);
+	bool		IsProbeZContact(CString* pstrPos = nullptr);
+	bool		IsProbeContactGuardAxisMoving(int* piAxis = nullptr);
+	void		WaitBackGantryStopForSubZ(int iSubZAxis, LPCTSTR pszWhere);	// LYS 2026-09-12 Z3/Z4 지령 전 X2(BACK GANTRY) 정지 대기 - 알람 없이 기다리기만 한다
+	double		GetInterlockSubZSafety() const { return m_dInterlockSubZSafety; }	// LYS 2026-09-07 Sub Z(Z3/Z4) 안전높이 getter (Review 등 시퀀스 계층용)
 	bool		IsOCP() const						{ return m_bIsOCP; }	// LYS 2026-06-26	// LYS 2026-06-26 OCP mode: disable P1-P4 + P5 X/Y axes
 
 

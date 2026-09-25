@@ -104,6 +104,8 @@ BEGIN_MESSAGE_MAP(CDlgSACC, CDialog)
 	ON_BN_CLICKED(IDC_BTN_LOADING,					&CDlgSACC::OnBnClickedBtnLoading)
 	ON_BN_CLICKED(IDC_BTN_UNLOADING,				&CDlgSACC::OnBnClickedBtnUnloading)
 	ON_BN_CLICKED(IDC_BTN_UNLOADING2,				&CDlgSACC::OnBnClickedBtnExchange)
+	ON_BN_CLICKED(IDC_BTN_SET_PROBEID,				&CDlgSACC::OnBnClickedBtnSetProbeID)		// LYS 2026-09-16
+	ON_BN_CLICKED(IDC_BTN_CLEAR_PROBEID,			&CDlgSACC::OnBnClickedBtnClearProbeID)	// LYS 2026-09-16
 
 	ON_BN_CLICKED(IDC_BTN_SACC_MOVE,				&CDlgSACC::OnBnClickedBtnGetInsideProbe_Move)
 	ON_BN_CLICKED(IDC_BTN_SACC_GATE,				&CDlgSACC::OnBnClickedBtnGetInsideProbe_Close)
@@ -327,6 +329,10 @@ BOOL CDlgSACC::OnInitDialog()
 	ReadTeachPosConfig();
 	UpdateTeachPosition();
 	ReadProbeIDtoFile();
+
+	// LYS 2026-09-16 OCP has only the MEAS probe (P5): select it at start so Loading/Unloading/Lock buttons work without clicking 'Select Meas Probe'.
+	//                (m_iSelectProbe starts at -1 and every command handler refuses until a probe is picked; P1~P4 buttons are hidden in the .rc)
+	OnBnClickedBtnSelectProbe5();
 	
 	CString strCheck;
 	for (i = 0; i < m_sprdProbeBF->GetMaxRows(); i++) //20170203 lhj change
@@ -536,6 +542,27 @@ void CDlgSACC::ReadConfigRobotRFID()
 	GetPrivateProfileString(strInsideGet, _T("MAXPROBE "), _T("7"), szValue, 20, szConfigFile);		// LYS 202607-03 Cassette 5->7
 	strValue.Format(_T("%s"), szValue);
 	m_sprdProbeID->SetMaxRows(_ttol(strValue));
+
+	// LYS 2026-09-16 Cassette 5->7: InitMySpread_SACCID() had reset the row count, so the rows added here came back with the
+	//                default cell type (no PROBE ID edit cell, no LOAD/UNLOAD check box on rows 6,7). Re-apply the types for every row.
+	{
+		int nRows = m_sprdProbeID->GetMaxRows();
+		if (nRows > 0)
+		{
+			SS_CELLTYPE cellType;
+			m_sprdProbeID->SetTypeEdit(&cellType, SSS_ALIGN_VCENTER | SSS_ALIGN_CENTER, 20, NULL, SS_CASE_NOCASE);
+			m_sprdProbeID->SetCellTypeRange(1, 1, 1, nRows, &cellType);
+			m_sprdProbeID->SetTypeCheckBox(&cellType, SSS_ALIGN_VCENTER | SSS_ALIGN_CENTER, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL);
+			m_sprdProbeID->SetCellTypeRange(2, 1, 3, nRows, &cellType);
+			m_sprdProbeID->SetFont(SS_ALLCOLS, SS_ALLROWS, m_hfont, TRUE);
+			for (int iRow = 1; iRow <= nRows; iRow++)
+			{
+				m_sprdProbeID->SetColor(1, iRow, dfCOLOR_GRAY, RGB_DARK_GRAY);
+				m_sprdProbeID->SetDataString(2, iRow, _T("0"));
+				m_sprdProbeID->SetDataString(3, iRow, _T("0"));
+			}
+		}
+	}
 }
 
 void CDlgSACC::ReadConfigInsideRFID()
@@ -1305,9 +1332,18 @@ LRESULT CDlgSACC::OnFPSpreadClick_Cassette(WPARAM wParam, LPARAM lParam)
 	int col = lpcc->Col;
 	int row = lpcc->Row;
 	
-	if(col == 2 || col == 3)
-		for (int iProbe = 5; iProbe <= 5; iProbe++)
+	// LYS 2026-09-16 LOAD/UNLOAD check box is single-select per column: clear every other row (was 'row 5 only' - left over from the 5-slot layout)
+	//if(col == 2 || col == 3)
+	//	for (int iProbe = 5; iProbe <= 5; iProbe++)
+	//		m_sprdProbeID->SetDataString(col, iProbe, _T("0"));
+	if (col == 2 || col == 3)
+	{
+		for (int iProbe = 1; iProbe <= m_sprdProbeID->GetMaxRows(); iProbe++)
+		{
+			if (iProbe == row) continue;
 			m_sprdProbeID->SetDataString(col, iProbe, _T("0"));
+		}
+	}
 
 	if (col == 2)
 	{
@@ -3476,7 +3512,10 @@ void CDlgSACC::SelectReadRFID()
 	strRFID.RemoveAll();
 
 	//Probe #5
-	for (int i = 1; i <= 5; i++)
+	// LYS 2026-09-16 Cassette 5->7: iterate the configured slot count (spread rows) instead of a fixed 5.
+	//                NOTE: this path is currently dead - WM_MSG_READ_RFID has no sender and m_szReadProbeCardID is never filled.
+	//for (int i = 1; i <= 5; i++)
+	for (int i = 1; i <= m_sprdProbeID->GetMaxRows(); i++)
 	{
 		strTempRFID.Format(_T("%s"), m_szReadProbeCardID[i]);
 
@@ -5168,4 +5207,73 @@ void CDlgSACC::SetProbeInfo(int iProbe, CString strRFID, CString strMountTime, i
 
 	strValue.Format(_T("%d"), nContactCount);
 	WritePrivateProfileString(strInsideGet, _T("InsideProbeContactCount"), strValue, szConfigFile);
+}
+
+// LYS 2026-09-16 Manual probe ID register (stage D of docs/SACC_P5_Cassette7_Plan.md).
+//   A manually mounted probe has no ID in the EQ probe ID word block (P5 = D2150) because only the SACC loading
+//   sequence copies the robot RFID (D2400) there. The unload/exchange request copies that ID to D2100 and the PLC
+//   uses it for the robot, so an empty ID must not reach the PLC. SET ID writes the typed ID, CLEAR ID writes blanks.
+//   Path: RITEMDATA(SACC_COMMAND_OPERATION_SET_PROBEID, nWTSequence = probe, szText = ID) -> CSACCMgr -> CFunctionModuleEQState::SetEQManualProbeID.
+//   The ProbeCard scanner re-reads D2100 every ~5 s, so the EQ Inside spread (row 5) shows the new ID shortly after.
+void CDlgSACC::SendManualProbeID(const CString& strID)
+{
+	if (m_iSelectProbe == -1)
+	{
+		AfxMessageBox(_T("Select a probe first (Select Meas Probe)."));
+		return;
+	}
+	if (m_cManager == nullptr)
+	{
+		return;
+	}
+	if (!m_cManager->pMoniter->stDataP.bMData[PLC_PACC_PACC_ALL_SEQ_DONE])
+	{
+		AfxMessageBox(_T("SACC sequence is running. Register the ID after it completes."));
+		return;
+	}
+
+	CString strMsg;
+	if (strID.IsEmpty())
+		strMsg.Format(_T("Clear the EQ probe ID of probe %d (D%d)?"), m_iSelectProbe, 2100 + 10 * m_iSelectProbe);
+	else
+		strMsg.Format(_T("Register EQ probe ID [%s] for probe %d (D%d)?"), strID, m_iSelectProbe, 2100 + 10 * m_iSelectProbe);
+	if (AfxMessageBox(strMsg, MB_YESNO | MB_ICONQUESTION) != IDYES)
+		return;
+
+	RITEMDATA uData;
+	memset(&uData, 0, sizeof(RITEMDATA));
+	uData.nEventCmd = SACC_COMMAND_OPERATION_SET_PROBEID;
+	uData.nWTSequence = m_iSelectProbe;
+	_tcscpy_s(uData.szText, _countof(uData.szText), strID);
+	m_cManager->UploadData(&uData);
+
+	strMsg.Format(_T("Manual probe ID %s : probe=%d id=[%s]"), strID.IsEmpty() ? _T("CLEAR") : _T("SET"), m_iSelectProbe, strID);
+	EventLog(strMsg);
+}
+
+void CDlgSACC::OnBnClickedBtnSetProbeID()
+{
+	CString strID;
+	GetDlgItem(IDC_EDIT_EQ_PROBEID)->GetWindowText(strID);
+	strID.Trim();
+	if (strID.IsEmpty() || strID.GetLength() > 10)
+	{
+		AfxMessageBox(_T("Enter a probe ID of 1~10 characters."));
+		return;
+	}
+	for (int i = 0; i < strID.GetLength(); i++)
+	{
+		TCHAR c = strID[i];
+		if (c < 0x21 || c > 0x7E || c == _T(','))
+		{
+			AfxMessageBox(_T("Probe ID must be printable ASCII without spaces or commas."));
+			return;
+		}
+	}
+	SendManualProbeID(strID);
+}
+
+void CDlgSACC::OnBnClickedBtnClearProbeID()
+{
+	SendManualProbeID(_T(""));
 }

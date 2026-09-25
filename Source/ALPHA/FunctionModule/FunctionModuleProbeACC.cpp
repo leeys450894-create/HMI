@@ -724,6 +724,7 @@ void CFunctionModuleProbeACC::GetIOModuleProbeACC(PLCRDATA* pbIO)
         _tcscpy_s(pShare->m_szBufferPROBEID[0], _countof(pShare->m_szBufferPROBEID[0]), szProbeInfo[0]);
         _tcscpy_s(pShare->m_szBufferPROBEID[1], _countof(pShare->m_szBufferPROBEID[1]), szProbeInfo[1]);
 
+#if 0	// LYS 2026-09-25 P1~P5 개별 복사 -> 루프 + CShareMemoryMgr::SetEqProbeID (동작 동일)
         // LYS 2026-06-26 OCP: only write P5 PROBEID
         if (!(GetSystemConfigMgrPtr() && GetSystemConfigMgrPtr()->IsOCP()))
         {
@@ -732,7 +733,29 @@ void CFunctionModuleProbeACC::GetIOModuleProbeACC(PLCRDATA* pbIO)
             _tcscpy_s(pShare->m_szPROBEID[2], _countof(pShare->m_szPROBEID[2]), szProbeInfo[15]);
             _tcscpy_s(pShare->m_szPROBEID[3], _countof(pShare->m_szPROBEID[3]), szProbeInfo[16]);
         }
+        else
+        {
+            // LYS 2026-09-16 OCP: P1~P4 프로브 모듈이 없으므로 D2110~D2140(szProbeInfo[13..16]) 값을 비운다.
+            //                szProbeInfo[k] 는 pbIO->szData[k] 를 가리키므로 SACC DLL 의 'PROBE ID'(EQ Inside) 스프레드 1~4행도 빈칸이 되고 5행(P5, D2150)만 남는다.
+            for (int k = 13; k <= 16; k++)
+            {
+                szProbeInfo[k][0] = _T('\0');
+            }
+        }
         _tcscpy_s(pShare->m_szPROBEID[4], _countof(pShare->m_szPROBEID[4]), szProbeInfo[17]);
+#else
+        // LYS 2026-09-25 P1~P5 = D2110~D2150 = szProbeInfo[13..17]. OCP 는 P5 만 유효: P1~P4 는 공유메모리도 비우고
+        //   szProbeInfo[k](= pbIO->szData[k]) 도 비워 SACC DLL 'PROBE ID' 스프레드 1~4행이 빈칸이 되게 한다(종전과 동일).
+        {
+            const bool bOcp = (GetSystemConfigMgrPtr() && GetSystemConfigMgrPtr()->IsOCP());
+            for (int iUnit = CShareMemoryMgr::EQ_PROBE_UNIT_MIN; iUnit <= CShareMemoryMgr::EQ_PROBE_UNIT_MAX; iUnit++)
+            {
+                TCHAR* pszSrc = szProbeInfo[12 + iUnit];	// 13..17
+                if (bOcp && iUnit != CShareMemoryMgr::EQ_PROBE_UNIT_MEAS) pszSrc[0] = _T('\0');
+                m_pAuroraMgrPool->pShareMemoryMgr->SetEqProbeID(iUnit, pszSrc);
+            }
+        }
+#endif
 
 		// jsyoon 2022.08.17 add
 		_tcscpy_s(pShare->m_szCassettePROBEID[0], _countof(pShare->m_szCassettePROBEID[0]), szProbeInfo[3]);

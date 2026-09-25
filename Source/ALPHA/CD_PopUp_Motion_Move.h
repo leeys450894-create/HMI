@@ -40,6 +40,7 @@ class CD_PopUp_Motion_Move : public CDialogEx
 	HANDLE		m_hStart1Event;
 	HANDLE		m_hStart2Event;
 	HANDLE		m_hCloseEvent;
+	volatile LONG	m_lMotionBusy;	// LYS 2026-09-17 1 while a motion ThreadFunc is running (blocks duplicate clicks)
 	HANDLE		m_hMultiEvent[3];
 	UINT static ThreadRun(LPVOID pParam);
 	UINT		ThreadFunc1();

@@ -1,0 +1,272 @@
+﻿// CD_PopUp_Safety_Map.cpp: 구현 파일
+// LYS 2026-09-24 EMS / DOOR 상태 지도 팝업 (IDD_POPUP_SAFETY_MAP). 헤더 주석 참조.
+#include "pch.h"
+#include "ALPHA.h"
+#include "CD_PopUp_Safety_Map.h"
+#include "afxdialogex.h"
+#include "Manager/MaintControlMgr.h"
+#include "Manager/IOMapControlMgr.h"
+#include "Manager/IOMapAddressDefine.h"
+
+#ifdef _DEBUG
+#define new DEBUG_NEW
+#endif
+
+// 타일 <-> PLC 비트 (plc_MBIT_t enum). 순서 = IDC_GRID_1.. / IDC_GRID_18.. 순서.
+static const int s_nEmsBit[CD_PopUp_Safety_Map::EMS_COUNT] = {
+		PLC_BIT_EMERGENCY_SWITCH01,	// M4010
+		PLC_BIT_EMERGENCY_SWITCH02,	// M4011
+		PLC_BIT_EMERGENCY_SWITCH03,	// M4012
+		PLC_BIT_EMERGENCY_SWITCH04,	// M4013
+		PLC_BIT_EMERGENCY_SWITCH05,	// M4014
+		PLC_BIT_EMERGENCY_SWITCH06,	// M4015
+		PLC_BIT_EMERGENCY_SWITCH07,	// M4016
+		PLC_BIT_EMERGENCY_SWITCH08,	// M4017
+		PLC_BIT_EMERGENCY_SWITCH09,	// M4018
+		PLC_BIT_EMERGENCY_SWITCH10,	// M4019
+		PLC_BIT_EMERGENCY_SWITCH11,	// M4420
+		PLC_BIT_EMERGENCY_SWITCH12,	// M4421
+		PLC_BIT_EMERGENCY_SWITCH13,	// M4422
+		PLC_BIT_EMERGENCY_SWITCH14,	// M4423
+		PLC_BIT_EMERGENCY_SWITCH15,	// M4424
+		PLC_BIT_EMERGENCY_SWITCH16,	// M4425
+		PLC_BIT_EMERGENCY_SWITCH17,	// M4426
+};
+// LYS 2026-09-24 도어 타일 = 열림 센서(M4021~4024) OR 키 제거(M4041~4044). 둘 다 본다.
+static const int s_nDoorOpenBit[CD_PopUp_Safety_Map::DOOR_COUNT] = {
+		PLC_BIT_DOOR_SENSOR2,	// M4021 DOOR 02 OPEN (RIGHT FRONT)
+		PLC_BIT_DOOR_SENSOR3,	// M4022 DOOR 03 OPEN (RIGHT BACK)
+		PLC_BIT_DOOR_SENSOR4,	// M4023 DOOR 04 OPEN (LEFT BACK)
+		PLC_BIT_DOOR_SENSOR5,	// M4024 DOOR 05 OPEN (SACC LOWER)
+};
+static const int s_nDoorKeyBit[CD_PopUp_Safety_Map::DOOR_COUNT] = {
+		PLC_BIT_DOOR_KEY_UNREMOVED_02,	// M4041
+		PLC_BIT_DOOR_KEY_UNREMOVED_03,	// M4042
+		PLC_BIT_DOOR_KEY_UNREMOVED_04,	// M4043
+		PLC_BIT_DOOR_KEY_UNREMOVED_05,	// M4044
+};
+static const UINT s_nEmsGridID[CD_PopUp_Safety_Map::EMS_COUNT] = {
+		IDC_GRID_1,  IDC_GRID_2,  IDC_GRID_3,  IDC_GRID_4,  IDC_GRID_5,  IDC_GRID_6,  IDC_GRID_7,  IDC_GRID_8,  IDC_GRID_9,
+		IDC_GRID_10, IDC_GRID_11, IDC_GRID_12, IDC_GRID_13, IDC_GRID_14, IDC_GRID_15, IDC_GRID_16, IDC_GRID_17,
+};
+static const UINT s_nDoorGridID[CD_PopUp_Safety_Map::DOOR_COUNT] = { IDC_GRID_18, IDC_GRID_19, IDC_GRID_20, IDC_GRID_21 };
+static const int  s_nDoorLabelNo[CD_PopUp_Safety_Map::DOOR_COUNT] = { 2, 3, 4, 5 };	// M4021~4024 = DOOR 02~05 OPEN
+// LYS 2026-09-25 셔터 센서 (enum 이름은 SUTTER 오타 그대로). CLOSE=M4280, OPEN=M4281.
+static const int s_nShutterCloseBit = PLC_BIT_SUTTER_SENSOR_CLOSE;	// M4280
+static const int s_nShutterOpenBit  = PLC_BIT_SUTTER_SENSOR_OPEN;	// M4281
+
+static const COLORREF CLR_TILE_ON   = RGB(255, 0, 0);		// 비트 1
+static const COLORREF CLR_TILE_OFF  = RGB(172, 172, 172);	// 비트 0
+static const COLORREF CLR_TILE_NA   = RGB(255, 255, 255);	// -1 (PLCMAdress 9999 / 통신 실패)
+static const COLORREF CLR_TILE_WARN = RGB(255, 200, 0);		// 셔터 OPEN / 이동 중 (알람은 아님)
+static const UINT     SAFETY_MAP_TIMER = 1000;
+
+IMPLEMENT_DYNAMIC(CD_PopUp_Safety_Map, CDialogEx)
+
+CD_PopUp_Safety_Map::CD_PopUp_Safety_Map(CMaintControlMgr* pMaintControlMgr, CWnd* pParent /*=nullptr*/)
+	: CDialogEx(IDD_POPUP_SAFETY_MAP, pParent)
+	, m_pMaintControlMgr(pMaintControlMgr)
+	, m_bAutoShown(false)
+	, m_nShutterState(-2)
+{
+	for (int i = 0; i < EMS_COUNT; i++)  m_nEmsState[i] = -2;
+	for (int i = 0; i < DOOR_COUNT; i++) m_nDoorState[i] = -2;
+}
+
+CD_PopUp_Safety_Map::~CD_PopUp_Safety_Map()
+{
+}
+
+void CD_PopUp_Safety_Map::DoDataExchange(CDataExchange* pDX)
+{
+	CDialogEx::DoDataExchange(pDX);
+	for (int i = 0; i < EMS_COUNT; i++)  DDX_Control(pDX, s_nEmsGridID[i],  m_gridEms[i]);
+	for (int i = 0; i < DOOR_COUNT; i++) DDX_Control(pDX, s_nDoorGridID[i], m_gridDoor[i]);
+	DDX_Control(pDX, IDC_GRID_22, m_gridShutter);	// LYS 2026-09-25
+}
+
+BEGIN_MESSAGE_MAP(CD_PopUp_Safety_Map, CDialogEx)
+	ON_WM_DESTROY()
+	ON_WM_TIMER()
+END_MESSAGE_MAP()
+
+BOOL CD_PopUp_Safety_Map::OnInitDialog()
+{
+	CDialogEx::OnInitDialog();
+
+	CString strLabel;
+	for (int i = 0; i < EMS_COUNT; i++)
+	{
+		strLabel.Format(_T("EMS %02d"), i + 1);
+		__InitTile(m_gridEms[i], strLabel);
+	}
+	for (int i = 0; i < DOOR_COUNT; i++)
+	{
+		strLabel.Format(_T("DOOR %02d"), s_nDoorLabelNo[i]);
+		__InitTile(m_gridDoor[i], strLabel);
+	}
+
+	__InitTile(m_gridShutter, _T("SHUTTER"));	// LYS 2026-09-25
+
+	RefreshState();
+	SetTimer(SAFETY_MAP_TIMER, 500, NULL);
+
+	return TRUE;
+}
+
+void CD_PopUp_Safety_Map::OnDestroy()
+{
+	CDialogEx::OnDestroy();
+	KillTimer(SAFETY_MAP_TIMER);
+}
+
+// CLOSE(IDCANCEL) / Enter - 모드리스 창이므로 파괴하지 않고 숨긴다(DlgMainForm 이 소유·삭제).
+void CD_PopUp_Safety_Map::OnOK()     { ShowWindow(SW_HIDE); }
+void CD_PopUp_Safety_Map::OnCancel() { ShowWindow(SW_HIDE); }
+
+// 타일 = 1행 1열, 고정 행/열 없음, 라벨 고정. 값은 배경색으로만 나타낸다.
+void CD_PopUp_Safety_Map::__InitTile(CGridCtrl& grid, LPCTSTR pszLabel)
+{
+	if (grid.GetSafeHwnd() == NULL) return;
+	grid.SetEditable(FALSE);
+	grid.SetListMode(FALSE);
+	grid.SetFixedRowCount(0);
+	grid.SetFixedColumnCount(0);
+	grid.SetRowCount(1);
+	grid.SetColumnCount(1);
+	grid.SetRowResize(FALSE);
+	grid.SetColumnResize(FALSE);
+	grid.SetTrackFocusCell(FALSE);
+	grid.SetSingleRowSelection(FALSE);
+	grid.SetSingleColSelection(FALSE);
+	grid.SetDefCellMargin(0);
+	grid.EnableSelection(FALSE);
+	grid.GetCell(0, 0)->SetFormat(DT_CENTER | DT_VCENTER | DT_SINGLELINE);
+	grid.SetItemState(0, 0, GVIS_READONLY);
+	grid.SetItemText(0, 0, pszLabel);
+	grid.SetItemFgColour(0, 0, RGB(0, 0, 0));
+	grid.SetItemBkColour(0, 0, CLR_TILE_OFF);
+	CRect rc; grid.GetClientRect(&rc);
+	grid.SetColumnWidth(0, rc.Width());
+	grid.SetRowHeight(0, rc.Height());
+}
+
+void CD_PopUp_Safety_Map::__PaintTile(CGridCtrl& grid, int nState, int& nPrev, LPCTSTR pszLabel)
+{
+	if (nState == nPrev) return;		// 바뀔 때만 다시 그린다
+	nPrev = nState;
+	if (grid.GetSafeHwnd() == NULL) return;
+	// nState: 0 = off, -1 = unreadable, >0 = active (door: bit0 OPEN, bit1 KEY)
+	COLORREF clr = (nState > 0) ? CLR_TILE_ON : ((nState == 0) ? CLR_TILE_OFF : CLR_TILE_NA);
+	grid.SetItemBkColour(0, 0, clr);
+	grid.SetItemFgColour(0, 0, (nState > 0) ? RGB(255, 255, 255) : RGB(0, 0, 0));
+	if (pszLabel != nullptr) grid.SetItemText(0, 0, pszLabel);
+	grid.Invalidate();
+}
+
+// 1 / 0, 또는 -1(PLCMAdress 9999 로 막힌 비트·통신 실패). -1 은 C++ 조건식에서 참이므로 == 1 로만 판정할 것.
+int CD_PopUp_Safety_Map::__ReadBit(int nEnumIndex)
+{
+	if (m_pMaintControlMgr == nullptr || m_pMaintControlMgr->GetIOMapControlMgrPtr() == nullptr) return -1;
+	CIOMapControlMgr* pIO = m_pMaintControlMgr->GetIOMapControlMgrPtr();
+	if (pIO->IsOutOfService() == true || pIO->IsConnected() != true) return -1;
+	int nRet = pIO->GetParam_DIOMapMemoryBitImport(nEnumIndex);
+	return (nRet == 1) ? 1 : ((nRet == 0) ? 0 : -1);
+}
+
+// 도어 타일: 열림(M402x)과 키(M404x)를 합친다. bit0 = 열림(센서 1), bit1 = 키 제거(M404x 는 1 이 '키 미제거 = 정상', 0 이 제거).
+//   못 읽은 비트(-1)는 이상으로 보지 않는다. 둘 다 못 읽으면 -1.
+void CD_PopUp_Safety_Map::__PaintDoorTile(int i)
+{
+	const int nOpen = __ReadBit(s_nDoorOpenBit[i]);
+	const int nKey  = __ReadBit(s_nDoorKeyBit[i]);
+	int nState = 0;
+	if (nOpen == -1 && nKey == -1) nState = -1;
+	else nState = ((nOpen == 1) ? 1 : 0) | ((nKey == 0) ? 2 : 0);	// LYS 2026-09-24 key bit 1 = key present (normal), 0 = removed
+	CString strLabel;
+	strLabel.Format(_T("DOOR %02d"), s_nDoorLabelNo[i]);
+	if (nState == 3)      strLabel += _T(" OPEN+KEY OUT");
+	else if (nState == 1) strLabel += _T(" OPEN");
+	else if (nState == 2) strLabel += _T(" KEY OUT");
+	__PaintTile(m_gridDoor[i], nState, m_nDoorState[i], strLabel);
+}
+
+// LYS 2026-09-25 셔터 타일: CLOSE 회색(정상), OPEN 노랑, 둘 다 0 = 이동 중 노랑, 둘 다 1 = 센서 이상 빨강, 못 읽음 흰색.
+//   표시 전용 - IsAnyActive(자동 팝업)에는 넣지 않는다.
+void CD_PopUp_Safety_Map::__PaintShutterTile()
+{
+	const int nClose = __ReadBit(s_nShutterCloseBit);
+	const int nOpen  = __ReadBit(s_nShutterOpenBit);
+	int nState = -1;
+	if (nClose != -1 || nOpen != -1)
+	{
+		if (nClose == 1 && nOpen == 1)      nState = 3;
+		else if (nOpen == 1)                nState = 1;
+		else if (nClose == 1)               nState = 0;
+		else                                nState = 2;
+	}
+	if (nState == m_nShutterState) return;
+	m_nShutterState = nState;
+	if (m_gridShutter.GetSafeHwnd() == NULL) return;
+	LPCTSTR pszLabel = _T("SHUTTER ?");
+	COLORREF clr = CLR_TILE_NA; COLORREF clrText = RGB(0, 0, 0);
+	switch (nState)
+	{
+	case 0: pszLabel = _T("SHUTTER CLOSE");  clr = CLR_TILE_OFF;  break;
+	case 1: pszLabel = _T("SHUTTER OPEN");   clr = CLR_TILE_WARN; break;
+	case 2: pszLabel = _T("SHUTTER MOVING"); clr = CLR_TILE_WARN; break;
+	case 3: pszLabel = _T("SHUTTER SENSOR NG"); clr = CLR_TILE_ON; clrText = RGB(255, 255, 255); break;
+	default: break;
+	}
+	m_gridShutter.SetItemText(0, 0, pszLabel);
+	m_gridShutter.SetItemBkColour(0, 0, clr);
+	m_gridShutter.SetItemFgColour(0, 0, clrText);
+	m_gridShutter.Invalidate();
+}
+
+void CD_PopUp_Safety_Map::RefreshState()
+{
+	__PaintShutterTile();	// LYS 2026-09-25
+	for (int i = 0; i < EMS_COUNT; i++)  __PaintTile(m_gridEms[i], __ReadBit(s_nEmsBit[i]), m_nEmsState[i]);
+	for (int i = 0; i < DOOR_COUNT; i++) __PaintDoorTile(i);
+}
+
+bool CD_PopUp_Safety_Map::IsAnyActive()
+{
+	for (int i = 0; i < EMS_COUNT; i++)  if (__ReadBit(s_nEmsBit[i])  == 1) return true;
+	for (int i = 0; i < DOOR_COUNT; i++) if (__ReadBit(s_nDoorOpenBit[i]) == 1 || __ReadBit(s_nDoorKeyBit[i]) == 0) return true;	// LYS 2026-09-24 key 0 = removed
+	return false;
+}
+
+// 비트가 하나라도 1 이 되는 순간(에지) 한 번 띄운다. 사용자가 CLOSE 로 숨겨도 전부 0 이 될 때까지는 다시 안 띄운다.
+void CD_PopUp_Safety_Map::AutoPopup()
+{
+	if (GetSafeHwnd() == NULL) return;
+	const bool bActive = IsAnyActive();
+	if (bActive == true)
+	{
+		if (m_bAutoShown == false)
+		{
+			m_bAutoShown = true;
+			RefreshState();
+			if (IsWindowVisible() == FALSE)
+			{
+				CenterWindow(GetParent());
+				ShowWindow(SW_SHOW);
+				SetForegroundWindow();
+			}
+			CLogWrapper::GetInstance()->KMLOG(WARN, _T("SAFETY MAP popup - EMS/DOOR bit active"));
+		}
+	}
+	else
+	{
+		m_bAutoShown = false;
+	}
+}
+
+void CD_PopUp_Safety_Map::OnTimer(UINT_PTR nIDEvent)
+{
+	CDialogEx::OnTimer(nIDEvent);
+	if (nIDEvent == SAFETY_MAP_TIMER && IsWindowVisible())
+		RefreshState();
+}

@@ -1,0 +1,587 @@
+// DlgSubLog.cpp : 구현 파일입니다.
+//
+
+#include "pch.h"
+#include "ALPHA.h"
+#include "DlgSubLog.h"
+#include "afxdialogex.h"
+#include "DlgSubLogFile.h"
+
+#include "AuroraMgr.h"
+#include "Manager\SequenceManager.h"
+#include "Dowork\SystemInitialize.h"
+#include "Dowork\DoWorkGlassSequence.h"
+#include "FunctionModule\FunctionModuleEQStateChange.h"
+#include "FunctionModule\FunctionModuleProbeACC.h"
+#include "BaseSequenceBody.h"
+#include "SystemParamShare.h"
+
+#include "Manager\CommTcpIpFactoryMgr.h"
+//#include "Manager\MotorControlMgr.h"
+//#include "Manager\IOMapControlMgr.h"
+#include "Manager\SeqTactTimeMgr.h"
+#include "Manager\LightControlMgr.h"
+#include "Manager\MaintControlMgr.h"
+#include "Manager\MCCLogMgr.h"
+#include "Manager\SACCMgr.h"
+#include "DoWork/DoWorkSequenceCIM.h"
+
+// CDlgSubLog 대화 상자입니다.
+
+//enumLogItemID_DLOG = 0,
+//enumLogItemID_TLOG,
+//enumLogItemID_OLOG,
+//enumLogItemID_MOTION,
+//enumLogItemID_IO,
+//enumLogItemID_SERIAL,
+//enumLogItemID_CIM,
+//enumLogItemID_MEAS1,	// 화질
+//enumLogItemID_MEAS2,    // 색이상
+//enumLogItemID_MEAS3,    // 시야각
+//enumLogItemID_MEAS4,    // 특성
+//enumLogItemID_MEAS5,    // PG
+//enumLogItemID_MEAS6,    // TSP / LCR
+//enumLogItemID_MEAS7,	// AGIGN
+//enumLogItemID_MEAS8,
+//enumLogItemID_MEAS9,
+//enumLogItemID_MEAS10,
+//enumLogItemID_MCC,
+//enumLogItemID_PROBE,
+
+static CString LogName[] =
+{
+	_T("DLOG"),
+	_T("TLOG"),
+	_T("OLOG"),
+	_T("MOTION"),
+	_T("IO"),
+	_T("SERIAL"),
+	_T("CIM"),
+	_T("MCC"),
+	_T("PROBE"),
+	_T("화질"),
+	//_T("면계측"),
+	_T("시야각"),
+	_T("PG"),
+	_T("특성"),
+	//_T("TSP / LCR"),
+	_T("AGING"),
+	_T(""),
+	_T(""),
+	_T(""),
+};
+
+IMPLEMENT_DYNAMIC(CDlgSubLog, CMainSubDlgWin)
+
+CDlgSubLog::CDlgSubLog(CAuroraMgr *pAuroraMgr, CWnd* pParent /*=NULL*/)
+	: CMainSubDlgWin(IDD_DLG_SUB_LOG, pParent)
+	, m_pAuroraMgr(pAuroraMgr)
+	, m_iCurLogFileView(enumLogItemID_DLOG)
+{
+	for (int i = 0; i < enumLogItemIDCount; ++i)
+	{
+		m_pMainLoggingFile[i] = nullptr;
+	}
+}
+
+CDlgSubLog::~CDlgSubLog()
+{
+	
+
+	for (int i = 0; i < enumLogItemID_DLOG; ++i)
+	{
+		if (m_pMainLoggingFile[i])
+		{
+			m_pMainLoggingFile[i]->DestroyWindow();
+			delete m_pMainLoggingFile[i];
+			m_pMainLoggingFile[i] = nullptr;
+		}
+	}
+}
+
+void CDlgSubLog::DoDataExchange(CDataExchange* pDX)
+{
+	CMainSubDlgWin::DoDataExchange(pDX);
+}
+
+
+BEGIN_MESSAGE_MAP(CDlgSubLog, CMainSubDlgWin)
+	ON_WM_SHOWWINDOW()
+	ON_BN_CLICKED(IDC_BUTTON_FILE_OPEN, &CDlgSubLog::OnBnClickedButtonFileOpen)
+	ON_BN_CLICKED(IDC_BUTTON_DLOG, &CDlgSubLog::OnBnClickedButtonDlog)
+	ON_BN_CLICKED(IDC_BUTTON_OLOG, &CDlgSubLog::OnBnClickedButtonOlog)
+	ON_BN_CLICKED(IDC_BUTTON_TLOG, &CDlgSubLog::OnBnClickedButtonTlog)
+	ON_BN_CLICKED(IDC_BUTTON_MOTION, &CDlgSubLog::OnBnClickedButtonMotion)
+	ON_BN_CLICKED(IDC_BUTTON_IO, &CDlgSubLog::OnBnClickedButtonIo)
+	ON_BN_CLICKED(IDC_BUTTON_SERIAL, &CDlgSubLog::OnBnClickedButtonSerial)
+	ON_BN_CLICKED(IDC_BUTTON_MEAS1, &CDlgSubLog::OnBnClickedButtonMeas1)
+	ON_BN_CLICKED(IDC_BUTTON_MEAS2, &CDlgSubLog::OnBnClickedButtonMeas2)
+	ON_BN_CLICKED(IDC_BUTTON_MEAS3, &CDlgSubLog::OnBnClickedButtonMeas3)
+	ON_BN_CLICKED(IDC_BUTTON_MEAS4, &CDlgSubLog::OnBnClickedButtonMeas4)
+	ON_BN_CLICKED(IDC_BUTTON_MEAS5, &CDlgSubLog::OnBnClickedButtonMeas5)
+	ON_BN_CLICKED(IDC_BUTTON_MEAS6, &CDlgSubLog::OnBnClickedButtonMeas6)
+	ON_BN_CLICKED(IDC_BUTTON_MEAS7, &CDlgSubLog::OnBnClickedButtonMeas7)
+	ON_BN_CLICKED(IDC_BUTTON_MEAS8, &CDlgSubLog::OnBnClickedButtonMeas8)
+	ON_BN_CLICKED(IDC_BUTTON_MEAS9, &CDlgSubLog::OnBnClickedButtonMeas9)
+	ON_BN_CLICKED(IDC_BUTTON_MEAS10, &CDlgSubLog::OnBnClickedButtonMeas10)
+	ON_BN_CLICKED(IDC_BUTTON_MCC, &CDlgSubLog::OnBnClickedButtonMcc)
+
+	ON_BN_CLICKED(IDC_BUTTON_PROBE, &CDlgSubLog::OnBnClickedButtonProbe)
+	ON_BN_CLICKED(IDC_BUTTON_CIM, &CDlgSubLog::OnBnClickedButtonCim)
+END_MESSAGE_MAP()
+
+
+// CDlgSubLog 메시지 처리기입니다.
+
+
+BOOL CDlgSubLog::OnInitDialog()
+{
+	CMainSubDlgWin::OnInitDialog();
+
+	// TODO:  여기에 추가 초기화 작업을 추가합니다.
+	CRect r2, rect;
+	CString str;
+
+	for (int i = 0; i < enumLogItemIDCount; ++i)
+	{
+		str.Format(_T("- %s View -"), LogName[i]);
+		m_pMainLoggingFile[i] = new CDlgSubLogFile(str);
+		m_pMainLoggingFile[i]->Create(IDD_DLG_SUB_LOG_FILE, this);
+//		m_pMainLoggingFile[i]->LinkParam(pDoWorkInitialSeq->GetLogFileAccessorPtr());
+		m_pMainLoggingFile[i]->ShowWindow(SW_HIDE);
+	}
+
+	// Initialize Step
+	CSystemInitialize *pDoWorkInitialSeq = CSequenceManager::GetInstance()->GetSystemInitialize();
+	if (pDoWorkInitialSeq)
+	{
+		m_pMainLoggingFile[enumLogItemID_DLOG]->LinkParam(pDoWorkInitialSeq->GetLogFileAccessorPtr());
+	}
+
+	// Glass Step
+	CDoWorkGlassSequence *pDoWorkGlassSeq = CSequenceManager::GetInstance()->GeDoWorkGlassSequence();
+	if (pDoWorkGlassSeq)
+	{
+		for (int i = 0; i < enumSeqItemIDCount; ++i)
+		{
+			if (pDoWorkGlassSeq->GetIteLogFileAccessorPtr(i))
+			{
+				m_pMainLoggingFile[enumLogItemID_DLOG]->LinkParam(pDoWorkGlassSeq->GetIteLogFileAccessorPtr(i));
+			}
+		}
+	}
+
+	// 
+	CFunctionModuleEQStateChange *pDoWorkEQStateSeq = CSequenceManager::GetInstance()->GetFunctionModuleEQStateChange();
+	if (pDoWorkEQStateSeq)
+	{
+		m_pMainLoggingFile[enumLogItemID_DLOG]->LinkParam(pDoWorkEQStateSeq->GetLogFileAccessorPtr());
+	}
+
+	CFunctionModuleProbeACC* pFunctionModuleProbeACC = CSequenceManager::GetInstance()->GetFunctionModuleProbeACC();
+	if (pFunctionModuleProbeACC)
+	{
+		m_pMainLoggingFile[enumLogItemID_DLOG]->LinkParam(pFunctionModuleProbeACC->GetLogFileAccessorPtr());
+	}
+
+	CDoWorkSequenceCIM* pDoWorkCIMSeq = CSequenceManager::GetInstance()->GetDoWorkSequenceCIM();
+	if (pDoWorkCIMSeq)
+	{
+		m_pMainLoggingFile[enumLogItemID_DLOG]->LinkParam(pDoWorkCIMSeq->GetLogFileAccessorPtr());
+	}
+
+	// 
+	m_pMainLoggingFile[enumLogItemID_TLOG]->LinkParam(m_pAuroraMgr->GetSeqTactTimeMgrPtr()->GetLogFileAccessorPtr());
+
+	CLogWrapper::GetInstance()->SetOLogMsgWindow(m_pMainLoggingFile[enumLogItemID_OLOG]->GetSafeHwnd());
+	// 
+	// 화질
+	m_pMainLoggingFile[enumLogItemID_MEAS1]->LinkParam(m_pAuroraMgr->GetCommTcpIpFactoryMgrPtr()->GetLogFileAccessorPtr(0)); 
+	m_pMainLoggingFile[enumLogItemID_MEAS1]->LinkParam(m_pAuroraMgr->GetCommTcpIpFactoryMgrPtr()->GetLogFileAccessorPtr(1));
+	m_pMainLoggingFile[enumLogItemID_MEAS1]->LinkParam(m_pAuroraMgr->GetCommTcpIpFactoryMgrPtr()->GetLogFileAccessorPtr(12)); // jsyoon 2022.09.08 add
+
+	// 색이상
+	m_pMainLoggingFile[enumLogItemID_MEAS2]->LinkParam(m_pAuroraMgr->GetCommTcpIpFactoryMgrPtr()->GetLogFileAccessorPtr(2));
+	m_pMainLoggingFile[enumLogItemID_MEAS2]->LinkParam(m_pAuroraMgr->GetCommTcpIpFactoryMgrPtr()->GetLogFileAccessorPtr(3));
+
+	// 시야각
+	m_pMainLoggingFile[enumLogItemID_MEAS3]->LinkParam(m_pAuroraMgr->GetCommTcpIpFactoryMgrPtr()->GetLogFileAccessorPtr(4));
+	m_pMainLoggingFile[enumLogItemID_MEAS3]->LinkParam(m_pAuroraMgr->GetCommTcpIpFactoryMgrPtr()->GetLogFileAccessorPtr(5));
+
+	// PG
+	m_pMainLoggingFile[enumLogItemID_MEAS5]->LinkParam(m_pAuroraMgr->GetCommTcpIpFactoryMgrPtr()->GetLogFileAccessorPtr(6));
+
+	// 특성
+	m_pMainLoggingFile[enumLogItemID_MEAS4]->LinkParam(m_pAuroraMgr->GetCommTcpIpFactoryMgrPtr()->GetLogFileAccessorPtr(7));
+
+	//// TSP
+	//m_pMainLoggingFile[enumLogItemID_MEAS6]->LinkParam(m_pAuroraMgr->GetCommTcpIpFactoryMgrPtr()->GetLogFileAccessorPtr(8));
+
+	// LCR
+	m_pMainLoggingFile[enumLogItemID_MEAS6]->LinkParam(m_pAuroraMgr->GetCommTcpIpFactoryMgrPtr()->GetLogFileAccessorPtr(8));
+
+	// AGING
+	m_pMainLoggingFile[enumLogItemID_MEAS7]->LinkParam(m_pAuroraMgr->GetCommTcpIpFactoryMgrPtr()->GetLogFileAccessorPtr(9));
+
+	// CIM
+	m_pMainLoggingFile[enumLogItemID_CIM]->LinkParam(m_pAuroraMgr->GetCommTcpIpFactoryMgrPtr()->GetLogFileAccessorPtr(10));
+	m_pMainLoggingFile[enumLogItemID_CIM]->LinkParam(m_pAuroraMgr->GetCommTcpIpFactoryMgrPtr()->GetLogFileAccessorPtr(11));	// jsyoon 2022.09.08 add
+
+
+	// TSP
+	for (size_t i = 0; i < 6; i++)
+	{
+		m_pMainLoggingFile[enumLogItemID_MEAS6]->LinkParam(m_pAuroraMgr->GetCommTcpIpFactoryMgrPtr()->GetLogFileAccessorPtr(13 + i));
+	}
+	
+
+	m_pMainLoggingFile[enumLogItemID_MOTION]->LinkParam(m_pAuroraMgr->GetMaintControlMgr()->GetMotorControlMgrPtr()->GetLogFileAccessorPtr());
+	m_pMainLoggingFile[enumLogItemID_IO]->LinkParam(m_pAuroraMgr->GetMaintControlMgr()->GetIOMapControlMgrPtr()->GetLogFileAccessorPtr());
+	m_pMainLoggingFile[enumLogItemID_SERIAL]->LinkParam(m_pAuroraMgr->GetLightControlMgrPtr()->GetLogFileAccessorPtr());
+
+	
+
+	//
+	m_pAuroraMgr->GetMaintControlMgr()->LinkIniFile(false);
+
+	if (m_pMainLoggingFile[m_iCurLogFileView])
+	{
+		m_pMainLoggingFile[m_iCurLogFileView]->ShowWindow(SW_SHOW);
+	}
+
+	bool bUseBtn[enumLogItemIDCount];
+	ZeroMemory(bUseBtn, sizeof(bUseBtn));
+	int nBtnIndex[enumLogItemIDCount] = { IDC_BUTTON_DLOG, IDC_BUTTON_TLOG, IDC_BUTTON_OLOG, IDC_BUTTON_MOTION, IDC_BUTTON_IO, IDC_BUTTON_SERIAL, IDC_BUTTON_CIM, IDC_BUTTON_MEAS1, IDC_BUTTON_MEAS2, IDC_BUTTON_MEAS3, IDC_BUTTON_MEAS4, IDC_BUTTON_MEAS5, IDC_BUTTON_MEAS6, IDC_BUTTON_MEAS7, IDC_BUTTON_MEAS8, IDC_BUTTON_MEAS9, IDC_BUTTON_MEAS10, IDC_BUTTON_MCC, IDC_BUTTON_PROBE};
+
+	bUseBtn[0] = true; // DLOG
+	bUseBtn[1] = true; // TLOG
+	bUseBtn[2] = true; // OLOG
+	bUseBtn[3] = true; // MOTIOM
+	bUseBtn[4] = true; // IO
+	bUseBtn[5] = true; // SERIAL
+	bUseBtn[6] = true; // CIM
+	bUseBtn[7] = true; // 화질
+	bUseBtn[8] = false; // 색이상		// LYS 2026-07-02 안쓰는 Mode 삭제
+	bUseBtn[9] = true; // 시야각
+	bUseBtn[10] = true; // 특성
+	bUseBtn[11] = true; // PG
+	bUseBtn[12] = false;  // TSP		// LYS 2026-07-02 안쓰는 Mode 삭제
+	bUseBtn[13] = true;  // AGING
+	bUseBtn[14] = false;
+	bUseBtn[15] = false;
+	bUseBtn[16] = false;
+	bUseBtn[17] = true;		// MCC
+	bUseBtn[18] = true;    // PROBE
+
+	
+	int nMoveH = 0, nCnt = 0;
+	GetDlgItem(IDC_BUTTON_DLOG)->GetWindowRect(r2);
+	ScreenToClient(&r2);
+
+	nMoveH = r2.Height() + 1;
+
+	int nNum[enumLogItemIDCount] = { 0,1,2,3,4,5,6,9,10,11,12,13,14,15,16,17,18,7,8 };
+
+	for (int i = 0; i < enumLogItemIDCount; ++i)
+	{
+		if (bUseBtn[i] == true)
+		{
+			GetDlgItem(nBtnIndex[i])->ShowWindow(SW_SHOW);
+
+			rect = r2;
+			rect.top += (nMoveH * nCnt);
+			rect.bottom += (nMoveH * nCnt);
+			GetDlgItem(nBtnIndex[i])->MoveWindow(rect);
+			GetDlgItem(nBtnIndex[i])->SetWindowText(LogName[nNum[i]]);
+
+			nCnt++;
+		}
+		else
+		{
+			GetDlgItem(nBtnIndex[i])->ShowWindow(SW_HIDE);
+		}
+	}
+
+	rect = r2;
+	rect.top += (nMoveH * nCnt);
+	rect.bottom += (nMoveH * nCnt);
+	GetDlgItem(IDC_BUTTON_FILE_OPEN)->MoveWindow(rect);
+
+	
+
+
+	//--------------------------------------------------------------------
+	// MCC 생성
+	//--------------------------------------------------------------------
+	GetDlgItem(IDC_STATIC_LOG_FILE)->GetWindowRect(&rect);
+	ScreenToClient(&rect);
+
+	CString strAppPath, strRecipePath, strMCCLogPath;
+	strAppPath.Format(_T("%s"), CSystemParamShare::GetInstance()->GetAppFolderPath());
+	strRecipePath.Format(_T("%s"), CSystemParamShare::GetInstance()->GetLoggerFolderPath());
+	strMCCLogPath.Format(_T("%s%s"), strRecipePath, _T("MCC"));
+
+	CMCCLogMgr::GetInstance()->Initialize(GetSafeHwnd(), rect, m_pAuroraMgr->GetSystemInfo().name, strAppPath, strAppPath, strMCCLogPath, m_pAuroraMgr->GetCompiledDate(1));
+
+	//
+	CString strSACCLogPath;
+	strSACCLogPath.Format(_T("%s%s\\"), strRecipePath, _T("SACC"));
+	CSACCMgr::GetInstance()->InitializeProbeLog(GetSafeHwnd(), rect, m_pAuroraMgr->GetSystemInfo().name, strAppPath, strAppPath, strSACCLogPath);
+
+	//GetDlgItem(IDC_STATIC_LOG_FILE)->GetWindowRect(&rect);
+	//ScreenToClient(&rect);
+	//::API_MCC_Initialize(GetSafeHwnd(), rect);
+
+	//CString strMCCFilePath;
+	//strMCCFilePath.Format(_T("%s%s"), CSystemParamShare::GetInstance()->GetAppFolderPath(), _T("MCCLog.exe"));
+	//::API_MCC_SetFilePath(strMCCFilePath);
+
+	//
+	//::API_MCC_SetLogPath(strMCCLogPath);
+	//::API_MCC_SetConfigPath(CSystemParamShare::GetInstance()->GetAppFolderPath());
+	////	_tcscpy_s(m_pSystem->m_strMCCPath, _countof(m_pSystem->m_strMCCPath), strMCCLogPath);
+	
+	return TRUE;  // return TRUE unless you set the focus to a control
+				  // 예외: OCX 속성 페이지는 FALSE를 반환해야 합니다.
+}
+
+
+void CDlgSubLog::OnShowWindow(BOOL bShow, UINT nStatus)
+{
+	CMainSubDlgWin::OnShowWindow(bShow, nStatus);
+
+	// TODO: 여기에 메시지 처리기 코드를 추가합니다.
+	if (bShow == TRUE)
+	{
+		RefreshLogFileView(bShow);
+	}
+}
+
+void CDlgSubLog::RefreshLogFileView(BOOL bShow)
+{
+	for (int i = 0; i < enumLogItemIDCount; ++i)
+	{
+		if (m_pMainLoggingFile[i])
+		{
+			m_pMainLoggingFile[i]->ShowWindow(SW_HIDE);
+		}
+	}
+
+	if (CMCCLogMgr::GetInstance()->GetReportmWnd() != nullptr)
+		CMCCLogMgr::GetInstance()->GetReportmWnd()->ShowWindow(SW_HIDE);
+
+	if (CSACCMgr::GetInstance()->GetProbeLogWnd() != nullptr)
+		CSACCMgr::GetInstance()->GetProbeLogWnd()->ShowWindow(SW_HIDE);
+
+	if (bShow == TRUE)
+	{
+		if (m_iCurLogFileView == enumLogItemID_MCC)
+		{
+			if (CMCCLogMgr::GetInstance()->GetReportmWnd() != nullptr)
+				CMCCLogMgr::GetInstance()->GetReportmWnd()->ShowWindow(SW_SHOW);
+		}
+		else if (m_iCurLogFileView == enumLogItemID_PROBE)
+		{
+			if (CSACCMgr::GetInstance()->GetProbeLogWnd() != nullptr)
+				CSACCMgr::GetInstance()->GetProbeLogWnd()->ShowWindow(SW_SHOW);
+		}
+		else
+		{
+			if (m_pMainLoggingFile[m_iCurLogFileView])
+			{
+				m_pMainLoggingFile[m_iCurLogFileView]->ShowWindow(SW_SHOW);
+			}
+		}
+	}
+}
+
+
+void CDlgSubLog::OnBnClickedButtonFileOpen()
+{
+	// TODO: 여기에 컨트롤 알림 처리기 코드를 추가합니다.
+	CLogWrapper::GetInstance()->KMLOG(OPER, _T("CDlgSubLog::OnBnClickedButtonFileOpen"));
+
+//	m_pMainLoggingFile[m_iCurLogFileView]->GetLogFileAccessorPtr()->GetLoggerFolderPath();
+	ShellExecute(NULL, _T("open"), CSystemParamShare::GetInstance()->GetLoggerFolderPath(), NULL, NULL, SW_SHOW);
+}
+
+
+void CDlgSubLog::OnBnClickedButtonDlog()
+{
+	// TODO: 여기에 컨트롤 알림 처리기 코드를 추가합니다.
+	CLogWrapper::GetInstance()->KMLOG(OPER, _T("CDlgSubLog::OnBnClickedButtonDlog"));
+
+	m_iCurLogFileView = enumLogItemID_DLOG;
+	RefreshLogFileView(TRUE);
+}
+
+
+void CDlgSubLog::OnBnClickedButtonOlog()
+{
+	// TODO: 여기에 컨트롤 알림 처리기 코드를 추가합니다.
+	CLogWrapper::GetInstance()->KMLOG(OPER, _T("CDlgSubLog::OnBnClickedButtonOlog"));
+
+	m_iCurLogFileView = enumLogItemID_OLOG;
+	RefreshLogFileView(TRUE);
+}
+
+
+void CDlgSubLog::OnBnClickedButtonTlog()
+{
+	// TODO: 여기에 컨트롤 알림 처리기 코드를 추가합니다.
+	CLogWrapper::GetInstance()->KMLOG(OPER, _T("CDlgSubLog::OnBnClickedButtonTlog"));
+
+	m_iCurLogFileView = enumLogItemID_TLOG;
+	RefreshLogFileView(TRUE);
+}
+
+
+void CDlgSubLog::OnBnClickedButtonMeas1()
+{
+	// TODO: 여기에 컨트롤 알림 처리기 코드를 추가합니다.
+	CLogWrapper::GetInstance()->KMLOG(OPER, _T("CDlgSubLog::OnBnClickedButtonMeas1"));
+
+	m_iCurLogFileView = enumLogItemID_MEAS1;
+	RefreshLogFileView(TRUE);
+}
+
+
+void CDlgSubLog::OnBnClickedButtonMeas2()
+{
+	// TODO: 여기에 컨트롤 알림 처리기 코드를 추가합니다.
+	CLogWrapper::GetInstance()->KMLOG(OPER, _T("CDlgSubLog::OnBnClickedButtonMeas2"));
+
+	m_iCurLogFileView = enumLogItemID_MEAS2;
+	RefreshLogFileView(TRUE);
+}
+
+
+void CDlgSubLog::OnBnClickedButtonMotion()
+{
+	// TODO: 여기에 컨트롤 알림 처리기 코드를 추가합니다.
+	CLogWrapper::GetInstance()->KMLOG(OPER, _T("CDlgSubLog::OnBnClickedButtonMotion"));
+
+	m_iCurLogFileView = enumLogItemID_MOTION;
+	RefreshLogFileView(TRUE);
+}
+
+
+void CDlgSubLog::OnBnClickedButtonIo()
+{
+	// TODO: 여기에 컨트롤 알림 처리기 코드를 추가합니다.
+	CLogWrapper::GetInstance()->KMLOG(OPER, _T("CDlgSubLog::OnBnClickedButtonIo"));
+
+	m_iCurLogFileView = enumLogItemID_IO;
+	RefreshLogFileView(TRUE);
+}
+
+
+void CDlgSubLog::OnBnClickedButtonSerial()
+{
+	// TODO: 여기에 컨트롤 알림 처리기 코드를 추가합니다.
+	CLogWrapper::GetInstance()->KMLOG(OPER, _T("CDlgSubLog::OnBnClickedButtonSerial"));
+
+	m_iCurLogFileView = enumLogItemID_SERIAL;
+	RefreshLogFileView(TRUE);
+}
+
+void CDlgSubLog::OnBnClickedButtonMeas3()
+{
+	// TODO: 여기에 컨트롤 알림 처리기 코드를 추가합니다.
+	CLogWrapper::GetInstance()->KMLOG(OPER, _T("CDlgSubLog::OnBnClickedButtonMeas3"));
+
+	m_iCurLogFileView = enumLogItemID_MEAS3;
+	RefreshLogFileView(TRUE);
+}
+
+void CDlgSubLog::OnBnClickedButtonMeas4()
+{
+	// TODO: 여기에 컨트롤 알림 처리기 코드를 추가합니다.
+	CLogWrapper::GetInstance()->KMLOG(OPER, _T("CDlgSubLog::OnBnClickedButtonMeas4"));
+
+	m_iCurLogFileView = enumLogItemID_MEAS4;
+	RefreshLogFileView(TRUE);
+}
+
+void CDlgSubLog::OnBnClickedButtonMeas5()
+{
+	// TODO: 여기에 컨트롤 알림 처리기 코드를 추가합니다.
+	CLogWrapper::GetInstance()->KMLOG(OPER, _T("CDlgSubLog::OnBnClickedButtonMeas5"));
+
+	m_iCurLogFileView = enumLogItemID_MEAS5;
+	RefreshLogFileView(TRUE);
+}
+
+void CDlgSubLog::OnBnClickedButtonMeas6()
+{
+	// TODO: 여기에 컨트롤 알림 처리기 코드를 추가합니다.
+	CLogWrapper::GetInstance()->KMLOG(OPER, _T("CDlgSubLog::OnBnClickedButtonMeas6"));
+
+	m_iCurLogFileView = enumLogItemID_MEAS6;
+	RefreshLogFileView(TRUE);
+}
+
+void CDlgSubLog::OnBnClickedButtonMeas7()
+{
+	// TODO: 여기에 컨트롤 알림 처리기 코드를 추가합니다.
+	CLogWrapper::GetInstance()->KMLOG(OPER, _T("CDlgSubLog::OnBnClickedButtonMeas7"));
+
+	m_iCurLogFileView = enumLogItemID_MEAS7;
+	RefreshLogFileView(TRUE);
+}
+
+void CDlgSubLog::OnBnClickedButtonMeas8()
+{
+	// TODO: 여기에 컨트롤 알림 처리기 코드를 추가합니다.
+	CLogWrapper::GetInstance()->KMLOG(OPER, _T("CDlgSubLog::OnBnClickedButtonMeas8"));
+
+	m_iCurLogFileView = enumLogItemID_MEAS8;
+	RefreshLogFileView(TRUE);
+}
+
+void CDlgSubLog::OnBnClickedButtonMeas9()
+{
+	// TODO: 여기에 컨트롤 알림 처리기 코드를 추가합니다.
+	CLogWrapper::GetInstance()->KMLOG(OPER, _T("CDlgSubLog::OnBnClickedButtonMeas9"));
+
+	m_iCurLogFileView = enumLogItemID_MEAS9;
+	RefreshLogFileView(TRUE);
+}
+
+void CDlgSubLog::OnBnClickedButtonMeas10()
+{
+	// TODO: 여기에 컨트롤 알림 처리기 코드를 추가합니다.
+	CLogWrapper::GetInstance()->KMLOG(OPER, _T("CDlgSubLog::OnBnClickedButtonMeas10"));
+
+	m_iCurLogFileView = enumLogItemID_MEAS10;
+	RefreshLogFileView(TRUE);
+}
+
+void CDlgSubLog::OnBnClickedButtonMcc()
+{
+	// TODO: 여기에 컨트롤 알림 처리기 코드를 추가합니다.
+	CLogWrapper::GetInstance()->KMLOG(OPER, _T("CDlgSubLog::OnBnClickedButtonMcc"));
+
+	m_iCurLogFileView = enumLogItemID_MCC;
+	RefreshLogFileView(TRUE);
+}
+
+
+void CDlgSubLog::OnBnClickedButtonProbe()
+{
+	// TODO: 여기에 컨트롤 알림 처리기 코드를 추가합니다.
+	CLogWrapper::GetInstance()->KMLOG(OPER, _T("CDlgSubLog::OnBnClickedButtonProbe"));
+
+	m_iCurLogFileView = enumLogItemID_PROBE;
+	RefreshLogFileView(TRUE);
+}
+
+
+void CDlgSubLog::OnBnClickedButtonCim()
+{
+	// TODO: 여기에 컨트롤 알림 처리기 코드를 추가합니다.
+	CLogWrapper::GetInstance()->KMLOG(OPER, _T("CDlgSubLog::OnBnClickedButtonCim"));
+
+	m_iCurLogFileView = enumLogItemID_CIM;
+	RefreshLogFileView(TRUE);
+}

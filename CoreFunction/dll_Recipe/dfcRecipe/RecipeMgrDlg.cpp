@@ -642,6 +642,9 @@ BOOL	C_RecipeMgrDlg::SaveFile (CString strRcpName)
 	WriteDouble(&File, g_inRcpInfo.m_recipeMgr.m_sInfo.m_sMotionSubZ.m_fWadSubzLeft);
 	WriteDouble(&File, g_inRcpInfo.m_recipeMgr.m_sInfo.m_sMotionSubZ.m_fVisionSubzRight);
 	WriteDouble(&File, g_inRcpInfo.m_recipeMgr.m_sInfo.m_sMotionSubZ.m_fVisionSubzLeft);
+	// LYS 2026-09-18 ANGLE Sub Z 는 여기서 되살리지 않는다 - 이 블록 중간에 값을 끼우면
+	//                V1005~V1009 로 저장된 레시피의 뒤쪽 항목이 전부 밀려 깨진다.
+	//                아래 _ANGLE_SUBZ_ 꼬리 블록(V1010)에서 저장한다.
 	//WriteDouble(&File, g_inRcpInfo.m_recipeMgr.m_sInfo.m_sMotionSubZ.m_fAngleSubzRight);
 	//WriteDouble(&File, g_inRcpInfo.m_recipeMgr.m_sInfo.m_sMotionSubZ.m_fAngleSubzLeft);
 
@@ -657,6 +660,21 @@ BOOL	C_RecipeMgrDlg::SaveFile (CString strRcpName)
 	WriteDouble(&File, g_inRcpInfo.m_recipeMgr.m_sInfo.m_sMotionAngle.m_fAngleZoom2);
 	WriteDouble(&File, g_inRcpInfo.m_recipeMgr.m_sInfo.m_sMotionAngle.m_fAngleTilt2);
 	WriteDouble(&File, g_inRcpInfo.m_recipeMgr.m_sInfo.m_sMotionAngle.m_fAngleAzimuth2);
+
+	// LYS 2026-09-09 Stick별 PROBE Z CONTACT OFFSET 저장 (V1009+, 꼬리 블록 - _STAGE_ 블록 안에 넣으면 구파일 파싱이 깨짐)
+	WriteString(&File, _T("_STICK_CONTACT_OFFSET_"));
+	strTemp = _T("");
+	nTemp = g_inRcpInfo.GetStickCount ();
+	for (int i = 0; i < nTemp; i++) {
+		str.Format (_T("%.4lf,"), g_inRcpInfo.GetStickItem (i).m_fProbeZOffset);
+		strTemp += str;
+	}
+	WriteString(&File, strTemp);
+
+	// LYS 2026-09-18 ANGLE Sub Z 저장 (V1010+, 꼬리 블록)
+	WriteString(&File, _T("_ANGLE_SUBZ_"));
+	WriteDouble(&File, g_inRcpInfo.m_recipeMgr.m_sInfo.m_sMotionSubZ.m_fAngleSubzRight);
+	WriteDouble(&File, g_inRcpInfo.m_recipeMgr.m_sInfo.m_sMotionSubZ.m_fAngleSubzLeft);
 
 	File.Close ();
 
@@ -1481,13 +1499,16 @@ void	C_RecipeMgrDlg::InitSubZ()
 	m_gridSubZHead.SetItemText(0, 1, _T("SUB Z"));
 	m_gridSubZHead.EnableWindow(FALSE);
 
-	InitGridUI(m_gridSubZData, IDC_GRID_27, 4, 2, TRUE);
+	// LYS 2026-09-18 ANGLE RIGHT/LEFT 두 행을 살려 6행. 아래 라벨 4/5 행은 예전부터 써 두었지만
+	//                행 수가 4 라 그려지지 않았다. IDC_GRID_27 높이(118 DLU = 173px)는 6행 x 22px 를 담는다.
+	//InitGridUI(m_gridSubZData, IDC_GRID_27, 4, 2, TRUE);
+	InitGridUI(m_gridSubZData, IDC_GRID_27, 6, 2, TRUE);
 	m_gridSubZData.SetItemText(0, 0, _T("WAD RIGHT"));
 	m_gridSubZData.SetItemText(1, 0, _T("WAD LEFT"));
-	m_gridSubZData.SetItemText(2, 0, _T("VIS+ANG RIGHT"));
-	m_gridSubZData.SetItemText(3, 0, _T("VIS+ANG LEFT"));
-	//m_gridSubZData.SetItemText(4, 0, _T("ANGLE RIGHT"));
-	//m_gridSubZData.SetItemText(5, 0, _T("ANGLE LEFT"));
+	m_gridSubZData.SetItemText(2, 0, _T("VISION RIGHT"));
+	m_gridSubZData.SetItemText(3, 0, _T("VISION LEFT"));
+	m_gridSubZData.SetItemText(4, 0, _T("ANGLE RIGHT"));
+	m_gridSubZData.SetItemText(5, 0, _T("ANGLE LEFT"));
 }
 
 void	C_RecipeMgrDlg::SetSubZ()
@@ -1496,8 +1517,8 @@ void	C_RecipeMgrDlg::SetSubZ()
 	m_gridSubZData.SetItemText(1, 1, dfcStr(g_inRcpInfo.m_recipeMgr.m_sInfo.m_sMotionSubZ.m_fWadSubzLeft));
 	m_gridSubZData.SetItemText(2, 1, dfcStr(g_inRcpInfo.m_recipeMgr.m_sInfo.m_sMotionSubZ.m_fVisionSubzRight));
 	m_gridSubZData.SetItemText(3, 1, dfcStr(g_inRcpInfo.m_recipeMgr.m_sInfo.m_sMotionSubZ.m_fVisionSubzLeft));
-	//m_gridSubZData.SetItemText(4, 1, dfcStr(g_inRcpInfo.m_recipeMgr.m_sInfo.m_sMotionSubZ.m_fAngleSubzRight));
-	//m_gridSubZData.SetItemText(5, 1, dfcStr(g_inRcpInfo.m_recipeMgr.m_sInfo.m_sMotionSubZ.m_fAngleSubzLeft));
+	m_gridSubZData.SetItemText(4, 1, dfcStr(g_inRcpInfo.m_recipeMgr.m_sInfo.m_sMotionSubZ.m_fAngleSubzRight));	// LYS 2026-09-18
+	m_gridSubZData.SetItemText(5, 1, dfcStr(g_inRcpInfo.m_recipeMgr.m_sInfo.m_sMotionSubZ.m_fAngleSubzLeft));
 
 }
 
@@ -1507,8 +1528,8 @@ BOOL	C_RecipeMgrDlg::GetSubZ()
 	g_inRcpInfo.m_recipeMgr.m_sInfo.m_sMotionSubZ.m_fWadSubzLeft = _wtof(m_gridSubZData.GetItemText(1, 1));
 	g_inRcpInfo.m_recipeMgr.m_sInfo.m_sMotionSubZ.m_fVisionSubzRight = _wtof(m_gridSubZData.GetItemText(2, 1));
 	g_inRcpInfo.m_recipeMgr.m_sInfo.m_sMotionSubZ.m_fVisionSubzLeft = _wtof(m_gridSubZData.GetItemText(3, 1));
-	//g_inRcpInfo.m_recipeMgr.m_sInfo.m_sMotionSubZ.m_fAngleSubzRight = _wtof(m_gridSubZData.GetItemText(4, 1));
-	//g_inRcpInfo.m_recipeMgr.m_sInfo.m_sMotionSubZ.m_fAngleSubzLeft = _wtof(m_gridSubZData.GetItemText(5, 1));
+	g_inRcpInfo.m_recipeMgr.m_sInfo.m_sMotionSubZ.m_fAngleSubzRight = _wtof(m_gridSubZData.GetItemText(4, 1));	// LYS 2026-09-18
+	g_inRcpInfo.m_recipeMgr.m_sInfo.m_sMotionSubZ.m_fAngleSubzLeft = _wtof(m_gridSubZData.GetItemText(5, 1));
 
 	return TRUE;
 }
@@ -1597,9 +1618,9 @@ void	C_RecipeMgrDlg::InitStageMove (int nStick)
 	m_gridStageMoveHead.SetItemText (0, 0, _T("GET POSITION"));
 	m_gridStageMoveHead.SetItemText (1, 0, _T("MOVE POSITION"));
 	m_gridStageMoveHead.SetItemText (2, 0, _T("STICK"));
-	m_gridStageMoveHead.SetItemText (3, 0, _T("STAGE Y"));
+	m_gridStageMoveHead.SetItemText (3, 0, _T("STAGE X"));
 	m_gridStageMoveHead.SetItemText (4, 0, _T("STAGE ROTATE"));
-	m_gridStageMoveHead.SetItemText (5, 0, _T("PROBE CARD"));
+	m_gridStageMoveHead.SetItemText (5, 0, _T("CONTACT OFFSET"));	// LYS 2026-09-09 미사용 행(PROBE CARD MOVE, 사용자 임시라벨 PROBE OFFSET) → Stick별 PROBE Z CONTACT OFFSET(mm, +=하강)
 	m_gridStageMoveHead.EnableWindow	 (FALSE);
 
 	InitGridUI (m_gridStageMoveData, IDC_GRID_17, 6, nStick, TRUE, FALSE, PIX_UNIFORMITY);
@@ -1646,6 +1667,7 @@ void	C_RecipeMgrDlg::SetStageMoveData ()
 		m_gridStageMoveData.SetItemText (2, i, dfcStr (sStick.m_nStickNum));
 		m_gridStageMoveData.SetItemText (3, i, dfcStr (sStick.m_fStageY));
 		m_gridStageMoveData.SetItemText (4, i, dfcStr (sStick.m_fStageR));
+		m_gridStageMoveData.SetItemText (5, i, dfcStr (sStick.m_fProbeZOffset));	// LYS 2026-09-09 CONTACT OFFSET
 	}
 }
 
@@ -1659,6 +1681,7 @@ BOOL	C_RecipeMgrDlg::GetStageMoveData ()
 		sStick.m_nStickNum = _wtoi (m_gridStageMoveData.GetItemText (2, i));
 		sStick.m_fStageY   = _wtof (m_gridStageMoveData.GetItemText (3, i));
 		sStick.m_fStageR   = _wtof (m_gridStageMoveData.GetItemText (4, i));
+		sStick.m_fProbeZOffset = _wtof (m_gridStageMoveData.GetItemText (5, i));	// LYS 2026-09-09 CONTACT OFFSET
 
 		g_inRcpInfo.SetStickItem (i, sStick);
 	}

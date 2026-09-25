@@ -12,6 +12,7 @@
 #include "FunctionModule/FunctionModuleEQState.h"
 #include "Manager/MaintControlMgr.h"
 #include "DoWork/DoWorkGlassSequence.h"
+#include "DoWork/DoWorkGlassMeasureStep.h"	// LYS 2026-09-14 MakeHeadPairByOrder
 #include "FunctionModule/FunctionModuleEQStateChange.h"
 #include "SystemParamShare.h"
 #include "Manager/ResultMgr.h"
@@ -205,6 +206,9 @@ BEGIN_MESSAGE_MAP(CDlgSubManual_Meas, CDialogEx)
 	ON_BN_CLICKED(IDC_BTN_MANUAL_MEAS_RECIPE_OPEN8, &CDlgSubManual_Meas::OnBnClickedBtnManualMeasRecipeOpen8)
 	ON_BN_CLICKED(IDC_BTN_MANUAL_PLC_RESET, &CDlgSubManual_Meas::OnBnClickedBtnManualPlcReset)
 	ON_MESSAGE(WM_MSG_UPDATE_CUR_STICK, &CDlgSubManual_Meas::OnUpdateCurStick)	// LYS 2026-08-24
+	ON_BN_CLICKED(IDC_BTN_MANUAL_PLC_BIT_ON, &CDlgSubManual_Meas::OnBnClickedBtnManualPlcBitOn)
+	ON_BN_CLICKED(IDC_BTN_MANUAL_PLC_BIT_OFF, &CDlgSubManual_Meas::OnBnClickedBtnManualPlcBItOff)
+	ON_BN_CLICKED(IDC_BUTTON7, &CDlgSubManual_Meas::OnBnClickedBtnManualPlcWadReset)
 END_MESSAGE_MAP()
 
 
@@ -1208,6 +1212,7 @@ int CDlgSubManual_Meas::ManualMoveCell(int iMode, int iMove)
 	double dSafetyZ1 = 0., dSafetyZ2 = 0.;
 	double fSafetyH1 = 0.0, fSafetyH2 = 0.0;
 	m_pAuroraMgr->GetPositionConfigMgrPtr()->GetSafetyPosition(nullptr, nullptr, nullptr, &fSafetyH1, &fSafetyH2, &dSafetyZ1, &dSafetyZ2);
+	m_pAuroraMgr->GetPositionConfigMgrPtr()->GetFrontHeadSafetyPosition(&fSafetyH1, &fSafetyH2);	// LYS 2026-09-14 fSafetyH1/H2 는 COLOR 의 dLeft2/dRight2(FRONT Y3/Y4) 에만 쓰여 FRONT Safety 키로 바꾼다
 //	m_pAuroraMgr->GetPositionConfigMgrPtr()->GetSafetyPosition(nullptr, nullptr, nullptr, nullptr, nullptr, &dSafetyZ1, &dSafetyZ2);
 
 	double dOffsetX = 0;
@@ -1285,8 +1290,8 @@ int CDlgSubManual_Meas::ManualMoveCell(int iMode, int iMove)
 			stPosition[3].dPosition = dRight2;
 			stPosition[4].axis = AXIS_X2;   nAxis++;
 			stPosition[4].dPosition = m_vecMeasGroup[i].dHeadFrontG + dOffsetX;	// 2023.07.06 add offset
-			stPosition[5].axis = AXIS_Z1;   nAxis++;
-			stPosition[5].dPosition = dSafetyZ2; // m_vecMeasGroup[i].dHeadFrontZ;
+			stPosition[5].axis = AXIS_Z3;   nAxis++;	// LYS 2026-09-07 Review: Z1(OCP 미사용) -> Sub Z(Z3). 안전높이(0) 유지, 하강 없음
+			stPosition[5].dPosition = 0.0;
 			stPosition[6].axis = AXIS_Z2;   nAxis++;
 			stPosition[6].dPosition = pRecipeData->m_sHeadZ.m_fReviewZ; // m_vecMeasGroup[i].dHeadBackZ;
 		}
@@ -1298,8 +1303,8 @@ int CDlgSubManual_Meas::ManualMoveCell(int iMode, int iMove)
 			stPosition[1].dPosition = dRight;
 			stPosition[2].axis = AXIS_X2;   nAxis++;
 			stPosition[2].dPosition = m_vecMeasGroup[i].dHeadFrontG + dOffsetX; // 2023.07.06 add offset
-			stPosition[3].axis = AXIS_Z1;   nAxis++;
-			stPosition[3].dPosition = dSafetyZ2; //m_vecMeasGroup[i].dHeadFrontZ;
+			stPosition[3].axis = AXIS_Z3;   nAxis++;	// LYS 2026-09-07 Review: Z1(OCP 미사용) -> Sub Z(Z3). 안전높이(0) 유지, 하강 없음
+			stPosition[3].dPosition = 0.0;
 			stPosition[4].axis = AXIS_Z2;   nAxis++;
 			stPosition[4].dPosition = pRecipeData->m_sHeadZ.m_fReviewZ; // m_vecMeasGroup[i].dHeadBackZ;
 		}
@@ -1319,10 +1324,16 @@ int CDlgSubManual_Meas::ManualMoveCell(int iMode, int iMove)
 			stPosition[2].dPosition = dLeft2;
 			stPosition[3].axis = AXIS_Y4;   nAxis++;
 			stPosition[3].dPosition = dRight2;
+			// LYS 2026-09-14 OCP: 첫 이동의 FRONT 헤드 Y3/Y4 는 셀이 아니라 [SAFETY] 로 보낸다 (자동 측정 스텝과 동일, ApplyIdleHeadSafetyY 가 치환).
+			if (m_pAuroraMgr->GetSystemConfigMgrPtr() && m_pAuroraMgr->GetSystemConfigMgrPtr()->IsOCP())
+			{
+				stPosition[2].dPosition = df_HEAD_Y_IDLE_SAFETY;
+				stPosition[3].dPosition = df_HEAD_Y_IDLE_SAFETY;
+			}
 			stPosition[4].axis = AXIS_X2;   nAxis++;
 			stPosition[4].dPosition = m_vecMeasGroup[i].dHeadFrontG + dOffsetX;	// 2023.07.06 add offset
-			stPosition[5].axis = AXIS_Z1;   nAxis++;
-			stPosition[5].dPosition = dSafetyZ2; //m_vecMeasGroup[i].dHeadFrontZ;
+			stPosition[5].axis = AXIS_Z3;   nAxis++;	// LYS 2026-09-07 WAD: Z1(OCP 미사용) -> Sub Z(Z3). 안전높이(0) 유지, 하강 없음
+			stPosition[5].dPosition = 0.0;
 			stPosition[6].axis = AXIS_Z2;   nAxis++;
 			stPosition[6].dPosition = pRecipeData->m_sHeadZ.m_fSpecZ; // m_vecMeasGroup[i].dHeadBackZ;
 		}
@@ -1334,8 +1345,8 @@ int CDlgSubManual_Meas::ManualMoveCell(int iMode, int iMove)
 			stPosition[1].dPosition = dRight;
 			stPosition[2].axis = AXIS_X2;   nAxis++;
 			stPosition[2].dPosition = m_vecMeasGroup[i].dHeadFrontG + dOffsetX;	// 2023.07.06 add offset
-			stPosition[3].axis = AXIS_Z1;   nAxis++;
-			stPosition[3].dPosition = dSafetyZ2; //m_vecMeasGroup[i].dHeadFrontZ;
+			stPosition[3].axis = AXIS_Z3;   nAxis++;	// LYS 2026-09-07 WAD: Z1(OCP 미사용) -> Sub Z(Z3). 안전높이(0) 유지, 하강 없음
+			stPosition[3].dPosition = 0.0;
 			stPosition[4].axis = AXIS_Z2;   nAxis++;
 			stPosition[4].dPosition = pRecipeData->m_sHeadZ.m_fSpecZ; // m_vecMeasGroup[i].dHeadBackZ;
 		}
@@ -1348,6 +1359,7 @@ int CDlgSubManual_Meas::ManualMoveCell(int iMode, int iMove)
 
 		m_pAuroraMgr->GetCommTcpIpFactoryMgrPtr()->SetMeasPos(enumTCPIpFactorytID_WAD, dXPos, dLeft, dRight);
 
+		MarkIdleHeadSafety(stPosition, nAxis, m_vecMeasGroup[i], 0.0);	// LYS 2026-09-14 짝 없는 셀의 쉬는 헤드 -> [SAFETY]
 		nRet = m_pAuroraMgr->GetMaintControlMgr()->MoveCmdPosWAD(stPosition, nAxis, SPEED_HIGH);
 	}
 	break;
@@ -1363,6 +1375,12 @@ int CDlgSubManual_Meas::ManualMoveCell(int iMode, int iMove)
 			stPosition[2].dPosition = dLeft2;
 			stPosition[3].axis = AXIS_Y4;   nAxis++;
 			stPosition[3].dPosition = dRight2;
+			// LYS 2026-09-14 OCP: 첫 이동의 BACK 헤드 Y1/Y2 는 셀이 아니라 [SAFETY] 로 보낸다 (자동 측정 스텝과 동일, ApplyIdleHeadSafetyY 가 치환).
+			if (m_pAuroraMgr->GetSystemConfigMgrPtr() && m_pAuroraMgr->GetSystemConfigMgrPtr()->IsOCP())
+			{
+				stPosition[0].dPosition = df_HEAD_Y_IDLE_SAFETY;
+				stPosition[1].dPosition = df_HEAD_Y_IDLE_SAFETY;
+			}
 			stPosition[4].axis = AXIS_X3;   nAxis++;
 			stPosition[4].dPosition = m_vecMeasGroup[i].dHeadFrontG + dOffsetX;	// 2023.07.06 add offset
 			stPosition[5].axis = AXIS_Z1;   nAxis++;
@@ -1394,6 +1412,7 @@ int CDlgSubManual_Meas::ManualMoveCell(int iMode, int iMove)
 			stPosition[4].dPosition = dSafetyZ1; //m_vecMeasGroup[i].dHeadBackZ;
 		}
 
+		MarkIdleHeadSafety(stPosition, nAxis, m_vecMeasGroup[i], 0.0);	// LYS 2026-09-14 짝 없는 셀의 쉬는 헤드 -> [SAFETY]
 		nRet = m_pAuroraMgr->GetMaintControlMgr()->MoveCmdPosVision(stPosition, nAxis, SPEED_HIGH);
 
 	}
@@ -1418,6 +1437,12 @@ int CDlgSubManual_Meas::ManualMoveCell(int iMode, int iMove)
 			stPosition[2].dPosition = dLeft2;
 			stPosition[3].axis = AXIS_Y4;   nAxis++;
 			stPosition[3].dPosition = dRight2;
+			// LYS 2026-09-14 OCP: 첫 이동의 BACK 헤드 Y1/Y2 는 셀이 아니라 [SAFETY] 로 보낸다 (자동 측정 스텝과 동일, ApplyIdleHeadSafetyY 가 치환).
+			if (m_pAuroraMgr->GetSystemConfigMgrPtr() && m_pAuroraMgr->GetSystemConfigMgrPtr()->IsOCP())
+			{
+				stPosition[0].dPosition = df_HEAD_Y_IDLE_SAFETY;
+				stPosition[1].dPosition = df_HEAD_Y_IDLE_SAFETY;
+			}
 			stPosition[4].axis = AXIS_X3;   nAxis++;
 			stPosition[4].dPosition = m_vecMeasGroup[i].dHeadFrontG + dOffsetX;	// 2023.07.06 add offset
 			stPosition[5].axis = AXIS_Z1;   nAxis++;
@@ -1439,6 +1464,7 @@ int CDlgSubManual_Meas::ManualMoveCell(int iMode, int iMove)
 			stPosition[4].dPosition = dSafetyZ1; //m_vecMeasGroup[i].dHeadBackZ;
 		}
 
+		MarkIdleHeadSafety(stPosition, nAxis, m_vecMeasGroup[i], 0.0);	// LYS 2026-09-14 짝 없는 셀의 쉬는 헤드 -> [SAFETY]
 		nRet = m_pAuroraMgr->GetMaintControlMgr()->MoveCmdPosColor(stPosition, nAxis, SPEED_HIGH);
 	}
 	break;
@@ -1454,6 +1480,12 @@ int CDlgSubManual_Meas::ManualMoveCell(int iMode, int iMove)
 			stPosition[2].dPosition = dLeft2;
 			stPosition[3].axis = AXIS_Y4;   nAxis++;
 			stPosition[3].dPosition = dRight2;
+			// LYS 2026-09-14 OCP: 첫 이동의 BACK 헤드 Y1/Y2 는 셀이 아니라 [SAFETY] 로 보낸다 (자동 측정 스텝과 동일, ApplyIdleHeadSafetyY 가 치환).
+			if (m_pAuroraMgr->GetSystemConfigMgrPtr() && m_pAuroraMgr->GetSystemConfigMgrPtr()->IsOCP())
+			{
+				stPosition[0].dPosition = df_HEAD_Y_IDLE_SAFETY;
+				stPosition[1].dPosition = df_HEAD_Y_IDLE_SAFETY;
+			}
 			stPosition[4].axis = AXIS_X2;   nAxis++;
 			stPosition[4].dPosition = m_vecMeasGroup[i].dHeadFrontG + dOffsetX;	// 2023.07.06 add offset
 			stPosition[5].axis = AXIS_Z1;   nAxis++;
@@ -1475,6 +1507,7 @@ int CDlgSubManual_Meas::ManualMoveCell(int iMode, int iMove)
 			stPosition[4].dPosition = pRecipeData->m_sHeadZ.m_fAngleZ; //m_vecMeasGroup[i].dHeadBackZ;
 		}
 
+		MarkIdleHeadSafety(stPosition, nAxis, m_vecMeasGroup[i], 0.0);	// LYS 2026-09-14 짝 없는 셀의 쉬는 헤드 -> [SAFETY]
 		nRet = m_pAuroraMgr->GetMaintControlMgr()->MoveCmdPosAngle(stPosition, nAxis, SPEED_HIGH);
 	}
 	break;
@@ -2340,7 +2373,7 @@ UINT CDlgSubManual_Meas::ThreadFunc()
 	break;
 	case enumStepID_MANUAL_CMD_07:
 	{
-		if (CSequenceManager::GetInstance()->GetFunctionModuleEQState()->IsSafetySensorOn() != true)
+		//if (CSequenceManager::GetInstance()->GetFunctionModuleEQState()->IsSafetySensorOn() != true)
 		{
 			CSequenceManager::GetInstance()->GetFunctionModuleEQStateChange()->SetEQStatusChangeStep(enumEQSTATUS_SAFETY);
 			CSequenceManager::GetInstance()->GetFunctionModuleEQStateChange()->Start();
@@ -2379,12 +2412,12 @@ UINT CDlgSubManual_Meas::ThreadFunc()
 	// Test Code
 	case enumStepID_MANUAL_CMD_08:
 	{
-		nRet = m_pAuroraMgr->GetCommTcpIpFactoryMgrPtr()->DoWorkInspectStart(enumTCPIpFactorytID_PG, enumTCPIpFactoryt_PG_TP_1);  
-
-		if(nRet != VTM_RV_SUCCESSED)
-		{
-			nRet = VTM_RV_SUCCESSED;
-		}
+		//nRet = m_pAuroraMgr->GetCommTcpIpFactoryMgrPtr()->DoWorkInspectStart(enumTCPIpFactorytID_PG, enumTCPIpFactoryt_PG_TP_1);  
+		//
+		//if(nRet != VTM_RV_SUCCESSED)
+		//{
+		//	nRet = VTM_RV_SUCCESSED;
+		//}
 
 	//	if (CSequenceManager::GetInstance()->GetFunctionModuleEQState()->WaitActionDone(PLC_BIT_XIONIZER_REMOTE_STATE_01, 1, 1, true, PLC_IO_ACTION_DONE_TIME_03) == true)
 	////	if( false )
@@ -2420,8 +2453,8 @@ UINT CDlgSubManual_Meas::ThreadFunc()
 		//m_pAuroraMgr->GetMaintControlMgr()->DoWork_Probe_Zero(df_PROBE_AGING4, false);
 	//	m_pAuroraMgr->GetMaintControlMgr()->DoWork_Probe_Zero(df_PROBE_MEAS, false);
 
-		TCHAR sz[100];
-		ZeroMemory(&sz, sizeof(sz));
+		//TCHAR sz[100];
+		//ZeroMemory(&sz, sizeof(sz));
 
 		//nRet = m_pAuroraMgr->GetMaintControlMgr()->GetIOMapControlMgrPtr()->SetMemoryNStrToDevice(_T("D2110"), _T("TEST1"), 10);
 		//Sleep(200);
@@ -4017,7 +4050,16 @@ UINT CDlgSubManual_Meas::ThreadFunc()
 		dfMove = pRecipeInfo->m_sContactPos.m_fPreContactPos;
 		dEMove = pRecipeInfo->m_sContactPos.m_fEndContactPos;
 		dOD = pRecipeInfo->m_sContactPos.m_fAddOD;
-		
+
+		// LYS 2026-09-09 수동 CONTACT도 현재 선택 스틱(m_iNumStick)의 PROBE Z CONTACT OFFSET을 End에 가산
+		double dZOffset = m_pAuroraMgr->GetRecipeEditMgrPtr()->GetStickProbeZOffset(m_iNumStick);
+		dEMove += dZOffset;
+		{
+			CString strLog;
+			strLog.Format(_T("Manual Probe Contact stick=%d offset=%.4f -> Z5 target=%.4f"), m_iNumStick + 1, dZOffset, dEMove + dOD);
+			CLogWrapper::GetInstance()->KMLOG(SYST, strLog);
+		}
+
 		nRet = m_pAuroraMgr->GetMaintControlMgr()->MoveCmdPos_ProbeContact(AXIS_PROBE_Z5, dfMove, dEMove, dOD);
 	}
 	break;
@@ -4247,6 +4289,37 @@ UINT CDlgSubManual_Meas::ThreadFunc()
 	}
 	break;
 
+	case enumStepID_MANUAL_CMD_ON:
+	{
+		bool bRet = false;
+		CString strAddr;
+		GetDlgItemText(IDC_EDIT_MANUAL_TEST_ADDR, strAddr);
+		int nAddr = _ttoi(strAddr);
+		CString strM;	strM.Format(_T("M%d"), nAddr);	// LYS 2026-09-03 raw M-주소 쓰기(CString 오버로드). int 오버로드는 4000이상을 enum 인덱스로 오해석해 엉뚱한 비트를 write함
+		bRet = m_pAuroraMgr->GetIOMapControlMgrPtr()->SetMemoryNBitToDevice(strM, 1, 1);
+	}
+	break;
+
+
+	case enumStepID_MANUAL_CMD_OFF:
+	{
+		bool bRet = false;
+		CString strAddr;
+		GetDlgItemText(IDC_EDIT_MANUAL_TEST_ADDR, strAddr);
+		int nAddr = _ttoi(strAddr);
+		CString strM;	strM.Format(_T("M%d"), nAddr);	// LYS 2026-09-03 raw M-주소 쓰기(CString 오버로드). int 오버로드는 4000이상을 enum 인덱스로 오해석해 엉뚱한 비트를 write함
+		bRet = m_pAuroraMgr->GetIOMapControlMgrPtr()->SetMemoryNBitToDevice(strM, 0, 1);
+	}
+	break;
+	case enumStepID_MANUAL_WAD_RESET:
+	{
+		bool bRet = false;
+
+		bRet = m_pAuroraMgr->GetIOMapControlMgrPtr()->SetMemoryNBitToDevice(PLC_BIT_ALRAM_RESET_STATUS, 1, 1);
+		Sleep(200);
+		if (bRet == 1) m_pAuroraMgr->GetIOMapControlMgrPtr()->SetMemoryNBitToDevice(PLC_BIT_ALRAM_RESET_STATUS, 0, 1);
+	}
+	break;
 	}
 
 
@@ -4809,6 +4882,11 @@ int CDlgSubManual_Meas::MakeMeasGroup()
 	S_MeasPos measPos;
 	cellFirst.Clear();
 
+	// LYS 2026-09-14 2Head 짝을 순번 방식으로 먼저 정한다 (DoWorkGlassMeasureStep.cpp MakeHeadPairByOrder 주석 참조).
+	//   -측 셀 k 번째 <-> +측 셀 k 번째 (A01-K01, B01-L01 ...). 수동 측정은 셀 필터가 없어 전 셀 대상.
+	int* pnPair = new int[nArea];
+	MakeHeadPairByOrder(pRecipeData->m_vecStick[iStick].m_vecCell, nullptr, nArea, dHeadGap, pnPair, _T("MANUAL"));
+
 	for (int iGroup = 0; iGroup < nArea; iGroup++) 
 	{
 		if (pbSet[iGroup] != true)
@@ -4822,7 +4900,9 @@ int CDlgSubManual_Meas::MakeMeasGroup()
 				{
 					cellSecond = pRecipeData->m_vecStick[iStick].m_vecCell[iSearch];
 
-					if (cellFirst.m_fCellX < 50)
+					// LYS 2026-09-14 순번으로 정해진 짝(pnPair)만 묶는다. 구 조건(아래 주석)은 X<50 셀에 가장 먼저 걸린 먼 셀을 묶었다.
+					//if (cellFirst.m_fCellX < 50)
+					if (cellFirst.m_fCellX < 0 && pnPair[iGroup] == iSearch)
 					{
 						if (fabs(cellFirst.m_fCellX - cellSecond.m_fCellX) > dHeadGap)
 						{
@@ -4867,7 +4947,10 @@ int CDlgSubManual_Meas::MakeMeasGroup()
 
 			cellFirst = pRecipeData->m_vecStick[iStick].m_vecCell[iGroup];
 
-			if (cellFirst.m_fCellX > 50)
+			// LYS 2026-09-14 단독 셀 헤드 판정은 기존 50 기준 유지 - 0 으로 두면 X=0 셀을 RIGHT 헤드가 맡아 화질/시야각 Y3=-50(HW 리밋 -66 근처)이 된다.
+			// LYS 2026-09-14 (재변경) 단독 셀 헤드 판정 50 -> 0 (자동 측정 스텝과 동일 - ANGLE J01 을 Y3 로 보내기 위함).
+			//if (cellFirst.m_fCellX > 50)
+			if (cellFirst.m_fCellX > 0)
 			{
 				measPos.Clear();
 				measPos.dHeadFrontG = cellFirst.m_fCellY + dGlassConactPos;
@@ -4910,6 +4993,7 @@ int CDlgSubManual_Meas::MakeMeasGroup()
 	}
 
 	delete[] pbSet;
+	delete[] pnPair;	// LYS 2026-09-14
 
 	nMeasArea = m_vecMeasGroup.size();
 	SetMeasureArea(nMeasArea *2);
@@ -5060,4 +5144,31 @@ void CDlgSubManual_Meas::OnBnClickedBtnManualPlcReset()
 	// TODO: 여기에 컨트롤 알림 처리기 코드를 추가합니다.
 	m_iStep = enumStepID_MANUAL_PLC_RESET;
 	DoWorkManual();
+}
+
+void CDlgSubManual_Meas::OnBnClickedBtnManualPlcBitOn()
+{
+	// TODO: 여기에 컨트롤 알림 처리기 코드를 추가합니다.
+	CString str, strAddr;
+	GetDlgItemText(IDC_EDIT_MANUAL_TEST_ADDR, strAddr);
+	str.Format(_T("%s bit를 On 합니다.\n 계속 하시겠습니까?"), strAddr);
+	if (AfxMessageBox(str, MB_YESNO | MB_ICONQUESTION) != IDYES) return;
+	m_iStep = enumStepID_MANUAL_CMD_ON;
+	DoWorkManual();
+}
+
+void CDlgSubManual_Meas::OnBnClickedBtnManualPlcBItOff()
+{
+	// TODO: 여기에 컨트롤 알림 처리기 코드를 추가합니다.
+	CString str, strAddr;
+	GetDlgItemText(IDC_EDIT_MANUAL_TEST_ADDR, strAddr);
+	str.Format(_T("%s bit를 Off 합니다.\n 계속 하시겠습니까?"), strAddr);
+	if (AfxMessageBox(str, MB_YESNO | MB_ICONQUESTION) != IDYES) return;
+	m_iStep = enumStepID_MANUAL_CMD_OFF;
+	DoWorkManual();
+}
+
+void CDlgSubManual_Meas::OnBnClickedBtnManualPlcWadReset()
+{
+	// TODO: 여기에 컨트롤 알림 처리기 코드를 추가합니다.
 }

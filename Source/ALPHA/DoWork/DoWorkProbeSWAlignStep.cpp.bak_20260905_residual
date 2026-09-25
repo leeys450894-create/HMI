@@ -1,0 +1,1572 @@
+#include "pch.h"
+#include "DoWorkProbeSWAlignStep.h"
+#include "DoWorkGlassSequenceImpl.h"
+#include "..\SystemParamShare.h"
+#include "..\Manager\SystemConfigMgr.h"
+#include "..\Manager\AlignCameraMgr.h"
+#include "..\Manager\LightControlMgr.h"
+#include "..\Manager\IOMapControlMgr.h"
+#include "..\Manager\PositionConfigMgr.h"
+#include "..\Manager\SeqTactTimeMgr.h"
+#include "..\Manager\CommTcpIpFactoryMgr.h"
+
+#include "..\Recipe\RecipeEditMgr.h"
+#include "..\Manager\SequenceManager.h"
+#include "..\Manager\MaintControlMgr.h"
+#include "..\FunctionModule\FunctionModuleCentering.h"
+#include "..\AuroraFuncDefine.h"
+#include "..\FunctionModule\FunctionModuleProbeACC.h"
+#include "..\Manager\MCCLogMgr.h"
+#include "..\Manager\SequenceManager.h"
+#include "..\FunctionModule\FunctionModuleEQState.h"
+
+#ifdef _DEBUG
+#define new DEBUG_NEW
+#endif
+
+bool CDoWorkProbeSWAlignStep::GetComplete()
+{
+	return m_pShareItem->GetComplete();
+}
+
+int CDoWorkProbeSWAlignStep::Align_MovePosition(int nHead, int nIndex)
+{
+	int nRet = df_MOTION_RV_SUCCESSED;
+
+	int nMeasMode = 0;
+	int iLampIntensity[2];
+	int iExposureTime[2];
+	int iCCDGain[2];
+
+	ZeroMemory(&iLampIntensity, sizeof(iLampIntensity));
+	ZeroMemory(&iExposureTime, sizeof(iExposureTime));
+	ZeroMemory(&iCCDGain, sizeof(iCCDGain));
+
+	S_Align* pAlignInfo = nullptr;
+	pAlignInfo = &m_pShareItem->GetRecipeEditMgrPtr()->GetRecipeMgrPtr()->m_sAlign;
+
+	if (pAlignInfo != nullptr)
+	{
+		iLampIntensity[0] = pAlignInfo->m_sCcdSet.m_sBackLeft.m_nLed;
+		iLampIntensity[1] = pAlignInfo->m_sCcdSet.m_sBackRight.m_nLed;
+
+		iExposureTime[0] = pAlignInfo->m_sCcdSet.m_sBackLeft.m_nExposureTime;
+		iExposureTime[1] = pAlignInfo->m_sCcdSet.m_sBackRight.m_nExposureTime;
+
+		iCCDGain[0] = pAlignInfo->m_sCcdSet.m_sBackLeft.m_nGain;
+		iCCDGain[1] = pAlignInfo->m_sCcdSet.m_sBackRight.m_nGain;
+	}
+
+
+		// Set CCD and Light
+	int iCh[2] = { 3, 2 };
+
+	// Probe Change 시 X3 으로 이동
+	bool bProbeChange = false;	// jsyoon 2022.05.10 add
+
+	// jsyoon 2022.05.19 add
+	if( m_pShareItem->GetMaintControlMgrPtr()->GetShareMemoryMgrPtr()->GetSys_ProbeChange() == 1)
+	{
+		bProbeChange = true;
+	}
+
+	if (bProbeChange == true)	// jsyoon 2022.05.10 add
+	{
+		iCh[0] = 0;
+		iCh[1] = 1;
+	}
+
+	CMCCLogMgr::GetInstance()->SetMCC_Action(MCC_A_CHNG_LAMP, true);
+
+	for (size_t i = 0; i < 2; i++)
+	{
+		m_pShareItem->GetLightControlMgrPtr()->SetLedLampIntensity(0, iCh[i], iLampIntensity[i]); // SPO
+		m_pShareItem->GetAlignCameraMgr(i)->SetParam_CameraExposureTime_ms(iExposureTime[i]);
+		m_pShareItem->GetAlignCameraMgr(i)->SetParam_CameraGain(iCCDGain[i]);
+	}
+
+	CMCCLogMgr::GetInstance()->SetMCC_Action(MCC_A_CHNG_LAMP, false);
+
+	// Position
+	double dPosX = 0., dPosX2 = 0, dPosY1 = 700, dPosY2 = -700, dPosR = 0, dPosZ = 0;
+	double dPosZR = 0., dPosZL = 0.;	// LYS 2026-09-05 SUB Z RIGHT/LEFT
+	double dProbeX = 0, dProbeY = 0;
+
+	// LYS 2026-08-24 Move Probe Align Position TEMP
+	//if (m_pShareItem->GetMaintControlMgrPtr()->GetIOMapControlMgrPtr()->IsOutOfService() != true)
+	{
+		dProbeX = pAlignInfo->m_sProbeAlign.m_fProbeY;
+		dProbeY = pAlignInfo->m_sProbeAlign.m_fProbeX;
+		dPosX2 = pAlignInfo->m_sProbeAlign.m_fBackY;
+		dPosY2 = pAlignInfo->m_sProbeAlign.m_fBackLeft;
+		dPosY1 = pAlignInfo->m_sProbeAlign.m_fBackRight;
+		dPosZ = pAlignInfo->m_sProbeAlign.m_fBackZ;
+		dPosZR = pAlignInfo->m_sProbeAlign.m_fSubZRight;	// LYS 2026-09-05 SUB Z RIGHT(Z3)
+		dPosZL = pAlignInfo->m_sProbeAlign.m_fSubZLeft;	// LYS 2026-09-05 SUB Z LEFT(Z4)
+		dPosX = pAlignInfo->m_sProbeAlign.m_fStageY;
+	}
+
+	bool bRet = false;
+	if (nRet == df_MOTION_RV_SUCCESSED)
+	{
+		CMaintControlMgr* pImpl = nullptr;
+		pImpl = m_pShareItem->GetMaintControlMgrPtr();
+
+		if (pImpl != nullptr)
+		{
+			if (nRet == df_MOTION_RV_SUCCESSED)
+			{
+				if (bProbeChange == true)
+				{
+					double dPos = 0.0;
+					dPos = pImpl->GetMinSWLimit(AXIS_Z2) + 10;
+					if (pImpl->GetCurPos(AXIS_Z2) > dPos )
+					{
+						nRet = pImpl->MoveOrgPosA(AXIS_Z2, dPos, true, SPEED_HIGH, -1, -1);
+					}
+				}
+				else
+				{
+					if (pImpl->GetCurPos(AXIS_Z2) > 0)
+					{
+						nRet = pImpl->MoveOrgPosA(AXIS_Z2, 0, true, SPEED_HIGH, -1, -1);
+					}
+				}
+			}
+
+			// Probe Zero
+			if (nRet == VTM_RV_SUCCESSED)
+			{
+				for (size_t i = df_PROBE_AGING1; i <= df_PROBE_MEAS; i++)
+				{
+					bRet = CSequenceManager::GetInstance()->GetFunctionModuleEQState()->IsProbeUnContactSensorOn(i);
+					if (bRet != true)
+					{
+						nRet = MOTION_INTERLOCK_6;
+						break;
+					}
+				}
+
+				if (nRet == MOTION_INTERLOCK_6)
+				{
+					nRet = pImpl->MoveCmdPos_ProbeMove(AXIS_ALL_Z, 0, SPEED_HIGH);
+
+					if (nRet == VTM_RV_SUCCESSED)
+					{
+						for (size_t i = df_PROBE_AGING1; i <= df_PROBE_MEAS; i++)
+						{
+							bRet = CSequenceManager::GetInstance()->GetFunctionModuleEQState()->IsProbeUnContactSensorOn(i);
+							if (bRet != true)
+							{
+								nRet = MOTION_INTERLOCK_6;
+								break;
+							}
+						}
+					}
+				}
+			}
+
+			if (nRet == VTM_RV_SUCCESSED)
+			{
+				bRet = CSequenceManager::GetInstance()->GetFunctionModuleEQState()->IsLoaderArmSensorOn();
+				if (bRet == true)
+				{
+					nRet = PLC_ARM_SENSOR_DETECT;
+				}
+			}
+
+			if (nRet == VTM_RV_SUCCESSED)
+			{
+				bRet = CSequenceManager::GetInstance()->GetFunctionModuleEQState()->IsShutterSensorClose();
+				if (bRet != true)
+				{
+					nRet = PLC_LOADER_SHUTTER_UP_ERROR;
+				}
+			}
+
+			if (nRet == VTM_RV_SUCCESSED)
+			{
+				bRet = pImpl->GetIOMapControlMgrPtr()->GetParam_DIOMapMemoryBitImport(PLC_AUTO_CHANGE_X0_POSITION_04);
+				if (bRet != true)
+				{
+					nRet = MOTION_INTERLOCK_9;
+				}
+			}
+
+			if (nRet == VTM_RV_SUCCESSED)
+			{
+				for (size_t i = df_PROBE_AGING1; i <= df_PROBE_MEAS; i++)
+				{
+					bRet = CSequenceManager::GetInstance()->GetFunctionModuleEQState()->IsProbeUnContactSensorOn(i);
+					if (bRet != true)
+					{
+						nRet = MOTION_INTERLOCK_6;
+						break;
+					}
+				}
+			} 
+
+			if (bProbeChange == true)
+			{
+				double dChangePos = 0.;	// jsyoon 2022.05.19 add
+
+				// 
+				// Probe X, Y Offset 위치 받음
+				double dPosProbeOffsetY = 0;
+				double dPosProbeOffsetT = 0;
+				int nAxis_Probe = AXIS_PROBE_X9;
+				int nAxis_Probe2 = AXIS_PROBE_X10;
+				int nAxis_ProbeY = AXIS_PROBE_Y5;
+
+				
+
+				int iProbe = CSequenceManager::GetInstance()->GetFunctionModuleProbeACC()->GetProbe();
+				if (iProbe < df_PROBE_AGING1)
+				{
+					nRet = JOB_PROC_ALIGN_ERROR;
+				}
+				else
+				{
+					switch (iProbe)
+					{
+					case df_PROBE_AGING1:
+						nAxis_Probe = AXIS_PROBE_X1;
+						nAxis_Probe2 = AXIS_PROBE_X2;
+						nAxis_ProbeY = AXIS_PROBE_Y1;
+						break;
+					case df_PROBE_AGING2:
+						nAxis_Probe = AXIS_PROBE_X3;
+						nAxis_Probe2 = AXIS_PROBE_X3;
+						nAxis_ProbeY = AXIS_PROBE_Y2;
+						break;
+					case df_PROBE_AGING3:
+						nAxis_Probe = AXIS_PROBE_X5;
+						nAxis_Probe2 = AXIS_PROBE_X6;
+						nAxis_ProbeY = AXIS_PROBE_Y3;
+						break;
+					case df_PROBE_AGING4:
+						nAxis_Probe = AXIS_PROBE_X7;
+						nAxis_Probe2 = AXIS_PROBE_X8;
+						nAxis_ProbeY = AXIS_PROBE_Y4;
+						break;
+					case df_PROBE_MEAS:
+						nAxis_Probe = AXIS_PROBE_X9;
+						nAxis_Probe2 = AXIS_PROBE_X10;
+						nAxis_ProbeY = AXIS_PROBE_Y5;
+						break;
+					default:
+						break;
+					}
+
+					pImpl->SetProbeAlignXYR(0, 0, 0, iProbe);
+
+					pImpl->GetPositionConfigMgr()->GetProbeOffsetPos(iProbe - 1, &dChangePos, &dPosProbeOffsetY, &dPosProbeOffsetT);
+				}
+
+				CString strLog;
+				strLog.Format(_T("Align_MovePosition Start. %d"), iProbe);
+				m_pShareItem->GetLogFileAccessorPtr()->KMLOG(SYST, strLog);
+
+				if (nRet == df_MOTION_RV_SUCCESSED)
+				{
+					double dGantryGap = 0;
+					pImpl->GetInterlockPos(&dGantryGap, nullptr, nullptr);
+
+					double dCurX2 = 0;
+					dCurX2 = pImpl->GetCurPos(AXIS_X2);
+
+					// jsyoon 2022.05.19 change
+					//if (true)
+					{
+						stMotorPosition stPosition[2];
+						ZeroMemory(&stPosition, sizeof(stPosition));
+
+						// << AXIS_X2 << AXIS_X3
+						stPosition[0].axis = AXIS_X2;
+						//stPosition[0].dPosition = dPosX2;
+						stPosition[0].dPosition = pImpl->GetMaxSWLimit(AXIS_X2) - 0.5;
+
+						stPosition[1].axis = AXIS_X3;
+						stPosition[1].dPosition = dChangePos;
+						
+						nRet = pImpl->MoveOrgPosMulti(stPosition, 2, SPEED_HIGH, true);
+					}
+					//else
+					//{
+					//	nRet = pImpl->MoveOrgPosA(AXIS_X3, dChangePos, true, SPEED_HIGH, -1, -1);
+					//}
+				}
+
+				if (nRet == df_MOTION_RV_SUCCESSED)
+				{
+					stMotorPosition stPosition[2];
+					ZeroMemory(&stPosition, sizeof(stPosition));
+					stPosition[0].axis = AXIS_Y3;
+					stPosition[0].dPosition = dPosY1;
+					stPosition[1].axis = AXIS_Y4;
+					stPosition[1].dPosition = dPosY2;
+
+					nRet = pImpl->MoveOrgPosMulti(stPosition, 2, SPEED_HIGH);
+				}
+
+				if (nRet == df_MOTION_RV_SUCCESSED)
+				{
+					nRet = pImpl->MoveOrgPosA(nAxis_ProbeY, 0, true, SPEED_HIGH, -1, -1);
+				}
+
+				if (nRet == df_MOTION_RV_SUCCESSED)
+				{
+					double dPos = 0.;
+					dPos = pImpl->GetCurPos(nAxis_Probe) - pImpl->GetCurPos(nAxis_Probe2);
+
+					nRet = pImpl->MoveCmdPosR(nAxis_Probe2, dPos, true, SPEED_LOW);
+				}
+
+				if (nRet == df_MOTION_RV_SUCCESSED)
+				{
+					// jsyoon 2022.05.19 change
+					if (fabs(pImpl->GetCurPos(nAxis_Probe) - dChangePos) > 1)
+					{
+						// Probe X
+						stMotorPosition stPositionProbeX[5];
+						pImpl->GetCmdPos_ProbeX(stPositionProbeX, iProbe, dChangePos, 200, TRUE);
+
+						nRet = pImpl->MoveOrgPosMulti(stPositionProbeX, 5, SPEED_HIGH, true);
+					}
+					else
+					{
+						nRet = pImpl->MoveOrgPosA(nAxis_Probe, dChangePos, true, SPEED_HIGH, 0, 0);
+					}
+				}
+
+				if (nRet == df_MOTION_RV_SUCCESSED)
+				{
+					nRet = pImpl->MoveOrgPosA(AXIS_LOADER_R, 0.0, true, SPEED_HIGH, -1, -1);
+				}
+
+				if (nRet == df_MOTION_RV_SUCCESSED)
+				{
+					nRet = pImpl->MoveOrgPosA(AXIS_X, 400.0, true, SPEED_HIGH, -1, -1);
+				}
+			}
+			else
+			{
+				if (nRet == df_MOTION_RV_SUCCESSED)
+				{
+					stMotorPosition stPosition[2];
+					ZeroMemory(&stPosition, sizeof(stPosition));
+					stPosition[0].axis = AXIS_Y1;
+					stPosition[0].dPosition = dPosY1;
+					stPosition[1].axis = AXIS_Y2;
+					stPosition[1].dPosition = dPosY2;
+
+					nRet = pImpl->MoveOrgPosMulti(stPosition, 2, SPEED_HIGH);
+				}
+
+				if (nRet == df_MOTION_RV_SUCCESSED)
+				{
+					double dProbeGap = 0;
+					pImpl->GetInterlockPos(nullptr, nullptr, &dProbeGap);
+
+					if (fabs(pImpl->GetCurPos(AXIS_PROBE_X9) - dProbeX) > 0.1 )  // 2023.04.06 change 0.5 to 0.1
+					{
+						/*!
+						* Probe 이동 개선
+						* 이동 전 간격 여유가 있으면 이동 안함
+						*/
+						double dPosProbe4 = 0;
+						dPosProbe4 = pImpl->GetCurPos(AXIS_PROBE_X7);
+						if (dProbeX - dProbeGap < dPosProbe4)
+						{
+							// Probe X
+							stMotorPosition stPositionProbeX[5];
+							ZeroMemory(&stPositionProbeX, sizeof(stPositionProbeX));
+							pImpl->GetCmdPos_ProbeX(stPositionProbeX, df_PROBE_MEAS, dProbeX, 190, FALSE);
+
+							nRet = pImpl->MoveOrgPosMulti(stPositionProbeX, 5, SPEED_HIGH, true);
+						}
+						else
+						{
+							if( fabs( dProbeX - pImpl->GetCurPos(AXIS_PROBE_X9) ) < 5 )		// 2023.04.06 add
+								nRet = pImpl->MoveOrgPosA(AXIS_PROBE_X9, dProbeX, true, SPEED_LOW, 0, 0);
+							else
+								nRet = pImpl->MoveOrgPosA(AXIS_PROBE_X9, dProbeX, true, SPEED_HIGH, 0, 0);
+						}
+					}
+					
+
+//					if (fabs(pImpl->GetCurPos(AXIS_PROBE_X9) - dProbeX) > 0.5 || fabs(pImpl->GetCurPos(AXIS_PROBE_X7) - dProbeX) <= dProbeGap )
+//					{
+//						// Probe X
+//						stMotorPosition stPositionProbeX[5];
+//						ZeroMemory(&stPositionProbeX, sizeof(stPositionProbeX));
+//;						pImpl->GetCmdPos_ProbeX(stPositionProbeX, df_PROBE_MEAS, dProbeX, 200, TRUE);
+//
+//						nRet = pImpl->MoveOrgPosMulti(stPositionProbeX, 5, SPEED_HIGH, true);
+//					}
+//					else
+//					{
+//						nRet = pImpl->MoveOrgPosA(AXIS_PROBE_X9, dProbeX, true, SPEED_LOW, 0, 0);
+//					}
+				}
+
+				if (nRet == df_MOTION_RV_SUCCESSED)
+				{
+					double dGantryGap = 0;
+					pImpl->GetInterlockPos(&dGantryGap, nullptr, nullptr);
+
+					double dCurX3 = 0;
+					dCurX3 = pImpl->GetCurPos(AXIS_X3);
+
+					if ((dPosX2 - dGantryGap) < dCurX3)
+					{
+						stMotorPosition stPosition[2];
+						ZeroMemory(&stPosition, sizeof(stPosition));
+
+						stPosition[0].axis = AXIS_X2;
+						stPosition[0].dPosition = dPosX2;
+						stPosition[1].axis = AXIS_X3;
+						stPosition[1].dPosition = pImpl->GetMinSWLimit(AXIS_X2) - (dGantryGap + 50); // dPosX2 - dGantryGap;	// jsyoon 2022.06.07 change
+						nRet = pImpl->MoveOrgPosMulti(stPosition, 2, SPEED_HIGH);
+					}
+					else
+					{
+						nRet = pImpl->MoveOrgPosA(AXIS_X2, dPosX2, false, SPEED_HIGH, -1, -1);
+					}
+				}
+			}
+
+			if (nRet == df_MOTION_RV_SUCCESSED)
+			{
+				for (int iAxis = AXIS_X; iAxis < AXIS_TYPE_END; iAxis++)
+				{
+					if (iAxis == AXIS_X)
+					{
+						nRet = pImpl->DoWork_MotionDone(iAxis);
+
+			//			CMCCLogMgr::GetInstance()->SetMCC_Action(MCC_A_PROC_ALIGN_MOVE_STEP2, false);
+					}
+					else if (iAxis == AXIS_X2)
+					{
+						nRet = pImpl->DoWork_MotionDone(iAxis);
+
+			//			CMCCLogMgr::GetInstance()->SetMCC_Action(MCC_A_PROC_ALIGN_MOVE_STEP5, false);
+					}
+					else if (iAxis == AXIS_X3)
+					{
+						nRet = pImpl->DoWork_MotionDone(iAxis);
+					}
+					else if (iAxis == AXIS_Y1)
+					{
+						nRet = pImpl->DoWork_MotionDone(iAxis);
+
+			//			CMCCLogMgr::GetInstance()->SetMCC_Action(MCC_A_PROC_ALIGN_MOVE_STEP3, false);
+					}
+					else if (iAxis == AXIS_Y2)
+					{
+						nRet = pImpl->DoWork_MotionDone(iAxis);
+
+			//			CMCCLogMgr::GetInstance()->SetMCC_Action(MCC_A_PROC_ALIGN_MOVE_STEP4, false);
+					}
+					else if (iAxis == AXIS_Y3)
+					{
+						nRet = pImpl->DoWork_MotionDone(iAxis);
+
+			//			CMCCLogMgr::GetInstance()->SetMCC_Action(MCC_A_PROC_ALIGN_MOVE_STEP3, false);
+					}
+					else if (iAxis == AXIS_Y4)
+					{
+						nRet = pImpl->DoWork_MotionDone(iAxis);
+
+			//			CMCCLogMgr::GetInstance()->SetMCC_Action(MCC_A_PROC_ALIGN_MOVE_STEP4, false);
+					}
+					else if (iAxis == AXIS_PROBE_X9)
+					{
+						nRet = pImpl->DoWork_MotionDone(iAxis);
+
+			//			CMCCLogMgr::GetInstance()->SetMCC_Action(MCC_A_PROC_ALIGN_MOVE_STEP4, false);
+					}
+					else if (iAxis == AXIS_PROBE_Y5)
+					{
+						nRet = pImpl->DoWork_MotionDone(iAxis);
+
+			//			CMCCLogMgr::GetInstance()->SetMCC_Action(MCC_A_PROC_ALIGN_MOVE_STEP4, false);
+					}
+
+					if (nRet != df_MOTION_RV_SUCCESSED)
+					{
+						break;
+					}
+				}
+			}
+
+			if (bProbeChange == true)	// jsyoon 2022.05.10 add 
+			{
+				if (nRet == df_MOTION_RV_SUCCESSED)
+				{
+					nRet = pImpl->MoveOrgPosA(AXIS_Z3, dPosZR, true, SPEED_HIGH, -1, -1); // LYS 2026-09-05 SUB Z RIGHT
+					if (nRet == df_MOTION_RV_SUCCESSED) nRet = pImpl->MoveOrgPosA(AXIS_Z4, dPosZL, true, SPEED_HIGH, -1, -1);	//  화질
+				}
+			}
+			//else
+			//{
+			//	if (nRet == df_MOTION_RV_SUCCESSED)
+			//	{
+			//		nRet = pImpl->MoveOrgPosA(AXIS_Z2, dPosZ, true, SPEED_HIGH, -1, -1);	// 시야각
+			//	}
+			//}
+		}
+	}
+
+	return nRet;
+}
+
+int CDoWorkProbeSWAlignStep::Align_ProbeSearch(int iProbe)
+{
+	int nRet = df_MOTION_RV_SUCCESSED;
+	float Score = 1.0;
+	float MaxSorce = -1;
+	int iPtrn[2] = { -1, -1 };
+	CPtrnInfo ptrnInfo[df_MAX_PTRNINFO];
+	for (size_t i = 0; i < df_MAX_PTRNINFO; i++)
+	{
+		ptrnInfo[i].ClearInfo();
+	}
+
+	S_Align* pAlignInfo = nullptr;
+	pAlignInfo = &m_pShareItem->GetRecipeEditMgrPtr()->GetRecipeMgrPtr()->m_sAlign;
+
+	CPtrnInfo* pPtrnInfo = NULL;
+	double dPixelx[2] = { 0, }, dPixely[2] = { 0, };
+
+	int iReTry = 0, nRetrylimit = 5;
+	double dAlignMargin = 1;
+	bool bAlignDone = false;
+	double dStartX = 0.;
+	int iAxisX = AXIS_PROBE_X9, iAxisYL = AXIS_Y1, iAxisYR = AXIS_Y2, iAxisT = AXIS_PROBE_X10;
+
+	// Probe
+	if (iProbe == 4)
+	{
+		iAxisX = AXIS_PROBE_X9;
+		iAxisYL = AXIS_Y1;
+		iAxisYR = AXIS_Y2;
+		iAxisT = AXIS_PROBE_X10;
+	}
+	else if (iProbe == 0)
+	{
+		iAxisX = AXIS_PROBE_X1;
+		iAxisYL = AXIS_Y3;
+		iAxisYR = AXIS_Y4;
+		iAxisT = AXIS_PROBE_X2;
+	}
+	else if (iProbe == 1)
+	{
+		iAxisX = AXIS_PROBE_X3;
+		iAxisYL = AXIS_Y3;
+		iAxisYR = AXIS_Y4;
+		iAxisT = AXIS_PROBE_X4;
+	}
+	else if (iProbe == 2)
+	{
+		iAxisX = AXIS_PROBE_X5;
+		iAxisYL = AXIS_Y3;
+		iAxisYR = AXIS_Y4;
+		iAxisT = AXIS_PROBE_X6;
+	}
+	else if (iProbe == 3)
+	{
+		iAxisX = AXIS_PROBE_X7;
+		iAxisYL = AXIS_Y3;
+		iAxisYR = AXIS_Y4;
+		iAxisT = AXIS_PROBE_X8;
+	}
+
+	// Set CCD Index
+	int iCCD[2] = { 0, 1 };
+	bool bProbeChange = false;	// jsyoon 2022.05.10 add
+
+	// jsyoon 2022.05.19 add
+	if( m_pShareItem->GetMaintControlMgrPtr()->GetShareMemoryMgrPtr()->GetSys_ProbeChange() == 1)
+	{
+		bProbeChange = true;
+	}
+
+	if (bProbeChange == true)
+	{
+		iCCD[0] = 2;
+		iCCD[1] = 3;
+	}
+
+	// 이미지 패턴 매칭
+	for (size_t j = 0; j < 2; j++)	// 2 Head
+	{
+		MaxSorce = -1;
+
+		if (j == 0)
+		{
+			for (size_t k = 0; k < df_MAX_PTRNINFO; k++)
+			{
+				if (k < 5)
+				{
+					ptrnInfo[k].m_nThreshold = pAlignInfo->m_sCcdSet.m_sBackLeft.m_nMatchingScore;
+					ptrnInfo[k].m_strName.Format(_T("%s"), pAlignInfo->m_chPtnBackLeft[k]);
+				}
+			}
+		}
+		else
+		{
+			for (size_t k = 0; k < df_MAX_PTRNINFO; k++)
+			{
+				if (k < 5)
+				{
+					ptrnInfo[k].m_nThreshold = pAlignInfo->m_sCcdSet.m_sBackRight.m_nMatchingScore;
+					ptrnInfo[k].m_strName.Format(_T("%s"), pAlignInfo->m_chPtnBackRight[k]);
+				}
+
+			}
+		}
+
+		// 이미지 패턴 매칭
+		for (size_t k = 0; k < df_MAX_PTRNINFO; k++)	// Pattern
+		{
+			pPtrnInfo = &ptrnInfo[k];
+			nRet = m_pShareItem->GetAlignCameraMgr(iCCD[j])->PtrnMatch(pPtrnInfo, &Score, LENS_USE_ALIGN, false); // jsyoon 2022.05.19 change
+//			nRet = m_pShareItem->GetAlignCameraMgr(j)->PtrnMatch(pPtrnInfo, &Score, LENS_USE_ALIGN, false);
+			if (nRet == VTM_RV_SUCCESSED)
+			{
+				if (Score > MaxSorce)
+				{
+					MaxSorce = Score;
+					iPtrn[j] = k;
+					dPixelx[j] = pPtrnInfo->m_dRealX;	// 차이값(mm)
+					dPixely[j] = pPtrnInfo->m_dRealY;	// 차이값(mm)
+				}
+
+				break;
+			}
+		}
+	}
+
+	bAlignDone = true;
+
+	for (size_t j = 0; j < 2; j++)
+	{
+	//	if (iPtrn[j] < -1)
+		if (iPtrn[j] < 0)	// 2023.03.09 change
+		{
+			bAlignDone = false;
+			break;
+		}
+	}
+
+	CMaintControlMgr* pImpl = nullptr;
+	pImpl = m_pShareItem->GetMaintControlMgrPtr();
+	if (pImpl->IsOutOfServiceMC() != true)
+	{
+		if (bAlignDone == true)
+		{
+			nRet = VTM_RV_SUCCESSED;
+		}
+		else
+		{
+			nRet = VISION_ALIGN_DETECTED_FAIL;
+		}
+	}
+	else
+	{
+		nRet = VTM_RV_SUCCESSED;
+	}
+
+	return nRet;
+}
+
+
+// Probe Theta Align
+int CDoWorkProbeSWAlignStep::Align_ProbeTZero(int iProbe, double* pdMovR)
+{
+	int nRet = df_MOTION_RV_SUCCESSED;
+	float Score = 1.0;
+	float MaxSorce = -1;
+	int iPtrn[2] = { -1, -1 };
+	CPtrnInfo ptrnInfo[df_MAX_PTRNINFO];
+	for (size_t i = 0; i < df_MAX_PTRNINFO; i++)
+	{
+		ptrnInfo[i].ClearInfo();
+	}
+
+	S_Align* pAlignInfo = nullptr;
+	pAlignInfo = &m_pShareItem->GetRecipeEditMgrPtr()->GetRecipeMgrPtr()->m_sAlign;
+
+	CPtrnInfo* pPtrnInfo = NULL;
+	double dPixelx[2] = { 0, }, dPixely[2] = { 0, };
+
+	CMaintControlMgr* pImpl = nullptr;
+	pImpl = m_pShareItem->GetMaintControlMgrPtr();
+
+	double dCurPos = 0;
+
+	// 측정 PROBE
+	dCurPos = pImpl->GetCurPos(AXIS_PROBE_X10);
+
+	int iReTry = 0, nRetrylimit = 5;
+	double dAlignMargin = 1;
+	bool bAlignDone = false;
+	double dStartX = 0.;
+
+	dAlignMargin = pAlignInfo->m_sMargin.m_sProbeMargin.m_fR;
+//	dAlignMargin = pAlignInfo->m_sMargin.m_sProbeMargin.m_fR;
+
+	nRetrylimit = pAlignInfo->m_sMargin.m_sProbeMargin.m_nCentering;
+
+
+	int iAxisX = AXIS_PROBE_X9, iAxisYL = AXIS_Y1, iAxisYR = AXIS_Y2, iAxisT = AXIS_PROBE_X10;
+
+	// Probe
+	if (iProbe == 4)
+	{
+		// LYS 2026-07-21 Probe Align 이 값으로 진행.
+		iAxisX = AXIS_PROBE_X9;
+		iAxisYL = AXIS_Y1;
+		iAxisYR = AXIS_Y2;
+		iAxisT = AXIS_PROBE_X10;
+	}
+	else if (iProbe == 0)
+	{
+		iAxisX = AXIS_PROBE_X1;
+		iAxisYL = AXIS_Y3;
+		iAxisYR = AXIS_Y4;
+		iAxisT = AXIS_PROBE_X2;
+	}
+	else if (iProbe == 1)
+	{
+		iAxisX = AXIS_PROBE_X3;
+		iAxisYL = AXIS_Y3;
+		iAxisYR = AXIS_Y4;
+		iAxisT = AXIS_PROBE_X4;
+	}
+	else if (iProbe == 2)
+	{
+		iAxisX = AXIS_PROBE_X5;
+		iAxisYL = AXIS_Y3;
+		iAxisYR = AXIS_Y4;
+		iAxisT = AXIS_PROBE_X6;
+	}
+	else if (iProbe == 3)
+	{
+		iAxisX = AXIS_PROBE_X7;
+		iAxisYL = AXIS_Y3;
+		iAxisYR = AXIS_Y4;
+		iAxisT = AXIS_PROBE_X8;
+	}
+
+	dStartX = pImpl->GetOrgPos(iAxisT);
+
+
+	// Set CCD Index
+	int iCCD[2] = { 0, 1 };
+	bool bProbeChange = false;	// jsyoon 2022.05.10 add
+
+	// jsyoon 2022.05.19 add
+	if( m_pShareItem->GetMaintControlMgrPtr()->GetShareMemoryMgrPtr()->GetSys_ProbeChange() == 1)
+	{
+		bProbeChange = true;
+	}
+
+	if (bProbeChange == true)
+	{
+		iCCD[0] = 2;
+		iCCD[1] = 3;
+	}
+
+	// 반복
+	do
+	{
+		// 이미지 패턴 매칭
+		for (size_t j = 0; j < 2; j++)	// 2 Head
+		{
+			MaxSorce = -1;
+
+			if (j == 0)
+			{
+				for (size_t k = 0; k < df_MAX_PTRNINFO; k++)
+				{
+					if (k < 5)
+					{
+						ptrnInfo[k].m_nThreshold = pAlignInfo->m_sCcdSet.m_sBackLeft.m_nMatchingScore;
+						ptrnInfo[k].m_strName.Format(_T("%s"), pAlignInfo->m_chPtnBackLeft[k]);
+					}
+
+				}
+			}
+			else
+			{
+				for (size_t k = 0; k < df_MAX_PTRNINFO; k++)
+				{
+					if (k < 5)
+					{
+						ptrnInfo[k].m_nThreshold = pAlignInfo->m_sCcdSet.m_sBackRight.m_nMatchingScore;
+						ptrnInfo[k].m_strName.Format(_T("%s"), pAlignInfo->m_chPtnBackRight[k]);
+					}
+
+				}
+			}
+
+			// 이미지 패턴 매칭
+			for (size_t k = 0; k < df_MAX_PTRNINFO; k++)	// Pattern
+			{
+				pPtrnInfo = &ptrnInfo[k];
+				nRet = m_pShareItem->GetAlignCameraMgr(iCCD[j])->PtrnMatch(pPtrnInfo, &Score, LENS_USE_ALIGN, false); // jsyoon 2022.05.19 change
+	//			nRet = m_pShareItem->GetAlignCameraMgr(j)->PtrnMatch(pPtrnInfo, &Score, LENS_USE_ALIGN, false);
+				if (nRet == VTM_RV_SUCCESSED)
+				{
+					if (Score > MaxSorce)
+					{
+						MaxSorce = Score;
+						iPtrn[j] = k;
+						dPixelx[j] = pPtrnInfo->m_dRealX;	// 차이값(mm)
+						dPixely[j] = pPtrnInfo->m_dRealY;	// 차이값(mm)
+					}
+
+					break;
+				}
+			}
+		}
+
+		bAlignDone = true;
+
+		for (size_t j = 0; j < 2; j++)
+		{
+		//	if (iPtrn[j] < -1)
+			if (iPtrn[j] < 0)	// 2023.03.09 change
+			{
+				bAlignDone = false;
+				break;
+			}
+		}
+
+		if (bAlignDone == false)
+		{
+			nRet = VISION_ALIGN_DETECTED_FAIL;
+			break;
+		}
+			
+
+		// 센터링
+		int iDir = 1;
+		double dDistanceX = 0., dDistanceY = 0., dRadian = 0.;
+		// 
+		// Angle 계산
+		COORDINATE stBase[2];		// Align Mark 좌표 위치
+		COORDINATE stDetect[2];
+
+	/*	stBase[0].m_dy = pImpl->GetCurPos(AXIS_PROBE_X9);
+		stBase[0].m_dx = pImpl->GetCurPos(AXIS_Y1);
+
+		stBase[1].m_dy = pImpl->GetCurPos(AXIS_PROBE_X9);
+		stBase[1].m_dx = pImpl->GetCurPos(AXIS_Y2);*/
+
+		stBase[0].m_dy = pImpl->GetCurPos(iAxisX);
+		stBase[0].m_dx = pImpl->GetCurPos(iAxisYL);
+
+		stBase[1].m_dy = pImpl->GetCurPos(iAxisX);
+		stBase[1].m_dx = pImpl->GetCurPos(iAxisYR);
+		
+		stDetect[0].m_dx = stBase[0].m_dx - dPixelx[0];
+		stDetect[0].m_dy = stBase[0].m_dy - dPixely[0];
+
+		stDetect[1].m_dx = stBase[1].m_dx - dPixelx[1];
+		stDetect[1].m_dy = stBase[1].m_dy - dPixely[1];
+
+
+		dRadian = m_pShareItem->GetAlignCameraMgr(0)->CalcAngle(stBase[0], stBase[1], stDetect[0], stDetect[1]);
+		if (dRadian > 180)
+			dRadian -= 360;
+
+		// Save Image
+		CString strPath, strSaveImage;
+		CString strCellID;
+		strCellID = CSystemParamShare::GetInstance()->GetCellID();
+		strPath.Format(_T("%s%s%s\\%s\\"), m_pShareItem->GetSystemConfigMgrPtr()->GetLogFilePath(), _T("ALIGN\\"), m_pShareItem->GetRecipeEditMgrPtr()->GetRecipeID(), strCellID);
+		MakeDir(strPath);
+
+	/*	strSaveImage.Format(_T("%s%s_%s.png"), strPath, _T("AlignGlassThetaZeroSrc1"), GetCurTimeStr());
+		imaqWritePNGFile2(pSnapImageCCD1, CStrToChar(strSaveImage), 750, NULL, FALSE);
+
+		strSaveImage.Format(_T("%s%s_%s.png"), strPath, _T("AlignGlassThetaZeroSrc2"), GetCurTimeStr());
+		imaqWritePNGFile2(pSnapImageCCD2, CStrToChar(strSaveImage), 750, NULL, FALSE);*/
+
+
+		// Margin 
+		if (nRet == VTM_RV_SUCCESSED)
+		{
+			CString str;
+			str.Format(_T("CDoWorkProbeSWAlignStep, TZero %d/%d, %.3f,- %.3f, %.3f"), iReTry + 1, nRetrylimit, dPixely[1], dPixely[0], dAlignMargin);
+			m_pShareItem->GetLogFileAccessorPtr()->KMLOG(SYST, str);
+
+			if (pImpl->IsOutOfServiceMC() == true)
+			{
+				break;
+			}
+
+			if (fabs(dPixely[1] - dPixely[0]) < dAlignMargin)
+			{
+				break;
+			}
+			else
+			{
+				// Move
+				if (pImpl != nullptr)
+				{
+					double dX = 0;
+					dX = (dPixely[1] - dPixely[0]) * iDir; 
+
+					// Move
+					if (pImpl != nullptr)
+					{
+						// 이동
+						/*pImpl->MoveOrgPosR(AXIS_PROBE_X10, dX, true, SPEED_LOW);
+
+						nRet = pImpl->DoWork_MotionDone(AXIS_PROBE_X10);*/
+
+						nRet = pImpl->MoveOrgPosR(iAxisT, dX, true, SPEED_LOW);
+
+						nRet = pImpl->DoWork_MotionDone(iAxisT);
+						if (nRet != df_MOTION_RV_SUCCESSED)
+						{
+							break;
+						}
+						
+					}
+
+					//dX = tan(dRadian)* (stDetect[1].m_dy - stDetect[0].m_dx);
+					//*pdMovR += dX;
+					// 각도에서 거리로 계산 수식 필요
+
+					// Probe X 동기화 해제
+					
+					// 이동
+
+					// Probe X 동기화  
+					
+					if (nRet != df_MOTION_RV_SUCCESSED)
+					{
+						break;
+					}
+				}
+
+				nRet = VISION_ALIGN_CENTERING_FAIL;
+			}
+		}
+
+		iReTry++;
+
+
+	} while (iReTry < nRetrylimit); 
+
+	if (nRet == df_MOTION_RV_SUCCESSED)
+	{
+		*pdMovR = pImpl->GetOrgPos(iAxisT) - dStartX;
+	}
+	else
+	{
+		CString str;
+		str.Format(_T("CDoWorkProbeSWAlignStep, TZero Fail %d, %.3f,- %.3f, %.3f"), nRet, dPixely[1], dPixely[0], dAlignMargin);
+		m_pShareItem->GetLogFileAccessorPtr()->KMLOG(WARN, str);
+	}
+		
+	return nRet;
+}
+
+// Probe X, Y Align
+int CDoWorkProbeSWAlignStep::Align_ProbeXYZero(int iProbe, double* pdMovX, double* pdMovY)
+{
+	int nRet = df_MOTION_RV_SUCCESSED;
+	float Score = 1.0;
+	float MaxSorce = -1;
+	int iPtrn[2] = { -1, -1 };
+	CPtrnInfo ptrnInfo[df_MAX_PTRNINFO];
+	for (size_t i = 0; i < df_MAX_PTRNINFO; i++)
+	{
+		ptrnInfo[i].ClearInfo();
+	}
+
+	S_Align* pAlignInfo = nullptr;
+	pAlignInfo = &m_pShareItem->GetRecipeEditMgrPtr()->GetRecipeMgrPtr()->m_sAlign;
+
+	CPtrnInfo* pPtrnInfo = NULL;
+	double dPixelx[2] = { 0, }, dPixely[2] = { 0, };
+
+	CMaintControlMgr* pImpl = nullptr;
+	pImpl = m_pShareItem->GetMaintControlMgrPtr();
+
+	int iReTry = 0, nRetrylimit = 3;
+	double dAlignMarginX = 1, dAlignMarginY = 1;
+	bool bAlignDone = false;
+
+	dAlignMarginX = pAlignInfo->m_sMargin.m_sProbeMargin.m_fX;
+	dAlignMarginY = pAlignInfo->m_sMargin.m_sProbeMargin.m_fY;
+	nRetrylimit = pAlignInfo->m_sMargin.m_sProbeMargin.m_nCentering;
+
+	double dStartX = 0., dStartY = 0.;
+
+	int iAxisX = AXIS_PROBE_X9, iAxisY = AXIS_PROBE_Y5;
+//	bool bBack = true;
+
+	// Probe
+	if (iProbe == 4)
+	{
+		iAxisX = AXIS_PROBE_X9;
+		iAxisY = AXIS_PROBE_Y5;
+
+//		bBack = true;
+	}
+	else if (iProbe == 0)
+	{
+		iAxisX = AXIS_PROBE_X1;
+		iAxisY = AXIS_PROBE_Y1;
+
+//		bBack = false;
+	}
+	else if (iProbe == 1)
+	{
+		iAxisX = AXIS_PROBE_X3;
+		iAxisY = AXIS_PROBE_Y2;
+
+//		bBack = false;
+	}
+	else if (iProbe == 2)
+	{
+		iAxisX = AXIS_PROBE_X5;
+		iAxisY = AXIS_PROBE_Y3;
+
+//		bBack = false;
+	}
+	else if (iProbe == 3)
+	{
+		iAxisX = AXIS_PROBE_X7;
+		iAxisY = AXIS_PROBE_Y4;
+
+//		bBack = false;
+	}
+
+//	dStartX = pImpl->GetCurPos(AXIS_PROBE_X9);
+	dStartX = pImpl->GetOrgPos(iAxisX);
+	dStartY = pImpl->GetOrgPos(iAxisY);
+
+	// Set CCD Index
+	int iCCD[2] = { 0, 1 };
+	bool bProbeChange = false;	// jsyoon 2022.05.10 add
+	// jsyoon 2022.05.19 add
+	if( m_pShareItem->GetMaintControlMgrPtr()->GetShareMemoryMgrPtr()->GetSys_ProbeChange() == 1)
+	{
+		bProbeChange = true;
+	}
+
+	if (bProbeChange == true)
+	{
+		iCCD[0] = 2;
+		iCCD[1] = 3;
+	}
+
+	// 반복
+	do
+	{
+		// 이미지 패턴 매칭
+		for (size_t j = 0; j < 2; j++)	// 2 Head
+		{
+			MaxSorce = -1;
+
+			if (j == 0)
+			{
+				for (size_t k = 0; k < df_MAX_PTRNINFO; k++)
+				{
+					if (k < 5)
+					{
+						ptrnInfo[k].m_nThreshold = pAlignInfo->m_sCcdSet.m_sBackLeft.m_nMatchingScore;
+						ptrnInfo[k].m_strName.Format(_T("%s"), pAlignInfo->m_chPtnBackLeft[k]);
+					}
+
+				}
+			}
+			else
+			{
+				for (size_t k = 0; k < df_MAX_PTRNINFO; k++)
+				{
+					if (k < 5)
+					{
+						ptrnInfo[k].m_nThreshold = pAlignInfo->m_sCcdSet.m_sBackRight.m_nMatchingScore;
+						ptrnInfo[k].m_strName.Format(_T("%s"), pAlignInfo->m_chPtnBackRight[k]);
+					}
+
+				}
+			}
+
+			// 이미지 패턴 매칭
+			for (size_t k = 0; k < df_MAX_PTRNINFO; k++)	// Pattern
+			{
+				pPtrnInfo = &ptrnInfo[k];
+
+				nRet = m_pShareItem->GetAlignCameraMgr(iCCD[j])->PtrnMatch(pPtrnInfo, &Score, LENS_USE_ALIGN, false); // jsyoon 2022.05.19 change
+				/*
+				if(bBack == true)
+					nRet = m_pShareItem->GetAlignCameraMgr(j)->PtrnMatch(pPtrnInfo, &Score, LENS_USE_ALIGN, false);
+				else
+					nRet = m_pShareItem->GetAlignCameraMgr(2+j)->PtrnMatch(pPtrnInfo, &Score, LENS_USE_ALIGN, false);
+				*/
+				if (nRet == VTM_RV_SUCCESSED)
+				{
+					if (Score > MaxSorce)
+					{
+						MaxSorce = Score;
+						iPtrn[j] = k;
+						dPixelx[j] = pPtrnInfo->m_dRealX;	// 차이값(mm)
+						dPixely[j] = pPtrnInfo->m_dRealY;	// 차이값(mm)
+					}
+
+					break;
+				}
+			}
+		}
+
+		bAlignDone = true;
+
+		for (size_t j = 0; j < 2; j++)
+		{
+		//	if (iPtrn[j] < -1)
+			if (iPtrn[j] < 0)	// 2023.03.09 change
+			{
+				bAlignDone = false;
+				break;
+			}
+		}
+
+		if (bAlignDone == false)
+		{
+			nRet = VISION_ALIGN_DETECTED_FAIL;
+			break;
+		}
+
+
+		// 센터링
+		int iDirX = -1, iDirY = 1;
+		double dDistanceX = 0., dDistanceY = 0;
+		double dX = 0, dY = 0;
+		// 
+		// Angle 계산
+		COORDINATE stBase[2];		// Align Mark 좌표 위치
+		COORDINATE stDetect[2];
+
+		// Probe
+	//	dY = ((dPixelx[0] + dPixelx[1]) / 2 ) * iDirX;		// PROBE Y
+	//	dX = ((dPixely[0] + dPixely[1]) / 2 ) * iDirY;		// PROBE X
+		dY = dPixelx[0] * iDirX;		// PROBE Y
+		dX = dPixely[0] * iDirY;		// PROBE X	// 2023.04.06 change
+
+	
+		/*
+		// Save Image
+		CString strPath, strSaveImage;
+		CString strCellID;
+		strCellID = CSystemParamShare::GetInstance()->GetCellID();
+		strPath.Format(_T("%s%s%s\\%s\\"), m_pShareItem->GetSystemConfigMgrPtr()->GetLogFilePath(), _T("ALIGN\\"), m_pShareItem->GetRecipeEditMgrPtr()->GetRecipeID(), strCellID);
+		MakeDir(strPath);
+
+		strSaveImage.Format(_T("%s%s_%s.png"), strPath, _T("AlignGlassThetaZeroSrc1"), GetCurTimeStr());
+		imaqWritePNGFile2(pSnapImageCCD1, CStrToChar(strSaveImage), 750, NULL, FALSE);
+
+		strSaveImage.Format(_T("%s%s_%s.png"), strPath, _T("AlignGlassThetaZeroSrc2"), GetCurTimeStr());
+		imaqWritePNGFile2(pSnapImageCCD2, CStrToChar(strSaveImage), 750, NULL, FALSE);
+		*/
+
+		// Margin 
+		if (nRet == VTM_RV_SUCCESSED)
+		{
+			CString str;
+			str.Format(_T("CDoWorkProbeSWAlignStep, XYZero %d/%d, %.4f, %.4f < %.4f, %.4f"), iReTry + 1, nRetrylimit, dX, dY, dAlignMarginX, dAlignMarginY);
+			m_pShareItem->GetLogFileAccessorPtr()->KMLOG(SYST, str);
+
+			if (pImpl->IsOutOfServiceMC() == true)
+			{
+				break;
+			}
+
+			if (fabs(dX) < dAlignMarginX && fabs(dY) < dAlignMarginY)
+			{
+				break;
+			}
+			else
+			{
+				nRet = VISION_ALIGN_CENTERING_FAIL;
+
+				//*pdMovX += dX;
+				//*pdMovY += dY;
+
+				// Move
+				if (pImpl != nullptr)
+				{
+					pImpl->MoveOrgPosR(iAxisX, dX, false, SPEED_MID);
+					pImpl->MoveOrgPosR(iAxisY, dY, false, SPEED_MID);
+
+					nRet = pImpl->DoWork_MotionDone(iAxisX);
+					if (nRet != df_MOTION_RV_SUCCESSED)
+					{
+						break;
+					}
+
+					nRet = pImpl->DoWork_MotionDone(iAxisY);
+					if (nRet != df_MOTION_RV_SUCCESSED)
+					{
+						break;
+					}
+
+					/*pImpl->MoveOrgPosR(AXIS_PROBE_X9, dX, false, SPEED_MID);
+					pImpl->MoveOrgPosR(AXIS_PROBE_Y5, dY, false, SPEED_MID);
+
+					nRet = pImpl->DoWork_MotionDone(AXIS_PROBE_X9);
+					if (nRet != df_MOTION_RV_SUCCESSED)
+					{
+						break;
+					}
+
+					nRet = pImpl->DoWork_MotionDone(AXIS_PROBE_Y5);
+					if (nRet != df_MOTION_RV_SUCCESSED)
+					{
+						break;
+					}*/
+				}
+			}
+		}
+
+		iReTry++;
+
+
+	} while (iReTry < nRetrylimit);
+
+	if (nRet == VTM_RV_SUCCESSED)
+	{
+		*pdMovX = pImpl->GetOrgPos(iAxisX) - dStartX;
+	//	*pdMovY = pImpl->GetOrgPos(iAxisY) - dStartY;
+		*pdMovY = pImpl->GetOrgPos(iAxisY) - 0;		// jsyoon 2022.08.16 change
+
+		/**pdMovX = pImpl->GetCurPos(AXIS_PROBE_X9) - dStartX;
+		*pdMovY = pImpl->GetCurPos(AXIS_PROBE_Y5) - 0;*/
+	}
+	else
+	{
+		CString str;
+		str.Format(_T("CDoWorkProbeSWAlignStep, XYZero Fail %d"), nRet);
+		m_pShareItem->GetLogFileAccessorPtr()->KMLOG(WARN, str);
+	}
+
+	return nRet;
+}
+
+int CDoWorkProbeSWAlignStep::Align_Probe()
+{
+	m_pShareItem->GetLogFileAccessorPtr()->KMLOG(SYST, _T("CDoWorkProbeSWAlignStep_Align_Probe Start."));
+
+	int nRet = VTM_RV_SUCCESSED;
+	int iProbe = 0;
+	double dMovX = 0, dMovY = 0, dMovR = 0;
+
+	// Probe 확인 
+	iProbe = CSequenceManager::GetInstance()->GetFunctionModuleProbeACC()->GetProbe();
+	if (iProbe < df_PROBE_AGING1)
+	{
+		nRet = false;
+	}
+	else
+	{
+		if (CSequenceManager::GetInstance()->GetFunctionModuleEQState()->IsProbeExistSensorOn(iProbe) == true)
+		{
+
+			CString strLog;
+			strLog.Format(_T("Align_Probe Start. %d"), iProbe);
+			m_pShareItem->GetLogFileAccessorPtr()->KMLOG(SYST, strLog);
+
+			// ALL Probe Offset Move
+			CMaintControlMgr* pImpl = nullptr;
+			pImpl = m_pShareItem->GetMaintControlMgrPtr();
+			if (pImpl != nullptr)
+			{
+				if (m_pShareItem->GetMaintControlMgrPtr()->GetShareMemoryMgrPtr()->GetSys_ProbeChange() == 1)
+					pImpl->SetProbeAlignXYR(dMovX, dMovY, dMovR, iProbe);
+				else
+					pImpl->SetProbeAlignXYR(dMovX, dMovY, dMovR, 0);
+
+				nRet = Align_ProbeSearch(iProbe - df_PROBE_AGING1);
+
+
+				if (m_pShareItem->GetMaintControlMgrPtr()->IsOutOfServiceMC() != true)
+				{
+					if (m_pShareItem->GetMaintControlMgrPtr()->GetShareMemoryMgrPtr()->GetSys_ProbeChange() == 1)
+					{
+						if (nRet == VTM_RV_SUCCESSED)
+						{
+							nRet = Align_ProbeTZero(iProbe - df_PROBE_AGING1, &dMovR);
+						}
+					}
+
+					if (nRet == VTM_RV_SUCCESSED)
+					{
+						nRet = Align_ProbeXYZero(iProbe - df_PROBE_AGING1, &dMovX, &dMovY);
+					}
+				}
+				else
+				{
+					Sleep(500);
+				}
+
+				if (nRet == VTM_RV_SUCCESSED)
+				{
+					// jsyoon 2022.08.16 add
+					CString strLog;
+					strLog.Format(_T("Align_Probe (XYR:%.4f,%.4f,%.4f)"), dMovX, dMovY, dMovR);
+					m_pShareItem->GetLogFileAccessorPtr()->KMLOG(SYST, strLog);
+
+					if (m_pShareItem->GetMaintControlMgrPtr()->GetShareMemoryMgrPtr()->GetSys_ProbeChange() == 1)
+						pImpl->SetProbeAlignXYR(dMovX, dMovY, dMovR, iProbe);
+					else
+						pImpl->SetProbeAlignXYR(dMovX, dMovY, dMovR, 0);
+				}
+			}
+		}
+	}
+
+	m_pShareItem->GetLogFileAccessorPtr()->KMLOG(SYST, _T("CDoWorkProbeSWAlignStep_Align_Probe End."));
+
+	return nRet;
+}
+
+
+bool CDoWorkProbeSWAlignStep_None::Run()
+{
+	// init
+	m_pShareItem->SetComplete(false);
+	m_pShareItem->SetAlarmOn(false);
+	m_pShareItem->SetFail(false);
+	m_pShareItem->SetStopUser(false);
+
+	m_pShareItem->GetLogFileAccessorPtr()->KMLOG(SYST, _T("CDoWorkProbeSWAlignStep_None Start."));
+
+	m_pShareItem->GetShareMemoryMgrPtr()->SetSys_ProcessStatus(SPS_PROCESS);	// 2023.08.09 add
+
+	/*m_pShareItem->SetAlarmOn(false);
+	m_pShareItem->SetComplete(false);
+	m_pShareItem->SetFail(false);*/
+
+	long nRet = df_MOTION_RV_SUCCESSED;
+
+	// Recipe Open
+
+
+	bool bRet = true;
+	if (nRet != df_MOTION_RV_SUCCESSED)
+	{
+		m_pShareItem->SetFail(true, nRet);
+		bRet = false;
+	}
+
+//	m_pShareItem->GetLogFileAccessorPtr()->KMLOG(SYST, _T("CDoWorkProbeSWAlignStep_None End."));
+
+	return bRet;
+}
+
+bool CDoWorkProbeSWAlignStep_Idle::Run()
+{
+	CWindowEventHandler::GetInstance()->SendMessageToUI(enumWndID_FRAME, WM_MSG_UPDATE_POSITION_STATE, enumDoWorkStateID_Idle, NULL);
+
+	//// Set CCD and Light
+	//for (size_t i = 0; i < MAIN_CCD_MAX_NUM; i++)
+	//{
+	//	m_pShareItem->GetLightControlMgrPtr()->SetLedLampIntensity(i, 0);
+	//}
+
+	// 완료
+	ResetEvent(m_pShareItem->GetStartEventHandle());
+
+	SetEvent(m_pShareItem->GetCompleteEventHandle()); // 시퀀스 완료 이벤트 SET
+
+	m_pShareItem->GetLogFileAccessorPtr()->KMLOG(SYST, _T("CDoWorkProbeSWAlignStep_Idle"));
+
+	m_pShareItem->GetShareMemoryMgrPtr()->SetSys_ProcessStatus(SPS_IDLE);	// 2023.08.09 add
+
+	return false;
+}
+
+bool CDoWorkProbeSWAlignStep_Move::Run()
+{
+	m_pShareItem->GetLogFileAccessorPtr()->KMLOG(SYST, _T("CDoWorkProbeSWAlignStep_Move Start."));
+
+	if (m_pShareItem->GetComplete())
+		return true;
+
+	CWindowEventHandler::GetInstance()->SendMessageToUI(enumWndID_FRAME, WM_MSG_UPDATE_POSITION_STATE, enumDoWorkStateID_MOVEING_Start, NULL);	// 2023.03.09 change
+
+	// jsyoon 2022.08.23 add
+	bool bGlassExist = false;
+	if (m_pShareItem->GetMaintControlMgrPtr()->GetIOMapControlMgrPtr()->IsOutOfService() != true)
+	{
+		bGlassExist = CSequenceManager::GetInstance()->GetFunctionModuleEQState()->IsGlassSensorOn();
+	}
+	else
+	{
+		bGlassExist = true;
+	}
+
+	bool bRet = true;
+	if (bGlassExist != true)
+	{
+		m_pShareItem->GetLogFileAccessorPtr()->KMLOG(SYST, _T("CDoWorkProbeSWAlignStep_Move Glass Exist NG."));
+
+		m_pShareItem->SetFail(true, PLC_GLASS_OBLIVIOUS_WORKPLATE_SENSOR_ALARM);
+		bRet = false;
+	}
+	else
+	{
+		bool bUseMeas = false;
+
+		if (m_pShareItem->GetMaintControlMgrPtr()->GetShareMemoryMgrPtr()->GetSys_ProbeChange() == 1 || m_pShareItem->GetMaintControlMgrPtr()->GetShareMemoryMgrPtr()->GetSys_ProbeChange() == 2)
+		{
+			bUseMeas = true;
+		}
+		else
+		{
+			// jsyoon 2022.07.22 change
+			S_RecipeInfo* pRecipeInfo;
+			pRecipeInfo = m_pShareItem->GetRecipeEditMgrPtr()->GetRecipeInfo();
+			if (pRecipeInfo != nullptr)
+			{
+				//		bUseMeas = pReciepInfo->m_sInspectItem.m_bUsePre_0 | pReciepInfo->m_sInspectItem.m_bUseElect_1 | pReciepInfo->m_sInspectItem.m_bUseAgingTest_2;
+
+				if (pRecipeInfo->m_sInspectItem.m_bUsePre_0 == true)
+					bUseMeas = true;
+
+				if (pRecipeInfo->m_sInspectItem.m_bUseElect_1 == true)
+					bUseMeas = true;
+
+				if (pRecipeInfo->m_sInspectItem.m_bUseAgingTest_2 == true)
+					bUseMeas = true;
+
+				if (pRecipeInfo->m_sInspectItem.m_bUseSpec_3 == true)
+					bUseMeas = true;
+
+				if (pRecipeInfo->m_sInspectItem.m_bUseQuality_4 == true)
+					bUseMeas = true;
+
+				if (pRecipeInfo->m_sInspectItem.m_bUseColor_5 == true)
+					bUseMeas = true;
+
+				if (pRecipeInfo->m_sInspectItem.m_bUseAngle_6 == true)
+					bUseMeas = true;
+
+				if (pRecipeInfo->m_sInspectItem.m_bUseTSP_7 == true)
+					bUseMeas = true;
+
+				if (pRecipeInfo->m_sInspectItem.m_bUseLCR_8 == true)
+					bUseMeas = true;
+			}
+		}
+
+		if (bUseMeas == true)
+		{
+			int nRet = VTM_RV_SUCCESSED;
+			nRet = Align_MovePosition(0, 0);
+			if (nRet != df_MOTION_RV_SUCCESSED)
+			{
+				m_pShareItem->SetFail(true, nRet);
+				bRet = false;
+			}
+		}
+	}
+
+	CWindowEventHandler::GetInstance()->SendMessageToUI(enumWndID_FRAME, WM_MSG_UPDATE_POSITION_STATE, enumDoWorkStateID_MOVEING_End, NULL);	// 2023.03.09 change
+
+	m_pShareItem->GetLogFileAccessorPtr()->KMLOG(SYST, _T("CDoWorkProbeSWAlignStep_Move End."));
+
+	return bRet;
+}
+
+bool CDoWorkProbeSWAlignStep_Align::Run()
+{
+	m_pShareItem->GetLogFileAccessorPtr()->KMLOG(SYST, _T("CDoWorkProbeSWAlignStep_Align Start."));
+
+	if (m_pShareItem->GetComplete())
+		return true;
+
+	CWindowEventHandler::GetInstance()->SendMessageToUI(enumWndID_FRAME, WM_MSG_UPDATE_POSITION_STATE, enumDoWorkStateID_PROBE_ALIGN_Start, NULL);	// 2023.03.09 change
+
+	bool bRet = true;
+	int nRet = VTM_RV_SUCCESSED;
+
+	bool bUseMeas = false;
+
+	if (m_pShareItem->GetMaintControlMgrPtr()->GetShareMemoryMgrPtr()->GetSys_ProbeChange() == 1 || m_pShareItem->GetMaintControlMgrPtr()->GetShareMemoryMgrPtr()->GetSys_ProbeChange() == 2)
+	{
+		bUseMeas = true;
+	}
+	else
+	{
+		// jsyoon 2022.07.22 change
+		S_RecipeInfo* pRecipeInfo;
+		pRecipeInfo = m_pShareItem->GetRecipeEditMgrPtr()->GetRecipeInfo();
+		if (pRecipeInfo != nullptr)
+		{
+			if (pRecipeInfo->m_sInspectItem.m_bUsePre_0 == true)
+				bUseMeas = true;
+
+			if (pRecipeInfo->m_sInspectItem.m_bUseElect_1 == true)
+				bUseMeas = true;
+
+			if (pRecipeInfo->m_sInspectItem.m_bUseAgingTest_2 == true)
+				bUseMeas = true;
+
+			if (pRecipeInfo->m_sInspectItem.m_bUseSpec_3 == true)
+				bUseMeas = true;
+
+			if (pRecipeInfo->m_sInspectItem.m_bUseQuality_4 == true)
+				bUseMeas = true;
+
+			if (pRecipeInfo->m_sInspectItem.m_bUseColor_5 == true)
+				bUseMeas = true;
+
+			if (pRecipeInfo->m_sInspectItem.m_bUseAngle_6 == true)
+				bUseMeas = true;
+
+			if (pRecipeInfo->m_sInspectItem.m_bUseTSP_7 == true)
+				bUseMeas = true;
+
+			if (pRecipeInfo->m_sInspectItem.m_bUseLCR_8 == true)
+				bUseMeas = true;
+		}
+
+		//S_RecipeInfo* pReciepInfo;
+		//pReciepInfo = m_pShareItem->GetRecipeEditMgrPtr()->GetRecipeInfo();
+		//if (pReciepInfo != nullptr)
+		//{
+		//	bUseMeas = pReciepInfo->m_sInspectItem.m_bUsePre_0 | pReciepInfo->m_sInspectItem.m_bUseElect_1 | pReciepInfo->m_sInspectItem.m_bUseAgingTest_2;
+		//}
+	}
+	
+	if (bUseMeas == true)
+	{
+		nRet = Align_Probe();	
+	}
+
+	if (nRet == VTM_RV_SUCCESSED)
+	{
+		m_pShareItem->SetComplete(true);   // 동작 완료
+	}
+	else
+	{
+		m_pShareItem->SetFail(true, nRet);
+		bRet = false;
+	}
+
+	CWindowEventHandler::GetInstance()->SendMessageToUI(enumWndID_FRAME, WM_MSG_UPDATE_POSITION_STATE, enumDoWorkStateID_PROBE_ALIGN_End, NULL);	// 2023.03.09 change
+
+	m_pShareItem->GetLogFileAccessorPtr()->KMLOG(SYST, _T("CDoWorkProbeSWAlignStep_Align End."));
+
+	return bRet;
+}

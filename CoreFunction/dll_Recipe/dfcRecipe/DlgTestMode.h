@@ -21,6 +21,8 @@ public:
 	void InitSelectGridUI(C_GridCtrl& Grid, int nDlgItem, int nRow, int nCol);
 	void SetViewSelectCell();
 	void GetSelectCell(int* pRow, int* pCol);
+	void InitCamJogGrid();				// LYS 2026-09-16
+	void SendCamJog(double dRel);		// LYS 2026-09-16
 
 protected:
 	CWnd* m_hWnd;
@@ -33,6 +35,11 @@ protected:
 	C_ButtonEx  m_btnPreContact;
 	C_ButtonEx  m_btnContact;
 	C_ButtonEx  m_btnUnContact;
+	// LYS 2026-09-16 Save Image 버튼 + 카메라 조그(REL 이동) - CAM_Both/Left/Right 라디오, 4x2 그리드(Move/REL/<</>>)
+	C_ButtonEx  m_btnSaveImage;
+	C_ButtonEx  m_rdCam[3];
+	C_GridCtrl  m_gridCamJog;
+	int m_nCamSel;    // 0=Both, 1=Left(cam0 / Y2,Y4), 2=Right(cam1 / Y1,Y3)
 
 	int m_nBfRowGlass;
 	int m_nBColGlass;
@@ -47,6 +54,9 @@ protected:
 	afx_msg void OnBtnPreContact();
 	afx_msg void OnBtnContact();
 	afx_msg void OnBtnUnContact();
+	afx_msg void OnBtnSaveImage();								// LYS 2026-09-16
+	afx_msg void OnSelCam(UINT nID);							// LYS 2026-09-16
+	afx_msg void OnSelJogItem(NMHDR* pNMHDR, LRESULT* pResult);	// LYS 2026-09-16
 	afx_msg void OnSelItem(NMHDR* pNMHDR, LRESULT* pResult);
 
 	DECLARE_MESSAGE_MAP()

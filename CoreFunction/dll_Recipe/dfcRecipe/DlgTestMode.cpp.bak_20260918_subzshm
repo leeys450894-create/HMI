@@ -1,0 +1,422 @@
+// DlgTestMode.cpp
+// LYS 2026-07-02 Test Mode 다이얼로그(GMI IDD_TEST_MODE_DLG 이식).
+// C_SelectCellDlg와 동일 패턴 - 셀 데이터는 g_inRcpInfo를 사용한다.
+
+#include "pch.h"
+#include "DlgTestMode.h"
+#include "dfcRecipe.h"
+#include "resource.h"
+#include "API_RECIPE.h"
+
+extern VTM_RECIPE* g_pSysMapView;
+
+#ifdef _DEBUG
+#define new DEBUG_NEW
+#endif
+
+IMPLEMENT_DYNAMIC(CDlgTestMode, C_BaseDialog)
+
+BEGIN_MESSAGE_MAP(CDlgTestMode, C_BaseDialog)
+	ON_COMMAND_RANGE(IDC_RADIO_1, IDC_RADIO_4, OnSelMode)
+	ON_COMMAND(IDC_BUTTON_21, OnBtnMove)
+	ON_COMMAND(IDC_BUTTON_26, OnBtnPreContact)
+	ON_COMMAND(IDC_BUTTON_15, OnBtnContact)
+	ON_COMMAND(IDC_BUTTON_17, OnBtnUnContact)
+	ON_NOTIFY(NM_CLICK, IDC_GRID_1, OnSelItem)
+	ON_COMMAND(IDC_BUTTON_1, OnBtnSaveImage)					// LYS 2026-09-16 Save Image
+	ON_COMMAND_RANGE(IDC_RADIO_5, IDC_RADIO_7, OnSelCam)		// LYS 2026-09-16 CAM_Both/Left/Right
+	ON_NOTIFY(NM_CLICK, IDC_GRID_2, OnSelJogItem)			// LYS 2026-09-16 camera jog grid
+	ON_WM_DESTROY()
+END_MESSAGE_MAP()
+
+CDlgTestMode::CDlgTestMode(CWnd* pParent)
+	: C_BaseDialog(IDD_DLG_TEST_MODE, pParent)
+	, m_hWnd(pParent)
+	, m_nTestMode(0)
+	, m_nBfRowGlass(0)
+	, m_nBColGlass(0)
+	, m_nBfcrBkColour(COLOR_WHITE)
+	, m_nCamSel(0)	// LYS 2026-09-16
+{
+	m_pRecipeMem = nullptr;
+	m_pRecipeMem = g_pSysMapView;
+}
+
+CDlgTestMode::~CDlgTestMode()
+{
+}
+
+void CDlgTestMode::DoDataExchange(CDataExchange* pDX)
+{
+	C_BaseDialog::DoDataExchange(pDX);
+
+	DDX_Control(pDX, IDC_GRID_1, m_gridGlass);
+	DDX_Control(pDX, IDC_RADIO_1, m_rdMode[0]);
+	DDX_Control(pDX, IDC_RADIO_2, m_rdMode[1]);
+	DDX_Control(pDX, IDC_RADIO_3, m_rdMode[2]);
+	DDX_Control(pDX, IDC_RADIO_4, m_rdMode[3]);
+	DDX_Control(pDX, IDC_RADIO_8, m_rdStage);
+	DDX_Control(pDX, IDC_BUTTON_21, m_btnMove);
+	DDX_Control(pDX, IDC_BUTTON_26, m_btnPreContact);
+	DDX_Control(pDX, IDC_BUTTON_15, m_btnContact);
+	DDX_Control(pDX, IDC_BUTTON_17, m_btnUnContact);
+	// LYS 2026-09-16 Save Image / camera jog
+	DDX_Control(pDX, IDC_BUTTON_1, m_btnSaveImage);
+	DDX_Control(pDX, IDC_RADIO_5, m_rdCam[0]);
+	DDX_Control(pDX, IDC_RADIO_6, m_rdCam[1]);
+	DDX_Control(pDX, IDC_RADIO_7, m_rdCam[2]);
+	DDX_Control(pDX, IDC_GRID_2, m_gridCamJog);
+}
+
+BOOL CDlgTestMode::OnInitDialog()
+{
+	C_BaseDialog::OnInitDialog();
+
+	// REAR STAGE fixed
+	m_rdStage.SetCheck(BST_CHECKED);
+	m_rdStage.EnableWindow(FALSE);
+
+	// Default mode: Review
+	m_rdMode[0].SetCheck(BST_CHECKED);
+	m_nTestMode = 0;
+
+	// LYS 2026-09-16 camera jog grid + default CAM_Both
+	InitCamJogGrid();
+	m_rdCam[0].SetCheck(BST_CHECKED);
+	m_nCamSel = 0;
+
+	return TRUE;
+}
+
+// ============================================================================
+// ShowWindow override - populate grid when shown (same as SelectCellDlg)
+// ============================================================================
+BOOL CDlgTestMode::ShowWindow(int nCmdShow)
+{
+	if (nCmdShow == SW_SHOW) {
+		SetViewSelectCell();
+
+		// LYS 2026-07-03 load recipe into g_outRcpInfo so RecipeEditMgr can read ContactPos
+		CString strRcpName = g_inRcpInfo.GetModelInfoName();
+		C_OutRecipeFunc* pOut = GetRecipeMgr();
+		if (pOut && !strRcpName.IsEmpty()) {
+			pOut->LoadRcpFile(strRcpName);
+		}
+	}
+	return C_BaseDialog::ShowWindow(nCmdShow);
+}
+
+void CDlgTestMode::OnDestroy()
+{
+	C_BaseDialog::OnDestroy();
+}
+
+// ============================================================================
+// InitSelectGridUI - same pattern as C_SelectCellDlg::InitSelectGridUI
+// ============================================================================
+void CDlgTestMode::InitSelectGridUI(C_GridCtrl& Grid, int nDlgItem, int nRow, int nCol)
+{
+	CRect rc;
+	GetDlgItem(nDlgItem)->GetWindowRect(&rc);
+	ScreenToClient(&rc);
+
+	Grid.SetFont(dfcGetFontName(), 12, FW_BOLD);
+
+	Grid.SetColumnCount(nCol);
+	Grid.SetRowCount(nRow);
+
+	Grid.SetFixedRowCol(0, 0);
+	Grid.EnableToolTips(FALSE);
+	Grid.EnableTitleTips(FALSE);
+	Grid.SetEditable(FALSE);
+	Grid.EnableSelection(FALSE);
+
+	Grid.GetWindowRect(&rc);
+
+	int nWidth = (rc.Width() - 4) / nCol;
+	for (int i = 0; i < nCol; i++) Grid.SetColumnWidth(i, nWidth);
+
+	int nHeight = (rc.Height() - 4) / nRow;
+	for (int i = 0; i < nRow; i++) Grid.SetRowHeight(i, nHeight);
+
+	for (int i = 0; i < nRow; i++) {
+		for (int j = 0; j < nCol; j++) {
+			Grid.SetItemFormat(i, j, DT_SINGLELINE | DT_CENTER | DT_VCENTER);
+		}
+	}
+}
+
+// ============================================================================
+// SetViewSelectCell - same pattern as C_SelectCellDlg::SetViewSelectCell
+// ============================================================================
+void CDlgTestMode::SetViewSelectCell()
+{
+	int nStick = 0, nCell = 0;
+
+	nStick = g_inRcpInfo.GetStickCount();
+	if (nStick < 1) return;
+
+	nCell = g_inRcpInfo.GetCellCount(0);
+	if (nCell < 1) return;
+
+	// Initialize grid (rows=sticks, cols=cells)
+	InitSelectGridUI(m_gridGlass, IDC_GRID_1, nStick, nCell);
+
+	// Populate cell IDs and colors
+	for (int i = 0; i < nStick; i++) {
+		for (int j = 0; j < nCell; j++) {
+			m_gridGlass.SetItemText(i, j, g_inRcpInfo.GetCellID(i, j));
+			m_gridGlass.SetItemBkColour(i, j, COLOR_WHITE);
+		}
+	}
+
+	// Default selection: first cell
+	m_nBfRowGlass = 0;
+	m_nBColGlass = 0;
+	m_nBfcrBkColour = COLOR_WHITE;
+	m_gridGlass.SetItemBkColour(0, 0, COLOR_SKYBLUE_BRIGHT);
+
+	Invalidate(FALSE);
+}
+
+// ============================================================================
+// OnSelItem - cell click handler (same as SelectCellDlg single-select)
+// ============================================================================
+void CDlgTestMode::OnSelItem(NMHDR* pNMHDR, LRESULT* pResult)
+{
+	NM_GRIDVIEW* pNMLV = reinterpret_cast<NM_GRIDVIEW*>(pNMHDR);
+	int nRow = (int)pNMLV->iRow;
+	int nCol = (int)pNMLV->iColumn;
+	*pResult = 0;
+
+	if (nRow < 0 || nCol < 0) return;
+
+	// Restore previous selection
+	m_gridGlass.SetItemBkColour(m_nBfRowGlass, m_nBColGlass, m_nBfcrBkColour);
+
+	// Highlight new selection
+	m_nBfcrBkColour = m_gridGlass.GetItemBkColour(nRow, nCol);
+	m_nBfRowGlass = nRow;
+	m_nBColGlass = nCol;
+	m_gridGlass.SetItemBkColour(nRow, nCol, COLOR_SKYBLUE_BRIGHT);
+
+	Invalidate(FALSE);
+}
+
+void CDlgTestMode::GetSelectCell(int* pRow, int* pCol)
+{
+	*pRow = m_nBfRowGlass;  // stick index
+	*pCol = m_nBColGlass;   // cell index
+}
+
+// ============================================================================
+// Mode selection
+// ============================================================================
+void CDlgTestMode::OnSelMode(UINT nID)
+{
+	switch (nID) {
+	case IDC_RADIO_1: m_nTestMode = 0; break; // Review
+	case IDC_RADIO_2: m_nTestMode = 1; break; // WAD
+	case IDC_RADIO_3: m_nTestMode = 2; break; // Vision
+	case IDC_RADIO_4: m_nTestMode = 3; break; // Angle
+	}
+}
+
+// ============================================================================
+// Move - send via shared memory
+// ============================================================================
+void CDlgTestMode::OnBtnMove()
+{
+	if (m_hWnd == nullptr || m_pRecipeMem == nullptr) return;
+
+	int iStick = m_nBfRowGlass;  // row = stick
+	int iCell  = m_nBColGlass;   // col = cell
+
+	int nStick = g_inRcpInfo.GetStickCount();
+	if (nStick < 1 || iStick >= nStick) return;
+	int nCell = g_inRcpInfo.GetCellCount(iStick);
+	if (nCell < 1 || iCell >= nCell) return;
+
+	// Get position data from g_inRcpInfo (DLL-side recipe)
+	S_StickInfo stickInfo = g_inRcpInfo.GetStickItem(iStick);
+	S_StickInfo stickInfo0 = g_inRcpInfo.GetStickItem(0);
+	S_CellInfo cellInfo = g_inRcpInfo.GetCellItem(iStick, iCell);
+
+	m_pRecipeMem->m_sRunState.Clear();
+	m_pRecipeMem->m_sRunState.m_dwData1 = M_CMD_TEST_MODE;
+	m_pRecipeMem->m_sRunState.m_dwData2 = 0;  // MOVE
+	m_pRecipeMem->m_sRunState.m_dwData3 = (DWORD)m_nTestMode;
+
+	// fData[0~1]: stick/cell index
+	m_pRecipeMem->m_sRunState.m_fData[0] = (double)iStick;
+	m_pRecipeMem->m_sRunState.m_fData[1] = (double)iCell;
+	// fData[2~3]: stick position (StageY, StageR)
+	m_pRecipeMem->m_sRunState.m_fData[2] = stickInfo.m_fStageY;
+	m_pRecipeMem->m_sRunState.m_fData[3] = stickInfo.m_fStageR;
+	// fData[4~5]: cell position (CellX, CellY)
+	m_pRecipeMem->m_sRunState.m_fData[4] = cellInfo.m_fCellX;
+	m_pRecipeMem->m_sRunState.m_fData[5] = cellInfo.m_fCellY;
+	// fData[6]: stick0 StageY (base position)
+	m_pRecipeMem->m_sRunState.m_fData[6] = stickInfo0.m_fStageY;
+	// fData[7]: cell count in this stick
+	m_pRecipeMem->m_sRunState.m_fData[7] = (double)nCell;
+	// fData[8~9]: HeadZ (ReviewZ, SpecZ, QualityZ, AngleZ - pack by mode)
+	m_pRecipeMem->m_sRunState.m_fData[8] = g_inRcpInfo.m_recipeMgr.m_sData.m_sHeadZ.m_fReviewZ;
+	m_pRecipeMem->m_sRunState.m_fData[9] = g_inRcpInfo.m_recipeMgr.m_sData.m_sHeadZ.m_fSpecZ;
+	m_pRecipeMem->m_sRunState.m_nData[0] = (int)(g_inRcpInfo.m_recipeMgr.m_sData.m_sHeadZ.m_fQualityZ * 1000);
+	m_pRecipeMem->m_sRunState.m_nData[1] = (int)(g_inRcpInfo.m_recipeMgr.m_sData.m_sHeadZ.m_fAngleZ * 1000);
+	// nData[2~7]: MotionOffset + OptionItem (for RecipeEditMgr)
+	m_pRecipeMem->m_sRunState.m_nData[2] = (int)(g_inRcpInfo.m_recipeMgr.m_sInfo.m_sMotionOffsetPos.m_fStageY * 1000);
+	m_pRecipeMem->m_sRunState.m_nData[3] = (int)(g_inRcpInfo.m_recipeMgr.m_sInfo.m_sMotionOffsetPos.m_fStageRotate * 1000);
+	m_pRecipeMem->m_sRunState.m_nData[4] = (int)(g_inRcpInfo.m_recipeMgr.m_sInfo.m_sMotionOffsetPos.m_fHeadReviewY * 1000);
+	m_pRecipeMem->m_sRunState.m_nData[5] = (int)(g_inRcpInfo.m_recipeMgr.m_sInfo.m_sOptionItem.m_fBackHeadGap * 1000);
+	m_pRecipeMem->m_sRunState.m_nData[6] = (int)(g_inRcpInfo.m_recipeMgr.m_sInfo.m_sOptionItem.m_fFrontHeadGap * 1000);
+
+	// Pack all cell X positions for 2-head pairing
+	for (int ic = 0; ic < nCell && ic < 40; ic++)
+	{
+		S_CellInfo ci = g_inRcpInfo.GetCellItem(iStick, ic);
+		m_pRecipeMem->m_sRunState.m_fData[10 + ic] = ci.m_fCellX;
+	}
+
+	::PostMessage(m_hWnd->m_hWnd, WM_RECIPE_EVENT, (WPARAM)M_RCP_TEST_MODE, 0);
+}
+
+// ============================================================================
+// Pre-Contact
+// ============================================================================
+void CDlgTestMode::OnBtnPreContact()
+{
+	if (m_hWnd == nullptr || m_pRecipeMem == nullptr) return;
+
+	m_pRecipeMem->m_sRunState.Clear();
+	m_pRecipeMem->m_sRunState.m_dwData1 = M_CMD_TEST_MODE;
+	m_pRecipeMem->m_sRunState.m_dwData2 = 1;
+
+	::PostMessage(m_hWnd->m_hWnd, WM_RECIPE_EVENT, (WPARAM)M_RCP_TEST_MODE, 1);
+}
+
+// ============================================================================
+// Contact
+// ============================================================================
+void CDlgTestMode::OnBtnContact()
+{
+	if (m_hWnd == nullptr || m_pRecipeMem == nullptr) return;
+
+	m_pRecipeMem->m_sRunState.Clear();
+	m_pRecipeMem->m_sRunState.m_dwData1 = M_CMD_TEST_MODE;
+	m_pRecipeMem->m_sRunState.m_dwData2 = 2;
+
+	::PostMessage(m_hWnd->m_hWnd, WM_RECIPE_EVENT, (WPARAM)M_RCP_TEST_MODE, 2);
+}
+
+// ============================================================================
+// UnContact
+// ============================================================================
+void CDlgTestMode::OnBtnUnContact()
+{
+	if (m_hWnd == nullptr || m_pRecipeMem == nullptr) return;
+
+	m_pRecipeMem->m_sRunState.Clear();
+	m_pRecipeMem->m_sRunState.m_dwData1 = M_CMD_TEST_MODE;
+	m_pRecipeMem->m_sRunState.m_dwData2 = 3;
+
+	::PostMessage(m_hWnd->m_hWnd, WM_RECIPE_EVENT, (WPARAM)M_RCP_TEST_MODE, 3);
+}
+
+
+// ============================================================================
+// LYS 2026-09-16 Save Image - Review(Align CCD) 카메라 2대 라이브 그랩 저장 요청. 실제 그랩/저장은 앱 RecipeEditMgr(M_CMD_TEST_MODE sub 4)
+// ============================================================================
+void CDlgTestMode::OnBtnSaveImage()
+{
+	if (m_hWnd == nullptr || m_pRecipeMem == nullptr) return;
+
+	m_pRecipeMem->m_sRunState.Clear();
+	m_pRecipeMem->m_sRunState.m_dwData1 = M_CMD_TEST_MODE;
+	m_pRecipeMem->m_sRunState.m_dwData2 = 4;	// SAVE_IMAGE
+
+	::PostMessage(m_hWnd->m_hWnd, WM_RECIPE_EVENT, (WPARAM)M_RCP_TEST_MODE, 4);
+}
+
+// ============================================================================
+// LYS 2026-09-16 카메라 조그 그리드 - 0행 헤더(Move/REL/<</>>), 1행 MOVE / 상대거리(편집 가능) / - / +
+// ============================================================================
+void CDlgTestMode::InitCamJogGrid()
+{
+	CRect rc;
+	m_gridCamJog.GetWindowRect(&rc);
+
+	m_gridCamJog.SetFont(dfcGetFontName(), 12, FW_BOLD);
+	m_gridCamJog.SetRowCount(2);
+	m_gridCamJog.SetColumnCount(4);
+	m_gridCamJog.SetFixedRowCol(1, 0);
+	m_gridCamJog.EnableToolTips(FALSE);
+	m_gridCamJog.EnableTitleTips(FALSE);
+	m_gridCamJog.SetEditable(TRUE);
+	m_gridCamJog.EnableSelection(FALSE);
+
+	int nWidth = (rc.Width() - 4) / 4;
+	for (int j = 0; j < 4; j++) m_gridCamJog.SetColumnWidth(j, nWidth);
+	int nHeight = (rc.Height() - 4) / 2;
+	for (int i = 0; i < 2; i++) m_gridCamJog.SetRowHeight(i, nHeight);
+
+	const TCHAR* szHead[4] = { _T("Move"), _T("REL"), _T("<<"), _T(">>") };
+	const TCHAR* szBody[4] = { _T("MOVE"), _T("1.000"), _T("-"), _T("+") };
+	for (int j = 0; j < 4; j++)
+	{
+		m_gridCamJog.SetItemText(0, j, szHead[j]);
+		m_gridCamJog.SetItemFormat(0, j, DT_SINGLELINE | DT_CENTER | DT_VCENTER);
+		m_gridCamJog.SetItemText(1, j, szBody[j]);
+		m_gridCamJog.SetItemFormat(1, j, DT_SINGLELINE | DT_CENTER | DT_VCENTER);
+		if (j != 1)
+		{
+			// MOVE / - / + 는 버튼 역할(읽기 전용), REL 칸만 편집
+			m_gridCamJog.SetItemState(1, j, m_gridCamJog.GetItemState(1, j) | GVIS_READONLY);
+			m_gridCamJog.SetItemBkColour(1, j, COLOR_GRAY);
+		}
+	}
+	m_gridCamJog.Invalidate(FALSE);
+}
+
+void CDlgTestMode::OnSelCam(UINT nID)
+{
+	switch (nID) {
+	case IDC_RADIO_5: m_nCamSel = 0; break; // CAM_Both
+	case IDC_RADIO_6: m_nCamSel = 1; break; // CAM_Left  (cam0, Y2/Y4)
+	case IDC_RADIO_7: m_nCamSel = 2; break; // CAM_Right (cam1, Y1/Y3)
+	}
+}
+
+// MOVE = REL 값 그대로(부호 포함), '-' = -|REL|, '+' = +|REL|
+void CDlgTestMode::OnSelJogItem(NMHDR* pNMHDR, LRESULT* pResult)
+{
+	NM_GRIDVIEW* pNMLV = reinterpret_cast<NM_GRIDVIEW*>(pNMHDR);
+	int nRow = (int)pNMLV->iRow;
+	int nCol = (int)pNMLV->iColumn;
+	*pResult = 0;
+
+	if (nRow != 1) return;
+	if (nCol == 1) return;	// REL 값 편집 셀
+
+	double dRel = _wtof(m_gridCamJog.GetItemText(1, 1));
+	if (nCol == 2) dRel = -fabs(dRel);
+	else if (nCol == 3) dRel = fabs(dRel);
+
+	SendCamJog(dRel);
+}
+
+void CDlgTestMode::SendCamJog(double dRel)
+{
+	if (m_hWnd == nullptr || m_pRecipeMem == nullptr) return;
+	if (fabs(dRel) < 0.0005) return;
+
+	m_pRecipeMem->m_sRunState.Clear();
+	m_pRecipeMem->m_sRunState.m_dwData1 = M_CMD_TEST_MODE;
+	m_pRecipeMem->m_sRunState.m_dwData2 = 5;	// CAM_JOG
+	m_pRecipeMem->m_sRunState.m_dwData3 = (DWORD)m_nTestMode;	// 0/1(Review/WAD)=Y1,Y2  2/3(VISION/ANGLE)=Y3,Y4
+	m_pRecipeMem->m_sRunState.m_fData[0] = dRel;
+	m_pRecipeMem->m_sRunState.m_nData[0] = m_nCamSel;
+
+	::PostMessage(m_hWnd->m_hWnd, WM_RECIPE_EVENT, (WPARAM)M_RCP_TEST_MODE, 5);
+}

@@ -96,13 +96,27 @@ UINT CCommTcpIpObjectPGMon::ThreadRaiseAlarm(LPVOID pParam)
 }
 
 // Doc 3. Error Code: box1 0~39, box2 100~139, socket 200~207, detail 300~303 / 400~403
+// LYS 2026-09-21 문서 표보다 블록마다 넓게 받는다.
+//   ELP 가 문서에 없는 코드를 실제로 보낸다 - 141(09-21), 140(09-21), 41(그 이전). 전부 버려졌고,
+//   그래서 코드 2개짜리 보고에서 HMI 알람이 1개만 떴다
+//   (PGMON 로그 10:04:45 `S(10), F(20), LEN(00010), Error Code(00101, )` - 141 은 WARN 만 남고 사라짐).
+//   문서 3장도 '이 값은 개발 상황에 따라 추가 혹은 변형된다' 고 적고 있다.
+//   블록당 50 으로 제한하는 이유: 알람 ID = ELP_ELECBOX_ALARM_START(8550) + code 인데
+//   빈 대역이 8550~8999 뿐이다(9001 부터 SDC_PPA_MODULE_FILE_EXIST_ERROR 가 쓴다).
+//   프레임이 깨져 들어온 엉뚱한 값은 계속 버린다.
+//   주의: 여기서 통과해도 Alarm.xls 에 행이 없으면 본문이 UNKNOWN 인 Heavy 알람으로 뜬다.
 bool CCommTcpIpObjectPGMon::IsValidAlarmCode(int iCode)
 {
-	if (iCode >= 0 && iCode <= 39)		return true;
-	if (iCode >= 100 && iCode <= 139)	return true;
-	if (iCode >= 200 && iCode <= 207)	return true;
-	if (iCode >= 300 && iCode <= 303)	return true;
-	if (iCode >= 400 && iCode <= 403)	return true;
+	//if (iCode >= 0 && iCode <= 39)		return true;
+	//if (iCode >= 100 && iCode <= 139)	return true;
+	//if (iCode >= 200 && iCode <= 207)	return true;
+	//if (iCode >= 300 && iCode <= 303)	return true;
+	//if (iCode >= 400 && iCode <= 403)	return true;
+	if (iCode >= 0 && iCode <= 49)		return true;	// 전장 박스1      (문서 0~39)
+	if (iCode >= 100 && iCode <= 149)	return true;	// 전장 박스2      (문서 100~139)
+	if (iCode >= 200 && iCode <= 249)	return true;	// 소켓/센서       (문서 200~207)
+	if (iCode >= 300 && iCode <= 349)	return true;	// 전장 박스1 상세 (문서 300~303)
+	if (iCode >= 400 && iCode <= 449)	return true;	// 전장 박스2 상세 (문서 400~403)
 
 	return false;
 }
@@ -288,7 +302,9 @@ void CCommTcpIpObjectPGMon::ParseS10F20(const CString& strCmd)
 		}
 		else
 		{
-			strLog.Format(_T("[%s] : S10F20 undefined error code(%d) skipped"), GetName(), iCode);
+			// LYS 2026-09-21 알람 ID 대역(8550~8999) 밖이라 알람으로 만들 수 없는 코드다.
+			//strLog.Format(_T("[%s] : S10F20 undefined error code(%d) skipped"), GetName(), iCode);
+			strLog.Format(_T("[%s] : S10F20 error code(%d) out of ELP block range - skipped (no alarm ID)"), GetName(), iCode);
 			m_pLogFileAccessor->KMLOG(WARN, strLog);
 		}
 	}

@@ -99,6 +99,9 @@
 #define IDC_COMBO_Z3                    1286
 #define IDC_EDIT_POS_PROBE_X            1287
 #define IDC_COMBO_Z4                    1288
+#define IDC_EDIT_EQ_PROBEID             1290
+#define IDC_BTN_SET_PROBEID             1291
+#define IDC_BTN_CLEAR_PROBEID           1292
 
 // Next default values for new objects
 // 

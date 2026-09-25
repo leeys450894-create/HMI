@@ -282,3 +282,67 @@ int CShareMemoryMgr::GetSys_ProbeChange()
 
 	return m_pFunction->GetSys_ProbeChange();
 }
+
+// LYS 2026-09-25 설비 내 프로브 ID 접근자 (헤더 주석 참조)
+static int __EqProbeIndex(int iProbeUnit)
+{
+	return (iProbeUnit >= CShareMemoryMgr::EQ_PROBE_UNIT_MIN && iProbeUnit <= CShareMemoryMgr::EQ_PROBE_UNIT_MAX) ? (iProbeUnit - 1) : -1;
+}
+
+CString CShareMemoryMgr::GetEqProbeID(int iProbeUnit)
+{
+	CCriticalSectionSync single(&m_cs_get, TRUE);
+	const int idx = __EqProbeIndex(iProbeUnit);
+	VTM_SYSTEM* p = (m_pFunction != nullptr) ? m_pFunction->GetSharedMemory() : nullptr;
+	if (idx < 0 || p == nullptr) return _T("");
+	CString str(p->m_szPROBEID[idx]);
+	str.Trim();
+	return str;
+}
+
+bool CShareMemoryMgr::SetEqProbeID(int iProbeUnit, LPCTSTR pszID)
+{
+	CCriticalSectionSync single(&m_cs_get, TRUE);
+	const int idx = __EqProbeIndex(iProbeUnit);
+	VTM_SYSTEM* p = (m_pFunction != nullptr) ? m_pFunction->GetSharedMemory() : nullptr;
+	if (idx < 0 || p == nullptr) return false;
+	_tcscpy_s(p->m_szPROBEID[idx], _countof(p->m_szPROBEID[idx]), (pszID != nullptr) ? pszID : _T(""));
+	return true;
+}
+
+CString CShareMemoryMgr::GetEqProbeMountTime(int iProbeUnit)
+{
+	CCriticalSectionSync single(&m_cs_get, TRUE);
+	const int idx = __EqProbeIndex(iProbeUnit);
+	VTM_SYSTEM* p = (m_pFunction != nullptr) ? m_pFunction->GetSharedMemory() : nullptr;
+	if (idx < 0 || p == nullptr) return _T("");
+	CString str(p->stProbeInfo[idx].m_szProbeCardIDTime);
+	str.Trim();
+	return str;
+}
+
+UINT CShareMemoryMgr::GetEqProbeUseCnt(int iProbeUnit)
+{
+	CCriticalSectionSync single(&m_cs_get, TRUE);
+	const int idx = __EqProbeIndex(iProbeUnit);
+	VTM_SYSTEM* p = (m_pFunction != nullptr) ? m_pFunction->GetSharedMemory() : nullptr;
+	if (idx < 0 || p == nullptr) return 0;
+	return p->stProbeInfo[idx].m_nUseCnt;
+}
+
+// Probe Align 레시피명: P1~P4 = PROBE_ALIGN<n>, P5(및 범위 밖) = PROBE_MEAS. ID 가 있으면 "_" + 앞 2자를 붙인다.
+//   SystemInitializeStep / DoWorkGlassAdsorptionStep / FunctionModuleProbeACCStep 에 있던 같은 switch 3벌을 대신한다.
+CString CShareMemoryMgr::GetEqProbeAlignRecipeName(int iProbeUnit)
+{
+	CString strName;
+	if (iProbeUnit >= EQ_PROBE_UNIT_MIN && iProbeUnit < EQ_PROBE_UNIT_MEAS)
+		strName.Format(_T("PROBE_ALIGN%d"), iProbeUnit);
+	else
+		strName = _T("PROBE_MEAS");
+
+	const CString strID = GetEqProbeID(iProbeUnit);
+	if (strID.IsEmpty() == FALSE)
+		strName.AppendFormat(_T("_%s"), (LPCTSTR)strID.Left(2));
+
+	return strName;
+}

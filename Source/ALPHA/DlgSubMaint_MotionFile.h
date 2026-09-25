@@ -48,6 +48,7 @@ private:
 	HANDLE		m_hStart4Event;
 	HANDLE		m_hStart5Event;
 	HANDLE		m_hCloseEvent;
+	volatile LONG	m_lMotionBusy;	// LYS 2026-09-17 1 while a motion ThreadFunc is running (blocks duplicate clicks)
 	HANDLE		m_hMultiEvent[5];
 	UINT static ThreadRun(LPVOID pParam);
 	UINT		ThreadFunc1();

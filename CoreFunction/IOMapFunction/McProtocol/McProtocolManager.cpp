@@ -525,6 +525,7 @@ bool CMcProtocolManager::InitDevice(int index)
 
 				if (m_vecnMcnetInfo[i].bOutOfService != true)
 				{
+
 					if (i != enumIO_DEVICE_WRITE_M)
 					{
 						m_vecpAddressScanner[i]->Start();

@@ -1,0 +1,2275 @@
+// DlgMainForm.cpp : 구현 파일입니다.
+//
+
+#include "pch.h"
+#include "ALPHA.h"
+#include "DlgMainForm.h"
+#include "Manager\SystemConfigMgr.h"	// LYS 2026-06-26 OCP option
+#include "afxdialogex.h"
+#include "AuroraMgr.h"
+#include "Alarm\AlarmController.h"	// LYS 2026-09-02 SW Limit 알람용
+#include "SystemParamShare.h"
+
+#include "MainSubDlgWin.h"
+
+//#include "Manager\MotorControlMgr.h"
+#include "Manager\PositionConfigMgr.h"
+#include "Manager\IOMapControlMgr.h"
+#include "Manager\SequenceManager.h"
+#include "Manager\MaintControlMgr.h"
+#include "Manager\ShareMemoryMgr.h"
+#include "Manager/MCCLogMgr.h"
+#include "Manager/RecipeMgr.h"
+#include "Manager/SACCMgr.h"
+#include "Alarm\AlarmMonitorMgr.h"
+
+#include "DlgNaviBar.h"
+#include "D_DisplayMessage.h"
+#include "DlgSubOperate.h"
+#include "DlgSubMaint.h"
+#include "DlgSubRecipe.h"
+#include "DlgSubAlarm.h"
+#include "DlgSubConfig.h"
+#include "DlgSubLog.h"
+#include "DlgAlignCCD.h"
+#include "DlgSubData.h"
+#include "DlgSubManual.h"
+#include "CD_PopUp_Alarm_F.h"
+#include "FunctionModule/FunctionModuleEQState.h"
+
+#include "..\Include\DefinesCIM.h"
+
+static CString ColumnName[] =
+{
+	_T("Name."),
+	_T("Num"),
+	_T("Current"),
+	_T("E"),
+	_T("L+"),
+	_T("L-"),
+	_T("H"),
+};
+static long ColumnSize[] =
+{
+	120,
+	25,
+	70,
+	25,
+	25,
+	25,
+	25,
+};
+enum enumColumnName
+{
+	enumColumnName_Value1,
+	enumColumnName_Value2,
+	enumColumnName_Value3,
+	enumColumnName_Value4,
+	enumColumnName_Value5,
+	enumColumnName_Value6,
+	enumColumnName_Value7,
+	enumColumnName_End,
+};
+
+static CString ColumnName2[] =
+{
+	_T("No."),
+	_T("Description"),
+};
+static long ColumnSize2[] =
+{
+	60,
+	240,
+};
+enum enumColumnName2
+{
+	enumColumnName2_No = 0,
+	enumColumnName2_Value1,
+	enumColumnName2_End,
+};
+
+
+#define _df_MAX_MOTION			50
+#define _df_MAX_IO_INFO			500
+
+static CString ColumnMotionName[] =
+{
+	_T("Y"),
+	_T("X"),
+	_T("R"),
+	_T("ALIGN X"),
+	_T("PICKER Z"),
+	_T("MEAS1 X"),
+	_T("MEAS2 X"),
+	_T("MEAS1 Z"),
+	_T("MEAS2 Z"),
+	_T("MEAS1 WDI Z"),
+	_T("MEAS2 WDI Z"),
+};
+
+// CDlgMainForm 대화 상자입니다.
+
+IMPLEMENT_DYNAMIC(CDlgMainForm, CD_AuroraDlgWin)
+
+CDlgMainForm::CDlgMainForm(CAuroraMgr *pAuroraMgr, CWnd* pParent /*=NULL*/)
+	: CD_AuroraDlgWin(IDD_DLG_MAIN_FORM, pParent)
+	, m_pAuroraMgr(pAuroraMgr)
+	, m_pWorkThread(NULL)
+	, m_bCloseSystem(false)
+	, m_lOldACSafety(-1)
+{
+	m_vecpMainSubDlg.clear();
+	m_vecpMainSubDlg.resize(enumNavigateIDCount, nullptr);
+	m_vecpMainSubDlg[enumNavigateID_OPERATE] = dynamic_cast<CMainSubDlgWin*>(new CDlgSubOperate(pAuroraMgr));
+	m_vecpMainSubDlg[enumNavigateID_RESULT_DATA] = dynamic_cast<CMainSubDlgWin*>(new CDlgSubData(pAuroraMgr));
+////	m_vecpMainSubDlg[enumNavigateID_RESULT_DATA] = dynamic_cast<CMainSubDlgWin*>(new CD_MainResultData(pAuroraMgr->GetResultCollectMgrPtr()));
+	m_vecpMainSubDlg[enumNavigateID_MAINT] = dynamic_cast<CMainSubDlgWin*>(new CDlgSubMaint(pAuroraMgr));
+	m_vecpMainSubDlg[enumNavigateID_MANUAL] = dynamic_cast<CMainSubDlgWin*>(new CDlgSubManual(pAuroraMgr));
+	m_vecpMainSubDlg[enumNavigateID_RECIPE] = dynamic_cast<CMainSubDlgWin*>(new CDlgSubRecipe(pAuroraMgr));
+	m_vecpMainSubDlg[enumNavigateID_SYSTEM_LOG] = dynamic_cast<CMainSubDlgWin*>(new CDlgSubLog(pAuroraMgr));
+	m_vecpMainSubDlg[enumNavigateID_CONFIG] = dynamic_cast<CMainSubDlgWin*>(new CDlgSubConfig(pAuroraMgr));
+	m_vecpMainSubDlg[enumNavigateID_ALARM] = dynamic_cast<CMainSubDlgWin*>(new CDlgSubAlarm(pAuroraMgr));
+
+	// Navi
+	m_pMainNavigateDlg = new CDlgNaviBar(pAuroraMgr);
+
+	// CCD
+	for (int  i = 0; i < MAIN_CCD_MAX_NUM; i++)
+	{
+		m_pMainAlignCCD[i] = new CDlgAlignCCD(pAuroraMgr, i);
+	}
+
+	// Alarm
+//	m_pPopUp_AlarmDlg = nullptr;
+	m_pPopUp_AlarmDlg = new CD_PopUp_Alarm_F(pAuroraMgr->GetMaintControlMgr());
+
+	//----------------------------------------------------------
+	// FONT 만들기
+	//----------------------------------------------------------
+	LOGFONT lf;
+	memset(&lf, 0, sizeof(LOGFONT));
+	lf.lfHeight = 15;
+	_tcscpy_s(lf.lfFaceName, _countof(lf.lfFaceName), _T("Arial"));
+	VERIFY(m_logFont.CreateFontIndirect(&lf));
+
+	m_hEvtKillThread = CreateEvent(NULL, FALSE, FALSE, NULL);	// auto reset, initially Reset
+	m_hEvtThreadKilled = CreateEvent(NULL, FALSE, FALSE, NULL);	// auto reset, initially Reset
+
+	ZeroMemory(&m_stTriggerInfo, sizeof(m_stTriggerInfo));
+	ZeroMemory(&m_stMoterInfo, sizeof(m_stMoterInfo));
+	ZeroMemory(&m_bMccSignal, sizeof(m_bMccSignal));
+	
+}
+
+CDlgMainForm::~CDlgMainForm()
+{
+	// 2023.03.06 add
+	KillTimer(MAIN_STATE_TIMER_ID);
+	KillTimer(MAIN_STATE_TIMER_ID + 1);
+	KillTimer(MAIN_STATE_TIMER_ID + 2);
+	KillTimer(MAIN_STATE_TIMER_ID + 3);
+
+	WaitTerminateWorkerThread();
+
+	for (int i = 0; i < MAIN_CCD_MAX_NUM; i++)
+	{
+		if (m_pMainAlignCCD[i])
+		{
+			m_pMainAlignCCD[i]->DestroyWindow();
+			delete m_pMainAlignCCD[i];
+			m_pMainAlignCCD[i] = nullptr;
+		}
+	}
+
+	if (m_pMainNavigateDlg)
+	{
+		m_pMainNavigateDlg->DestroyWindow();
+		delete m_pMainNavigateDlg;
+		m_pMainNavigateDlg = nullptr;
+	}
+
+	if (m_pPopUp_AlarmDlg)
+	{
+		m_pPopUp_AlarmDlg->DestroyWindow();
+		delete m_pPopUp_AlarmDlg;
+		m_pPopUp_AlarmDlg = nullptr;
+	}
+
+	// 2023.03.06 add
+	for (int i = 0; i < m_vecpMainSubDlg.size(); ++i)
+	{
+		if (m_vecpMainSubDlg[i])
+		{
+			m_vecpMainSubDlg[i]->DestroyWindow();
+			delete m_vecpMainSubDlg[i];
+			m_vecpMainSubDlg[i] = nullptr;
+		}
+	}
+
+	m_logFont.DeleteObject();
+
+	CloseHandle(m_hEvtKillThread);
+	CloseHandle(m_hEvtThreadKilled);
+}
+
+void CDlgMainForm::DoDataExchange(CDataExchange* pDX)
+{
+	CD_AuroraDlgWin::DoDataExchange(pDX);
+	DDX_Control(pDX, IDC_GRID_LIST_MOTION_INFO, m_gridListMotionInfo);
+	DDX_Control(pDX, IDC_GRID_LIST_INFO_IO, m_gridListIOnfo);
+	DDX_Control(pDX, IDC_STATIC_MOTION_INFO, m_LabelInfo);
+	DDX_Control(pDX, IDC_STATIC_SYSTEM_LOG, m_LabelInfo2);
+	DDX_Control(pDX, IDC_STATIC_INFO_IO, m_LabelInfo3);
+	DDX_Control(pDX, IDC_LIST_LOG, m_listLog);
+	DDX_Control(pDX, IDC_CHK_LIVE_CCD1, m_chkLiveH1);
+	DDX_Control(pDX, IDC_CHK_LIVE_CCD2, m_chkLiveH2);
+}
+
+
+BEGIN_MESSAGE_MAP(CDlgMainForm, CD_AuroraDlgWin)
+	ON_MESSAGE(WM_MSG_UPDATE_CHANGE_NOT_INITIALIZE, &CDlgMainForm::OnUpdateChangeNotInitialize)
+	ON_MESSAGE(WM_MSG_UPDATE_CHANGE_INITIALIZE, &CDlgMainForm::OnUpdateChangeInitialize)
+	ON_MESSAGE(WM_MSG_UPDATE_CHANGE_VIEW_STATE, &CDlgMainForm::OnUpdateChangeViewState)
+	ON_MESSAGE(WM_MSG_UPDATE_RECIPE_INFORMATION, &CDlgMainForm::OnUpdateDataBaseInformation)
+	ON_MESSAGE(WM_MSG_UPDATE_SEQ_ITEM_ELAPSED_TIME, &CDlgMainForm::OnUpdateSeqItemElapsedTime)
+	ON_MESSAGE(WM_MSG_UPDATE_MEASURS_ELAPSED_TIME, &CDlgMainForm::OnUpdateMeasureElapsedTime)
+	ON_MESSAGE(WM_MSG_UPDATE_CYCLE_INSPECTION_START, &CDlgMainForm::OnUpdateCycleInspectionStart)
+//	ON_MESSAGE(WM_MSG_UPDATE_CYCLE_INSPECTION_RESULT, &CDlgMainForm::OnUpdateCycleInspectionResult)
+	ON_MESSAGE(WM_MSG_UPDATE_CYCLE_INSPECTION_COMPLETE, &CDlgMainForm::OnUpdateCycleInspectionComplete)
+	ON_MESSAGE(WM_MSG_UPDATE_POSITION_STATE, &CDlgMainForm::OnUpdateMotorPosition)
+	ON_MESSAGE(WM_MSG_UPDATE_CHANGE_CIM_STATE, &CDlgMainForm::OnUpdateCIMState)
+	ON_MESSAGE(WM_MSG_UPDATE_CHANGE_CONTROLMODE, &CDlgMainForm::OnUpdateControlMode)
+	
+	ON_MESSAGE(WM_GUILOG, &CDlgMainForm::OnGuiLog)
+	ON_MESSAGE(WM_MSG_UPDATE_CLOSE_SYSTEM, &CDlgMainForm::OnCloseSysrem)
+	ON_MESSAGE(WM_MSG_UPDATE_LAMP_TIME, &CDlgMainForm::OnUpdateDataLampTime)
+	ON_MESSAGE(WM_MSG_WRITE_LAMP_TIME, &CDlgMainForm::OnWriteLampTime)
+	ON_MESSAGE(WM_MSG_UPDATE_COLOR, &CDlgMainForm::OnUpdateMeasColor)
+	
+	ON_MESSAGE(WM_MSG_CCD_LIVE, &CDlgMainForm::OnCcdLiveMode)
+
+ON_WM_SHOWWINDOW()
+ON_WM_TIMER()
+ON_BN_CLICKED(IDC_BTN_ZOOM_IN, &CDlgMainForm::OnBnClickedButton1)
+ON_BN_CLICKED(IDC_BTN_ZOOM_IN2, &CDlgMainForm::OnBnClickedBtnZoomIn2)
+ON_BN_CLICKED(IDC_BTN_ZOOM_IN3, &CDlgMainForm::OnBnClickedBtnZoomIn3)
+ON_BN_CLICKED(IDC_BTN_ZOOM_IN4, &CDlgMainForm::OnBnClickedBtnZoomIn4)
+ON_BN_CLICKED(IDC_BTN_ZOOM_IN5, &CDlgMainForm::OnBnClickedBtnZoomIn5)
+ON_BN_CLICKED(IDC_BTN_ZOOM_IN7, &CDlgMainForm::OnBnClickedBtnZoomIn7)
+ON_BN_CLICKED(IDC_CHK_LIVE_CCD1, &CDlgMainForm::OnBnClickedChkLiveCcd1)
+ON_BN_CLICKED(IDC_CHK_LIVE_CCD2, &CDlgMainForm::OnBnClickedChkLiveCcd2)
+ON_BN_CLICKED(IDC_BTN_CCD_RESET, &CDlgMainForm::OnBnClickedBtnCcdReset)	// LYS 2026-09-07
+END_MESSAGE_MAP()
+
+
+// CDlgMainForm 메시지 처리기입니다.
+
+
+BOOL CDlgMainForm::OnInitDialog()
+{
+	CD_AuroraDlgWin::OnInitDialog();
+
+	// TODO:  여기에 추가 초기화 작업을 추가합니다.
+	//---------------------------------------------------------------------
+	// OPERATION 항목을 생성한다.
+	//---------------------------------------------------------------------
+	CRect rtROI;
+	GetDlgItem(IDC_STATIC_OPERATION)->GetWindowRect(&rtROI);
+	ScreenToClient(&rtROI);
+	m_vecpMainSubDlg[enumNavigateID_OPERATE]->Create(IDD_DLG_SUB_OPERATE, this);
+	m_vecpMainSubDlg[enumNavigateID_OPERATE]->ShowWindow(SW_SHOW);
+	m_vecpMainSubDlg[enumNavigateID_OPERATE]->MoveWindow(rtROI);
+
+	//---------------------------------------------------------------------
+	GetDlgItem(IDC_STATIC_OPERATION)->GetWindowRect(&rtROI);
+	ScreenToClient(&rtROI);
+	m_vecpMainSubDlg[enumNavigateID_MAINT]->Create(IDD_DLG_SUB_MAINT, this);
+	m_vecpMainSubDlg[enumNavigateID_MAINT]->ShowWindow(SW_HIDE);
+	m_vecpMainSubDlg[enumNavigateID_MAINT]->MoveWindow(rtROI);
+
+	//---------------------------------------------------------------------
+	GetDlgItem(IDC_STATIC_OPERATION)->GetWindowRect(&rtROI);
+	ScreenToClient(&rtROI);
+	m_vecpMainSubDlg[enumNavigateID_RECIPE]->Create(IDD_DLG_SUB_RECIPE, this);
+	m_vecpMainSubDlg[enumNavigateID_RECIPE]->ShowWindow(SW_HIDE);
+	m_vecpMainSubDlg[enumNavigateID_RECIPE]->MoveWindow(rtROI);
+
+	//---------------------------------------------------------------------
+	GetDlgItem(IDC_STATIC_OPERATION)->GetWindowRect(&rtROI);
+	ScreenToClient(&rtROI);
+	m_vecpMainSubDlg[enumNavigateID_SYSTEM_LOG]->Create(IDD_DLG_SUB_LOG, this);
+	m_vecpMainSubDlg[enumNavigateID_SYSTEM_LOG]->ShowWindow(SW_HIDE);
+	m_vecpMainSubDlg[enumNavigateID_SYSTEM_LOG]->MoveWindow(rtROI);
+
+	//---------------------------------------------------------------------
+	GetDlgItem(IDC_STATIC_OPERATION)->GetWindowRect(&rtROI);
+	ScreenToClient(&rtROI);
+	m_vecpMainSubDlg[enumNavigateID_CONFIG]->Create(IDD_DLG_SUB_CONFIG, this);
+	m_vecpMainSubDlg[enumNavigateID_CONFIG]->ShowWindow(SW_HIDE);
+	m_vecpMainSubDlg[enumNavigateID_CONFIG]->MoveWindow(rtROI);
+
+	//---------------------------------------------------------------------
+	GetDlgItem(IDC_STATIC_OPERATION)->GetWindowRect(&rtROI);
+	ScreenToClient(&rtROI);
+	m_vecpMainSubDlg[enumNavigateID_ALARM]->Create(IDD_DLG_SUB_ALARM, this);
+	m_vecpMainSubDlg[enumNavigateID_ALARM]->ShowWindow(SW_HIDE);
+	m_vecpMainSubDlg[enumNavigateID_ALARM]->MoveWindow(rtROI);
+
+	//---------------------------------------------------------------------
+	// DATA
+	GetDlgItem(IDC_STATIC_OPERATION)->GetWindowRect(&rtROI);
+	ScreenToClient(&rtROI);
+	m_vecpMainSubDlg[enumNavigateID_RESULT_DATA]->Create(IDD_DLG_SUB_DATA, this);
+	m_vecpMainSubDlg[enumNavigateID_RESULT_DATA]->ShowWindow(SW_HIDE);
+	m_vecpMainSubDlg[enumNavigateID_RESULT_DATA]->MoveWindow(rtROI);
+
+	//---------------------------------------------------------------------
+	// MANUAL
+	GetDlgItem(IDC_STATIC_OPERATION)->GetWindowRect(&rtROI);
+	ScreenToClient(&rtROI);
+	m_vecpMainSubDlg[enumNavigateID_MANUAL]->Create(IDD_DLG_SUB_MANUAL, this);
+	m_vecpMainSubDlg[enumNavigateID_MANUAL]->ShowWindow(SW_HIDE);
+	m_vecpMainSubDlg[enumNavigateID_MANUAL]->MoveWindow(rtROI);
+
+
+	//---------------------------------------------------------------------
+	// NAVI를 표시한다.
+	//---------------------------------------------------------------------
+	CRect rtROI2;
+	GetDlgItem(IDC_STATIC_NAVI_INFO)->GetWindowRect(&rtROI2);
+	ScreenToClient(&rtROI2);
+	m_pMainNavigateDlg->Create(IDD_DLG_MAIN_NAVI, this);
+	m_pMainNavigateDlg->ShowWindow(SW_SHOW);
+	m_pMainNavigateDlg->MoveWindow(rtROI2);
+
+	//---------------------------------------------------------------------
+	// CCD 를 표시한다.
+	//---------------------------------------------------------------------
+	// CCD
+	CMCCLogMgr::GetInstance()->SetMCC_Action(MCC_A_INIT_CAM, TRUE);
+
+	CRect rtROI3;
+	GetDlgItem(IDC_STATIC_POSITION_CCD1)->GetWindowRect(&rtROI3);
+	ScreenToClient(&rtROI3);
+	m_pMainAlignCCD[0]->Create(IDD_DLG_SUB_CCD, this);
+	m_pMainAlignCCD[0]->ShowWindow(SW_SHOW);
+	m_pMainAlignCCD[0]->MoveWindow(rtROI3);
+	m_pMainAlignCCD[0]->DoWorkStartGrab();
+	m_pMainAlignCCD[0]->CCDDisplayDlg(this, rtROI3);
+
+	GetDlgItem(IDC_STATIC_POSITION_CCD2)->GetWindowRect(&rtROI3);
+	ScreenToClient(&rtROI3);
+	m_pMainAlignCCD[1]->Create(IDD_DLG_SUB_CCD, this);
+	m_pMainAlignCCD[1]->ShowWindow(SW_SHOW);
+	m_pMainAlignCCD[1]->MoveWindow(rtROI3);
+	m_pMainAlignCCD[1]->DoWorkStartGrab();
+	m_pMainAlignCCD[1]->CCDDisplayDlg(this, rtROI3);
+
+	GetDlgItem(IDC_STATIC_POSITION_CCD3)->GetWindowRect(&rtROI3);
+	ScreenToClient(&rtROI3);
+	m_pMainAlignCCD[2]->Create(IDD_DLG_SUB_CCD, this);
+	m_pMainAlignCCD[2]->ShowWindow(SW_HIDE);		// LYS 2026-08-24 CCD 3,4 Hide
+	m_pMainAlignCCD[2]->MoveWindow(rtROI3);
+	m_pMainAlignCCD[2]->DoWorkStartGrab();
+	m_pMainAlignCCD[2]->CCDDisplayDlg(this, rtROI3);
+
+	GetDlgItem(IDC_STATIC_POSITION_CCD4)->GetWindowRect(&rtROI3);
+	ScreenToClient(&rtROI3);
+	m_pMainAlignCCD[3]->Create(IDD_DLG_SUB_CCD, this);
+	m_pMainAlignCCD[3]->ShowWindow(SW_HIDE);		// LYS 2026-08-24 CCD 3,4 Hide
+	m_pMainAlignCCD[3]->MoveWindow(rtROI3);
+	m_pMainAlignCCD[3]->DoWorkStartGrab();
+	m_pMainAlignCCD[3]->CCDDisplayDlg(this, rtROI3);
+
+	CMCCLogMgr::GetInstance()->SetMCC_Action(MCC_A_INIT_CAM, FALSE);
+
+	//---------------------------------------------------------------------
+	// ALARM 를 생성한다.
+	//---------------------------------------------------------------------
+	m_pPopUp_AlarmDlg->Create(IDD_PUPUP_ALARM_F, this);
+	m_pPopUp_AlarmDlg->ShowWindow(SW_HIDE);
+
+	//---------------------------------------------------------------------
+	// message 전달을 위해서 hwnd 를 받아 둔다.
+	//---------------------------------------------------------------------
+	CWindowEventHandler::GetInstance()->SetMessageHandle(enumWndID_FRAME, GetSafeHwnd());
+
+
+	//---------------------------------------------------------------------
+	// 모션 타이틀에 색상을 입혀준다.
+	//---------------------------------------------------------------------
+	m_LabelInfo.SetBorder(TRUE, TRUE);
+	m_LabelInfo.SetBkColor(RGB(0, 32, 0));
+	m_LabelInfo.SetTextColor(RGB(255, 255, 192));
+	m_LabelInfo.SetFontBold(TRUE);
+
+	//---------------------------------------------------------------------
+	// 로그 타이틀에 색상을 입혀준다.
+	//---------------------------------------------------------------------
+	m_LabelInfo2.SetBorder(TRUE, TRUE);
+	m_LabelInfo2.SetBkColor(RGB(0, 32, 0));
+	m_LabelInfo2.SetTextColor(RGB(255, 255, 192));
+	m_LabelInfo2.SetFontBold(TRUE);
+
+	//---------------------------------------------------------------------
+	// 트리거 타이틀에 색상을 입혀준다.
+	//---------------------------------------------------------------------
+	m_LabelInfo3.SetBorder(TRUE, TRUE);
+	m_LabelInfo3.SetBkColor(RGB(0, 32, 0));
+	m_LabelInfo3.SetTextColor(RGB(255, 255, 192));
+	m_LabelInfo3.SetFontBold(TRUE);
+
+	//---------------------------------------------------------------------
+	// 모션 리스트의 정보를 채워준다.
+	//---------------------------------------------------------------------
+	__InitListControl();
+	__InitialListData();
+
+	//---------------------------------------------------------------------
+	// 트리거 리스트의 정보를 채워준다.
+	//---------------------------------------------------------------------
+	__InitListControl2();
+	__InitialListData2();
+
+	//---------------------------------------------------------------------
+	// 로그 Font 설정
+	//---------------------------------------------------------------------
+	m_listLog.SetFont(&m_logFont);
+
+	CLogWrapper::GetInstance()->SetLogMsgWindow(GetSafeHwnd());
+
+	CString strLog;
+	strLog.Format(_T("This app start - Name [ %s ], Version : [ %s ]"), m_pAuroraMgr->GetSystemInfo().name.GetString(), m_pAuroraMgr->GetSystemInfo().version.GetString());
+	CLogWrapper::GetInstance()->KMLOG(SYST, strLog);
+	CLogWrapper::GetInstance()->KMLOG(OPER, strLog);
+
+	BeginThread_WorkProc();
+
+	SetTimer(MAIN_STATE_TIMER_ID, 600, NULL);
+	SetTimer(MAIN_STATE_TIMER_ID+1, 5000, NULL);
+	SetTimer(MAIN_STATE_TIMER_ID + 2, 10, NULL);
+	SetTimer(MAIN_STATE_TIMER_ID + 3, 1000, NULL);
+
+	m_chkLiveH1.SetCheck(TRUE);
+	m_chkLiveH2.SetCheck(TRUE);
+
+
+	return TRUE;  // return TRUE unless you set the focus to a control
+				  // 예외: OCX 속성 페이지는 FALSE를 반환해야 합니다.
+}
+
+
+void CDlgMainForm::OnShowWindow(BOOL bShow, UINT nStatus)
+{
+	CD_AuroraDlgWin::OnShowWindow(bShow, nStatus);
+
+	// TODO: 여기에 메시지 처리기 코드를 추가합니다.
+	if (bShow)
+	{
+		;
+		//// 윈도우 show 상태를 변경해야 OnShowWindow event 가 발생한다.
+		//m_pMainLoggingDlg->ShowWindow(SW_HIDE);
+		//m_pMainLoggingDlg->ShowWindow(SW_SHOW);
+		//
+		////// list 정보를 갱신한다.
+		////__InitListData_PtrnGenController();
+		////
+		////RefreshPGOpenClose();
+		////
+		////__RefreshListData_PGACVoltageControl();
+	}
+	else
+	{
+		for (size_t i = 0; i < m_vecpMainSubDlg.size(); ++i)
+		{
+			if (m_vecpMainSubDlg[i])
+			{
+				m_vecpMainSubDlg[i]->ShowWindow(SW_HIDE);
+			}
+		}
+	}
+}
+
+LRESULT CDlgMainForm::OnUpdateChangeNotInitialize(WPARAM wp, LPARAM lp)
+{
+	for (size_t i = 0; i < m_vecpMainSubDlg.size(); ++i)
+	{
+		if (i == enumNavigateID_OPERATE || i == enumNavigateID_ALARM)
+			continue;
+
+		if (m_vecpMainSubDlg[i])
+		{
+			m_vecpMainSubDlg[i]->EnableWindow(FALSE);
+		}
+	}
+
+	return 0;
+}
+
+LRESULT CDlgMainForm::OnUpdateChangeInitialize(WPARAM wp, LPARAM lp)
+{
+	// 하위 창들에게 정보를 전달한다.
+	bool bInitialize = (bool)lp;
+	
+
+	for (size_t i = 0; i < m_vecpMainSubDlg.size(); ++i)
+	{
+		if (m_vecpMainSubDlg[i])
+		{
+			m_vecpMainSubDlg[i]->EnableWindow(TRUE);
+
+			if (bInitialize == true)
+				m_vecpMainSubDlg[i]->UpdateChangeInitialize();
+
+			m_vecpMainSubDlg[i]->ShowWindow(SW_HIDE);
+		}
+	}
+
+	m_vecpMainSubDlg[enumNavigateID_OPERATE]->ShowWindow(SW_SHOW);
+
+
+	// 툴바도 업데이트 해준다.
+	m_pMainNavigateDlg->UpdateChangeInitialize();
+
+	return 0;
+}
+
+LRESULT CDlgMainForm::OnUpdateChangeViewState(WPARAM wp, LPARAM lp)
+{
+	int index = (int)wp;
+
+	for (size_t i = 0; i < m_vecpMainSubDlg.size(); ++i)
+	{
+		if (m_vecpMainSubDlg[i])
+		{
+			m_vecpMainSubDlg[i]->ShowWindow(SW_HIDE);
+		}
+	}
+
+//	if (CRecipeMgr::GetInstance()->GetReportmWnd() != nullptr)
+//		CRecipeMgr::GetInstance()->GetReportmWnd()->ShowWindow(SW_HIDE);
+
+	if (m_vecpMainSubDlg[index])
+	{
+		if (index == enumNavigateID_ALARM)
+		{
+			m_vecpMainSubDlg[index]->EnableWindow(TRUE);
+		}
+
+		//if (index == enumNavigateID_RECIPE)
+		//{
+		//	if (CRecipeMgr::GetInstance()->GetReportmWnd() != nullptr)
+		//		CRecipeMgr::GetInstance()->GetReportmWnd()->ShowWindow(SW_SHOW);
+		//}
+		//else
+		{
+			m_vecpMainSubDlg[index]->RefreshListData();
+			m_vecpMainSubDlg[index]->ShowReportAlarm();
+			m_vecpMainSubDlg[index]->ShowWindow(SW_SHOW);
+		}
+		
+		m_pMainNavigateDlg->ChangeCheck(index);
+	}
+
+	return 0;
+}
+
+LRESULT CDlgMainForm::OnUpdateDataBaseInformation(WPARAM wp, LPARAM lp)
+{
+	//// 각 Item 의 Object 에 Recipe 정보를 업데이트 한다.
+	CSequenceManager::GetInstance()->UpdateDataBaseInformation();
+
+	// 각 Item 의 UI 에 Recipe 정보를 업데이트 한다.
+	for (size_t i = 0; i < m_vecpMainSubDlg.size(); ++i)
+	{
+		if (m_vecpMainSubDlg[i])
+		{
+			m_vecpMainSubDlg[i]->UpdateRecipeInformation();
+		}
+	}
+
+	CWindowEventHandler::GetInstance()->PostMessageToUI(enumWndID_TITLE, WM_MSG_UPDATE_RECIPE_INFORMATION, NULL, NULL);
+
+	return 0;
+}
+
+
+LRESULT CDlgMainForm::OnUpdateSeqItemElapsedTime(WPARAM wp, LPARAM lp)
+{
+	// 각 Item 의 UI 에 Recipe 정보를 업데이트 한다.
+	for (size_t i = 0; i < m_vecpMainSubDlg.size(); ++i)
+	{
+		if (m_vecpMainSubDlg[i])
+		{
+			m_vecpMainSubDlg[i]->UpdateSeqItemElapsedTime();
+		}
+	}
+
+	return 0;
+}
+
+LRESULT CDlgMainForm::OnUpdateMeasureElapsedTime(WPARAM wp, LPARAM lp)
+{
+	// 각 Item 의 UI 에 Recipe 정보를 업데이트 한다.
+	bool bStart = (bool)lp;
+
+	for (size_t i = 0; i < m_vecpMainSubDlg.size(); ++i)
+	{
+		if (m_vecpMainSubDlg[i])
+		{
+			m_vecpMainSubDlg[i]->UpdateMeasureElapsedTime(bStart);
+		}
+	}
+
+	return 0;
+}
+
+LRESULT CDlgMainForm::OnUpdateCycleInspectionStart(WPARAM wp, LPARAM lp)
+{
+	// 각 Item 의 UI 에 Recipe 정보를 업데이트 한다.
+	for (size_t i = 0; i < m_vecpMainSubDlg.size(); ++i)
+	{
+		if (m_vecpMainSubDlg[i])
+		{
+			m_vecpMainSubDlg[i]->UpdateCycleInspectionStart();
+			m_vecpMainSubDlg[i]->UpdateRecipeInformation();
+		}
+	}
+
+	// 툴바도 업데이트 해준다.
+	m_pMainNavigateDlg->UpdateCycleInspectionStart();
+
+//	m_pAuroraMgr->GetIOMapControlMgrPtr()->SetSinalTowerRun();
+
+	return 0;
+}
+
+LRESULT CDlgMainForm::OnUpdateCycleInspectionResult(WPARAM wp, LPARAM lp)
+{
+	// 각 Item 의 UI 에 Recipe 정보를 업데이트 한다.
+	for (size_t i = 0; i < m_vecpMainSubDlg.size(); ++i)
+	{
+		if (m_vecpMainSubDlg[i])
+		{
+			m_vecpMainSubDlg[i]->UpdateCycleInspectionResult();
+		}
+	}
+
+	return 0;
+}
+
+LRESULT CDlgMainForm::OnUpdateCycleInspectionComplete(WPARAM wp, LPARAM lp)
+{
+	// 각 Item 의 UI 에 Recipe 정보를 업데이트 한다.
+	for (size_t i = 0; i < m_vecpMainSubDlg.size(); ++i)
+	{
+		if (m_vecpMainSubDlg[i])
+		{
+			m_vecpMainSubDlg[i]->UpdateCycleInspectionComplete();
+		}
+	}
+
+	// 툴바도 업데이트 해준다.
+	m_pMainNavigateDlg->UpdateCycleInspectionComplete();
+
+	m_pAuroraMgr->GetMaintControlMgr()->GetIOMapControlMgrPtr()->SetMemoryBitToDevice(PLC_BIT_W_GLASS_SENSOR_POWER_ON, false);	// jsyoon 2022.05.26 add
+
+	bool bFail = (bool)lp;
+	if (bFail == true)
+	{
+		CD_DisplayMessage dlg(_T("The Inspection is Fail.!!"));
+		dlg.DoModal();
+	}
+	else
+	{
+		// 검사 완료 확인 버튼을 표시해준다.
+		if (CSystemParamShare::GetInstance()->IsForceStopByUser() == true)
+		{
+			CSystemParamShare::GetInstance()->SetForceStopByUser(false);
+
+			//CD_DisplayMessage dlg(_T("Stoped By User!!"));
+			//dlg.DoModal();
+
+			CD_DisplayMessage dlg(_T("Need to initialize.. because, force stop by user!!"));
+			dlg.DoModal();
+		}
+		else
+		{
+			if (m_pAuroraMgr->GetShareMemoryMgrPtr()->GetSys_MachineMode() != df_HOST_ONLINE_REMOTE)
+			{
+				CD_DisplayMessage dlg(_T("The Inspection is Complete.!!"));
+				dlg.DoModal();
+			}
+		}
+	}
+
+	// cycle mode 가 완료 되었으므로 
+	CSystemParamShare::GetInstance()->SetCycleState(false);
+
+//	m_pAuroraMgr->GetIOMapControlMgrPtr()->SetSinalTowerIdle();
+
+	return 0;
+}
+
+
+
+LRESULT CDlgMainForm::OnUpdateMotorPosition(WPARAM wp, LPARAM lp)
+{
+	int index = (int)wp;
+
+	switch (index)
+	{
+	case enumDoWorkStateID_Idle: m_vecpMainSubDlg[enumNavigateID_OPERATE]->UpdateOperateStatus(_T("IDLE..."));			break;
+	case enumDoWorkStateID_LOADING_STATUS_ready: m_vecpMainSubDlg[enumNavigateID_OPERATE]->UpdateOperateStatus(_T("Loading..."));		break;
+	case enumDoWorkStateID_LOADING_STATUS_start: m_vecpMainSubDlg[enumNavigateID_OPERATE]->UpdateOperateStatus(_T("Loading..."));		break;
+	case enumDoWorkStateID_MEASURE_STATUS_ready: m_vecpMainSubDlg[enumNavigateID_OPERATE]->UpdateOperateStatus(_T("Measuring..."));	break;
+	case enumDoWorkStateID_MEASURE_STATUS_start: m_vecpMainSubDlg[enumNavigateID_OPERATE]->UpdateOperateStatus(_T("Measuring..."));	break;
+	case enumDoWorkStateID_Unloading_STATUS_ready: m_vecpMainSubDlg[enumNavigateID_OPERATE]->UpdateOperateStatus(_T("Unloading..."));	break;
+	case enumDoWorkStateID_Unloading_STATUS_start: m_vecpMainSubDlg[enumNavigateID_OPERATE]->UpdateOperateStatus(_T("Unloading..."));	break;
+
+	case enumDoWorkStateID_MOVEING_Start: m_vecpMainSubDlg[enumNavigateID_OPERATE]->UpdateOperateStatus(_T("Moving Start..."));		break;
+	case enumDoWorkStateID_MOVEING_End: m_vecpMainSubDlg[enumNavigateID_OPERATE]->UpdateOperateStatus(_T("Moving End..."));		break;
+	case enumDoWorkStateID_ALIGN_Start: m_vecpMainSubDlg[enumNavigateID_OPERATE]->UpdateOperateStatus(_T("ALIGN Start..."));		break;
+	case enumDoWorkStateID_ALIGN_End: m_vecpMainSubDlg[enumNavigateID_OPERATE]->UpdateOperateStatus(_T("ALIGN End..."));		break;
+	case enumDoWorkStateID_AF_Start: m_vecpMainSubDlg[enumNavigateID_OPERATE]->UpdateOperateStatus(_T("AF Start..."));		break;
+	case enumDoWorkStateID_AF_End: m_vecpMainSubDlg[enumNavigateID_OPERATE]->UpdateOperateStatus(_T("AF End..."));		break;
+	case enumDoWorkStateID_MEASURE_Start: 
+	{
+		int iMeasMode = (int)lp;
+		switch (iMeasMode)
+		{
+		case 0:  // 사전검사
+			m_vecpMainSubDlg[enumNavigateID_OPERATE]->UpdateOperateStatus(_T("MEASURE Start...사전검사"));
+			break;
+		case 1:  // 전기검사
+			m_vecpMainSubDlg[enumNavigateID_OPERATE]->UpdateOperateStatus(_T("MEASURE Start...전기검사"));
+			break;
+		case 2:  // Aging
+			m_vecpMainSubDlg[enumNavigateID_OPERATE]->UpdateOperateStatus(_T("MEASURE Start...AGING"));
+			break;
+		case 3:  // WAD
+			m_vecpMainSubDlg[enumNavigateID_OPERATE]->UpdateOperateStatus(_T("MEASURE Start...특성검사"));
+			break;
+		case 4:  // 화질
+			m_vecpMainSubDlg[enumNavigateID_OPERATE]->UpdateOperateStatus(_T("MEASURE Start...화질검사"));
+			break;
+		case 5:  // 면계측
+			m_vecpMainSubDlg[enumNavigateID_OPERATE]->UpdateOperateStatus(_T("MEASURE Start...면계측검사"));
+			break;
+		case 6:  // 시야각
+			m_vecpMainSubDlg[enumNavigateID_OPERATE]->UpdateOperateStatus(_T("MEASURE Start...시야각검사"));
+			break;
+		case 7:  // TSP
+			m_vecpMainSubDlg[enumNavigateID_OPERATE]->UpdateOperateStatus(_T("MEASURE Start...TSP 검사"));
+			break;
+		case 8:  // LCR
+			m_vecpMainSubDlg[enumNavigateID_OPERATE]->UpdateOperateStatus(_T("MEASURE Start...LCR 검사"));
+			break;
+		default:
+			m_vecpMainSubDlg[enumNavigateID_OPERATE]->UpdateOperateStatus(_T("MEASURE Start..."));
+			break;
+		}	
+		break;
+	}
+	case enumDoWorkStateID_MEASURE_End: m_vecpMainSubDlg[enumNavigateID_OPERATE]->UpdateOperateStatus(_T("MEASURE End..."));		break;
+	case enumDoWorkStateID_SAFETY_Start: m_vecpMainSubDlg[enumNavigateID_OPERATE]->UpdateOperateStatus(_T("MOVING SAFETY Start..."));		break;
+	case enumDoWorkStateID_SAFETY_End: m_vecpMainSubDlg[enumNavigateID_OPERATE]->UpdateOperateStatus(_T("MOVING SAFETY End..."));		break;
+
+	case enumDoWorkStateID_MEASURE_P2P_Start: m_vecpMainSubDlg[enumNavigateID_OPERATE]->UpdateOperateStatus(_T("MEASURE Start... PToP"));		break;
+	case enumDoWorkStateID_MEASURE_OST_Start: m_vecpMainSubDlg[enumNavigateID_OPERATE]->UpdateOperateStatus(_T("MEASURE Start... OST"));		break;
+	case enumDoWorkStateID_MEASURE_RTEST_Start: m_vecpMainSubDlg[enumNavigateID_OPERATE]->UpdateOperateStatus(_T("MEASURE Start... RTEST"));		break;
+	case enumDoWorkStateID_MEASURE_AGING_Start: m_vecpMainSubDlg[enumNavigateID_OPERATE]->UpdateOperateStatus(_T("MEASURE Start... AGING")); m_vecpMainSubDlg[enumNavigateID_OPERATE]->UpdateAgingMode(true, (int)lp);		break;
+	case enumDoWorkStateID_MEASURE_AGING_End: m_vecpMainSubDlg[enumNavigateID_OPERATE]->UpdateOperateStatus(_T("MEASURE End... AGING")); m_vecpMainSubDlg[enumNavigateID_OPERATE]->UpdateAgingMode(false, 0);		break;
+	case enumDoWorkStateID_PROBE_CONTACT_Start: m_vecpMainSubDlg[enumNavigateID_OPERATE]->UpdateOperateStatus(_T("MEASURE Start... PROBE CONTACT"));		break;
+	case enumDoWorkStateID_PROBE_UNCONTACT_Start: m_vecpMainSubDlg[enumNavigateID_OPERATE]->UpdateOperateStatus(_T("MEASURE Start... PROBE UNCONTACT"));		break;
+
+	case enumDoWorkStateID_WORK_SACC_Start: m_vecpMainSubDlg[enumNavigateID_OPERATE]->UpdateOperateStatus(_T("SACC Start..."));
+	{
+		for (size_t i = 0; i < m_vecpMainSubDlg.size(); ++i)
+		{
+			if (i == enumNavigateID_OPERATE || i == enumNavigateID_ALARM)
+				continue;
+
+			if (m_vecpMainSubDlg[i])
+			{
+				m_vecpMainSubDlg[i]->EnableWindow(FALSE);
+			}
+		}
+
+		m_vecpMainSubDlg[enumNavigateID_OPERATE]->UpdateSACCMode(true);
+	}
+				break;
+	case enumDoWorkStateID_WORK_SACC_End: m_vecpMainSubDlg[enumNavigateID_OPERATE]->UpdateOperateStatus(_T("IDLE...")); 
+	{
+		for (size_t i = 0; i < m_vecpMainSubDlg.size(); ++i)
+		{
+			if (m_vecpMainSubDlg[i])
+			{
+				m_vecpMainSubDlg[i]->EnableWindow(TRUE);
+			}
+		}
+
+		m_vecpMainSubDlg[enumNavigateID_OPERATE]->UpdateSACCMode(false);
+	}
+		break;
+
+	// 2023.03.09 add Probe Align
+	case enumDoWorkStateID_PROBE_ALIGN_Start: m_vecpMainSubDlg[enumNavigateID_OPERATE]->UpdateOperateStatus(_T("Probe ALIGN Start..."));		break;
+	case enumDoWorkStateID_PROBE_ALIGN_End: m_vecpMainSubDlg[enumNavigateID_OPERATE]->UpdateOperateStatus(_T("Probe ALIGN End..."));		break;
+
+
+
+
+
+
+	// EMO 버튼에 대한 부분
+	case enumEMOPositionID_OP: m_vecpMainSubDlg[enumNavigateID_OPERATE]->UpdateOperateStatus(_T("EMS alarm - OP"));		break;
+	case enumEMOPositionID_LEFT_FRONT: m_vecpMainSubDlg[enumNavigateID_OPERATE]->UpdateOperateStatus(_T("EMS alarm - LEFT FRONT"));		break;
+	case enumEMOPositionID_RIGHT_FRONT: m_vecpMainSubDlg[enumNavigateID_OPERATE]->UpdateOperateStatus(_T("EMS alarm - RIGHT FRONT"));		break;
+	case enumEMOPositionID_RIGHT_BACK: m_vecpMainSubDlg[enumNavigateID_OPERATE]->UpdateOperateStatus(_T("EMS alarm - RIGHT BACK"));		break;
+	case enumEMOPositionID_LEFT_BACK: m_vecpMainSubDlg[enumNavigateID_OPERATE]->UpdateOperateStatus(_T("EMS alarm - LEFT BACK"));		break;
+	case enumEMOPositionID_INNER_LEFT_FRONT: m_vecpMainSubDlg[enumNavigateID_OPERATE]->UpdateOperateStatus(_T("EMS alarm - INNER LEFT FRONT"));		break;
+	case enumEMOPositionID_INNER_RIGHT_FRONT: m_vecpMainSubDlg[enumNavigateID_OPERATE]->UpdateOperateStatus(_T("EMS alarm - INNER RIGHT FRONT"));		break;
+	case enumEMOPositionID_INNER_RIGHT_BACK: m_vecpMainSubDlg[enumNavigateID_OPERATE]->UpdateOperateStatus(_T("EMS alarm - INNER RIGHT BACK"));		break;
+	case enumEMOPositionID_INNER_LEFT_BACK: m_vecpMainSubDlg[enumNavigateID_OPERATE]->UpdateOperateStatus(_T("EMS alarm - INNER LEFT BACK"));		break;
+	case enumEMOPositionID_SACC: m_vecpMainSubDlg[enumNavigateID_OPERATE]->UpdateOperateStatus(_T("EMS alarm - SACC"));		break;
+	case enumEMOPositionID_INNER_SACC: m_vecpMainSubDlg[enumNavigateID_OPERATE]->UpdateOperateStatus(_T("EMS alarm - INNER SACC"));		break;
+	case enumEMOPositionID_EBOX_FRONT: m_vecpMainSubDlg[enumNavigateID_OPERATE]->UpdateOperateStatus(_T("EMS alarm - E-BOX FRONT(UPS)"));		break;
+	case enumEMOPositionID_EBOX_BACK: m_vecpMainSubDlg[enumNavigateID_OPERATE]->UpdateOperateStatus(_T("EMS alarm - E-BOX REAR(GPS)"));		break;
+	case enumEMOPositionID_ENABLE_SWITCH: m_vecpMainSubDlg[enumNavigateID_OPERATE]->UpdateOperateStatus(_T("EMS alarm - ENABLE SWITCH"));		break;
+	case enumEMOPositionID_SBOX_FRONT: m_vecpMainSubDlg[enumNavigateID_OPERATE]->UpdateOperateStatus(_T("EMS alarm - S-BOX FRONT"));		break;
+	case enumEMOPositionID_SBOX_BACK: m_vecpMainSubDlg[enumNavigateID_OPERATE]->UpdateOperateStatus(_T("EMS alarm - S-BOX REAR"));		break;
+
+
+	
+	//case enumEMOPositionID_LEFT: m_vecpMainSubDlg[enumNavigateID_OPERATE]->UpdateOperateStatus(_T("EMO alarm - LEFT"));	break;
+	//case enumEMOPositionID_RIGHT: m_vecpMainSubDlg[enumNavigateID_OPERATE]->UpdateOperateStatus(_T("EMO alarm - RIGHT"));	break;
+	//case enumEMOPositionID_BACK: m_vecpMainSubDlg[enumNavigateID_OPERATE]->UpdateOperateStatus(_T("EMO alarm - BACK"));	break;
+	//case enumEMOPositionID_EBOX: m_vecpMainSubDlg[enumNavigateID_OPERATE]->UpdateOperateStatus(_T("EMO alarm - EBOX"));	break;
+
+	default:
+		m_vecpMainSubDlg[enumNavigateID_OPERATE]->UpdateOperateStatus(_T("IDLE..."));
+		break;
+	}
+
+	//m_pMotorPositionDlg->SetPosition(index);
+
+	return 0;
+}
+
+LRESULT CDlgMainForm::OnUpdateCIMState(WPARAM wp, LPARAM lp)
+{
+	int index = (int)wp;
+
+	if (index == TO_SERVER_ALARM)
+	{
+		m_vecpMainSubDlg[enumNavigateID_OPERATE]->UpdateCIMAlarm((int)lp);
+	}
+	else
+	{
+		m_vecpMainSubDlg[enumNavigateID_OPERATE]->UpdateCIMState(index);
+	}
+	
+
+	return 0;
+}
+
+LRESULT CDlgMainForm::OnUpdateControlMode(WPARAM wp, LPARAM lp)
+{
+	int index = (int)wp;
+
+	m_vecpMainSubDlg[enumNavigateID_OPERATE]->UpdateControlMode(index);
+
+	return 0;
+}
+
+
+void CDlgMainForm::__InitListControl()
+{
+	m_gridListMotionInfo.GetDefaultCell(FALSE, TRUE)->SetFormat(DT_CENTER | DT_VCENTER | DT_SINGLELINE);
+	m_gridListMotionInfo.GetDefaultCell(TRUE, FALSE)->SetFormat(DT_CENTER | DT_VCENTER | DT_SINGLELINE);
+	m_gridListMotionInfo.GetDefaultCell(FALSE, FALSE)->SetFormat(DT_CENTER | DT_VCENTER | DT_SINGLELINE);
+	m_gridListMotionInfo.SetDefCellMargin(0);
+	m_gridListMotionInfo.SetFixedColumnSelection(FALSE);
+	m_gridListMotionInfo.SetFixedRowSelection(FALSE);
+	m_gridListMotionInfo.SetSingleColSelection(FALSE);
+	m_gridListMotionInfo.SetSingleRowSelection(FALSE);
+	m_gridListMotionInfo.SetTrackFocusCell(FALSE);
+	m_gridListMotionInfo.SetRowResize(FALSE);
+	m_gridListMotionInfo.SetColumnResize(FALSE);
+}
+
+
+void CDlgMainForm::__InitialListData()
+{
+	// 결과값 리스트를 갱신한다.
+	m_gridListMotionInfo.DeleteAllItems();
+	m_gridListMotionInfo.SetColumnCount(enumColumnName_End);
+	m_gridListMotionInfo.SetFixedRowCount(1);
+
+	for (long n = 0; n < enumColumnName_End; ++n)
+	{
+		m_gridListMotionInfo.SetColumnWidth(n, ColumnSize[n]);
+		m_gridListMotionInfo.SetItemText(0, n, ColumnName[n]);
+		m_gridListMotionInfo.SetItemState(0, n, GVIS_READONLY);
+		m_gridListMotionInfo.SetItemBkColour(0, n, RGB(172, 172, 172));
+		m_gridListMotionInfo.SetItemFgColour(0, n, RGB(255, 255, 255));
+	}
+
+	int iMaxMotion = 0;
+	CMotorControlMgr *pImpl = nullptr;
+	pImpl = m_pAuroraMgr->GetMaintControlMgr()->GetMotorControlMgrPtr();
+	if (pImpl != nullptr)
+	{
+		for (int iAxis = 0; iAxis < AXIS_TYPE_END; iAxis++)
+		{
+			if (pImpl->GetAxisProperty(iAxis)->bUse == FALSE)
+				continue;
+
+			iMaxMotion++;
+		}
+	}
+
+	// Items + Header
+	m_gridListMotionInfo.SetEditable(TRUE);
+
+	m_gridListMotionInfo.SetRowCount(iMaxMotion + 1);	// Axis type end 
+//	m_gridListMotionInfo.SetRowCount(_df_MAX_MOTION +1);	// Axis type end 
+
+	m_gridListMotionInfo.SetRowHeight(0, 18);
+	for (long i = 0; i < iMaxMotion; i++)
+	{
+		m_gridListMotionInfo.SetRowHeight(i + 1, 15);
+	}
+
+	__RefreshListData();
+}
+
+
+void CDlgMainForm::__RefreshListData()
+{
+	m_gridListMotionInfo.SetRedraw(FALSE);
+
+	bool bHomeDone = false, bChkPos = false, bChkNeg = false;
+	int i = 0;
+	CString strData;
+	CMotorControlMgr *pImpl = nullptr;
+	pImpl = m_pAuroraMgr->GetMaintControlMgr()->GetMotorControlMgrPtr();
+	if (pImpl != nullptr)
+	{
+		for (int iAxis = 0; iAxis < AXIS_TYPE_END; iAxis++)
+		{
+			if (pImpl->GetAxisProperty(iAxis)->bUse == FALSE)
+				continue;
+
+			if (iAxis == AXIS_PROBE_X2 || iAxis == AXIS_PROBE_X4 || iAxis == AXIS_PROBE_X6 || iAxis == AXIS_PROBE_X8 || iAxis == AXIS_PROBE_X10)
+			{
+				m_gridListMotionInfo.SetRowHeight(i + 1, 0);
+			}
+
+			// Name 
+			strData.Format(_T("%s"), pImpl->GetAxisMapProperty(iAxis)->m_strAxisName);
+			m_gridListMotionInfo.GetCell(i + 1, enumColumnName_Value1)->SetFormat(DT_CENTER | DT_VCENTER | DT_SINGLELINE);
+			m_gridListMotionInfo.SetItemState(i + 1, enumColumnName_Value1, GVIS_READONLY);
+			m_gridListMotionInfo.SetItemText(i + 1, enumColumnName_Value1, strData);
+
+			// Number
+			strData.Format(_T("%d"), m_stMoterInfo[iAxis].axis); // pImpl->GetAxisProperty(iAxis)->iNumHomePLC);
+			m_gridListMotionInfo.GetCell(i + 1, enumColumnName_Value2)->SetFormat(DT_CENTER | DT_VCENTER | DT_SINGLELINE);
+			m_gridListMotionInfo.SetItemState(i + 1, enumColumnName_Value2, GVIS_READONLY);
+			m_gridListMotionInfo.SetItemText(i + 1, enumColumnName_Value2, strData);
+
+
+			// Current position 
+			//if (iAxis == AXIS_Z7 || iAxis == AXIS_Z8)
+			//{
+			//	double dCurPos = 0;
+			//	int iIndex = 0;
+			//	if (iAxis == AXIS_Z7)
+			//	{
+			//		iIndex = 0;
+			//	}
+			//	else
+			//	{
+			//		iIndex = 1;
+			//	}
+
+			//	dCurPos = CSequenceManager::GetInstance()->GetFunctionModuleAFControl()->GetPos(iIndex);
+			//	strData.Format(_T("%.4f"), dCurPos );
+
+			//	CSequenceManager::GetInstance()->GetFunctionModuleAFControl()->GetStatus(iIndex, &bHomeDone, &bChkPos, &bChkNeg);
+
+			//}
+			//else
+			//{
+			//	strData.Format(_T("%.4f"), pImpl->GetCurPos(iAxis, 0, 0));
+			//}
+
+
+			strData.Format(_T("%.4f"), m_stMoterInfo[iAxis].dPosition);
+			m_gridListMotionInfo.GetCell(i + 1, enumColumnName_Value3)->SetFormat(DT_CENTER | DT_VCENTER | DT_SINGLELINE);
+			m_gridListMotionInfo.SetItemState(i + 1, enumColumnName_Value3, GVIS_READONLY);
+			m_gridListMotionInfo.SetItemText(i + 1, enumColumnName_Value3, strData);
+
+
+			// CheckBox - Enable
+			CGridCellCheck* pCell;
+			m_gridListMotionInfo.SetCellType(i + 1, enumColumnName_Value4, RUNTIME_CLASS(CGridCellCheck));
+			m_gridListMotionInfo.SetItemState(i + 1, enumColumnName_Value4, GVIS_READONLY);
+			pCell = (CGridCellCheck*)m_gridListMotionInfo.GetCell(i + 1, enumColumnName_Value4);
+
+
+			if (m_stMoterInfo[iAxis].bEnable)
+				pCell->SetCheck(true);
+			else
+				pCell->SetCheck(false);
+
+			/*if (iAxis == AXIS_Z7 || iAxis == AXIS_Z8)
+			{
+				pCell->SetCheck(true);
+			}
+			else
+			{
+				if (pImpl->GetAmpEnable(iAxis) != 0)
+					pCell->SetCheck(true);
+				else
+					pCell->SetCheck(false);
+			}*/
+
+			// CheckBox - Limit(+)
+			m_gridListMotionInfo.SetCellType(i + 1, enumColumnName_Value5, RUNTIME_CLASS(CGridCellCheck));
+			m_gridListMotionInfo.SetItemState(i + 1, enumColumnName_Value5, GVIS_READONLY);
+			pCell = (CGridCellCheck*)m_gridListMotionInfo.GetCell(i + 1, enumColumnName_Value5);
+
+			if (m_stMoterInfo[iAxis].bLimitP)
+				pCell->SetCheck(true);
+			else
+				pCell->SetCheck(false);
+
+			/*if (iAxis == AXIS_Z7 || iAxis == AXIS_Z8)
+			{
+				if (bChkPos)
+					pCell->SetCheck(true);
+				else
+					pCell->SetCheck(false);
+			}
+			else
+			{
+				if (pImpl->GetHWLimit(iAxis, TRUE) != true)
+					pCell->SetCheck(true);
+				else
+					pCell->SetCheck(false);
+			}*/
+
+			// CheckBox - Limit(-)
+			m_gridListMotionInfo.SetCellType(i + 1, enumColumnName_Value6, RUNTIME_CLASS(CGridCellCheck));
+			m_gridListMotionInfo.SetItemState(i + 1, enumColumnName_Value6, GVIS_READONLY);
+			pCell = (CGridCellCheck*)m_gridListMotionInfo.GetCell(i + 1, enumColumnName_Value6);
+
+			if (m_stMoterInfo[iAxis].bLimitN)
+				pCell->SetCheck(true);
+			else
+				pCell->SetCheck(false);
+
+			/*if (iAxis == AXIS_Z7 || iAxis == AXIS_Z8)
+			{
+				if (bChkNeg)
+					pCell->SetCheck(true);
+				else
+					pCell->SetCheck(false);
+			}
+			else
+			{
+				if (pImpl->GetHWLimit(iAxis, FALSE) != true)
+					pCell->SetCheck(true);
+				else
+					pCell->SetCheck(false);
+			}*/
+
+			// CheckBox - Home Done
+			m_gridListMotionInfo.SetCellType(i + 1, enumColumnName_Value7, RUNTIME_CLASS(CGridCellCheck));
+			m_gridListMotionInfo.SetItemState(i + 1, enumColumnName_Value7, GVIS_READONLY);
+			pCell = (CGridCellCheck*)m_gridListMotionInfo.GetCell(i + 1, enumColumnName_Value7);
+
+			if (m_stMoterInfo[iAxis].bHomeDone)
+				pCell->SetCheck(true);
+			else
+				pCell->SetCheck(false);
+
+			/*if (iAxis == AXIS_Z7 || iAxis == AXIS_Z8)
+			{
+				if (bHomeDone)
+					pCell->SetCheck(true);
+				else
+					pCell->SetCheck(false);
+			}
+			else
+			{
+				if (pImpl->GetHomeDone(iAxis))
+					pCell->SetCheck(true);
+				else
+					pCell->SetCheck(false);
+			}*/
+
+			for (long n = 0; n < enumColumnName_End; ++n)
+			{
+				m_gridListMotionInfo.SetItemFgColour(i + 1, n, RGB(0, 0, 0));
+			}
+
+			i++;
+		}
+	}
+
+	//for (int iAxis = i; iAxis < _df_MAX_MOTION; iAxis++)
+	//{
+	//	m_gridListMotionInfo.SetRowHeight(iAxis + 1, 0);
+	//}
+
+	m_gridListMotionInfo.ExpandColumnsToFit(TRUE);
+	m_gridListMotionInfo.SetRedraw(TRUE);
+}
+
+void CDlgMainForm::__InitListControl2()
+{
+	m_gridListIOnfo.GetDefaultCell(FALSE, TRUE)->SetFormat(DT_CENTER | DT_VCENTER | DT_SINGLELINE);
+	m_gridListIOnfo.GetDefaultCell(TRUE, FALSE)->SetFormat(DT_CENTER | DT_VCENTER | DT_SINGLELINE);
+	m_gridListIOnfo.GetDefaultCell(FALSE, FALSE)->SetFormat(DT_CENTER | DT_VCENTER | DT_SINGLELINE);
+	m_gridListIOnfo.SetDefCellMargin(0);
+	m_gridListIOnfo.SetFixedColumnSelection(FALSE);
+	m_gridListIOnfo.SetFixedRowSelection(FALSE);
+	m_gridListIOnfo.SetSingleColSelection(FALSE);
+	m_gridListIOnfo.SetSingleRowSelection(FALSE);
+	m_gridListIOnfo.SetTrackFocusCell(FALSE);
+	m_gridListIOnfo.SetRowResize(FALSE);
+	m_gridListIOnfo.SetColumnResize(FALSE);
+}
+
+
+void CDlgMainForm::__InitialListData2()
+{
+	// 결과값 리스트를 갱신한다.
+	m_gridListIOnfo.DeleteAllItems();
+	m_gridListIOnfo.SetColumnCount(enumColumnName2_End);
+	m_gridListIOnfo.SetFixedRowCount(1);
+
+	for (long n = 0; n < enumColumnName2_End; ++n)
+	{
+		m_gridListIOnfo.SetColumnWidth(n, ColumnSize2[n]);
+		m_gridListIOnfo.SetItemText(0, n, ColumnName2[n]);
+		m_gridListIOnfo.SetItemState(0, n, GVIS_READONLY);
+		m_gridListIOnfo.SetItemBkColour(0, n, RGB(172, 172, 172));
+		m_gridListIOnfo.SetItemFgColour(0, n, RGB(255, 255, 255));
+	}
+
+	int iMaxIO = 0;
+	CIOMapControlMgr* pImpl = nullptr;
+	pImpl = m_pAuroraMgr->GetIOMapControlMgrPtr();
+	if (pImpl != nullptr)
+	{
+		CString strData;
+		for (int nIO = 4000; nIO < 4000 + _df_MAX_IO_INFO; nIO++)
+		{
+			strData.Format(_T("%s"), pImpl->GetParam_DIOMapAddressBitImport(nIO));
+			strData.TrimRight();
+			if (strData.IsEmpty())
+				continue;
+
+			iMaxIO++;
+		}
+	}
+
+	// Items + Header
+	m_gridListIOnfo.SetEditable(TRUE);
+	m_gridListIOnfo.SetRowCount(iMaxIO + 1);	// Axis type end 
+
+	m_gridListIOnfo.SetRowHeight(0, 18);
+	for (long i = 0; i < iMaxIO; i++)
+	{
+		m_gridListIOnfo.SetRowHeight(i + 1, 15);
+	}
+
+	__RefreshListData2();
+}
+
+
+void CDlgMainForm::__RefreshListData2()
+{
+	m_gridListIOnfo.SetRedraw(FALSE);
+
+	bool bHomeDone = false, bChkPos = false, bChkNeg = false;
+	int i = 0;
+	CString strData;
+	CIOMapControlMgr* pImpl = nullptr;
+	pImpl = m_pAuroraMgr->GetIOMapControlMgrPtr();
+	if (pImpl != nullptr)
+	{
+		for (int nIO = 4000; nIO < 4000 + _df_MAX_IO_INFO; nIO++)
+		{
+			// Number 
+			strData.Format(_T("%s"), pImpl->GetParam_DIOMapAddressBitImport(nIO));
+			strData.TrimRight();
+			if (strData.IsEmpty())
+				continue;
+
+			m_gridListIOnfo.GetCell(i + 1, enumColumnName2_No)->SetFormat(DT_CENTER | DT_VCENTER | DT_SINGLELINE);
+			m_gridListIOnfo.SetItemState(i + 1, enumColumnName2_No, GVIS_READONLY);
+			m_gridListIOnfo.SetItemText(i + 1, enumColumnName2_No, strData);
+
+			// Name
+			strData.Format(_T("%s"), pImpl->GetParam_DIOMapAddressBitImportName(nIO));
+			m_gridListIOnfo.GetCell(i + 1, enumColumnName2_Value1)->SetFormat(DT_CENTER | DT_VCENTER | DT_SINGLELINE);
+			m_gridListIOnfo.SetItemState(i + 1, enumColumnName2_Value1, GVIS_READONLY);
+			m_gridListIOnfo.SetItemText(i + 1, enumColumnName2_Value1, strData);
+			
+
+			// 활성화 되어 있는 상태를 표시해준다.
+			if (pImpl->GetParam_DIOMapMemoryBitImport2(nIO) == true)
+			{
+				for (long n = enumColumnName2_Value1; n < enumColumnName2_End; ++n)
+				{
+					m_gridListIOnfo.SetItemBkColour(i + 1, n, CLR_LIGHT_YELLOW);
+				}
+			}
+			else
+			{
+				for (long n = enumColumnName2_Value1; n < enumColumnName2_End; ++n)
+				{
+					m_gridListIOnfo.SetItemBkColour(i + 1, n, CLR_GRAY);
+				}
+			}
+
+			i++;
+		}
+	}
+
+	m_gridListIOnfo.ExpandColumnsToFit(TRUE);
+	m_gridListIOnfo.SetRedraw(TRUE, TRUE);
+}
+
+LRESULT CDlgMainForm::OnGuiLog(WPARAM wp, LPARAM lp)
+{
+	const CString strLog = (LPCTSTR)wp;
+
+	// 1000 개 이상은 담아두지 말자. - 속도가 느려진데..
+	if (1000 <= m_listLog.GetCount())
+	{
+		m_listLog.DeleteString(0);
+	}
+
+	//최신 로그가 위에 기록되도록 변경
+	//m_listLog.AddString(strLog);
+	//m_listLog.SetCurSel(m_listLog.GetCount() - 1);
+	m_listLog.InsertString(0, strLog);
+	m_listLog.SetCurSel(0);
+	//////
+
+	return 0;
+}
+
+LRESULT CDlgMainForm::OnUpdateDataLampTime(WPARAM wp, LPARAM lp)
+{
+	//// 각 Item 의 Object 에 Recipe 정보를 업데이트 한다.
+	int iLamp = (int)wp;
+	bool bOn = (bool)lp;
+
+	m_vecpMainSubDlg[enumNavigateID_OPERATE]->UpdateDataLampTime(iLamp, bOn);
+
+	return 0;
+}
+
+LRESULT CDlgMainForm::OnWriteLampTime(WPARAM wp, LPARAM lp)
+{
+	//// 각 Item 의 Object 에 Recipe 정보를 업데이트 한다.
+	int iLamp = (int)wp;
+	bool bOn = (bool)lp;
+
+	m_vecpMainSubDlg[enumNavigateID_OPERATE]->UpdateWriteLampTime(iLamp, bOn);
+
+	return 0;
+}
+
+LRESULT CDlgMainForm::OnUpdateMeasColor(WPARAM wp, LPARAM lp)
+{
+	//// 각 Item 의 Object 에 Recipe 정보를 업데이트 한다.
+	m_vecpMainSubDlg[enumNavigateID_OPERATE]->UpdateMeasColor();
+
+	return 0;
+}
+
+LRESULT CDlgMainForm::OnCloseSysrem(WPARAM wp, LPARAM lp)
+{
+	TerminateWorkerThread();
+
+	return 0;
+}
+
+LRESULT CDlgMainForm::OnCcdLiveMode(WPARAM wp, LPARAM lp)
+{
+	int index = (int)wp;
+
+	switch (index)
+	{
+		case enumSeqItemID_CCD_LIVE_START:
+			CLogWrapper::GetInstance()->KMLOG(SYST, _T("CCD LIVE START (display on)"));	// LYS 2026-09-07 알람 시 라이브 꺼짐 분석용
+			for (int i = 0; i < 2; i++) m_pMainAlignCCD[i]->SetCCDLive(true);
+			m_chkLiveH1.SetCheck(true);
+			m_chkLiveH2.SetCheck(true);
+		break;
+		case enumSeqItemID_CCD_LIVE_STOP:
+			CLogWrapper::GetInstance()->KMLOG(SYST, _T("CCD LIVE STOP (display off, grab thread keeps running)"));	// LYS 2026-09-07 알람 시 라이브 꺼짐 분석용
+			for (int i = 0; i < 2; i++) m_pMainAlignCCD[i]->SetCCDLive(false);
+			m_chkLiveH1.SetCheck(false);
+			m_chkLiveH2.SetCheck(false);
+		break;
+	}
+
+	return 0;
+}
+
+
+void CDlgMainForm::OnTimer(UINT_PTR nIDEvent)
+{
+	// TODO: 여기에 메시지 처리기 코드를 추가 및/또는 기본값을 호출합니다.
+	if (nIDEvent == MAIN_STATE_TIMER_ID)
+	{
+		UpdateInformation();
+	}
+
+	else if (nIDEvent == MAIN_STATE_TIMER_ID+1)
+	{
+		KillTimer(MAIN_STATE_TIMER_ID + 1);
+		//--------------------------------------------------------------------
+		// 알람을 처리 할 수 있도록 Monitoring 을 시작한다.
+		//--------------------------------------------------------------------
+		m_pAuroraMgr->GetAlarmMonitorMgrPtr()->SetMonitoringStart();
+	}
+
+	else if (nIDEvent == MAIN_STATE_TIMER_ID+2)
+	{
+		__RefreshListData2();
+	}
+
+	else if (nIDEvent == MAIN_STATE_TIMER_ID + 3)
+	{
+		if (m_pPopUp_AlarmDlg)
+		{
+			int nRet = 0;
+			nRet = m_pAuroraMgr->GetMaintControlMgr()->GetIOMapControlMgrPtr()->GetParam_DIOMapMemoryBitImport(PLC_BIT_STATE_ALARM) || m_pAuroraMgr->GetMaintControlMgr()->GetIOMapControlMgrPtr()->GetParam_DIOMapMemoryBitImport(PLC_BIT_STATE_WARN);
+
+			if (nRet != -1)
+			{
+				if (nRet == 1)
+				{
+					m_pPopUp_AlarmDlg->ShowWindow(SW_SHOW);
+				}
+				else
+				{
+					m_pPopUp_AlarmDlg->ShowWindow(SW_HIDE);
+				}
+			}
+		}
+
+	//	CWindowEventHandler::GetInstance()->SendMessageToUI(enumWndID_FRAME, WM_MSG_UPDATE_POSITION_STATE, enumDoWorkStateID_WORK_SACC_End, NULL);
+	}
+
+	CD_AuroraDlgWin::OnTimer(nIDEvent);
+}
+
+
+void CDlgMainForm::UpdateInformation()
+{
+	__RefreshListData();
+
+	if (CSACCMgr::GetInstance() != nullptr)
+		CSACCMgr::GetInstance()->Updata_Data();
+
+//	__RefreshListData2();
+
+	if (m_vecpMainSubDlg[enumNavigateID_OPERATE] != nullptr)
+	{
+		//if (m_vecpMainSubDlg[enumNavigateID_OPERATE]->IsWindowVisible()) //20220407 remove
+			m_vecpMainSubDlg[enumNavigateID_OPERATE]->UpdateInformation();
+	}
+	
+	if (m_vecpMainSubDlg[enumNavigateID_MAINT] != nullptr)
+	{
+		if (m_vecpMainSubDlg[enumNavigateID_MAINT]->IsWindowVisible())
+			m_vecpMainSubDlg[enumNavigateID_MAINT]->UpdateInformation();
+	}
+}
+
+
+void CDlgMainForm::BeginThread_WorkProc()
+{
+	if (m_pWorkThread == NULL)
+	{
+		m_pWorkThread =
+			AfxBeginThread(WorkThreadProbeProc, this);
+	}
+}
+
+
+int CDlgMainForm::TerminateWorkerThread()
+{
+	m_bCloseSystem = true;
+
+	if (m_pWorkThread != NULL)	// jsyoon 20141126 add
+	{
+		SetEvent(m_hEvtKillThread);
+	}
+
+	for (int i = 0; i < MAIN_CCD_MAX_NUM; i++)
+	{
+		if (m_pMainAlignCCD[i] != nullptr)
+		{
+			m_pMainAlignCCD[i]->TerminateWorkerThread();
+		}
+	}
+
+	return 0;
+}
+
+
+int CDlgMainForm::WaitTerminateWorkerThread()
+{
+	if (m_pWorkThread != NULL)	// jsyoon 20141126 add
+	{
+		if (WaitForSingleObject(m_hEvtThreadKilled, 1000)
+			== WAIT_OBJECT_0)
+		{
+			m_pWorkThread = NULL;
+		}
+	}
+
+	if (m_pWorkThread == NULL)
+		TRACE("m_pWorkThread NULL @@@@@@@@@@@\n");
+
+	return 0;
+}
+
+UINT CDlgMainForm::WorkThreadProbeProc(LPVOID pParam)
+{
+	CDlgMainForm* pProc = (CDlgMainForm*)pParam;
+
+	while (TRUE)
+	{
+		// m_hEvtKillThread Event 시그널이 Set 되면 Loop를 빠져 나간다
+		if (WaitForSingleObject(pProc->m_hEvtKillThread, 50)
+			== WAIT_OBJECT_0)
+		{
+			break; // Terminate this thread by exiting the proc.
+		}
+
+		///////////////////////////////
+		pProc->GetMonitor();	//실제 작업을 진행하는 함수
+	}
+
+	SetEvent(pProc->m_hEvtThreadKilled);				// "나(쓰레드) 죽었다"라고 해 줌
+
+	return 0;
+}
+
+void CDlgMainForm::GetMonitor()
+{
+	//// Motion
+	GetMonitorMotion();
+
+	GetMonitorIO();
+
+	// MCC
+	SetMCCSignal();
+}
+
+
+void CDlgMainForm::GetMonitorMotion()
+{
+	bool bHomeDone = false, bChkPos = false, bChkNeg = false;
+	CString strData;
+	CMaintControlMgr*pImpl = nullptr;
+	long nInput = 0;
+
+	if (m_bCloseSystem == true)
+		return;
+
+	if (m_pAuroraMgr == nullptr)
+		return;
+
+	pImpl = m_pAuroraMgr->GetMaintControlMgr();
+	if (pImpl != nullptr)
+	{
+		// jsyoon 2022.07.06 remove
+		//// ACS 에서 Home 센서 감지 읽어서 PLC 로 강제 출력 
+		//nInput = pImpl->GetMotorControlMgrPtr()->GetInput(2, 6); // ACX Safety
+		//if (m_lOldACSafety != nInput)
+		//{
+		//	if (nInput == 1)
+		//	{
+		//		m_pAuroraMgr->GetMaintControlMgr()->GetIOMapControlMgrPtr()->SetMemoryBitToDevice(PLC_AUTO_CHANGE_X0_POSITION_03, true);
+		//	}
+		//	else
+		//	{
+		//		m_pAuroraMgr->GetMaintControlMgr()->GetIOMapControlMgrPtr()->SetMemoryBitToDevice(PLC_AUTO_CHANGE_X0_POSITION_03, false);
+		//	}
+
+		//	m_lOldACSafety = nInput;
+		//}
+
+		for (int iAxis = 0; iAxis < AXIS_TYPE_END; iAxis++)
+		{
+			if(m_bCloseSystem == true)
+				return;
+
+			if (pImpl->GetMotorControlMgrPtr()->GetAxisProperty(iAxis)->bUse == FALSE)
+			{
+				m_stMoterInfo[iAxis].axis = -1;
+				m_stMoterInfo[iAxis].dPosition = -1;
+				m_stMoterInfo[iAxis].bEnable = false;
+				m_stMoterInfo[iAxis].bLimitP = false;
+				m_stMoterInfo[iAxis].bLimitN = false;
+				m_stMoterInfo[iAxis].bHomeDone = false;
+				continue;
+			}
+			/*else if (pImpl->IsConnected() != true)
+			{
+				m_stMoterInfo[iAxis].axis = iAxis;
+				m_stMoterInfo[iAxis].dPosition = -1;
+				m_stMoterInfo[iAxis].bEnable = false;
+				m_stMoterInfo[iAxis].bLimitP = false;
+				m_stMoterInfo[iAxis].bLimitN = false;
+				m_stMoterInfo[iAxis].bHomeDone = false;
+
+				CMCCLogMgr::GetInstance()->SetMccMoterInfoCur(iAxis, m_stMoterInfo[iAxis].dPosition, m_stMoterInfo[iAxis].dAxisSpeed, m_stMoterInfo[iAxis].dAxisRMS);
+
+				continue;
+			}*/
+
+			if (m_bCloseSystem == true)
+				break;
+
+			// Number
+			m_stMoterInfo[iAxis].axis = pImpl->GetMotorControlMgrPtr()->GetAxisProperty(iAxis)->iNumHomePLC;
+
+			// Current position 
+			if (iAxis == AXIS_Z7 || iAxis == AXIS_Z8)
+			{
+				double dCurPos = 0;
+				int iIndex = 0;
+				if (iAxis == AXIS_Z7)
+				{
+					iIndex = 0;
+				}
+				else
+				{
+					iIndex = 1;
+				}
+			}
+			else
+			{
+				strData.Format(_T("%.4f"), pImpl->GetCurPos(iAxis, 0, 0));
+			}
+
+			m_stMoterInfo[iAxis].dPosition = _ttof(strData);
+
+			// RMS
+			if (iAxis == AXIS_Z7 || iAxis == AXIS_Z8)
+			{
+				double dCurPos = 0;
+				int iIndex = 0;
+				if (iAxis == AXIS_Z7)
+				{
+					iIndex = 0;
+				}
+				else
+				{
+					iIndex = 1;
+				}
+			}
+			else
+			{
+				strData.Format(_T("%.4f"), pImpl->GetMotorControlMgrPtr()->GetMotorRMSValue(iAxis));
+			}
+
+			m_stMoterInfo[iAxis].dAxisRMS = _ttof(strData);
+
+			// SPEED
+			if (iAxis == AXIS_Z7 || iAxis == AXIS_Z8)
+			{
+				double dCurPos = 0;
+				int iIndex = 0;
+				if (iAxis == AXIS_Z7)
+				{
+					iIndex = 0;
+				}
+				else
+				{
+					iIndex = 1;
+				}
+			}
+			else
+			{
+				strData.Format(_T("%.4f"), pImpl->GetMotorControlMgrPtr()->GetSpeedVal(iAxis));
+			}
+
+			m_stMoterInfo[iAxis].dAxisSpeed = _ttof(strData);
+
+			// CheckBox - Enable
+			if (iAxis == AXIS_Z7 || iAxis == AXIS_Z8)
+			{
+				m_stMoterInfo[iAxis].bEnable = true;
+			}
+			else
+			{
+				if (pImpl->GetMotorControlMgrPtr()->GetAmpEnable(iAxis) != 0)
+					m_stMoterInfo[iAxis].bEnable = true;
+				else
+					m_stMoterInfo[iAxis].bEnable = false;
+			}
+
+			// CheckBox - Limit(+)
+			if (iAxis == AXIS_Z7 || iAxis == AXIS_Z8)
+			{
+				if (bChkPos)
+					m_stMoterInfo[iAxis].bLimitP = true;
+				else
+					m_stMoterInfo[iAxis].bLimitP = false;
+			}
+			else
+			{
+				if (pImpl->GetMotorControlMgrPtr()->GetHWLimit(iAxis, TRUE) != true)
+					m_stMoterInfo[iAxis].bLimitP = true;
+				else
+					m_stMoterInfo[iAxis].bLimitP = false;
+			}
+
+			// CheckBox - Limit(-)
+			if (iAxis == AXIS_Z7 || iAxis == AXIS_Z8)
+			{
+				if (bChkNeg)
+					m_stMoterInfo[iAxis].bLimitN = true;
+				else
+					m_stMoterInfo[iAxis].bLimitN = false;
+			}
+			else
+			{
+				if (pImpl->GetMotorControlMgrPtr()->GetHWLimit(iAxis, FALSE) != true)
+					m_stMoterInfo[iAxis].bLimitN = true;
+				else
+					m_stMoterInfo[iAxis].bLimitN = false;
+			}
+
+			// CheckBox - Home Done
+			if (iAxis == AXIS_Z7 || iAxis == AXIS_Z8)
+			{
+				if (bHomeDone)
+					m_stMoterInfo[iAxis].bHomeDone = true;
+				else
+					m_stMoterInfo[iAxis].bHomeDone = false;
+			}
+			else
+			{
+				if (pImpl->GetMotorControlMgrPtr()->GetHomeDone(iAxis))
+					m_stMoterInfo[iAxis].bHomeDone = true;
+				else
+					m_stMoterInfo[iAxis].bHomeDone = false;
+			}
+
+			CMCCLogMgr::GetInstance()->SetMccMoterInfoCur(iAxis, m_stMoterInfo[iAxis].dPosition, m_stMoterInfo[iAxis].dAxisSpeed, m_stMoterInfo[iAxis].dAxisRMS);
+
+			m_pAuroraMgr->GetShareMemoryMgrPtr()->GetSharedMemory()->stMotionStatus[iAxis].bEnable = m_stMoterInfo[iAxis].bEnable;
+			m_pAuroraMgr->GetShareMemoryMgrPtr()->GetSharedMemory()->stMotionStatus[iAxis].bLimitP = m_stMoterInfo[iAxis].bLimitP;
+			m_pAuroraMgr->GetShareMemoryMgrPtr()->GetSharedMemory()->stMotionStatus[iAxis].bLimitN = m_stMoterInfo[iAxis].bLimitN;
+			m_pAuroraMgr->GetShareMemoryMgrPtr()->GetSharedMemory()->stMotionStatus[iAxis].bHomeDone = m_stMoterInfo[iAxis].bHomeDone;
+			m_pAuroraMgr->GetShareMemoryMgrPtr()->GetSharedMemory()->stMotionStatus[iAxis].dAxisPos = m_stMoterInfo[iAxis].dPosition;
+			m_pAuroraMgr->GetShareMemoryMgrPtr()->GetSharedMemory()->stMotionStatus[iAxis].dAxisRMS = m_stMoterInfo[iAxis].dAxisRMS;
+
+			// LYS 2026-09-02 SW Limit 알람: homed+Enable 축이 SW 리밋 초과 시 MOTION_OVER_LIMIT_POS/NEG 발생
+			// (m_stMoterInfo[iAxis].bEnable && m_stMoterInfo[iAxis].bHomeDone)
+			//
+			//	double dSwMaxChk = pImpl->GetMotorControlMgrPtr()->GetMaxSWLimit(iAxis);
+			//	double dSwMinChk = pImpl->GetMotorControlMgrPtr()->GetMinSWLimit(iAxis);
+			//	if (m_stMoterInfo[iAxis].dPosition > dSwMaxChk)
+			//		CAlarmController::GetInstance()->SetAlarm(MOTION_SW_OVER_LIMIT_POS);
+			//	else if (m_stMoterInfo[iAxis].dPosition < dSwMinChk)
+			//		CAlarmController::GetInstance()->SetAlarm(MOTION_SW_OVER_LIMIT_NEG);
+			//
+
+			// jsyoon 2022.06.24 add
+			bool IonizerRun = false;
+			if (m_pAuroraMgr->GetMaintControlMgr()->GetIOMapControlMgrPtr()->GetParam_DIOMapMemoryBitImport(PLC_BIT_XIONIZER_REMOTE_STATE_01) == 1)
+			{
+				IonizerRun = true;
+			}
+
+			CMCCLogMgr::GetInstance()->SetIonizerRun(IonizerRun);
+
+
+		}
+	}
+}
+
+
+void CDlgMainForm::GetMonitorIO()
+{
+	double dValue = 0., dValueMax = 0., dValueMin = 0.;
+
+	for (int iTemp = 0; iTemp < 20; iTemp++)
+	{
+		CMCCLogMgr::GetInstance()->GetFDCDValue(FDC_WDATA_TEMP_1 + iTemp, &dValue, &dValueMax, &dValueMin);
+
+		if ( dValueMax < dValue )
+		{
+			m_pAuroraMgr->GetShareMemoryMgrPtr()->SetSys_TemperOver(iTemp, true);
+		}
+		else
+		{
+			m_pAuroraMgr->GetShareMemoryMgrPtr()->SetSys_TemperOver(iTemp, false);
+		}
+	}
+
+	//BOOL bActive = FALSE;
+	//WORD nwValueOperating = 0, nwValueDirection = 0, nwValueTriggerMode = 0;
+	//DWORD ndwValueTriggerPeriod = 0, ndwValueNumOfTiggers = 0, ndwValueTriggerCount = 0, ndwValueEncoderCont = 0;
+	//float nFValueEncoder = 0, nFValueStartPos = 0, nFValueEndPos = 0, nFValueTriggerPitch = 0, nFValuePulseWidth = 0, nFValueEncoderPosition = 0;
+
+	//for (size_t iCol = 0; iCol < 2; iCol++)
+	//{
+	//	for (int iAxis = 0; iAxis < _df_MAX_TRIGGER_INFO; iAxis++)
+	//	{
+	//		if (m_bCloseSystem == true)
+	//			break;
+
+	//		// Value 
+	//		switch (iAxis)
+	//		{
+	//		case 0:
+	//			m_pAuroraMgr->GetTriggerControlMgr()->GetReadDataBIT(iCol, &bActive);
+	//			m_stTriggerInfo[iCol].bActive = bActive;
+	//			break;
+	//		case 1:
+	//			m_pAuroraMgr->GetTriggerControlMgr()->GetReadDataWORD(iCol * 64 + 0, &nwValueOperating);
+	//			m_stTriggerInfo[iCol].nwValueOperating = nwValueOperating;
+	//			break;
+	//		case 2:
+	//			m_pAuroraMgr->GetTriggerControlMgr()->GetReadDataWORD(iCol * 64 + 1, &nwValueDirection);
+	//			m_stTriggerInfo[iCol].nwValueDirection = nwValueDirection;
+	//			break;
+	//		case 3:
+	//			m_pAuroraMgr->GetTriggerControlMgr()->GetReadDataFLOAT(iCol * 64 + 2, &nFValueEncoder);
+	//			m_stTriggerInfo[iCol].nFValueEncoder = nFValueEncoder;
+	//			break;
+	//		case 4:
+	//			m_pAuroraMgr->GetTriggerControlMgr()->GetReadDataFLOAT(iCol * 64 + 4, &nFValueStartPos);
+	//			m_stTriggerInfo[iCol].nFValueStartPos = nFValueStartPos;
+	//			break;
+	//		case 5:
+	//			m_pAuroraMgr->GetTriggerControlMgr()->GetReadDataFLOAT(iCol * 64 + 6, &nFValueEndPos);
+	//			m_stTriggerInfo[iCol].nFValueEndPos = nFValueEndPos;
+	//			break;
+	//		case 6:
+	//			m_pAuroraMgr->GetTriggerControlMgr()->GetReadDataFLOAT(iCol * 64 + 8, &nFValueTriggerPitch);
+	//			m_stTriggerInfo[iCol].nFValueTriggerPitch = nFValueTriggerPitch;
+	//			break;
+	//		case 7:
+	//			m_pAuroraMgr->GetTriggerControlMgr()->GetReadDataWORD(iCol * 64 + 12, &nwValueTriggerMode);
+	//			m_stTriggerInfo[iCol].nwValueTriggerMode = nwValueTriggerMode;
+	//			break;
+	//		case 8:
+	//			m_pAuroraMgr->GetTriggerControlMgr()->GetReadDataDWORD(iCol * 64 + 13, &ndwValueTriggerPeriod);
+	//			m_stTriggerInfo[iCol].ndwValueTriggerPeriod = ndwValueTriggerPeriod;
+	//			break;
+	//		case 9:
+	//			m_pAuroraMgr->GetTriggerControlMgr()->GetReadDataDWORD(iCol * 64 + 32, &ndwValueNumOfTiggers);
+	//			m_stTriggerInfo[iCol].ndwValueNumOfTiggers = ndwValueNumOfTiggers;
+	//			break;
+	//		case 10:
+	//			m_pAuroraMgr->GetTriggerControlMgr()->GetReadDataFLOAT(iCol * 64 + 34, &nFValuePulseWidth);
+	//			m_stTriggerInfo[iCol].nFValuePulseWidth = nFValuePulseWidth;
+	//			break;
+	//		case 11:
+	//			m_pAuroraMgr->GetTriggerControlMgr()->GetReadDataDWORD(iCol * 64 + 48, &ndwValueTriggerCount);
+	//			m_stTriggerInfo[iCol].ndwValueTriggerCount = ndwValueTriggerCount;
+	//			break;
+	//		case 12:
+	//			m_pAuroraMgr->GetTriggerControlMgr()->GetReadDataDWORD(iCol * 64 + 50, &ndwValueEncoderCont);
+	//			m_stTriggerInfo[iCol].ndwValueEncoderCont = ndwValueEncoderCont;
+	//			break;
+	//		case 13:
+	//			m_pAuroraMgr->GetTriggerControlMgr()->GetReadDataFLOAT(iCol * 64 + 52, &nFValueEncoderPosition);
+	//			m_stTriggerInfo[iCol].nFValueEncoderPosition = nFValueEncoderPosition;
+	//			break;
+	//		default:
+	//			break;
+	//		}
+	//	}
+	//}
+}
+
+
+void CDlgMainForm::Finalize()
+{
+}
+
+
+void CDlgMainForm::OnBnClickedButton1()
+{
+	// TODO: 여기에 컨트롤 알림 처리기 코드를 추가합니다.
+	m_pMainAlignCCD[0]->ShowImage2(true);
+}
+
+
+void CDlgMainForm::OnBnClickedBtnZoomIn2() 
+{
+	// TODO: 여기에 컨트롤 알림 처리기 코드를 추가합니다.
+	m_pMainAlignCCD[0]->ShowImage2(false);
+}
+
+
+void CDlgMainForm::OnBnClickedBtnZoomIn3()
+{
+	// TODO: 여기에 컨트롤 알림 처리기 코드를 추가합니다.
+	m_pMainAlignCCD[1]->ShowImage2(true);
+}
+
+
+void CDlgMainForm::OnBnClickedBtnZoomIn4()
+{
+	// TODO: 여기에 컨트롤 알림 처리기 코드를 추가합니다.
+	m_pMainAlignCCD[1]->ShowImage2(false);
+}
+
+
+void CDlgMainForm::OnBnClickedBtnZoomIn5()
+{
+	// TODO: 여기에 컨트롤 알림 처리기 코드를 추가합니다.
+	m_pMainAlignCCD[2]->ShowImage2(true);
+}
+
+
+void CDlgMainForm::OnBnClickedBtnZoomIn7()
+{
+	// TODO: 여기에 컨트롤 알림 처리기 코드를 추가합니다.
+	m_pMainAlignCCD[3]->ShowImage2(true);
+}
+
+
+void CDlgMainForm::SetMCCSignal()
+{
+	bool bMccSignal[100];
+	ZeroMemory(&bMccSignal, sizeof(bMccSignal));
+	int nBit = 0;
+
+	nBit = m_pAuroraMgr->GetMaintControlMgr()->GetIOMapControlMgrPtr()->GetParam_DIOMapMemoryBitImport(PLC_LOADER_ARM_SENSOR_01);
+	if (nBit != -1)
+	{
+		if (nBit == 1)
+		{
+			bMccSignal[MCC_S_X_ENTRY_ARM] = false;
+		}
+		else
+		{
+			bMccSignal[MCC_S_X_ENTRY_ARM] = true;
+		}
+	}
+
+	bool bSensorOff = false;
+	nBit = m_pAuroraMgr->GetMaintControlMgr()->GetIOMapControlMgrPtr()->GetParam_DIOMapMemoryBitExport(PLC_BIT_W_GLASS_SENSOR_POWER_ON);
+	if (nBit != -1)
+	{
+		if (nBit == 1)
+		{
+			bMccSignal[MCC_S_X_GLASS_EXIST] = true;
+			bSensorOff = true;
+		}
+	}
+
+	if (bSensorOff != true)
+	{
+		for (int iGlassShort = 0; iGlassShort < 4; iGlassShort++)
+		{
+			nBit = m_pAuroraMgr->GetMaintControlMgr()->GetIOMapControlMgrPtr()->GetParam_DIOMapMemoryBitImport(PLC_BIT_GLASS_EXIST_01 + iGlassShort);
+			if (nBit != -1)
+			{
+				if (nBit == 1)
+				{
+					bMccSignal[MCC_S_X_GLASS_EXIST] |= true;
+				}
+				else
+				{
+					bMccSignal[MCC_S_X_GLASS_EXIST] |= false;
+				}
+			}
+		}
+	}
+	
+
+	nBit = m_pAuroraMgr->GetMaintControlMgr()->GetIOMapControlMgrPtr()->GetParam_DIOMapMemoryBitImport(PLC_BIT_LIFT_PIN_SENSOR_UP01);
+	if (nBit != -1)
+	{
+		if (nBit == 1)
+		{
+			bMccSignal[MCC_S_X_PIN_UP] = true;
+		}
+		else
+		{
+			bMccSignal[MCC_S_X_PIN_UP] = false;
+		}
+	}
+
+	nBit = m_pAuroraMgr->GetMaintControlMgr()->GetIOMapControlMgrPtr()->GetParam_DIOMapMemoryBitImport(PLC_BIT_LIFT_PIN_SENSOR_DOWN01);
+	if (nBit != -1)
+	{
+		if (nBit == 1)
+		{
+			bMccSignal[MCC_S_X_PIN_DOWN] = true;
+		}
+		else
+		{
+			bMccSignal[MCC_S_X_PIN_DOWN] = false;
+		}
+	}
+
+	nBit = m_pAuroraMgr->GetMaintControlMgr()->GetIOMapControlMgrPtr()->GetParam_DIOMapMemoryBitImport(PLC_BIT_UNLOAD_SENSOR03);
+	if (nBit != -1)
+	{
+		if (nBit == 1)
+		{
+			bMccSignal[MCC_S_X_SAFETY_ON] = true;
+		}
+		else
+		{
+			bMccSignal[MCC_S_X_SAFETY_ON] = false;
+		}
+	}
+
+	nBit = m_pAuroraMgr->GetMaintControlMgr()->GetIOMapControlMgrPtr()->GetParam_DIOMapMemoryBitImport(PLC_R_MOTION_LOADER_DEGREE_0);
+	if (nBit != -1)
+	{
+		if (nBit == 1)
+		{
+			bMccSignal[MCC_S_X_LOADER_ROT_POS_0] = true;
+		}
+		else
+		{
+			bMccSignal[MCC_S_X_LOADER_ROT_POS_0] = false;
+		}
+	}
+
+	nBit = m_pAuroraMgr->GetMaintControlMgr()->GetIOMapControlMgrPtr()->GetParam_DIOMapMemoryBitImport(PLC_R_MOTION_LOADER_DEGREE_1);
+	if (nBit != -1)
+	{
+		if (nBit == 1)
+		{
+			bMccSignal[MCC_S_X_LOADER_ROT_POS_1] = true;
+		}
+		else
+		{
+			bMccSignal[MCC_S_X_LOADER_ROT_POS_1] = false;
+		}
+	}
+
+	nBit = m_pAuroraMgr->GetMaintControlMgr()->GetIOMapControlMgrPtr()->GetParam_DIOMapMemoryBitImport(PLC_R_MOTION_LOADER_DEGREE_2);
+	if (nBit != -1)
+	{
+		if (nBit == 1)
+		{
+			bMccSignal[MCC_S_X_LOADER_ROT_POS_2] = true;
+		}
+		else
+		{
+			bMccSignal[MCC_S_X_LOADER_ROT_POS_2] = false;
+		}
+	}
+
+	nBit = m_pAuroraMgr->GetMaintControlMgr()->GetIOMapControlMgrPtr()->GetParam_DIOMapMemoryBitImport(PLC_R_MOTION_LOADER_DEGREE_3);
+	if (nBit != -1)
+	{
+		if (nBit == 1)
+		{
+			bMccSignal[MCC_S_X_LOADER_ROT_POS_3] = true;
+		}
+		else
+		{
+			bMccSignal[MCC_S_X_LOADER_ROT_POS_3] = false;
+		}
+	}
+
+	nBit = m_pAuroraMgr->GetMaintControlMgr()->GetIOMapControlMgrPtr()->GetParam_DIOMapMemoryBitImport(PLC_BIT_RUN_TEACH_SWITCH);
+	if (nBit != -1)
+	{
+		if (nBit == 1)
+		{
+			bMccSignal[MCC_S_X_RUN_AUTO_SWITCH] = true;
+		}
+		else
+		{
+			bMccSignal[MCC_S_X_RUN_AUTO_SWITCH] = false;
+		}
+	}
+
+	nBit = m_pAuroraMgr->GetMaintControlMgr()->GetIOMapControlMgrPtr()->GetParam_DIOMapMemoryBitImport(PLC_BIT_SUTTER_SENSOR_OPEN);
+	if (nBit != -1)
+	{
+		if (nBit == 1)
+		{
+			bMccSignal[MCC_S_X_PLC_SHUTTER_OPEN] = true;
+		}
+		else
+		{
+			bMccSignal[MCC_S_X_PLC_SHUTTER_OPEN] = false;
+		}
+	}
+
+	nBit = m_pAuroraMgr->GetMaintControlMgr()->GetIOMapControlMgrPtr()->GetParam_DIOMapMemoryBitImport(PLC_BIT_SUTTER_SENSOR_CLOSE);
+	if (nBit != -1)
+	{
+		if (nBit == 1)
+		{
+			bMccSignal[MCC_S_X_PLC_SHUTTER_CLOSE] = true;
+		}
+		else
+		{
+			bMccSignal[MCC_S_X_PLC_SHUTTER_CLOSE] = false;
+		}
+	}
+
+
+	nBit = m_pAuroraMgr->GetMaintControlMgr()->GetIOMapControlMgrPtr()->GetParam_DIOMapMemoryBitImport(PLC_BIT_INITIALIZE_COMPLETE);
+	if (nBit != -1)
+	{
+		if (nBit == 1)
+		{
+			bMccSignal[MCC_S_X_PLC_INIT] = true;
+		}
+		else
+		{
+			bMccSignal[MCC_S_X_PLC_INIT] = false;
+		}
+	}
+
+	nBit = m_pAuroraMgr->GetMaintControlMgr()->GetIOMapControlMgrPtr()->GetParam_DIOMapMemoryBitImport(PLC_BIT_STATE_READY);
+	if (nBit != -1)
+	{
+		if (nBit == 1)
+		{
+			bMccSignal[MCC_S_X_PLC_READY] = true;
+		}
+		else
+		{
+			bMccSignal[MCC_S_X_PLC_READY] = false;
+		}
+	}
+
+	nBit = m_pAuroraMgr->GetMaintControlMgr()->GetIOMapControlMgrPtr()->GetParam_DIOMapMemoryBitImport(PLC_BIT_STATE_LOAD);
+	if (nBit != -1)
+	{
+		if (nBit == 1)
+		{
+			bMccSignal[MCC_S_X_PLC_LOAD] = true;
+		}
+		else
+		{
+			bMccSignal[MCC_S_X_PLC_LOAD] = false;
+		}
+	}
+
+	nBit = m_pAuroraMgr->GetMaintControlMgr()->GetIOMapControlMgrPtr()->GetParam_DIOMapMemoryBitImport(PLC_BIT_STATE_MEASURE);
+	if (nBit != -1)
+	{
+		if (nBit == 1)
+		{
+			bMccSignal[MCC_S_X_PLC_MEAS] = true;
+		}
+		else
+		{
+			bMccSignal[MCC_S_X_PLC_MEAS] = false;
+		}
+	}
+
+	// LYS 2026-06-26 OCP: only check P5 (index 4)
+	int nProbeStart = (m_pAuroraMgr->GetSystemConfigMgrPtr() && m_pAuroraMgr->GetSystemConfigMgrPtr()->IsOCP()) ? 4 : 0;
+
+	int nProbeExistNum[5] = { MCC_S_X_PROBE_EXIST_01 , MCC_S_X_PROBE_EXIST_02, MCC_S_X_PROBE_EXIST_03, MCC_S_X_PROBE_EXIST_04, MCC_S_X_PROBE_EXIST_05 };
+	for (int iProbe = nProbeStart; iProbe < 5; iProbe++)
+	{
+		if (CSequenceManager::GetInstance()->GetFunctionModuleEQState()->IsProbeExistSensorOn(iProbe) == true)
+		{
+			bMccSignal[nProbeExistNum[iProbe]] = true;
+		}
+		else
+		{
+			bMccSignal[nProbeExistNum[iProbe]] = false;
+		}
+	}
+
+	int nPcbNum[5] = { MCC_S_X_PCB_LOCK_01 , MCC_S_X_PCB_LOCK_02, MCC_S_X_PCB_LOCK_03, MCC_S_X_PCB_LOCK_04, MCC_S_X_PCB_LOCK_05 };
+	for (int iProbe = nProbeStart; iProbe < 5; iProbe++)
+	{
+		if (CSequenceManager::GetInstance()->GetFunctionModuleEQState()->IsProbePCBFold(iProbe + df_PROBE_AGING1) == true)
+		{
+			bMccSignal[nPcbNum[iProbe]] = true;
+		}
+		else
+		{
+			bMccSignal[nPcbNum[iProbe]] = false;
+		}
+	}
+	
+	int nClampNum[5] = { MCC_S_X_CLAM_LOCK_01 , MCC_S_X_CLAM_LOCK_02, MCC_S_X_CLAM_LOCK_03, MCC_S_X_CLAM_LOCK_04, MCC_S_X_CLAM_LOCK_05 };
+	for (int iProbe = nProbeStart; iProbe < 5; iProbe++)
+	{
+		if (CSequenceManager::GetInstance()->GetFunctionModuleEQState()->IsProbeClampFold(iProbe + df_PROBE_AGING1) == true)
+		{
+			bMccSignal[nClampNum[iProbe]] = true;
+		}
+		else
+		{
+			bMccSignal[nClampNum[iProbe]] = false;
+		}
+	}
+	
+	int nZeroNum[5] = { MCC_S_X_ZERO_LOCK_01 , MCC_S_X_ZERO_LOCK_02, MCC_S_X_ZERO_LOCK_03, MCC_S_X_ZERO_LOCK_04, MCC_S_X_ZERO_LOCK_05 };
+	for (int iProbe = nProbeStart; iProbe < 5; iProbe++)
+	{
+		if (CSequenceManager::GetInstance()->GetFunctionModuleEQState()->IsProbeZerolockSensorOn(iProbe + df_PROBE_AGING1) == true)
+		{
+			bMccSignal[nZeroNum[iProbe]] = true;
+		}
+		else
+		{
+			bMccSignal[nZeroNum[iProbe]] = false;
+		}
+	}
+	
+	int nPcbUnlockNum[5] = { MCC_S_X_PCB_UNLOCK_01 , MCC_S_X_PCB_UNLOCK_02, MCC_S_X_PCB_UNLOCK_03, MCC_S_X_PCB_UNLOCK_04, MCC_S_X_PCB_UNLOCK_05 };
+	for (int iProbe = nProbeStart; iProbe < 5; iProbe++)
+	{
+		if (CSequenceManager::GetInstance()->GetFunctionModuleEQState()->IsProbePCBUnFold(iProbe + df_PROBE_AGING1) == true)
+		{
+			bMccSignal[nPcbUnlockNum[iProbe]] = true;
+		}
+		else
+		{
+			bMccSignal[nPcbUnlockNum[iProbe]] = false;
+		}
+	}
+
+	int nClampUnlockNum[5] = { MCC_S_X_CLAM_UNLOCK_01 , MCC_S_X_CLAM_UNLOCK_02, MCC_S_X_CLAM_UNLOCK_03, MCC_S_X_CLAM_UNLOCK_04, MCC_S_X_CLAM_UNLOCK_05 };
+	for (int iProbe = nProbeStart; iProbe < 5; iProbe++)
+	{
+		if (CSequenceManager::GetInstance()->GetFunctionModuleEQState()->IsProbeClampUnFold(iProbe + df_PROBE_AGING1) == true)
+		{
+			bMccSignal[nClampUnlockNum[iProbe]] = true;
+		}
+		else
+		{
+			bMccSignal[nClampUnlockNum[iProbe]] = false;
+		}
+	}
+
+	int nZeroUnlockNum[5] = { MCC_S_X_ZERO_UNLOCK_01 , MCC_S_X_ZERO_UNLOCK_02, MCC_S_X_ZERO_UNLOCK_03, MCC_S_X_ZERO_UNLOCK_04, MCC_S_X_ZERO_UNLOCK_05 };
+	for (int iProbe = nProbeStart; iProbe < 5; iProbe++)
+	{
+		if (CSequenceManager::GetInstance()->GetFunctionModuleEQState()->IsProbeZeroUnlockSensorOn(iProbe + df_PROBE_AGING1) == true)
+		{
+			bMccSignal[nZeroUnlockNum[iProbe]] = true;
+		}
+		else
+		{
+			bMccSignal[nZeroUnlockNum[iProbe]] = false;
+		}
+	}
+
+	nBit = m_pAuroraMgr->GetMaintControlMgr()->GetIOMapControlMgrPtr()->GetParam_DIOMapMemoryBitImport(PLC_BIT_INITIALIZE);
+	if (nBit != -1)
+	{
+		if (nBit == 1)
+		{
+			bMccSignal[MCC_S_Y_PLC_INIT] = true;
+		}
+		else
+		{
+			bMccSignal[MCC_S_Y_PLC_INIT] = false;
+		}
+	}
+
+
+	nBit = m_pAuroraMgr->GetMaintControlMgr()->GetIOMapControlMgrPtr()->GetParam_DIOMapMemoryBitImport(PLC_BIT_MEAS2READY_START);
+	if (nBit != -1)
+	{
+		if (nBit == 1)
+		{
+			bMccSignal[MCC_S_Y_PLC_READY] = true;
+		}
+		else
+		{
+			bMccSignal[MCC_S_Y_PLC_READY] = false;
+		}
+	}
+
+	nBit = m_pAuroraMgr->GetMaintControlMgr()->GetIOMapControlMgrPtr()->GetParam_DIOMapMemoryBitImport(PLC_BIT_READY2MEAS_START);
+	if (nBit != -1)
+	{
+		if (nBit == 1)
+		{
+			bMccSignal[MCC_S_Y_PLC_MEAS] = true;
+		}
+		else
+		{
+			bMccSignal[MCC_S_Y_PLC_MEAS] = false;
+		}
+	}
+
+
+
+
+	for (size_t i = 0; i < MCC_S_PLC_END; i++)
+	{
+		if (bMccSignal[i] != m_bMccSignal[i])
+		{
+			if (bMccSignal[i] == true)
+			{
+				CMCCLogMgr::GetInstance()->SetMCC_Signal(i, true); 
+			}
+			else
+			{
+				CMCCLogMgr::GetInstance()->SetMCC_Signal(i, false);
+			}
+
+			m_bMccSignal[i] = bMccSignal[i];
+		}
+	}
+}
+
+void CDlgMainForm::OnBnClickedChkLiveCcd1()
+{
+	{ CString s; s.Format(_T("CCD1 LIVE checkbox -> %d (UI)"), m_chkLiveH1.GetCheck()); CLogWrapper::GetInstance()->KMLOG(SYST, s); }	// LYS 2026-09-07 라이브 꺼짐 분석용
+	// TODO: 여기에 컨트롤 알림 처리기 코드를 추가합니다.
+	if( m_chkLiveH1.GetCheck() == TRUE)
+		m_pMainAlignCCD[0]->SetCCDLive(true);
+	else
+		m_pMainAlignCCD[0]->SetCCDLive(false);
+}
+
+
+void CDlgMainForm::OnBnClickedChkLiveCcd2()
+{
+	{ CString s; s.Format(_T("CCD2 LIVE checkbox -> %d (UI)"), m_chkLiveH2.GetCheck()); CLogWrapper::GetInstance()->KMLOG(SYST, s); }	// LYS 2026-09-07 라이브 꺼짐 분석용
+	// TODO: 여기에 컨트롤 알림 처리기 코드를 추가합니다.
+	if (m_chkLiveH2.GetCheck() == TRUE)
+		m_pMainAlignCCD[1]->SetCCDLive(true);
+	else
+		m_pMainAlignCCD[1]->SetCCDLive(false);
+}
+
+void CDlgMainForm::OnBnClickedBtnCcdReset()
+{
+	// LYS 2026-09-07 CCD RESET(재연결) 버튼: Align CCD 1/2 라이브 표시 ON + 카메라 재오픈/재접속 + 그랩 스레드 확인
+	CLogWrapper::GetInstance()->KMLOG(SYST, _T("CCD RESET button pressed"));
+	for (int i = 0; i < 2; i++)
+	{
+		if (m_pMainAlignCCD[i] != nullptr)
+			m_pMainAlignCCD[i]->ReconnectCCD();
+	}
+	m_chkLiveH1.SetCheck(TRUE);
+	m_chkLiveH2.SetCheck(TRUE);
+}

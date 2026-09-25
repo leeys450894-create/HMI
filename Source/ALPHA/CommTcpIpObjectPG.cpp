@@ -143,7 +143,8 @@ bool CCommTcpIpObjectPG::RecipeChange()
 {
 	int nRet = VTM_RV_SUCCESSED;
 
-	nRet = _ExePGCtrl(enumTCPIpFactoryt_PGEvent_2);
+	// LYS 2026-09-14 AGING Model_Open Remove TEMP
+	//nRet = _ExePGCtrl(enumTCPIpFactoryt_PGEvent_2);
 
 	if (nRet == VTM_RV_SUCCESSED)
 		nRet = _ExePGCtrl(enumTCPIpFactoryt_PGEvent_0);
@@ -413,7 +414,7 @@ bool CCommTcpIpObjectPG::WaitInspectionComplete(DWORD dwTimeOut, int iMeasType)
 		{
 			for (size_t i = 0; i < nCellCnt; i++)
 			{
-				if (nCellCnt > 10)
+				if (nCellCnt > 10 && !IsOCP())	// LYS 2026-09-07 OCP: no ODD/EVEN split
 				{
 					if (m_bAgingingEven != true)
 					{
@@ -459,7 +460,7 @@ bool CCommTcpIpObjectPG::WaitInspectionComplete(DWORD dwTimeOut, int iMeasType)
 		{
 			for (size_t i = 0; i < nCellCnt; i++)
 			{
-				if (nCellCnt > 10)
+				if (nCellCnt > 10 && !IsOCP())	// LYS 2026-09-07 OCP: no ODD/EVEN split
 				{
 					if (m_bAgingingEven != true)
 					{
@@ -509,7 +510,7 @@ bool CCommTcpIpObjectPG::WaitInspectionComplete(DWORD dwTimeOut, int iMeasType)
 			}
 			for (size_t i = 0; i < nCellCnt; i++)
 			{
-				if (nCellCnt > 10)
+				if (nCellCnt > 10 && !IsOCP())	// LYS 2026-09-07 OCP: no ODD/EVEN split
 				{
 					if (m_bAgingingEven != true)
 					{
@@ -555,7 +556,7 @@ bool CCommTcpIpObjectPG::WaitInspectionComplete(DWORD dwTimeOut, int iMeasType)
 
 			for (size_t i = 0; i < nCellCnt; i++)
 			{
-				if (nCellCnt > 10)
+				if (nCellCnt > 10 && !IsOCP())	// LYS 2026-09-07 OCP: no ODD/EVEN split
 				{
 					if (m_bAgingingEven != true)
 					{
@@ -641,7 +642,7 @@ bool CCommTcpIpObjectPG::WaitInspectionComplete(DWORD dwTimeOut, int iMeasType)
 	TCHAR szResult;
 	if (iMeasType == 5)			// OST
 	{
-		if (nCellCnt > 10)
+		if (nCellCnt > 10 && !IsOCP())	// LYS 2026-09-07 OCP: no ODD/EVEN split
 		{
 			if (m_bAgingingEven != true)
 			{
@@ -760,7 +761,7 @@ bool CCommTcpIpObjectPG::WaitInspectionComplete(DWORD dwTimeOut, int iMeasType)
 	}
 	else if (iMeasType == 6)	// PTP
 	{
-		if (nCellCnt > 10)
+		if (nCellCnt > 10 && !IsOCP())	// LYS 2026-09-07 OCP: no ODD/EVEN split
 		{
 			if (m_bAgingingEven != true)
 			{
@@ -888,7 +889,7 @@ bool CCommTcpIpObjectPG::WaitInspectionComplete(DWORD dwTimeOut, int iMeasType)
 			for (int iCnt = 0; iCnt < m_strPGResult.GetLength() && iCnt < RTEST_MAX; iCnt++)
 				pAutoCnt->SetCellStatus(iCnt, _ttoi(m_strPGResult.Mid(iCnt, 1)) + 20);
 		}
-		if (nCellCnt > 10)
+		if (nCellCnt > 10 && !IsOCP())	// LYS 2026-09-07 OCP: no ODD/EVEN split
 		{
 			if (m_bAgingingEven != true)
 			{
@@ -1010,7 +1011,7 @@ bool CCommTcpIpObjectPG::WaitInspectionComplete(DWORD dwTimeOut, int iMeasType)
 		int iStick = 0;
 		iStick = m_pShareMemoryMgr->GetSharedMemory()->m_nAgingStartStick[4];
 
-		if (nCellCnt > 10)
+		if (nCellCnt > 10 && !IsOCP())	// LYS 2026-09-07 OCP: no ODD/EVEN split
 		{
 			if (m_bAgingingEven != true)
 			{
@@ -1392,6 +1393,17 @@ void CCommTcpIpObjectPG::xNetCallbackRecieveData(LPVOID ud)
 					nEventOK = enumRecvEventID_RECIPE_CHANGE_OK;
 					nEventNG = enumRecvEventID_RECIPE_CHANGE_NG;
 				}
+				else if (strPGCmd.Find(eS2F9) == 0)		// LYS 2026-09-15 Add Pab5 Model Set ACK
+				{
+					bAck = FALSE;
+					stRcvPg.iStream = _ttoi(strPGCmd.Left(2));
+					stRcvPg.iFunc = _ttoi(strPGCmd.Mid(2, 2));
+					stRcvPg.iAck = _ttoi(strPGCmd.Mid(4, 2));
+					stRcvPg.iError = _ttoi(strPGCmd.Mid(6, 2));
+
+					nEventOK = enumRecvEventID_RECIPE_CHANGE_OK;
+					nEventNG = enumRecvEventID_RECIPE_CHANGE_NG;
+					}
 				else if (strPGCmd.Find(eS2F3) == 0)		// Model ACK
 				{
 					stRcvPg.iStream = _ttoi(strPGCmd.Left(2));
@@ -1444,7 +1456,7 @@ void CCommTcpIpObjectPG::xNetCallbackRecieveData(LPVOID ud)
 						int iStick = 0;
 						iStick = m_pShareMemoryMgr->GetSharedMemory()->m_nAgingStartStick[4];
 
-						if (nCellCnt > 10)
+						if (nCellCnt > 10 && !IsOCP())	// LYS 2026-09-07 OCP: no ODD/EVEN split
 						{
 							int j = 0;
 							for (size_t i = 0; i < nCellCnt; i++)
@@ -1592,6 +1604,14 @@ CLogFileAccessor* CCommTcpIpObjectPG::GetLogFileAccessorPtr()
 	return m_pLogFileAccessor;
 }
 
+// LYS 2026-09-07 OCP PG (Metrosys reference) sends S6/S8 with no ODD/EVEN option byte and
+// ages/tests the whole stick in one command. The nCellCnt > 10 ODD/EVEN split (Ensis PG rule)
+// must therefore be bypassed on OCP so every cell is marked and every result char is consumed.
+bool CCommTcpIpObjectPG::IsOCP() const
+{
+	return (m_pSystemConfigMgr != nullptr && m_pSystemConfigMgr->IsOCP());
+}
+
 int CCommTcpIpObjectPG::SetCommand(PGPROTOCOL stPg, bool bWait)
 {
 //	int iRet = VTM_RV_SUCCESSED;
@@ -1620,11 +1640,11 @@ int CCommTcpIpObjectPG::SetCommand(PGPROTOCOL stPg, bool bWait)
 
 	int nEventOK = enumRecvEventID_SET_PARAMETER_OK, nEventNG = enumRecvEventID_SET_PARAMETER_NG;
 
-	if (stPg.iStream == 10) // Turn OFF or TEST STOP
-	{
-		;
-	}
-	else
+	//if (stPg.iStream == 10) // Turn OFF or TEST STOP
+	//{
+	//	;
+	//}
+	//else
 	{
 		if (stPg.iStream == 2)	// Recipe
 		{
@@ -1897,10 +1917,22 @@ int	 CCommTcpIpObjectPG::_ExePGCtrl(int iEvent, int iCellNum)
 	if (iEvent == enumTCPIpFactoryt_PGEvent_0)
 	{	
 		// Turn Off
-		stPg.iStream = 10;
-		stPg.iFunc = 3;
+		// LYS 2026-09-14 OCP 는 S10F3 대신 S8F1 cmd=2(Turn Off, 전체 셀) - PGEvent_8 과 동일 근거. 응답 대기 없이 보내고 1초 쉬는 기존 흐름은 유지.
+		if (IsOCP())
+		{
+			stPg.iStream = 8;
+			stPg.iFunc = 1;
+			stPg.iCmd = 2;
+			stPg.iCellNum = 0;
+		}
+		else
+		{
+			stPg.iStream = 10;
+			stPg.iFunc = 3;
+		}
 		SetCommand(stPg, false);
 		Sleep(1000);
+		ZeroMemory(&stPg, sizeof(stPg));	// LYS 2026-09-14 iCmd/iCellNum 잔존값이 뒤의 Model 명령에 섞이지 않게 초기화
 
 		str.Format(_T("%s"), m_pRecipeEditMgr->GetRecipeID()); 
 
@@ -2047,10 +2079,30 @@ int	 CCommTcpIpObjectPG::_ExePGCtrl(int iEvent, int iCellNum)
 	}
 	else if (iEvent == enumTCPIpFactoryt_PGEvent_8)		// Turn Off 
 	{
-		stPg.iStream = 10;
-		stPg.iFunc = 3;
+		// LYS 2026-09-14 OCP PG 는 S10F3(전체 Turn Off, "1003") 에 응답하지 않는다 - PG 로그에 1003 송신 후 RECV 가 한 번도 없음(09-08~09-14).
+		//   Turn On(S8F1 cmd=1 cell=0, "080101 00") 이 정상 동작하므로 같은 Cell Command 형식으로 보낸다.
+		//   근거: ELP-ICP-PG-Control-LanProtocol(SDC,160310) 2.8.1 S8F1 Command 표 = 1 Turn On / 2 Turn Off / 3 Next / 4 Prev / 5 OST / 6 PTP / 7 RTest, Cell 00 = 전체 셀.
+		//   완료(S8F3) 대기는 Turn On 과 동일. PG 가 S8F3 을 안 주면 PG 로그에 'WaitInspectionComplete, HEAD_ACK_TIMEOUT' 이 남는다. HMI 모드는 기존 S10F3 유지.
+		if (IsOCP())
+		{
+			stPg.iStream = 8;
+			stPg.iFunc = 1;
+			stPg.iCmd = 2;		// S8F1 cmd=2 Turn Off
+			stPg.iCellNum = 0;
 
-		nRtn = SetCommand(stPg);
+			nRtn = SetCommand(stPg);
+			if (nRtn == VTM_RV_SUCCESSED)
+			{
+				nRtn = WaitInspectionComplete(nTimeOut);
+			}
+		}
+		else
+		{
+			stPg.iStream = 10;
+			stPg.iFunc = 3;
+
+			nRtn = SetCommand(stPg);
+		}
 	}
 
 	else if (iEvent == enumTCPIpFactoryt_PGEvent_9)
@@ -2295,7 +2347,7 @@ int	 CCommTcpIpObjectPG::_ExePGCtrl(int iEvent, int iCellNum)
 			int iStick = 0;
 			iStick = m_pShareMemoryMgr->GetSharedMemory()->m_nAgingStartStick[4];
 
-			if (nCellCnt > 10)
+			if (nCellCnt > 10 && !IsOCP())	// LYS 2026-09-07 OCP: no ODD/EVEN split
 			{
 				for (size_t i = 0; i < nCellCnt; i++)
 				{
@@ -2468,7 +2520,7 @@ int	 CCommTcpIpObjectPG::_ExePGCtrl(int iEvent, int iCellNum)
 
 			for (size_t i = 0; i < nCellCnt; i++)
 			{
-				if (nCellCnt > 10)
+				if (nCellCnt > 10 && !IsOCP())	// LYS 2026-09-07 OCP: no ODD/EVEN split
 				{
 					if (i % 2)
 					{

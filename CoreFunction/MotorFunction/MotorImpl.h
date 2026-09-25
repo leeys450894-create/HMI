@@ -33,6 +33,7 @@ public:
 	virtual long		MoveCmdPosR(int iAxis, double dPos, bool bBlockMode, int iSpeed);
 	virtual long		MoveCmdPosMulti(stMotorPosition *pPos, int iAxis, int iSpeed);
 	virtual long		MoveJog(int iAxis, bool bDir);
+	virtual long		MoveToPos(int iAxis, double dPos, int iSpeed = -1);	// LYS 2026-09-23 MC OFF Probe Z 긴급 후퇴용 - 인터락·상태검사 없는 절대 이동(IT_8.6G_HBS 이식)
 	virtual long		WaitMotionEnd(int iAxis, DWORD dwTimeout);
 	virtual bool		CheckMoveDone(int iAxis, DWORD dwTimeout);
 	virtual bool		CheckHomeDone(int iAxis, DWORD dwTimeout);

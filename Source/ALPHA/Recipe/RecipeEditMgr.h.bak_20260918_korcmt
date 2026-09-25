@@ -1,0 +1,140 @@
+#pragma once
+
+#include "..\AuroraSubMgr.h"
+#include "RecipeData.h"
+#include "..\AuroraMgrPool.h"
+#include "..\Include\API_RECIPE.h"
+
+#define _RCP_EXT_FILE_NAME	_T(".rcp")
+#define _RCP_ALL_FILE_NAME	_T("*.rcp")
+
+
+enum enumMEASURE_MODE_INDEX
+{
+	enumMEASURE_MODE_WAD = 0,
+	enumMEASURE_MODE_VISION,
+	enumMEASURE_MODE_COLOR,
+	enumMEASURE_MODE_ANGLE,
+	enumMEASURE_MODE_TSP,
+	enumMEASURE_MODE_LCR,
+	enumMEASURE_MODE_PG,
+	enumMEASURE_MODE_AGING,
+	enumMEASURE_MODE_END,
+};
+
+/*
+struct stGlassMeasAreaInfo
+{
+	bool			bUse;
+	int				nCurrentArea;
+	int				nCurrentHead;
+	stMeasAreaInfo	stGlassMeasInfo;
+
+	stGlassMeasAreaInfo()
+	{
+		bUse = false;
+		nCurrentArea = -1;
+	}
+};
+*/
+struct SRECIPE_FILEINFO
+{
+	CString strName;
+	CString strDate;
+};
+
+class CIniHelper;									//sklee 20210601 add
+class CBinaryHelper;
+class CPositionConfigMgr;
+class CRecipeEditMgr : public CAuroraSubMgr
+{
+	CIniHelper				*m_pIniHelper;					//sklee 20210601 add
+	CBinaryHelper			*m_pBinaryHelper;
+	CRecipeData				*m_pRecipeData;
+	CPositionConfigMgr		*m_pPositionConfigMgr;
+	stAuroraMgrPool			*m_pMgrPool_link;
+	CPtrnInfo				m_ptrnReview;
+	C_OutRecipeFunc			* m_pRecipeFunc;
+
+	CShareMemoryMgr* GetShareMemoryMgrPtr() { return m_pMgrPool_link->pShareMemoryMgr; }
+
+public:
+
+	void SetRecipePtr();
+	CRecipeData	*GetRecipeDataPtr()	{ return m_pRecipeData;	}
+	C_OutRecipeFunc* GetRecipeFuncPtr() { return m_pRecipeFunc; }
+	S_RecipeMgr* GetRecipeMgrPtr();
+	S_RecipeInfo* GetRecipeInfo();
+	S_RecipeData* GetRecipeData();
+	S_RecipeMap* GetRecipeMap();
+	double GetStickProbeZOffset(int iStick);	// LYS 2026-09-09 Stick별 PROBE Z CONTACT OFFSET(mm, +=하강). 범위 밖/미로드=0, |값|>1.0mm 클램프
+
+	void ChangeAreaInfoRecipeToMeas();
+//	std::vector<stGlassMeasAreaInfo>		m_vecGlassMeasAreaHead1;
+//	std::vector<stGlassMeasAreaInfo>		m_vecGlassMeasAreaHead2;
+
+private:
+	CString m_strRecipeID;
+	CString m_strRecipeFolderPath;
+	CString m_strRecipeFileFullPath;
+	bool	m_bRecipeDeleteFlag;
+
+private:
+	CWinThread* m_pThread;
+	bool		m_bThreadLive;
+	HANDLE		m_hCloseEvent;
+	static UINT ThreadRun(LPVOID p1);
+	UINT ThreadRun();
+
+	// PG device 에 Download 를 수행하기 떄문에
+	// PG device 와 연동해서 화면에 표시하기 위해서 필요한 함수
+public:
+	int		RecipeChange(CString strRecipeID);
+	void	RecipeUpdateUI();
+
+public:
+	int		NewRecipe(CString strRecipeID);
+	int		OpenRecipe(CString strRecipeID);
+	int		OpenAlignRecipe(CString strRecipeID);
+	bool	SaveRecipe(CString strRecipeID);
+	bool	SaveRecipeAs(CString strRecipeID);
+	BOOL	DeleteRecipe(CString strRecipeID);
+	bool	IsRecipeOpened() const;
+	CString	GetRecipeID() const;
+	CString	GetRecipeFolderPath() const;
+	int		DefaultRecipeCopy(CString strRecipeID);
+
+private:
+	std::vector<SRECIPE_FILEINFO> m_vecRcpList;
+	// LYS 2026-09-18 TestMode MOVE : stick of the previous move (-1 = none yet).
+	//                used to skip the probe uncontact when only the cell changes.
+	int		m_iTestModeLastStick;
+public:
+	void	UpdateRecipeList();
+	int		GetRecipeListCount() const;
+	CString GetSelectedRecipeID(int nIndex);
+	CString GetSelectedRecipeDate(int nIndex);
+	void	SetRecipePosDeleteFlag(bool bFlag);
+	bool	GetRecipePosDeleteFlag();
+	bool	SetROIAlignPtrn(int nIndex);
+	bool	SetROIMeasPtrn(int nIndex);
+	int		SetDetectAlignPtrn(int nIndex);
+	int		SetDetectMeasPtrn(int nIndex);
+
+public:
+	bool LinkDataBase(bool bSave);
+	
+
+
+
+//------------------------------------------------------------------
+// 공통 인터페이스 함수
+//------------------------------------------------------------------
+public:
+	virtual bool Initialize() override;
+private:
+	virtual void Finalize() override;
+public:
+	CRecipeEditMgr(stAuroraMgrPool &MgrPool);
+	virtual ~CRecipeEditMgr();
+};

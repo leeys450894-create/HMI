@@ -130,7 +130,7 @@ UINT CAlarmMonitorToSensorTemperatureLow::ThreadRun()
 		}
 	}
 
-	if (m_nResetCnt > 2)  // 3sec
+	if (m_nResetCnt > 1)  // 3sec
 	{
 		m_bSetAlarm = false;
 		m_nResetCnt = 0;

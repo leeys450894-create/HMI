@@ -15,6 +15,7 @@
 //#include "Manager\AlarmMonitorMgr.h"
 //#include "AlarmController.h"
 #include "Manager\SystemConfigMgr.h"
+#include "Manager\ShareMemoryMgr.h"	// LYS 2026-09-25 GetEqProbeID
 #include "Manager\SequenceManager.h"
 //#include "Manager\IOMapControlMgr.h"
 //#include "Manager\MotorControlMgr.h"
@@ -39,6 +40,7 @@
 
 #include "FunctionModule\FunctionModuleEQState.h"
 #include "FunctionModule\FunctionModuleEQStateChange.h"
+#include "FunctionModule\FunctionModuleProbeACC.h"	// LYS 2026-09-25 STOP 이 SACC 시퀀스도 세운다
 #include "..\CoreFunction\common\IniHelper.h"
 #include "AuroraFuncDefine.h"
 #include "D_SystemHostMode.h"
@@ -179,6 +181,31 @@ static CString ColumnMeas[] =
 	_T("Value"),
 };
 
+// LYS 2026-09-19 온도 행 이름·순서를 PLCMAdress.csv 온도 비트 순서(M 주소 순서)로 맞췄다.
+//                i 번째 행 = stFDCWData[FDC_WDATA_TEMP_1 + i] = 과열 표시기 M4210+i = 리셋 스위치 (i+1) 번.
+//                이름은 IO List Map 위치명. FDC 가 안 보내는 PG-BOX R/L, PROFILE R1/R2/L1/L2 행은 뺐다.
+//                순서가 행 인덱스이므로 ESD[V] / LIFT PIN 은 반드시 온도 뒤 마지막 두 칸에 둘 것.
+//static CString szNameRow[] =
+//{
+//	_T("GPS EL.BOX"),
+//	_T("UPS EL.BOX"),
+//	_T("PC BOX"),
+//	_T("PC E-BOX FRONT"),
+//	_T("PC E-BOX REAR"),
+//	_T("I/O PANEL"),
+//	_T("P/N PANEL"),
+//	_T("PG-BOX_RIGHT"),
+//	_T("PG-BOX_LEFT"),
+//	_T("PROFILE RIGHT1"),
+//	_T("PROFILE RIGHT2"),
+//	_T("PROFILE LEFT1"),
+//	_T("PROFILE LEFT2"),
+//	_T("FRONT S-BOX"),
+//	_T("REAR S-BOX"),
+//	_T("SACC"),
+//	_T("ESD[V]"),
+//	_T("LIFT PIN"),
+//};
 static CString szNameRow[] =
 {
 	_T("GPS EL.BOX"),
@@ -188,12 +215,6 @@ static CString szNameRow[] =
 	_T("PC E-BOX REAR"),
 	_T("I/O PANEL"),
 	_T("P/N PANEL"),
-	_T("PG-BOX_RIGHT"),
-	_T("PG-BOX_LEFT"),
-	_T("PROFILE RIGHT1"),
-	_T("PROFILE RIGHT2"),
-	_T("PROFILE LEFT1"),
-	_T("PROFILE LEFT2"),
 	_T("FRONT S-BOX"),
 	_T("REAR S-BOX"),
 	_T("SACC"),
@@ -208,17 +229,20 @@ enum _SIZE_t {
 	_MIN_SIZE_Y,
 };
 
+// LYS 2026-09-25 NAME 열 추가, 폭은 컨트롤 190 DLU(약 281px)에 맞춤 - 구 130/145/50 = 325px 라 Count 열이 잘렸다
 static long ColumnSizeProbe[] =
 {
-	130,
-	145,
-	50,
+	55,
+	100,
+	90,
+	36,
 };
+//static long ColumnSizeProbe[] = { 130, 145, 50 };
 
 enum enumColumnNameProbe
 {
 	enumColumnNameProbe_Name = 0,
-	enumColumnNameProbe_Value1 = 0,
+	enumColumnNameProbe_Value1,		// LYS 2026-09-25 was "= 0" (NAME column folded into ProbeID)
 	enumColumnNameProbe_Value2,
 	enumColumnNameProbe_Value3,
 	enumColumnNameProbe_End,
@@ -226,10 +250,27 @@ enum enumColumnNameProbe
 
 static CString ColumnProbe[] =
 {
-	_T("ProbeID"),
-	_T("Mount Time"),
-	_T("Count"),
+	_T("NAME"),		// LYS 2026-09-25
+	_T("PROBE ID"),
+	_T("MOUNT TIME"),
+	_T("CNT"),
 };
+
+// LYS 2026-09-25 램프 타이머 4 -> 2. 실제 사용 중인 Align 카메라 2대의 조명은 SPO(port 0) 채널 3(LEFT, CCD1) / 2(RIGHT, CCD2) 이고
+//   (DoWorkGlassSWAlignStep / DoWorkGlassMeasureStep 의 iCh = {3, 2}), 채널 0/1 은 OUT_OF_SERVICE 인 프로브 교체용 카메라라 표시하지 않는다.
+//   레지스트리 키(LampTime_Used%02d 등)는 종전처럼 SPO 채널 번호로 유지해 누적 시간을 잇고, 화면 라벨만 ALIGN CCD1/2 로 바꾼다.
+//   LightControlMgr 가 보내는 WM_MSG_UPDATE_LAMP_TIME 의 iLamp 는 채널 번호이므로 LampChannelToSlot 으로 슬롯을 찾는다.
+static const int     s_nLampTimerChannel[df_MAX_USE_LAMP] = { 3, 2 };
+static const TCHAR*  s_szLampTimerLabel[df_MAX_USE_LAMP]  = { _T("ALIGN CCD1"), _T("ALIGN CCD2") };
+
+int CDlgSubOperate::LampChannelToSlot(int nChannel)
+{
+	for (int i = 0; i < df_MAX_USE_LAMP; i++)
+	{
+		if (s_nLampTimerChannel[i] == nChannel) return i;
+	}
+	return -1;
+}
 
 IMPLEMENT_DYNAMIC(CDlgSubOperate, CMainSubDlgWin)
 
@@ -328,8 +369,8 @@ void CDlgSubOperate::DoDataExchange(CDataExchange* pDX)
 	DDX_Control(pDX, IDC_BUTTON_STOP, m_btnImage[BUTTON_IMAGE_STOP]);
 	DDX_Control(pDX, IDC_STATIC_LAMP_TIMER1, m_LmapTimer[0]);
 	DDX_Control(pDX, IDC_STATIC_LAMP_TIMER2, m_LmapTimer[1]);
-	DDX_Control(pDX, IDC_STATIC_LAMP_TIMER3, m_LmapTimer[2]);
-	DDX_Control(pDX, IDC_STATIC_LAMP_TIMER4, m_LmapTimer[3]);
+	//DDX_Control(pDX, IDC_STATIC_LAMP_TIMER3, m_LmapTimer[2]);	// LYS 2026-09-25 removed (df_MAX_USE_LAMP 4 -> 2)
+	//DDX_Control(pDX, IDC_STATIC_LAMP_TIMER4, m_LmapTimer[3]);
 
 	DDX_Control(pDX, IDC_STATIC_OPERATION_INFO, m_LabelInfo[0]);
 	DDX_Control(pDX, IDC_STATIC_LAMPTIME, m_LabelInfo[1]);
@@ -417,7 +458,9 @@ BOOL CDlgSubOperate::OnInitDialog()
 	// Lamp Timer
 	for (int iLamp = 0; iLamp< df_MAX_USE_LAMP; iLamp++)
 	{
-		m_LmapTimer[iLamp].InitTimer(STR_COMPANY_NAME, strAppName, LT_LAMP_TIMER, iLamp);
+		m_LmapTimer[iLamp].SetLabel(s_szLampTimerLabel[iLamp]);	// LYS 2026-09-25 라벨은 InitTimer(DefaultTimer) 전에
+		m_LmapTimer[iLamp].InitTimer(STR_COMPANY_NAME, strAppName, LT_LAMP_TIMER, s_nLampTimerChannel[iLamp]);	// LYS 2026-09-25 레지스트리 키 = SPO 채널
+		//m_LmapTimer[iLamp].InitTimer(STR_COMPANY_NAME, strAppName, LT_LAMP_TIMER, iLamp);
 
 		SetLampUse(iLamp, true);
 	}
@@ -534,7 +577,7 @@ BOOL CDlgSubOperate::OnInitDialog()
 	RotateMeasPath(m_nOldAngle);
 	RotateGlassPath(0);	// LYS 2026-08-07 rotation-change: default view 0-deg (load posture, was 90)
 
-	m_pdCardSize[0] = 250;
+	m_pdCardSize[0] = 210;		// LYS 2026-09-03 프로브 사이즈 250 -> 210
 	m_pdCardSize[1] = 0;
 	m_pdCardSize[2] = m_pdGlassSize[_MAX_SIZE_X];
 	m_pdCardSize[3] = m_pdGlassSize[_MIN_SIZE_X];
@@ -878,6 +921,7 @@ void CDlgSubOperate::__InitListControl3()
 }
 
 
+#if 0	// LYS 2026-09-25 구 PROBE INFO 그리드(P1~P5 5행 고정, NAME 열 없음) - 아래 새 구현으로 대체
 void CDlgSubOperate::__InitialListData3()
 {
 	// 결과값 리스트를 갱신한다.
@@ -952,6 +996,103 @@ void CDlgSubOperate::__RefreshListData3()
 
 	m_gridListMeasInfo.SetRedraw(TRUE);
 }
+
+
+#else
+// LYS 2026-09-25 PROBE INFO 그리드를 현 컨셉에 맞춤.
+//   OCP(1-Probe): P5 MEAS(설비 내 프로브, D2150) / BUFFER 1,2 / LOAD(RFID, D2400) 4행. 장착 시각·컨택 횟수는 P5 행에만.
+//   HMI: P1~P4 AGING + P5 MEAS 5행. ID·시각·횟수는 CShareMemoryMgr 접근자(GetEqProbe*)로 읽는다.
+int CDlgSubOperate::__MeasInfoRowCount()
+{
+	const bool bOcp = (m_pAuroraMgr->GetSystemConfigMgrPtr() && m_pAuroraMgr->GetSystemConfigMgrPtr()->IsOCP());
+	return bOcp ? 4 : CShareMemoryMgr::EQ_PROBE_UNIT_MAX;
+}
+
+void CDlgSubOperate::__InitialListData3()
+{
+	m_gridListMeasInfo.DeleteAllItems();
+	m_gridListMeasInfo.SetColumnCount(enumColumnNameProbe_End);
+	m_gridListMeasInfo.SetFixedRowCount(1);
+
+	for (long n = 0; n < enumColumnNameProbe_End; ++n)
+	{
+		m_gridListMeasInfo.SetColumnWidth(n, ColumnSizeProbe[n]);
+		m_gridListMeasInfo.SetItemText(0, n, ColumnProbe[n]);
+		m_gridListMeasInfo.SetItemState(0, n, GVIS_READONLY);
+		m_gridListMeasInfo.SetItemBkColour(0, n, RGB(172, 172, 172));
+		m_gridListMeasInfo.SetItemFgColour(0, n, RGB(255, 255, 255));
+	}
+
+	const int nRows = __MeasInfoRowCount();
+	m_gridListMeasInfo.SetEditable(TRUE);
+	m_gridListMeasInfo.SetRowCount(nRows + 1);
+	m_gridListMeasInfo.SetRowHeight(0, 18);
+	for (long i = 0; i < nRows; i++)
+	{
+		m_gridListMeasInfo.SetRowHeight(i + 1, 15);
+	}
+	m_gridListMeasInfo.ExpandColumnsToFit(TRUE);
+
+	__RefreshListData3();
+}
+
+void CDlgSubOperate::__RefreshListData3()
+{
+	CShareMemoryMgr* pShm = m_pAuroraMgr->GetShareMemoryMgrPtr();
+	if (pShm == nullptr) return;
+	VTM_SYSTEM* pShare = pShm->GetSharedMemory();
+	const bool bOcp = (m_pAuroraMgr->GetSystemConfigMgrPtr() && m_pAuroraMgr->GetSystemConfigMgrPtr()->IsOCP());
+	const int nRows = __MeasInfoRowCount();
+	if (m_gridListMeasInfo.GetRowCount() < nRows + 1) return;	// __InitialListData3 전
+
+	m_gridListMeasInfo.SetRedraw(FALSE);
+
+	for (int nRow = 0; nRow < nRows; nRow++)
+	{
+		CString strName, strID, strMount, strCnt;
+		if (bOcp)
+		{
+			switch (nRow)
+			{
+			case 0:
+				strName = _T("P5 MEAS");
+				strID = pShm->GetEqProbeID(CShareMemoryMgr::EQ_PROBE_UNIT_MEAS);
+				strMount = pShm->GetEqProbeMountTime(CShareMemoryMgr::EQ_PROBE_UNIT_MEAS);
+				strCnt.Format(_T("%u"), pShm->GetEqProbeUseCnt(CShareMemoryMgr::EQ_PROBE_UNIT_MEAS));
+				break;
+			case 1:	strName = _T("BUFFER 1");	if (pShare != nullptr) strID = pShare->m_szBufferPROBEID[0];	break;
+			case 2:	strName = _T("BUFFER 2");	if (pShare != nullptr) strID = pShare->m_szBufferPROBEID[1];	break;
+			case 3:	strName = _T("LOAD");		if (pShare != nullptr) strID = pShare->m_szLoadPROBEID;		break;
+			default: break;
+			}
+		}
+		else
+		{
+			const int iUnit = nRow + 1;	// P1..P5
+			if (iUnit == CShareMemoryMgr::EQ_PROBE_UNIT_MEAS)
+				strName.Format(_T("P%d MEAS"), iUnit);
+			else
+				strName.Format(_T("P%d AGING"), iUnit);
+			strID = pShm->GetEqProbeID(iUnit);
+			strMount = pShm->GetEqProbeMountTime(iUnit);
+			strCnt.Format(_T("%u"), pShm->GetEqProbeUseCnt(iUnit));
+		}
+		strID.Trim();
+
+		const long nGridRow = nRow + 1;
+		LPCTSTR pszCell[enumColumnNameProbe_End] = { strName, strID, strMount, strCnt };
+		for (long n = 0; n < enumColumnNameProbe_End; ++n)
+		{
+			m_gridListMeasInfo.GetCell(nGridRow, n)->SetFormat(DT_CENTER | DT_VCENTER | DT_SINGLELINE);
+			m_gridListMeasInfo.SetItemState(nGridRow, n, GVIS_READONLY);
+			m_gridListMeasInfo.SetItemText(nGridRow, n, pszCell[n]);
+			m_gridListMeasInfo.SetItemFgColour(nGridRow, n, RGB(0, 0, 0));
+		}
+	}
+
+	m_gridListMeasInfo.SetRedraw(TRUE);
+}
+#endif
 
 
 void CDlgSubOperate::__InitListControl4()
@@ -1146,9 +1287,11 @@ void CDlgSubOperate::__InitialListData5()
 
 	// Items + Header
 	m_gridListTempInfo.SetEditable(TRUE);
-	m_gridListTempInfo.SetRowCount(1 + 18);
+	//m_gridListTempInfo.SetRowCount(1 + 18);
+	m_gridListTempInfo.SetRowCount(1 + FDC_WDATA_TEMP_LIST_CNT + 2);	// LYS 2026-09-19 헤더 + 온도 10 + ESD + LIFT PIN
 	m_gridListTempInfo.SetRowHeight(0, 19);
-	for (long i = 0; i < 18; i++)
+	//for (long i = 0; i < 18; i++)
+	for (long i = 0; i < FDC_WDATA_TEMP_LIST_CNT + 2; i++)
 	{
 		m_gridListTempInfo.SetRowHeight(i + 1, 15);
 	}
@@ -1166,7 +1309,8 @@ void CDlgSubOperate::__RefreshListData5()
 	bool bCheck = false;
 	double dValue = 0, dValueMax = 0, dValueMin = 0;
 	int nRow = 0;
-	for ( nRow = 0; nRow < 16; nRow++)
+	//for ( nRow = 0; nRow < 16; nRow++)
+	for ( nRow = 0; nRow < FDC_WDATA_TEMP_LIST_CNT; nRow++)	// LYS 2026-09-19 FDC 가 보내는 온도 10 개
 	{
 		// Name 
 		m_gridListTempInfo.GetCell(i + 1, enumColumnNameMeas_Name)->SetFormat(DT_CENTER | DT_VCENTER | DT_SINGLELINE);
@@ -1189,7 +1333,8 @@ void CDlgSubOperate::__RefreshListData5()
 		i++;
 	}
 
-	for (nRow = 16; nRow < 17; nRow++)
+	//for (nRow = 16; nRow < 17; nRow++)
+	for (nRow = FDC_WDATA_TEMP_LIST_CNT; nRow < FDC_WDATA_TEMP_LIST_CNT + 1; nRow++)	// LYS 2026-09-19 ESD 행
 	{
 		// Name 
 		m_gridListTempInfo.GetCell(i + 1, enumColumnNameMeas_Name)->SetFormat(DT_CENTER | DT_VCENTER | DT_SINGLELINE);
@@ -1213,7 +1358,8 @@ void CDlgSubOperate::__RefreshListData5()
 	}
 
 	// Lift Pin
-	for (nRow = 17; nRow < 18; nRow++)
+	//for (nRow = 17; nRow < 18; nRow++)
+	for (nRow = FDC_WDATA_TEMP_LIST_CNT + 1; nRow < FDC_WDATA_TEMP_LIST_CNT + 2; nRow++)	// LYS 2026-09-19 LIFT PIN 행
 	{
 		// Name 
 		m_gridListTempInfo.GetCell(i + 1, enumColumnNameMeas_Name)->SetFormat(DT_CENTER | DT_VCENTER | DT_SINGLELINE);
@@ -1703,6 +1849,16 @@ void CDlgSubOperate::OnBnClickedButtonStop()
 	//	m_pSystemInitializingDlg->InitStop();
 
 		// 검사 정지
+		// LYS 2026-09-25 SACC(ProbeACC) 함수모듈도 세운다. 지금까지 STOP 은 초기화·Glass 엔진만 세워서, 클램프 락 대기에 갇힌
+		//   ProbeACC 스레드(SPS_PROCESS 유지)는 STOP 으로 빠져나올 수 없었다. Stop() 은 StopUser 를 세우고 InitStep 으로 돌리며,
+		//   진행 중인 PLC 대기(최대 30 초)가 끝나면 Idle 스텝이 SPS_IDLE 로 되돌린다.
+		if (CSequenceManager::GetInstance()->GetFunctionModuleProbeACC() != nullptr &&
+			CSequenceManager::GetInstance()->GetFunctionModuleProbeACC()->Is_ThreadRun() == true)
+		{
+			CLogWrapper::GetInstance()->KMLOG(WARN, _T("STOP - ProbeACC(SACC) sequence stop requested"));
+			CSequenceManager::GetInstance()->GetFunctionModuleProbeACC()->Stop();
+		}
+
 		if (CSequenceManager::GetInstance()->IsEngineCompleteAll() == false)
 		{
 			CSequenceManager::GetInstance()->EngineStop();
@@ -1822,19 +1978,20 @@ void CDlgSubOperate::UpdateInformation()
 	UpdateCurCoord();
 
 	int iLampTime = 0;
+	// LYS 2026-09-25 공유메모리 LampTimeOver / MCC 램프시간은 SPO 채널 번호로 기록 (알람 모니터 JOB_LAMP_TIMEOUT_0n 이 채널 인덱스를 본다)
 	for (int iLamp = 0; iLamp < df_MAX_USE_LAMP; iLamp++)
 	{
 		if (m_LmapTimer[iLamp].GetTimeOver() == TRUE) 
 		{
-			m_pAuroraMgr->GetShareMemoryMgrPtr()->SetSys_LampTimeOver(iLamp, true);
+			m_pAuroraMgr->GetShareMemoryMgrPtr()->SetSys_LampTimeOver(s_nLampTimerChannel[iLamp], true);
 		}
 		else
 		{
-			m_pAuroraMgr->GetShareMemoryMgrPtr()->SetSys_LampTimeOver(iLamp, false);
+			m_pAuroraMgr->GetShareMemoryMgrPtr()->SetSys_LampTimeOver(s_nLampTimerChannel[iLamp], false);
 		}
 
 		iLampTime = m_LmapTimer[iLamp].GetCurTime();
-		CMCCLogMgr::GetInstance()->SetLampTime(iLamp, iLampTime);
+		CMCCLogMgr::GetInstance()->SetLampTime(s_nLampTimerChannel[iLamp], iLampTime);	// LYS 2026-09-25
 	}
 
 	CMCCLogMgr::GetInstance()->UpdateSensor();
@@ -1857,12 +2014,14 @@ void CDlgSubOperate::UpdateDataLampTime(int iLamp, bool bOn)
 	}
 	else
 	{
-		if (iLamp < df_MAX_USE_LAMP)
+		// LYS 2026-09-25 iLamp 는 SPO 채널 번호(LightControlMgr::SetLedLampIntensity). 슬롯으로 변환, 미사용 채널(0/1)은 무시
+		const int nSlot = LampChannelToSlot(iLamp);
+		if (nSlot >= 0)
 		{
 			if (bOn == true)
-				m_LmapTimer[iLamp].StartTimer();
+				m_LmapTimer[nSlot].StartTimer();
 			else
-				m_LmapTimer[iLamp].StopTimer();
+				m_LmapTimer[nSlot].StopTimer();
 		}
 	}
 }
@@ -1875,7 +2034,7 @@ void CDlgSubOperate::UpdateWriteLampTime(int iLamp, bool bOn)
 		{
 			if (bOn == true)
 			{
-				m_LmapTimer[i].ReloadRegistry(i);
+				m_LmapTimer[i].ReloadRegistry(s_nLampTimerChannel[i]);	// LYS 2026-09-25
 				m_LmapTimer[i].RefreshTimer();
 				m_LmapTimer[i].SetRegistryWrite(TRUE);
 
@@ -1889,17 +2048,18 @@ void CDlgSubOperate::UpdateWriteLampTime(int iLamp, bool bOn)
 	}
 	else
 	{
-		if (iLamp < df_MAX_USE_LAMP)
+		const int nSlot = LampChannelToSlot(iLamp);	// LYS 2026-09-25 채널 -> 슬롯
+		if (nSlot >= 0)
 		{
 			if (bOn == true)
 			{
-				m_LmapTimer[iLamp].ReloadRegistry(iLamp);
-				m_LmapTimer[iLamp].RefreshTimer();
-				m_LmapTimer[iLamp].SetRegistryWrite(TRUE);
+				m_LmapTimer[nSlot].ReloadRegistry(iLamp);
+				m_LmapTimer[nSlot].RefreshTimer();
+				m_LmapTimer[nSlot].SetRegistryWrite(TRUE);
 			}
 			else
 			{
-				m_LmapTimer[iLamp].SetRegistryWrite(FALSE);
+				m_LmapTimer[nSlot].SetRegistryWrite(FALSE);
 			}
 		}
 	}
@@ -2973,7 +3133,8 @@ void CDlgSubOperate::UpdateCurCoord()
 
 
 		m_pParentMeasPathDlg->UpdateCurCoord(-10, dMotionPos[AXIS_X], dMotionPos[AXIS_LOADER_R] * -1, 0, 0);		// STAGE   // jsyoon 2022.09.29 add * -1
-		m_pParentMeasPathDlg->UpdateCurCoord(-11, (dMotionPos[AXIS_X4] - dChangePos ) * -1, 0, 0, 0);		// ACX
+		//m_pParentMeasPathDlg->UpdateCurCoord(-11, (dMotionPos[AXIS_X4] - dChangePos ) , 0, 0, 0);		// ACX
+		m_pParentMeasPathDlg->UpdateCurCoord(-11, (dMotionPos[AXIS_X4]), 0, 0, 0);		// ACX		// LYS 2026-09-03 ACX UI 이동 수정
 
 		m_pParentMeasPathDlg->UpdateCurCoord(1, dMotionPos[AXIS_X2], dMotionPos[AXIS_Y1], 0, 0);		// HEAD 1
 		m_pParentMeasPathDlg->UpdateCurCoord(0, dMotionPos[AXIS_X2], dMotionPos[AXIS_Y2], 0, 0);		// HEAD 2

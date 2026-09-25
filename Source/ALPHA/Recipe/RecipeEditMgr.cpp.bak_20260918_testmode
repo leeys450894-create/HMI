@@ -1,0 +1,1994 @@
+#include "pch.h"
+#include "RecipeEditMgr.h"
+
+#include "..\Manager\SequenceManager.h"
+#include "..\SystemParamShare.h"
+#include "..\AuroraFuncDefine.h"
+#include "common\BinaryHelper.h"
+#include "common\IniHelper.h"					//sklee 20210601 add
+#include "..\Manager\AlignCameraMgr.h"
+#include "..\Manager\PositionConfigMgr.h"
+#include "..\Manager\LightControlMgr.h"
+#include "..\Manager\MaintControlMgr.h"
+#include "common/CommonFunc.h"
+#include "..\D_RoiSet.h"
+#include "..\DoWork\DoWorkGlassSequence.h"
+#include "..\Alarm\AlarmController.h"
+#include "..\FunctionModule\FunctionModuleProbeACC.h"
+#include "D_DisplayMessage.h"
+
+#ifdef _DEBUG
+#define new DEBUG_NEW
+#endif
+
+CRecipeEditMgr::CRecipeEditMgr(stAuroraMgrPool &MgrPool)
+	: m_pBinaryHelper(new CBinaryHelper)
+	, m_pIniHelper(new CIniHelper)
+	, m_pRecipeData(new CRecipeData)
+	, m_strRecipeFolderPath(MgrPool.strRecipePath)
+	, m_pPositionConfigMgr(MgrPool.pPositionConfigMgr)
+	, m_pMgrPool_link(&MgrPool)
+{
+	SetName(_T("RECIPE_EDIT_MGR"));	
+	m_bRecipeDeleteFlag = false;
+
+	m_ptrnReview.ClearPtrn();
+
+	m_pRecipeFunc = nullptr;
+
+	//----------------------------------------------------------------------
+	// Thread 생성
+	//----------------------------------------------------------------------
+	m_pThread = AfxBeginThread(ThreadRun, this);
+	m_bThreadLive = false;
+	m_hCloseEvent = CreateEvent(NULL, FALSE, FALSE, NULL);	// auto reset, initial reset
+
+	
+}
+
+CRecipeEditMgr::~CRecipeEditMgr(void)
+{
+	Finalize();
+}
+
+bool CRecipeEditMgr::Initialize()
+{
+	CString strRecipeID = _T("DEFAULT");
+
+	m_pBinaryHelper->SetFilePath(CSystemParamShare::GetInstance()->GetDefaultRecipeFolderPath() + strRecipeID + _RCP_EXT_FILE_NAME);
+	m_pIniHelper->SetFilePath(CSystemParamShare::GetInstance()->GetDefaultRecipeFolderPath() + strRecipeID + _RCP_EXT_FILE_NAME);
+
+	bool ret = LinkDataBase(false);
+
+	m_strRecipeID = _T("");
+
+
+	
+
+	return ret;
+}
+
+void CRecipeEditMgr::Finalize()
+{
+	//----------------------------------------------------------------------
+   // Thread 종료
+   //----------------------------------------------------------------------
+	if(m_bThreadLive == true)
+	{ 
+		SetEvent(m_hCloseEvent);
+	}
+		
+	if(m_pRecipeData)
+	{
+		delete m_pRecipeData;
+		m_pRecipeData = nullptr;
+	}
+
+	if (m_pBinaryHelper)
+	{
+		delete m_pBinaryHelper;
+		m_pBinaryHelper = nullptr;
+	}
+
+	if (m_pIniHelper)
+	{
+		delete m_pIniHelper;
+		m_pIniHelper = nullptr;
+	}
+
+	if (m_pThread && m_bThreadLive)
+	{
+		WaitForSingleObject(m_pThread->m_hThread, INFINITE);
+
+		if (m_hCloseEvent) CloseHandle(m_hCloseEvent);
+
+		m_pThread = nullptr;
+	}
+}
+
+int CRecipeEditMgr::RecipeChange(CString strRecipeID)
+{
+
+	// 레시피 명이 없다. - 문제네..
+	if (strRecipeID.IsEmpty())
+	{
+		CLogWrapper::GetInstance()->KMLOG(OPER, _T("Fail : Recipe Name is Empty"));
+		return -1;
+	}
+
+	//// 이미 OPEN 한 레시피 명이다. 그냥 OK 날리자.
+	//if (m_strRecipeID == strRecipeID && !GetRecipePosDeleteFlag())
+	//{
+	//	return 1;
+	//}
+
+
+//	m_pRecipeFunc = GetRecipeMgr(); //220317
+	if (m_pRecipeFunc->LoadRcpFile(strRecipeID) != TRUE)
+	{
+		return  JOB_RECIPE_NOT_EXIST;
+	}
+
+	CString strAlignRecipe;
+	strAlignRecipe.Format(_T("%s"), GetRecipeInfo()->m_sOptionItem.m_chAlignName);
+	if (m_pRecipeFunc->LoadAlignRcpFile(strAlignRecipe) != TRUE)
+	{
+		return  JOB_RECIPE_NOT_EXIST;
+	}
+
+	// for Test 
+	m_strRecipeID = strRecipeID;
+
+	RecipeUpdateUI();
+
+	return 1;
+
+	// 새로운 레시피를 OPEN 한다.
+	m_strRecipeFileFullPath.Format(_T("%s\\%s%s"), m_strRecipeFolderPath.GetString(), strRecipeID.GetString(), _RCP_EXT_FILE_NAME);
+	m_strRecipeFileFullPath.Replace(_T("\\\\"), _T("\\"));
+
+ 	//m_pBinaryHelper->SetFilePath(m_strRecipeFileFullPath);
+	m_pIniHelper->SetFilePath(m_strRecipeFileFullPath);
+
+	SetRecipePosDeleteFlag(false);
+
+	bool bRet = false;
+
+	//if (m_pBinaryHelper->IsReadEnable())
+	if (m_pIniHelper->IsReadEnable())
+	{
+		m_strRecipeID = strRecipeID;
+
+		bRet = LinkDataBase(false);
+
+		if (bRet == false)
+		{
+			CLogWrapper::GetInstance()->KMLOG(OPER, _T("Fail : Recipe Open"));
+		}
+	}
+	else
+	{
+		CLogWrapper::GetInstance()->KMLOG(OPER, _T("Fail : can not read Recipe file"));
+	}
+	return (bRet == true) ? 2 : -1;
+}
+
+void CRecipeEditMgr::RecipeUpdateUI()
+{
+	CWindowEventHandler::GetInstance()->PostMessageToUI(enumWndID_FRAME, WM_MSG_UPDATE_RECIPE_INFORMATION, NULL, NULL);        
+//	CWindowEventHandler::GetInstance()->PostMessageToUI(enumWndID_TITLE, WM_MSG_UPDATE_RECIPE_INFORMATION, NULL, NULL);
+}
+
+int CRecipeEditMgr::NewRecipe(CString strRecipeID)
+{
+	CString strDefRecipeFilePath = CSystemParamShare::GetInstance()->GetDefaultRecipeFolderPath() + _T("DEFAULT.rcp");
+	CString strNewRecipeFilePath = CSystemParamShare::GetInstance()->GetRecipeFolderPath() + strRecipeID + _RCP_EXT_FILE_NAME;
+
+
+	CFileFind finder; 
+	if (finder.FindFile(strDefRecipeFilePath) == FALSE)
+	{
+	//	MakeDir(strDefRecipeFilePath);
+		m_pIniHelper->SetFilePath(strDefRecipeFilePath);
+
+		//if (m_pIniHelper->IsReadEnable())
+		{
+			LinkDataBase(true);
+		}
+	}
+
+
+	if(CopyFile(strDefRecipeFilePath, strNewRecipeFilePath, FALSE) == TRUE)
+	{
+		return OpenRecipe(strRecipeID);
+	}
+
+	return -1;
+}
+
+int CRecipeEditMgr::DefaultRecipeCopy(CString strRecipeID)
+{
+	CString strDefRecipeFilePath = CSystemParamShare::GetInstance()->GetDefaultRecipeFolderPath() + _T("DEFAULT.rcp");
+	CString strNewRecipeFilePath = CSystemParamShare::GetInstance()->GetRecipeFolderPath() + strRecipeID + _RCP_EXT_FILE_NAME;
+
+
+	if (CopyFile(strDefRecipeFilePath, strNewRecipeFilePath, FALSE) == TRUE)
+	{
+		return 1;
+	}
+
+	return -1;
+}
+
+int CRecipeEditMgr::OpenRecipe(CString strRecipeID)
+{
+	CSequenceManager::GetInstance()->GetFunctionModuleProbeACC()->SetProbe(df_PROBE_MEAS);
+
+	int nRet = VTM_RV_SUCCESSED;
+
+	nRet = RecipeChange(strRecipeID);
+
+	if (nRet == VTM_RV_SUCCESSED)
+	{
+		CSystemParamShare::GetInstance()->SetRecipeID(strRecipeID);
+	}
+	
+	 return nRet;
+}
+
+// jsyoon 2022.05.09 add
+int CRecipeEditMgr::OpenAlignRecipe(CString strRecipeID)
+{
+	int nRet = VTM_RV_SUCCESSED;
+
+	// 레시피 명이 없다. - 문제네..
+	if (strRecipeID.IsEmpty())
+	{
+		CLogWrapper::GetInstance()->KMLOG(OPER, _T("Fail : Recipe Name is Empty"));
+		return -1;
+	}
+
+	if (m_pRecipeFunc->LoadAlignRcpFile(strRecipeID) != TRUE)
+	{
+		nRet = JOB_RECIPE_NOT_EXIST;
+	}
+	
+	return nRet;
+}
+
+bool CRecipeEditMgr::SaveRecipe(CString strRecipeID)
+{
+	m_strRecipeFileFullPath.Format(_T("%s%s%s"), m_strRecipeFolderPath.GetString(), strRecipeID.GetString(), _RCP_EXT_FILE_NAME);
+
+	CString sTime;
+	SYSTEMTIME st;
+	::GetLocalTime(&st);
+	sTime.Format(_T("%04d%02d%02d-%02d%02d%02d"), st.wYear, st.wMonth, st.wDay, st.wHour, st.wMinute, st.wSecond);
+
+	CString strNewRecipeFilePath, strBackupRecipeFile;
+	strNewRecipeFilePath.Format(_T("%s%s\\%s"), m_strRecipeFolderPath.GetString(), _T("BACKUP"), strRecipeID.GetString() );
+	MakeDir(strNewRecipeFilePath);
+	strBackupRecipeFile.Format(_T("%s\\%s_%s%s"), strNewRecipeFilePath, strRecipeID.GetString(), sTime, _RCP_EXT_FILE_NAME);
+
+	// Backup
+	if (CopyFile(m_strRecipeFileFullPath, strBackupRecipeFile, FALSE) == TRUE)
+	{
+		//m_pBinaryHelper->SetFilePath(m_strRecipeFileFullPath);
+
+		m_pIniHelper->SetFilePath(m_strRecipeFileFullPath);
+
+		//if (m_pBinaryHelper->IsReadEnable())
+		if (m_pIniHelper->IsReadEnable())
+		{
+			return LinkDataBase(true);
+		}
+	}
+
+	return false;
+}
+
+bool CRecipeEditMgr::SaveRecipeAs(CString strRecipeID)
+{
+	m_strRecipeFileFullPath.Format(_T("%s\\%s%s"), m_strRecipeFolderPath.GetString(), strRecipeID.GetString(), _RCP_EXT_FILE_NAME);
+
+	//m_pBinaryHelper->SetFilePath(m_strRecipeFileFullPath);
+
+	m_pIniHelper->SetFilePath(m_strRecipeFileFullPath);
+
+	return LinkDataBase(true);
+}
+
+BOOL CRecipeEditMgr::DeleteRecipe(CString strRecipeID)
+{
+	CString sFilePath = _T("");
+	sFilePath.Format(_T("%s%s%s"), m_strRecipeFolderPath.GetString(), strRecipeID.GetString(), _RCP_EXT_FILE_NAME);
+
+	if(m_strRecipeID == strRecipeID && !GetRecipePosDeleteFlag())
+	{
+		m_strRecipeID = _T("");
+	}
+
+	return DeleteFile(sFilePath);
+}
+
+void CRecipeEditMgr::SetRecipePosDeleteFlag(bool bFlag)
+{
+	m_bRecipeDeleteFlag = bFlag;
+}
+
+bool CRecipeEditMgr::GetRecipePosDeleteFlag()
+{
+	return m_bRecipeDeleteFlag;
+}
+
+bool CRecipeEditMgr::IsRecipeOpened() const
+{ 
+	return !m_strRecipeID.IsEmpty();	
+}
+
+CString	CRecipeEditMgr::GetRecipeID() const
+{ 
+	return m_strRecipeID;				
+}
+
+CString	CRecipeEditMgr::GetRecipeFolderPath() const
+{
+	return m_strRecipeFolderPath;
+}
+
+void CRecipeEditMgr::ChangeAreaInfoRecipeToMeas()
+{
+	//Reset
+	for (int i = 0; i < m_pRecipeData->GetParam_RecipeMeasAreaCount(); i++)
+	{
+		m_pRecipeData->GetParam_RecipeMeasArea(i)->nMultiHeadMeasArea = -1;
+		m_pRecipeData->GetParam_RecipeMeasArea(i)->iMeasHeadID_linked = -1;
+	}
+
+	//0 : Head1 + Head2, 1 : Only Head1, 2 : Only Head2
+	if (m_pRecipeData->GetParam_RecipeInfo()->stRecipeOptionParam.nUseMeasHead == 1 || m_pRecipeData->GetParam_RecipeInfo()->stRecipeOptionParam.nUseMeasHead == 2)
+	{
+		for (int i = 0; i < m_pRecipeData->GetParam_RecipeMeasAreaCount(); i++)
+		{
+			m_pRecipeData->GetParam_RecipeMeasArea(i)->nMultiHeadMeasArea = i;
+			m_pRecipeData->GetParam_RecipeMeasArea(i)->iMeasHeadID_linked = m_pRecipeData->GetParam_RecipeInfo()->stRecipeOptionParam.nUseMeasHead - 1;
+
+			//if (m_pRecipeData->GetParam_RecipeInfo()->stRecipeOptionParam.nUseMeasHead == 1)
+			//{
+			//	m_vecGlassMeasAreaHead1[i].bUse = true;
+			//	m_vecGlassMeasAreaHead1[i].nCurrentArea = i;
+			//	m_vecGlassMeasAreaHead1[i].nCurrentHead = 0;
+			//	m_vecGlassMeasAreaHead1[i].stGlassMeasInfo = *m_pRecipeData->GetParam_RecipeMeasArea(i);
+			//	m_vecGlassMeasAreaHead2[i].bUse = false;
+			//}
+			//else if (m_pRecipeData->GetParam_RecipeInfo()->stRecipeOptionParam.nUseMeasHead == 2)
+			//{
+			//	m_vecGlassMeasAreaHead2[i].bUse = true;
+			//	m_vecGlassMeasAreaHead2[i].nCurrentArea = i;
+			//	m_vecGlassMeasAreaHead2[i].nCurrentHead = 0;
+			//	m_vecGlassMeasAreaHead2[i].stGlassMeasInfo = *m_pRecipeData->GetParam_RecipeMeasArea(i);
+			//	m_vecGlassMeasAreaHead1[i].bUse = false;
+			//}
+		}
+
+		return;
+	}
+
+	//Calc Multi Head Index Step 1
+	int nMultiHeadIndex = 0;
+
+	for (int i = 0; i < m_pRecipeData->GetParam_RecipeMeasAreaCount(); i++)
+	{
+		if (m_pRecipeData->GetParam_RecipeMeasArea(i)->nMultiHeadMeasArea >= 0) continue;
+
+		double dOldPos = 10000.0;
+		int nIndex = 0;
+		bool bFlag = false;
+
+		m_pRecipeData->GetParam_RecipeMeasArea(i)->nMultiHeadMeasArea = nMultiHeadIndex;
+
+		double dRefPosX = m_pRecipeData->GetParam_RecipeMeasArea(i)->stMeasCoordinate.dx;
+		double dRefPosY = m_pRecipeData->GetParam_RecipeMeasArea(i)->stMeasCoordinate.dy;
+
+		for (int j = 0; j < m_pRecipeData->GetParam_RecipeMeasAreaCount(); j++)
+		{
+			if (m_pRecipeData->GetParam_RecipeMeasArea(j)->nMultiHeadMeasArea >= 0) continue;
+			if (i == j) continue;
+
+			double dPosX = m_pRecipeData->GetParam_RecipeMeasArea(j)->stMeasCoordinate.dx;
+			double dPosY = m_pRecipeData->GetParam_RecipeMeasArea(j)->stMeasCoordinate.dy;
+
+			if (fabs(dRefPosX - dPosX) < df_Gantry_Compare)
+			{
+				double dPos = fabs(dRefPosY - dPosY);
+
+				if (dPos > df_Head_Gap)
+				{
+					if (dOldPos > dPos)
+					{
+						dOldPos = dPos;
+						nIndex = j;
+						bFlag = true;
+					}
+				}
+			}
+		}
+
+		if (bFlag)
+			m_pRecipeData->GetParam_RecipeMeasArea(nIndex)->nMultiHeadMeasArea = nMultiHeadIndex;
+
+		nMultiHeadIndex++;
+	}
+
+	//Calc Multi Head Index Step 2
+	stPositionParam stParam = m_pPositionConfigMgr->GetPositionParam();
+	double dSafetyHeadY1 = stParam.dSafetyHeadY1;
+	double dSafetyHeadY2 = stParam.dSafetyHeadY2;
+
+	for (int i = 0; i < m_pRecipeData->GetParam_RecipeMeasAreaCount(); i++)
+	{
+		double dRefPosY = m_pRecipeData->GetParam_RecipeMeasArea(i)->stMeasCoordinate.dy;
+		nMultiHeadIndex = m_pRecipeData->GetParam_RecipeMeasArea(i)->nMultiHeadMeasArea;
+
+		m_pRecipeData->GetParam_RecipeMeasArea(i)->iMeasHeadID_linked = 0;
+
+		for (int j = 0; j < m_pRecipeData->GetParam_RecipeMeasAreaCount(); j++)
+		{
+			if (i == j) continue;
+
+			if (nMultiHeadIndex == m_pRecipeData->GetParam_RecipeMeasArea(j)->nMultiHeadMeasArea)
+			{
+				double ddPosY = m_pRecipeData->GetParam_RecipeMeasArea(j)->stMeasCoordinate.dy;
+				
+				double dPos = dRefPosY + ddPosY;
+
+				if (fabs(dSafetyHeadY1 + dPos) >= fabs(dSafetyHeadY2 + dPos))
+				{
+					m_pRecipeData->GetParam_RecipeMeasArea(i)->iMeasHeadID_linked = 0;
+					m_pRecipeData->GetParam_RecipeMeasArea(j)->iMeasHeadID_linked = 1;
+				}
+				else
+				{
+					m_pRecipeData->GetParam_RecipeMeasArea(i)->iMeasHeadID_linked = 1;
+					m_pRecipeData->GetParam_RecipeMeasArea(j)->iMeasHeadID_linked = 0;
+				}
+			}
+		}
+	}
+
+/*
+	//Set Vector
+	m_vecGlassMeasAreaHead1.clear();
+	m_vecGlassMeasAreaHead1.resize(nMultiHeadIndex);
+	m_vecGlassMeasAreaHead2.clear();
+	m_vecGlassMeasAreaHead2.resize(nMultiHeadIndex);
+
+	int nIndex = 0;
+	for (int i = 0; i < m_pRecipeData->GetParam_RecipeMeasAreaCount(); i++)
+	{
+		if (m_pRecipeData->GetParam_RecipeInfo()->stRecipeOptionParam.nUseMeasHead == 0)
+		{
+			if (m_pRecipeData->GetParam_RecipeMeasArea(i)->iMeasHeadID_linked != -1)
+			{
+				int nMultiHeadMeasArea = m_pRecipeData->GetParam_RecipeMeasArea(i)->nMultiHeadMeasArea;
+
+				if (m_pRecipeData->GetParam_RecipeMeasArea(i)->iMeasHeadID_linked == 0)
+				{
+					m_vecGlassMeasAreaHead1[nMultiHeadMeasArea].bUse = true;
+					m_vecGlassMeasAreaHead1[nMultiHeadMeasArea].nCurrentArea = nIndex;
+					m_vecGlassMeasAreaHead1[nMultiHeadMeasArea].nCurrentHead = 0;
+					m_vecGlassMeasAreaHead1[nMultiHeadMeasArea].stGlassMeasInfo = *m_pRecipeData->GetParam_RecipeMeasArea(i);
+				}
+
+				if (m_pRecipeData->GetParam_RecipeMeasArea(i)->iMeasHeadID_linked == 1)
+				{
+					m_vecGlassMeasAreaHead2[nMultiHeadMeasArea].bUse = true;
+					m_vecGlassMeasAreaHead2[nMultiHeadMeasArea].nCurrentArea = nIndex;
+					m_vecGlassMeasAreaHead2[nMultiHeadMeasArea].nCurrentHead = 1;
+					m_vecGlassMeasAreaHead2[nMultiHeadMeasArea].stGlassMeasInfo = *m_pRecipeData->GetParam_RecipeMeasArea(i);
+				}
+			}
+		}
+	}
+*/
+
+	//Test Message Box
+	//for (int i = 0; i < m_pRecipeData->GetParam_RecipeMeasAreaCount(); i++)
+	//{
+	//	CString strTest;
+	//	strTest.Format(_T("Count : %d, Meas Area : %d, Head : %d"), i+1, m_pRecipeData->GetParam_RecipeMeasArea(i)->nMultiHeadMeasArea+1, m_pRecipeData->GetParam_RecipeMeasArea(i)->iMeasHeadID_linked + 1);
+	//	AfxMessageBox(strTest);
+	//}
+}
+
+
+
+
+
+
+
+
+
+void CRecipeEditMgr::UpdateRecipeList()
+{
+	m_vecRcpList.clear();
+
+	// find List
+	CString sFind;
+	sFind.Format(_T("%s%s%s"), m_strRecipeFolderPath.GetString(), STR_DIR_RECIPE, _RCP_ALL_FILE_NAME);
+
+	CFileFind find;
+	BOOL bFound = find.FindFile(sFind);
+	while (bFound)
+	{
+		bFound = find.FindNextFile();
+
+        if (find.IsDots()) continue;
+        if (find.IsDirectory()) continue;
+
+		FILETIME refTime;
+		find.GetLastWriteTime(&refTime);
+		SYSTEMTIME st;
+		if(FileTimeToSystemTime(&refTime, &st))
+		{
+			SRECIPE_FILEINFO temp;
+			temp.strName = find.GetFileName();
+			temp.strName.Replace(_RCP_EXT_FILE_NAME, _T(""));
+			temp.strDate.Format(_T("%04d%02d%02d_%02d:%02d:%02d"), st.wYear, st.wMonth, st.wDay, st.wHour,st.wMinute, st.wSecond);
+					
+			m_vecRcpList.push_back(temp);
+		}
+		
+		Sleep(1);
+	}
+
+	find.Close();
+}
+
+int CRecipeEditMgr::GetRecipeListCount() const
+{
+	return (int)m_vecRcpList.size();
+}
+
+CString CRecipeEditMgr::GetSelectedRecipeID(int nIndex)
+{
+	if ((0 <= nIndex) && (nIndex < GetRecipeListCount()))
+	{
+		return m_vecRcpList[nIndex].strName;
+	}
+
+	return _T("");	
+}
+
+CString CRecipeEditMgr::GetSelectedRecipeDate(int nIndex)
+{
+	if ((0 <= nIndex) && (nIndex < GetRecipeListCount()))
+	{
+		return m_vecRcpList[nIndex].strDate;
+	}
+
+	return _T("");	
+}
+
+bool CRecipeEditMgr::LinkDataBase(bool bSave)
+{
+	bool ret = true;
+	//ret &= m_pRecipeData->LinkDataBase(m_pBinaryHelper, bSave);
+	//ret &= m_pRecipeData->LinkIniFile(m_pIniHelper, bSave);				//sklee 20210601 change
+	ret &= m_pRecipeData->LinkIniFileUTG(m_pIniHelper, bSave);
+	
+
+//	ret &= CSequenceManager::GetInstance()->LinkDataBase(m_pBinaryHelper, bSave);
+
+	return ret;
+}
+
+
+bool CRecipeEditMgr::SetROIAlignPtrn(int nIndex)
+{
+	bool bRet = false;
+	CPtrnInfo* pPtrnInfo = &m_ptrnReview;
+	CString strPath;
+
+	pPtrnInfo->ClearInfo();
+	
+	if (m_pMgrPool_link->pAlignCameraMgr[nIndex]->SnapImage(pPtrnInfo->m_pImgInput, true) == VTM_RV_SUCCESSED)
+	{
+#if _DEBUG
+		imaqWriteJPEGFile(pPtrnInfo->m_pImgInput, "D:\\Temp\\Snap.jpg", 750, NULL);
+#endif
+
+		strPath.Format(_T("%s%s"), m_strRecipeFolderPath, STR_DIR_ALIGN);
+		gf_MakeDir(strPath);
+
+		CWnd* pW = CWindowEventHandler::GetInstance()->GetHandleWnd(enumWndID_FRAME);
+
+		CD_RoiSet dlg(pW);
+		dlg.SetSavePath(strPath);
+		dlg.SetROIViewInfo(VI_ALIGN, pPtrnInfo);
+		if (dlg.DoModal() == IDOK)
+		{
+			bRet = true;
+		//	UpdatePatternImageScaled(pPtrnInfo, TRUE, FALSE);
+		}
+	}
+
+	return bRet;
+}
+
+bool CRecipeEditMgr::SetROIMeasPtrn(int nIndex)
+{
+	bool bRet = false;
+	CPtrnInfo* pPtrnInfo = &m_ptrnReview;
+	CString strPath;
+
+	if (m_pMgrPool_link->pAlignCameraMgr[nIndex]->SnapImage(pPtrnInfo->m_pImgInput, true) == VTM_RV_SUCCESSED)
+	{
+		strPath.Format(_T("%s%s"), m_strRecipeFolderPath, STR_DIR_PATTERN);
+		gf_MakeDir(strPath);
+
+		CWnd* pW = CWindowEventHandler::GetInstance()->GetHandleWnd(enumWndID_FRAME);
+
+		CD_RoiSet dlg(pW);
+		dlg.SetSavePath(strPath);
+		dlg.SetROIViewInfo(VI_PTRN_MEAS, pPtrnInfo);
+		if (dlg.DoModal() == IDOK)
+		{
+			bRet = true;
+		}
+	}
+
+	return bRet;
+}
+
+int	CRecipeEditMgr::SetDetectAlignPtrn(int nIndex)
+{
+	int nRet = VTM_RV_SUCCESSED;
+
+	float Score = 1.0;
+	float MaxSorce = -1;
+	
+	double dPixelx = 0, dPixely = 0;
+	CPtrnInfo ptrnInfo[df_MAX_PTRNINFO];
+	for (size_t i = 0; i < df_MAX_PTRNINFO; i++)
+	{
+		ptrnInfo[i].ClearInfo();
+	}
+
+	S_Align* pAlignInfo = nullptr;
+	pAlignInfo = &GetRecipeMgrPtr()->m_sAlign;
+
+	CPtrnInfo* pPtrnInfo = NULL;
+
+	bool bGlass = true;
+
+	int iCCD = 0;
+	switch (nIndex)
+	{
+	case 0:
+	{
+		for (size_t k = 0; k < df_MAX_PTRNINFO; k++)
+		{
+			if (k < 5)
+			{
+				ptrnInfo[k].m_nThreshold = pAlignInfo->m_sCcdSet.m_sFrontLeft.m_nMatchingScore;
+				ptrnInfo[k].m_strName.Format(_T("%s"), pAlignInfo->m_chPtnFrontLeft[k]);
+			}
+		}
+
+		iCCD = 0;
+	}
+	break;
+	case 1:
+	{
+		for (size_t k = 0; k < df_MAX_PTRNINFO; k++)
+		{
+			if (k < 5)
+			{
+				ptrnInfo[k].m_nThreshold = pAlignInfo->m_sCcdSet.m_sFrontRight.m_nMatchingScore;
+				ptrnInfo[k].m_strName.Format(_T("%s"), pAlignInfo->m_chPtnFrontRight[k]);
+			}
+
+		}
+
+		iCCD = 1;
+	}
+	break;
+	case 2:
+	{
+		for (size_t k = 0; k < df_MAX_PTRNINFO; k++)
+		{
+			if (k < 5)
+			{
+				ptrnInfo[k].m_nThreshold = pAlignInfo->m_sCcdSet.m_sBackLeft.m_nMatchingScore;
+				ptrnInfo[k].m_strName.Format(_T("%s"), pAlignInfo->m_chPtnBackLeft[k]);
+			}
+
+		}
+
+		iCCD = 0;
+
+		bGlass = false;
+	}
+	break;
+	case 3:
+	{
+		for (size_t k = 0; k < df_MAX_PTRNINFO; k++)
+		{
+			if (k < 5)
+			{
+				ptrnInfo[k].m_nThreshold = pAlignInfo->m_sCcdSet.m_sBackRight.m_nMatchingScore;
+				ptrnInfo[k].m_strName.Format(_T("%s"), pAlignInfo->m_chPtnBackRight[k]);
+			}
+
+		}
+
+		iCCD = 1;
+
+		bGlass = false;
+	}
+	break;
+	case 4:
+	{
+		for (size_t k = 0; k < df_MAX_PTRNINFO; k++)
+		{
+			if (k < 5)
+			{
+				ptrnInfo[k].m_nThreshold = pAlignInfo->m_sCcdSet.m_sBackLeft.m_nMatchingScore;
+				ptrnInfo[k].m_strName.Format(_T("%s"), pAlignInfo->m_chPtnBackLeft[k]);
+			}
+
+		}
+
+		iCCD = 2;
+
+		bGlass = false;
+	}
+	break;
+	case 5:
+	{
+		for (size_t k = 0; k < df_MAX_PTRNINFO; k++)
+		{
+			if (k < 5)
+			{
+				ptrnInfo[k].m_nThreshold = pAlignInfo->m_sCcdSet.m_sBackRight.m_nMatchingScore;
+				ptrnInfo[k].m_strName.Format(_T("%s"), pAlignInfo->m_chPtnBackRight[k]);
+			}
+
+		}
+
+		iCCD = 3;
+
+		bGlass = false;
+	}
+	break;
+	default:
+		break;
+	}
+
+
+	// 이미지 패턴 매칭
+	for (size_t k = 0; k < 5; k++)	// Pattern
+	{
+		pPtrnInfo = &ptrnInfo[k];
+		nRet = m_pMgrPool_link->pAlignCameraMgr[iCCD]->PtrnMatch(pPtrnInfo, &Score, LENS_USE_ALIGN, bGlass);
+		if (nRet == VTM_RV_SUCCESSED)
+		{
+			if (Score > MaxSorce)
+			{
+				MaxSorce = Score;
+				dPixelx = pPtrnInfo->m_dRealX;	// 차이값(mm)
+				dPixely = pPtrnInfo->m_dRealY;	// 차이값(mm)
+			}
+
+			break;
+		}
+	}
+
+	return nRet;
+}
+
+int	CRecipeEditMgr::SetDetectMeasPtrn(int nIndex)
+{
+	int nRet = VTM_RV_SUCCESSED;
+
+	return nRet;
+}
+
+void CRecipeEditMgr::SetRecipePtr()
+{
+	m_pRecipeFunc = GetRecipeMgr();
+}
+
+S_RecipeMgr* CRecipeEditMgr::GetRecipeMgrPtr()
+{
+	if (m_pRecipeFunc != nullptr)
+		return &m_pRecipeFunc->m_recipeMgr;
+	else
+		return nullptr;
+}
+
+S_RecipeInfo* CRecipeEditMgr::GetRecipeInfo()
+{
+	if (m_pRecipeFunc != nullptr)
+		return &m_pRecipeFunc->m_recipeMgr.m_sInfo;
+	else
+		return nullptr;
+}
+
+S_RecipeData* CRecipeEditMgr::GetRecipeData()
+{
+	if (m_pRecipeFunc != nullptr)
+		return &m_pRecipeFunc->m_recipeMgr.m_sData;
+	else
+		return nullptr;
+}
+
+S_RecipeMap* CRecipeEditMgr::GetRecipeMap()
+{
+	if (m_pRecipeFunc != nullptr)
+		return &m_pRecipeFunc->m_recipeMgr.m_sMap;
+	else
+		return nullptr;
+}
+
+// LYS 2026-09-09 Stick별 PROBE Z CONTACT OFFSET - 레시피 STAGE MOVE 그리드 5행(CONTACT OFFSET). End Contact 목표(End+OD)에만 가산, PreContact/UnContact 높이는 스틱 공통
+double CRecipeEditMgr::GetStickProbeZOffset(int iStick)
+{
+	S_RecipeData* pData = GetRecipeData();
+	if (pData == nullptr) return 0.0;
+	if (iStick < 0 || iStick >= (int)pData->m_vecStick.size()) return 0.0;
+
+	double dOffset = pData->m_vecStick[iStick].m_fProbeZOffset;
+	const double dLimit = 1.0;	// mm - 오입력 보호(프로브 과압입 방지)
+	if (fabs(dOffset) > dLimit)
+	{
+		CString strLog;
+		strLog.Format(_T("Stick %d PROBE Z CONTACT OFFSET %.4f exceeds +/-%.1f mm -> clamped"), iStick + 1, dOffset, dLimit);
+		CLogWrapper::GetInstance()->KMLOG(WARN, strLog);
+		dOffset = (dOffset > 0.0) ? dLimit : -dLimit;
+	}
+	return dOffset;
+}
+
+UINT CRecipeEditMgr::ThreadRun(LPVOID p1)
+{
+	CRecipeEditMgr* pThis = (CRecipeEditMgr*)p1;
+
+	pThis->m_bThreadLive = true;
+
+	while (1)
+	{
+		// Close Event 가 set될 때까지 기다린다.
+		if (WaitForSingleObject(pThis->m_hCloseEvent, 10) == WAIT_OBJECT_0)
+		{
+			break;
+		}
+
+		pThis->ThreadRun();
+	}
+
+	pThis->m_bThreadLive = false;
+
+	return 0;
+}
+
+UINT CRecipeEditMgr::ThreadRun()
+{
+	VTM_RECIPE* pRecipeEvent = nullptr;
+	pRecipeEvent = Recipe_GetSharedMemory();
+	if (pRecipeEvent != nullptr)
+	{
+		if (pRecipeEvent->m_sRunState.m_nRunStatus != M_RUN_REQ)
+		{
+			return 0;
+		}
+
+		if (GetShareMemoryMgrPtr() != nullptr)
+		{
+			// 2023.08.09 add Online Interlock
+			if ( GetShareMemoryMgrPtr()->GetSys_MachineMode() != df_HOST_OFFLINE )
+			{
+				CD_DisplayMessage dlg(_T("Onlien 모드 입니다. OFFLine 변경 후 사용하세요."));
+				dlg.DoModal();
+
+				pRecipeEvent->m_sRunState.m_nRunStatus = M_RUN_NG;
+				return 0;
+			}
+
+			// 2023.08.09 add Process Interlock
+			if ( GetShareMemoryMgrPtr()->GetSys_ProcessStatus() != SPS_IDLE || CSequenceManager::GetInstance()->IsEngineCompleteAll() != true)
+			{
+				// LYS 2026-09-16 거부 사유를 OCP 로그에 남긴다(모달은 이 워커 스레드에서 뜨므로 메인 창 뒤에 숨을 수 있다)
+				{
+					CString strLog;
+					strLog.Format(_T("Recipe cmd %d rejected - ProcessStatus=%d, EngineCompleteAll=%d"), (int)pRecipeEvent->m_sRunState.m_dwData1, GetShareMemoryMgrPtr()->GetSys_ProcessStatus(), CSequenceManager::GetInstance()->IsEngineCompleteAll() ? 1 : 0);
+					CLogWrapper::GetInstance()->KMLOG(WARN, strLog);
+				}
+				CD_DisplayMessage dlg(_T("프로세스 진행 중 입니다. 정지 후 사용하세요."));
+				dlg.DoModal();
+
+				pRecipeEvent->m_sRunState.m_nRunStatus = M_RUN_NG;
+
+				return 0;
+			}
+
+			if (GetShareMemoryMgrPtr()->GetSys_MachineMode() == df_HOST_OFFLINE && GetShareMemoryMgrPtr()->GetSys_ProcessStatus() == SPS_IDLE )
+			{
+				GetShareMemoryMgrPtr()->SetSys_ProcessStatus(SPS_CYCLETEST);
+
+				pRecipeEvent->m_sRunState.m_nRunStatus = M_RUN_PROC;
+
+				bool bCmdNG = false;	// LYS 2026-09-16 Align PROC 실패 시 M_RUN_NG 로 응답
+
+				switch (pRecipeEvent->m_sRunState.m_dwData1)
+				{
+					// Set
+				case M_CMD_SHOW_REF_SET:
+				{
+					double dPos = 0;
+					dPos = m_pMgrPool_link->pMaintControlMgr->GetCurPos(AXIS_X3);	// jsyoon 2022.05.10 add 
+					if (fabs(dPos) < 15)
+					{ 
+						switch (pRecipeEvent->m_sRunState.m_dwData2)
+						{
+						case M_HEAD_FRONT_LEFT:
+							SetROIAlignPtrn(0);
+							break;
+						case M_HEAD_FRONT_RIGHT:
+							SetROIAlignPtrn(1);
+							break;
+						case M_HEAD_BACK_LEFT:
+							SetROIAlignPtrn(2);
+							break;
+						case M_HEAD_BACK_RIGHT:
+							SetROIAlignPtrn(3);
+							break;
+						default:
+							break;
+						}
+					}
+					else
+					{
+						switch (pRecipeEvent->m_sRunState.m_dwData2)
+						{
+						case M_HEAD_FRONT_LEFT:
+							SetROIAlignPtrn(0);
+							break;
+						case M_HEAD_FRONT_RIGHT:
+							SetROIAlignPtrn(1);
+							break;
+						case M_HEAD_BACK_LEFT:
+							SetROIAlignPtrn(0);
+							break;
+						case M_HEAD_BACK_RIGHT:
+							SetROIAlignPtrn(1);
+							break;
+						default:
+							break;
+						}
+					}
+				}
+				break;
+				case M_CMD_PATTERN_SEARCH:
+				{
+					if (GetRecipeMgrPtr() != nullptr)
+					{
+						GetRecipeMgrPtr()->m_sAlign.Clear();
+
+						GetRecipeMgrPtr()->m_sAlign = pRecipeEvent->m_sAlign;
+
+						int nRet = VTM_RV_SUCCESSED;
+
+						S_Align* pAlignInfo = nullptr;
+						pAlignInfo = &GetRecipeMgrPtr()->m_sAlign;
+
+
+						double dPos = 0;
+						dPos = m_pMgrPool_link->pMaintControlMgr->GetCurPos(AXIS_X3);	// jsyoon 2022.05.10 add 
+						if (fabs(dPos) < 15)
+						{
+							switch (pRecipeEvent->m_sRunState.m_dwData2)
+							{
+							case M_HEAD_FRONT_LEFT:
+
+								pAlignInfo->m_sCcdSet.m_sFrontLeft.m_nMatchingScore = pRecipeEvent->m_sRunState.m_nData[0];
+								memcpy(pAlignInfo->m_chPtnFrontLeft[0], pRecipeEvent->m_sRunState.m_chData1, sizeof(wchar_t) * CH_LEN);
+
+								nRet = SetDetectAlignPtrn(0);
+								break;
+							case M_HEAD_FRONT_RIGHT:
+
+								pAlignInfo->m_sCcdSet.m_sFrontRight.m_nMatchingScore = pRecipeEvent->m_sRunState.m_nData[0];
+								memcpy(pAlignInfo->m_chPtnFrontRight[0], pRecipeEvent->m_sRunState.m_chData1, sizeof(wchar_t) * CH_LEN);
+								nRet = SetDetectAlignPtrn(1);
+								break;
+							case M_HEAD_BACK_LEFT:
+
+								pAlignInfo->m_sCcdSet.m_sBackLeft.m_nMatchingScore = pRecipeEvent->m_sRunState.m_nData[0];
+								memcpy(pAlignInfo->m_chPtnBackLeft[0], pRecipeEvent->m_sRunState.m_chData1, sizeof(wchar_t) * CH_LEN);
+								nRet = SetDetectAlignPtrn(4);
+								break;
+							case M_HEAD_BACK_RIGHT:
+
+								pAlignInfo->m_sCcdSet.m_sBackRight.m_nMatchingScore = pRecipeEvent->m_sRunState.m_nData[0];
+								memcpy(pAlignInfo->m_chPtnBackRight[0], pRecipeEvent->m_sRunState.m_chData1, sizeof(wchar_t) * CH_LEN);
+								nRet = SetDetectAlignPtrn(5);
+								break;
+							default:
+								break;
+							}
+						}
+						else
+						{
+							switch (pRecipeEvent->m_sRunState.m_dwData2)
+							{
+							case M_HEAD_FRONT_LEFT:
+
+								pAlignInfo->m_sCcdSet.m_sFrontLeft.m_nMatchingScore = pRecipeEvent->m_sRunState.m_nData[0];
+								memcpy(pAlignInfo->m_chPtnFrontLeft[0], pRecipeEvent->m_sRunState.m_chData1, sizeof(wchar_t) * CH_LEN);
+
+								nRet = SetDetectAlignPtrn(0);
+								break;
+							case M_HEAD_FRONT_RIGHT:
+
+								pAlignInfo->m_sCcdSet.m_sFrontRight.m_nMatchingScore = pRecipeEvent->m_sRunState.m_nData[0];
+								memcpy(pAlignInfo->m_chPtnFrontRight[0], pRecipeEvent->m_sRunState.m_chData1, sizeof(wchar_t) * CH_LEN);
+								nRet = SetDetectAlignPtrn(1);
+								break;
+							case M_HEAD_BACK_LEFT:
+
+								pAlignInfo->m_sCcdSet.m_sBackLeft.m_nMatchingScore = pRecipeEvent->m_sRunState.m_nData[0];
+								memcpy(pAlignInfo->m_chPtnBackLeft[0], pRecipeEvent->m_sRunState.m_chData1, sizeof(wchar_t) * CH_LEN);
+								nRet = SetDetectAlignPtrn(2);
+								break;
+							case M_HEAD_BACK_RIGHT:
+
+								pAlignInfo->m_sCcdSet.m_sBackRight.m_nMatchingScore = pRecipeEvent->m_sRunState.m_nData[0];
+								memcpy(pAlignInfo->m_chPtnBackRight[0], pRecipeEvent->m_sRunState.m_chData1, sizeof(wchar_t) * CH_LEN);
+								nRet = SetDetectAlignPtrn(3);
+								break;
+							default:
+								break;
+							}
+						}
+
+						if (nRet != VTM_RV_SUCCESSED)
+						{
+							CAlarmController::GetInstance()->SetAlarm(nRet);
+						}
+					}
+				}
+				break;
+				case M_CMD_CCD_SET:
+				{
+					int iLampIntensity = pRecipeEvent->m_sRunState.m_nData[2];
+					int iExposureTime = pRecipeEvent->m_sRunState.m_nData[0];
+					int iCCDGain = pRecipeEvent->m_sRunState.m_nData[1];
+					int iCh[4] = { 3, 2, 1, 0};
+					int iCCD = 0;
+					switch (pRecipeEvent->m_sRunState.m_dwData2) 
+					{
+					case M_HEAD_FRONT_LEFT:
+					{
+						iCCD = 0;
+					}
+					break;
+					case M_HEAD_FRONT_RIGHT:
+					{
+						iCCD = 1;
+					}
+					break;
+					case M_HEAD_BACK_LEFT:
+					{
+						iCCD = 2;
+					}
+					break;
+					case M_HEAD_BACK_RIGHT:
+					{
+						iCCD = 3;
+					}
+					break;
+					default:
+						break;
+					}
+
+					m_pMgrPool_link->pLightControlMgr->SetLedLampIntensity(0, iCh[iCCD], iLampIntensity);
+					m_pMgrPool_link->pAlignCameraMgr[iCCD]->SetParam_CameraExposureTime_ms(iExposureTime);
+					m_pMgrPool_link->pAlignCameraMgr[iCCD]->SetParam_CameraGain(iCCDGain);
+				}
+				break;
+				case M_CMD_LAMP_SET:
+				{
+					int iLampIntensity = 0;
+
+					int iCh[4] = { 3, 2, 1, 0 };
+
+					int iLamp = pRecipeEvent->m_sRunState.m_dwData2;
+					int i = 0;
+					switch (iLamp)
+					{
+					case M_HEAD_FRONT_LEFT:
+					{
+						i = 0;
+						iLampIntensity = pRecipeEvent->m_sRunState.m_nData[i];
+						m_pMgrPool_link->pLightControlMgr->SetLedLampIntensity(0, iCh[i], iLampIntensity);
+					}
+					break;
+					case M_HEAD_FRONT_RIGHT:
+					{
+						i = 1;
+						iLampIntensity = pRecipeEvent->m_sRunState.m_nData[i];
+						m_pMgrPool_link->pLightControlMgr->SetLedLampIntensity(0, iCh[i], iLampIntensity);
+					}
+					break;
+					case M_HEAD_BACK_LEFT:
+					{
+						i = 2;
+						iLampIntensity = pRecipeEvent->m_sRunState.m_nData[i];
+						m_pMgrPool_link->pLightControlMgr->SetLedLampIntensity(0, iCh[i], iLampIntensity);
+					}
+					break;
+					case M_HEAD_BACK_RIGHT:
+					{
+						i = 3;
+						iLampIntensity = pRecipeEvent->m_sRunState.m_nData[i];
+						m_pMgrPool_link->pLightControlMgr->SetLedLampIntensity(0, iCh[i], iLampIntensity);
+					}
+					break;
+					case M_HEAD_FRONT:
+					{
+						for (i = 0; i < 2; i++)
+						{
+							iLampIntensity = pRecipeEvent->m_sRunState.m_nData[i];
+							m_pMgrPool_link->pLightControlMgr->SetLedLampIntensity(0, iCh[i], iLampIntensity);
+						}
+					}
+					break;
+					case M_HEAD_BACK:
+					{
+						for (i = 2; i < 4; i++)
+						{
+							iLampIntensity = pRecipeEvent->m_sRunState.m_nData[i];
+							m_pMgrPool_link->pLightControlMgr->SetLedLampIntensity(0, iCh[i], iLampIntensity);
+						}
+					}
+					break;
+					case 0:
+					{
+						for (i = 0; i < MAIN_CCD_MAX_NUM; i++)
+						{
+							iLampIntensity = pRecipeEvent->m_sRunState.m_nData[i];
+
+							m_pMgrPool_link->pLightControlMgr->SetLedLampIntensity(0, iCh[i], iLampIntensity);
+						}
+					}
+					break;
+					default:
+						break;
+					}
+
+					//for (size_t i = 0; i < MAIN_CCD_MAX_NUM; i++)
+					//{
+					//	iLampIntensity = pRecipeEvent->m_sRunState.m_nData[i];
+
+					//	m_pMgrPool_link->pLightControlMgr->SetLedLampIntensity(0, iCh[i], iLampIntensity);
+					//}
+				}
+				break;
+
+				case M_CMD_SRM_LAMP_SET:
+				{
+					int iLampIntensity = 0;
+
+					int iCh[4] = { 0, 1, 2, 3 };
+
+					int iLamp = pRecipeEvent->m_sRunState.m_dwData2;
+					int i = 0;
+					switch (iLamp)
+					{
+					case M_HEAD_FRONT_LEFT:
+					{
+						for (i = 0; i < 4; i++)
+						{
+							if (i == 0)
+								iLampIntensity = pRecipeEvent->m_sRunState.m_nData[i];
+							else
+								iLampIntensity = 0;
+
+							m_pMgrPool_link->pLightControlMgr->SetLedLampIntensity(1, iCh[i], iLampIntensity);
+						}
+					}
+						break;
+					case M_HEAD_FRONT_RIGHT:
+					{
+						for (i = 0; i < 4; i++)
+						{
+							if (i == 1)
+								iLampIntensity = pRecipeEvent->m_sRunState.m_nData[i];
+							else
+								iLampIntensity = 0;
+
+							m_pMgrPool_link->pLightControlMgr->SetLedLampIntensity(1, iCh[i], iLampIntensity);
+						}
+					}
+					break;
+					case M_HEAD_BACK_LEFT:
+					{
+						for (i = 0; i < 4; i++)
+						{
+							if (i == 2)
+								iLampIntensity = pRecipeEvent->m_sRunState.m_nData[i];
+							else
+								iLampIntensity = 0;
+
+							m_pMgrPool_link->pLightControlMgr->SetLedLampIntensity(1, iCh[i], iLampIntensity);
+						}
+					}
+					break;
+					case M_HEAD_BACK_RIGHT:
+					{
+						for (i = 0; i < 4; i++)
+						{
+							if (i == 3)
+								iLampIntensity = pRecipeEvent->m_sRunState.m_nData[i];
+							else
+								iLampIntensity = 0;
+
+							m_pMgrPool_link->pLightControlMgr->SetLedLampIntensity(1, iCh[i], iLampIntensity);
+						}
+					}
+					break;
+					case 0:
+					{
+						for (i = 0; i < 4; i++)
+						{
+							iLampIntensity = 0;
+
+							m_pMgrPool_link->pLightControlMgr->SetLedLampIntensity(1, iCh[i], iLampIntensity);
+						}
+					}
+					break;
+					default:
+						break;
+					}
+				}
+				break;
+
+				// Align
+				case M_CMD_GLASS_GET_POS:
+				{
+					pRecipeEvent->m_sRunState.m_fData[0] = m_pMgrPool_link->pMaintControlMgr->GetCurPos(AXIS_X); // < -STAGE Y
+					pRecipeEvent->m_sRunState.m_fData[1] = m_pMgrPool_link->pMaintControlMgr->GetCurPos(AXIS_LOADER_R); // < -STAGE ROTATE
+					pRecipeEvent->m_sRunState.m_fData[2] = m_pMgrPool_link->pMaintControlMgr->GetCurPos(AXIS_X2); // < -BACK Y
+					pRecipeEvent->m_sRunState.m_fData[3] = m_pMgrPool_link->pMaintControlMgr->GetCurPos(AXIS_Y1); // < -BACK LEFT
+					pRecipeEvent->m_sRunState.m_fData[4] = m_pMgrPool_link->pMaintControlMgr->GetCurPos(AXIS_Y2); // < -BACK RIGHT
+					pRecipeEvent->m_sRunState.m_fData[5] = m_pMgrPool_link->pMaintControlMgr->GetCurPos(AXIS_Z3); // LYS 2026-09-04 SUB Z RIGHT
+					pRecipeEvent->m_sRunState.m_fData[6] = m_pMgrPool_link->pMaintControlMgr->GetCurPos(AXIS_Z4); // LYS 2026-09-04 SUB Z LEFT
+				}
+				break;
+				case M_CMD_GLASS_MOVE:
+				{
+					//m_fData[0]; // = STAGE Y
+					//m_fData[1]; // = STAGE ROTATE
+					//m_fData[2]; // = FRONT Y
+					//m_fData[3]; // = FRONT LEFT
+					//m_fData[4]; // = FRONT RIGHT
+					//m_fData[5]; // = FRONT Z
+
+				/*	int nProbe = pRecipeEvent->m_sRunState.m_nData[0];
+					CSequenceManager::GetInstance()->GetFunctionModuleProbeACC()->SetProbe(nProbe + df_PROBE_AGING1);*/
+
+					double* pPos = nullptr;
+					pPos = pRecipeEvent->m_sRunState.m_fData;
+					m_pMgrPool_link->pMaintControlMgr->MoveCmdAlignPos_Glass(pPos);
+				}
+				break;
+				case M_CMD_GLASS_PROC:
+				{
+					m_pMgrPool_link->pMaintControlMgr->ResetAlign(); //Reset 먼저 해주고 진행
+
+					if (GetRecipeMgrPtr() != nullptr)
+					{
+						GetRecipeMgrPtr()->m_sAlign.Clear();
+
+						GetRecipeMgrPtr()->m_sAlign = pRecipeEvent->m_sAlign;
+
+						//int nProbe = pRecipeEvent->m_sRunState.m_nData[0];
+						//CSequenceManager::GetInstance()->GetFunctionModuleProbeACC()->SetProbe( nProbe + df_PROBE_AGING1);
+
+						bool bRet = false;
+						CDoWorkGlassSequence* pDoWorkGlassSeq = CSequenceManager::GetInstance()->GeDoWorkGlassSequence();
+						bRet = pDoWorkGlassSeq->ItemStart(_T("SEQUENCE_ITEM_DWGLASS_SEQ_GLASS_SW_ALIGN"), true);
+						if (bRet != true)	// LYS 2026-09-16 실패(알람은 ItemStart 가 띄움) -> DLL 에 NG 응답, 즉시 종료
+						{
+							CLogWrapper::GetInstance()->KMLOG(WARN, _T("Manual Glass Align NG - command ends with M_RUN_NG"));
+							bCmdNG = true;
+						}
+					}
+				}
+				break;
+				case M_CMD_PROBE_GET_POS:
+				{
+					pRecipeEvent->m_sRunState.m_fData[0] = m_pMgrPool_link->pMaintControlMgr->GetCurPos(AXIS_PROBE_X9); //  PROBE Y
+					// LYS 2026-09-17 Y5/Y1/Y2 는 GetOrgPos(엔코더값) 로 저장 - MOVE 가 MoveOrgPosMulti(보상 미적용)로 가므로 GET->MOVE 왕복이 일치한다. X9 는 종전대로 CurPos/CmdPos 쌍.
+					pRecipeEvent->m_sRunState.m_fData[1] = m_pMgrPool_link->pMaintControlMgr->GetOrgPos(AXIS_PROBE_Y5); // PROBE X
+					pRecipeEvent->m_sRunState.m_fData[2] = m_pMgrPool_link->pMaintControlMgr->GetCurPos(AXIS_X2);       // <-BACK Y
+					pRecipeEvent->m_sRunState.m_fData[3] = m_pMgrPool_link->pMaintControlMgr->GetOrgPos(AXIS_Y1);		// < -BACK RIGHT
+					pRecipeEvent->m_sRunState.m_fData[4] = m_pMgrPool_link->pMaintControlMgr->GetOrgPos(AXIS_Y2);		// < -BACK LEFT
+					pRecipeEvent->m_sRunState.m_fData[5] = m_pMgrPool_link->pMaintControlMgr->GetCurPos(AXIS_Z3); // LYS 2026-09-04 SUB Z RIGHT
+					pRecipeEvent->m_sRunState.m_fData[6] = m_pMgrPool_link->pMaintControlMgr->GetCurPos(AXIS_Z4); // LYS 2026-09-04 SUB Z LEFT
+					pRecipeEvent->m_sRunState.m_fData[7] = m_pMgrPool_link->pMaintControlMgr->GetCurPos(AXIS_X);  // LYS 2026-09-04 STAGE Y (reindex 6->7)
+				}
+				break;
+				case M_CMD_PROBE_MOVE:
+				{
+					double* pPos = nullptr;
+					pPos = pRecipeEvent->m_sRunState.m_fData;
+					m_pMgrPool_link->pMaintControlMgr->MoveCmdAlignPos_Probe(pPos);
+				}
+				break;
+				case M_CMD_PROBE_PROC:
+				{
+					if (GetRecipeMgrPtr() != nullptr)
+					{
+						GetRecipeMgrPtr()->m_sAlign.Clear();
+
+						GetRecipeMgrPtr()->m_sAlign = pRecipeEvent->m_sAlign;
+
+						int nProbe = pRecipeEvent->m_sRunState.m_nData[0];
+					    CSequenceManager::GetInstance()->GetFunctionModuleProbeACC()->SetProbe(nProbe + df_PROBE_AGING1);
+
+						m_pMgrPool_link->pMaintControlMgr->GetShareMemoryMgrPtr()->SetSys_ProbeChange(2);
+
+						bool bRet = false;
+						CDoWorkGlassSequence* pDoWorkGlassSeq = CSequenceManager::GetInstance()->GeDoWorkGlassSequence();
+						bRet = pDoWorkGlassSeq->ItemStart(_T("SEQUENCE_ITEM_DWGLASS_SEQ_PROBE_SW_ALIGN"), true);
+						if (bRet != true)	// LYS 2026-09-16 실패(알람은 ItemStart 가 띄움) -> DLL 에 NG 응답, 즉시 종료
+						{
+							CLogWrapper::GetInstance()->KMLOG(WARN, _T("Manual Probe Align NG - command ends with M_RUN_NG"));
+							bCmdNG = true;
+						}
+
+						m_pMgrPool_link->pMaintControlMgr->GetShareMemoryMgrPtr()->SetSys_ProbeChange(0);
+					}
+				}
+				break;
+				case M_CMD_RESET:	/////Align Reset
+				{
+					m_pMgrPool_link->pMaintControlMgr->ResetAlign();
+				}
+				break;
+
+
+				// 요청 응답
+				case M_CMD_CONTACT_SET:
+				{
+					//double Data
+					//m_fData[0] = Ready / Pre - Contact / Contact / OD / Contact + OD
+					double dMovePos = 0;
+					switch (pRecipeEvent->m_sRunState.m_dwData2)
+					{
+					case M_PROBE_MOVE_POS:
+					{
+						//_TEST
+						dMovePos = pRecipeEvent->m_sRunState.m_fData[0];
+						m_pMgrPool_link->pMaintControlMgr->MoveCmdPos_ProbeMove(AXIS_PROBE_Z5, dMovePos, SPEED_HIGH);
+					}
+					break;
+					case M_PROBE_MOVE_OD:
+					{
+						dMovePos = pRecipeEvent->m_sRunState.m_fData[0];
+						m_pMgrPool_link->pMaintControlMgr->MoveCmdPos_ProbeMove(AXIS_PROBE_Z5, dMovePos, SPEED_LOW);
+					}
+					break;
+					default:
+						break;
+					}
+				}
+				break;
+				case M_CMD_STAGE_GET_POS:
+				{
+					pRecipeEvent->m_sRunState.m_fData[0] = m_pMgrPool_link->pMaintControlMgr->GetCurPos(AXIS_PROBE_X9); // Probe
+					pRecipeEvent->m_sRunState.m_fData[1] = m_pMgrPool_link->pMaintControlMgr->GetCurPos(AXIS_LOADER_R); // Loader
+				}
+				break;
+				case M_CMD_STAGE_MOVE:
+				{
+					double dMovePos = pRecipeEvent->m_sRunState.m_fData[0];
+					double dPosR = pRecipeEvent->m_sRunState.m_fData[1];
+					int iStick = (int)pRecipeEvent->m_sRunState.m_fData[2];
+					double dDistance = (double)pRecipeEvent->m_sRunState.m_fData[3];
+
+					double dStageY = 0;
+					dStageY = dMovePos;
+				//	dStageY = (dDistance * iStick) * 1;
+
+					/*S_RecipeData* pRecipeData;
+					pRecipeData = GetRecipeData();
+					int iStick = 0;
+					for (size_t i = 0; i < pRecipeData->m_vecStick.size(); i++)
+					{
+						if (fabs(pRecipeData->m_vecStick[i].m_fStageY - dMovePos) < 0.01)
+						{
+							iStick = i;
+						}
+					}
+
+					S_RecipeMap* pRecipeMap;
+					pRecipeMap = GetRecipeMap();
+
+					double dStageY = 0;
+					dStageY = (pRecipeMap->m_fCellDistance.y * iStick) * 1;*/
+
+					double dPos[2];
+					dPos[0] = dStageY;
+					dPos[1] = dPosR;
+
+					double* pPos = nullptr;
+					pPos = dPos;
+					m_pMgrPool_link->pMaintControlMgr->MoveCmdPos_Stage(pPos);
+				}
+				break;
+				case M_CMD_STAGE_PROBE_MOVE:
+				{
+					double dPos[10];
+					ZeroMemory(&dPos, sizeof(dPos)); 
+				//	dPos[0] = pRecipeEvent->m_sRunState.m_fData[0];	// Stage Y
+					dPos[0] = pRecipeEvent->m_sRunState.m_fData[4];	// Head Y
+					dPos[1] = pRecipeEvent->m_sRunState.m_fData[1]; // Stage Rotate
+
+					int iStick = (int)pRecipeEvent->m_sRunState.m_fData[2];
+					double dDistance = (double)pRecipeEvent->m_sRunState.m_fData[3]; // 
+					double dProbeShitf = 0.;
+					int nStick = (int)pRecipeEvent->m_sRunState.m_fData[5];
+
+					double dProbeGap = 0;
+					m_pMgrPool_link->pMaintControlMgr->GetInterlockPos(nullptr, nullptr, &dProbeGap);
+
+				//	double dProbeShitf = (double)pRecipeEvent->m_sRunState.m_fData[9];
+
+					int k = 0;
+					bool bSetMove[5] = { false, };	// 2023.04.11 add
+
+					// 2023.07.05 change
+					double dProbeInterlockPos = 0;
+					m_pMgrPool_link->pMaintControlMgr->GetInterlockPos(nullptr, nullptr, &dProbeInterlockPos);
+					double fOffsetGap = 2.;
+
+					for (int i = 0; i < 5; i++)
+					{
+						if (bSetMove[i] == true)		// M, A4, A3, A2, A1
+							continue;
+
+						if (i == 0)
+						{
+							if (pRecipeEvent->m_sRunState.m_fData[6 + i] > -9999.0)
+							{
+								dPos[2 + i] = pRecipeEvent->m_sRunState.m_fData[6 + i] + dProbeShitf;
+								k = i;
+							}
+							else
+							{
+								dPos[2 + i] = pRecipeEvent->m_sRunState.m_fData[6] - (dDistance * i) + dProbeShitf;
+							}
+
+							bSetMove[i] = true;	// 2023.04.11 add	
+						}
+						else
+						{
+							
+							if (pRecipeEvent->m_sRunState.m_fData[6 + i] > -9999.0)
+							{
+								;
+							}
+							else
+							{
+								if (bSetMove[i] != true)
+						//			dPos[2 + i] = pRecipeEvent->m_sRunState.m_fData[6] - (dDistance * i) + dProbeShitf;
+									dPos[2 + i] = pRecipeEvent->m_sRunState.m_fData[6] - (dProbeInterlockPos * i) + fOffsetGap;
+							}
+
+							if (k < nStick)
+							{
+								for (int j = k + 1; j < nStick; j++)
+								{
+									if (pRecipeEvent->m_sRunState.m_fData[6 + k] - pRecipeEvent->m_sRunState.m_fData[6 + j] > (dProbeInterlockPos + fOffsetGap) * 2)	// 2023.05.12 Stick 간 간격이 넓을 경우
+									{
+										int nCurProbe = i;
+										int nNextProbe = i + 1;
+										// Next Probe
+										double dMovePos = 0;
+										dMovePos = pRecipeEvent->m_sRunState.m_fData[6 + j] + dProbeShitf;
+										if (m_pMgrPool_link->pMaintControlMgr->GetMinSWLimit(AXIS_X3) < dMovePos)
+										{
+											dPos[2 + nNextProbe] = dMovePos;
+											k = j;
+
+											bSetMove[nNextProbe] = true;	// 2023.04.11 add
+										}
+
+										// Cur Probe
+										dPos[2 + nCurProbe] = dMovePos + (dProbeInterlockPos + fOffsetGap);
+										bSetMove[nCurProbe] = true;
+
+										break;
+									}
+									else if (pRecipeEvent->m_sRunState.m_fData[6 + k] - pRecipeEvent->m_sRunState.m_fData[6 + j] > dProbeGap)
+									{
+										double dMovePos = 0;
+										dMovePos = pRecipeEvent->m_sRunState.m_fData[6 + j] + dProbeShitf;
+										if (m_pMgrPool_link->pMaintControlMgr->GetMinSWLimit(AXIS_X3) < dMovePos)
+										{
+											dPos[2 + i] = dMovePos;
+											k = j;
+
+											bSetMove[i] = true;	// 2023.04.11 add
+											break;
+										}
+
+										/*dPos[2 + i] = pRecipeEvent->m_sRunState.m_fData[6 + j] + dProbeShitf;
+										k = j;
+										break;*/
+									}
+								}
+							}
+
+						}
+						//	dPos[2 + i] = pRecipeEvent->m_sRunState.m_fData[4 + i] + dProbeShitf;	// jsayoon 2022.05.13 add "+0.2"
+					}
+
+					for (int i = 0; i < 5; i++) 
+					{
+						if (bSetMove[i] != true)
+						{
+							dPos[2 + i] = dPos[1 + i] - ((dProbeInterlockPos + fOffsetGap));
+						}
+					}
+					//
+					// 
+					//for (int i = 0; i < 5; i++)
+					//{
+					//	if (i == 0)
+					//	{
+					//		if (pRecipeEvent->m_sRunState.m_fData[6 + i] > -9999.0)
+					//		{
+					//			dPos[2 + i] = pRecipeEvent->m_sRunState.m_fData[6 + i] + dProbeShitf;
+					//			k = i;
+					//		}
+					//		else
+					//		{
+					//			dPos[2 + i] = pRecipeEvent->m_sRunState.m_fData[6] - (dDistance * i) + dProbeShitf;
+					//		}
+
+					//		bSetMove[i] = true;	// 2023.04.11 add	
+					//	}
+					//	else
+					//	{
+					//		if (pRecipeEvent->m_sRunState.m_fData[6 + i] > -9999.0)
+					//		{
+					//			;
+					//		}
+					//		else
+					//		{
+					//			dPos[2 + i] = pRecipeEvent->m_sRunState.m_fData[6] - (dDistance * i) + dProbeShitf;
+					//		}
+
+					//		if (k < nStick)
+					//		{
+					//			for (int j = k + 1; j < nStick; j++)
+					//			{
+
+					//				if (pRecipeEvent->m_sRunState.m_fData[6 + k] - pRecipeEvent->m_sRunState.m_fData[6 + j] > dProbeGap)
+					//				{
+					//					double dMovePos = 0;
+					//					dMovePos = pRecipeEvent->m_sRunState.m_fData[6 + j] + dProbeShitf;
+					//					if (m_pMgrPool_link->pMaintControlMgr->GetMinSWLimit(AXIS_X3) < dMovePos)
+					//					{
+					//						dPos[2 + i] = dMovePos;
+					//						k = j;
+
+					//						bSetMove[i] = true;	// 2023.04.11 add
+					//						break;
+					//					}
+
+					//					/*dPos[2 + i] = pRecipeEvent->m_sRunState.m_fData[6 + j] + dProbeShitf;
+					//					k = j;
+					//					break;*/
+					//				}
+					//			}
+					//		}
+					//		
+					//	}
+					////	dPos[2 + i] = pRecipeEvent->m_sRunState.m_fData[4 + i] + dProbeShitf;	// jsayoon 2022.05.13 add "+0.2"
+					//}
+
+					//// 2023.04.11 add
+					//double dProbeInterlockPos = 0;
+					//m_pMgrPool_link->pMaintControlMgr->GetInterlockPos(nullptr, nullptr, &dProbeInterlockPos);
+
+					//for (int i = 0; i < 5; i++)
+					//{
+					//	if (bSetMove[i] != true)
+					//	{
+					//		double fOffsetGap = 3.;
+					//		dPos[2 + i] = dPos[1 + i] - ((dProbeInterlockPos + fOffsetGap));
+					//	}
+					//}
+					////
+
+				//	// m_fData[0] = Stage Y
+				//	// m_fData[1] = Stage Rotate
+				//	S_RecipeMap* pRecipeMap;
+				//	pRecipeMap = GetRecipeMap();
+
+				//	double dStageY = 0;
+				//	dStageY = pRecipeMap->m_fCellDistance.y;
+
+				////	double* pPos = nullptr;
+				////	pPos = pRecipeEvent->m_sRunState.m_fData;
+				//	for (int i = 0; i < 5; i++)
+				//	{
+				//		dPos[2+i] = dPos[0] - (dStageY * i);
+				//	}
+					
+					double* pPos = nullptr;
+					pPos = dPos;
+
+					m_pMgrPool_link->pMaintControlMgr->MoveCmdPos_Probe(pPos);
+				}
+				break;
+				case M_CMD_HEAD_GET_POS:
+				{
+					bool bFront = true;
+					bool bLeft = true;
+
+					switch (pRecipeEvent->m_sRunState.m_dwData3)
+					{
+					case M_TYPE_REVIEW:
+						bFront = false;
+						break;
+					case M_TYPE_SPEC:
+						bFront = false;
+						break;
+					case M_TYPE_QUALITY:
+						bFront = true;
+						break;
+					case M_TYPE_COLOR:
+						bFront = true;
+						break;
+					case M_TYPE_ANGLE:
+						bFront = true;
+						break;
+					default:
+						break;
+					}
+
+					switch (pRecipeEvent->m_sRunState.m_dwData2)
+					{
+					case M_HEAD_LEFT:
+						bLeft = true;
+						break;
+					case M_HEAD_RIGHT:
+						bLeft = false;
+						break;
+					default:
+						break;
+					}
+
+					if (bFront == true)		// vision, angle
+					{
+						pRecipeEvent->m_sRunState.m_fData[0] = m_pMgrPool_link->pMaintControlMgr->GetCurPos(AXIS_X3); // X
+
+						if (bLeft == true)
+						{
+							pRecipeEvent->m_sRunState.m_fData[1] = m_pMgrPool_link->pMaintControlMgr->GetCurPos(AXIS_Y3); // Y
+							pRecipeEvent->m_sRunState.m_fData[2] = m_pMgrPool_link->pMaintControlMgr->GetCurPos(AXIS_Z1); // Z
+						}
+						else
+						{
+							pRecipeEvent->m_sRunState.m_fData[1] = m_pMgrPool_link->pMaintControlMgr->GetCurPos(AXIS_Y4); // Y
+							pRecipeEvent->m_sRunState.m_fData[2] = m_pMgrPool_link->pMaintControlMgr->GetCurPos(AXIS_Z1); // Z
+						}
+					}
+					else // Review, WAD
+					{
+						pRecipeEvent->m_sRunState.m_fData[0] = m_pMgrPool_link->pMaintControlMgr->GetCurPos(AXIS_X2); // X
+
+						if (bLeft == true)
+						{
+							pRecipeEvent->m_sRunState.m_fData[1] = m_pMgrPool_link->pMaintControlMgr->GetCurPos(AXIS_Y1); // Y
+							pRecipeEvent->m_sRunState.m_fData[2] = m_pMgrPool_link->pMaintControlMgr->GetCurPos(AXIS_Z1); // Z
+						}
+						else
+						{
+							pRecipeEvent->m_sRunState.m_fData[1] = m_pMgrPool_link->pMaintControlMgr->GetCurPos(AXIS_Y2); // Y
+							pRecipeEvent->m_sRunState.m_fData[2] = m_pMgrPool_link->pMaintControlMgr->GetCurPos(AXIS_Z1); // Z
+						}
+					}	
+				}
+				break;
+				case M_CMD_HEAD_MOVE:
+				{
+					int nMeasType = 0, nSelect = 0;
+					nSelect = pRecipeEvent->m_sRunState.m_dwData2;
+					nMeasType = pRecipeEvent->m_sRunState.m_dwData3;
+
+					double* pPos = nullptr;
+					pPos = pRecipeEvent->m_sRunState.m_fData;
+
+					m_pMgrPool_link->pMaintControlMgr->MoveCmdPos_Head(pPos, nMeasType, nSelect);
+				}
+				break;
+
+				// LYS 2026-07-02 TestMode Move/Contact/UnContact
+				case M_CMD_TEST_MODE:
+				{
+					int nSubCmd = (int)pRecipeEvent->m_sRunState.m_dwData2;
+					switch (nSubCmd)
+					{
+					case 0: // MOVE - position data from shared memory (set by DlgTestMode from g_inRcpInfo)
+					{
+						int nTestMode = (int)pRecipeEvent->m_sRunState.m_dwData3;
+						int iStick = (int)pRecipeEvent->m_sRunState.m_fData[0];
+						int iCell  = (int)pRecipeEvent->m_sRunState.m_fData[1];
+						double dStickY  = pRecipeEvent->m_sRunState.m_fData[2];
+						double dStickR  = pRecipeEvent->m_sRunState.m_fData[3];
+						double dCellX   = pRecipeEvent->m_sRunState.m_fData[4];
+						double dCellY   = pRecipeEvent->m_sRunState.m_fData[5];
+						double dStick0Y = pRecipeEvent->m_sRunState.m_fData[6];
+						int nCellCnt    = (int)pRecipeEvent->m_sRunState.m_fData[7];
+
+						// Recipe offsets from shared memory (set by DlgTestMode)
+						double dOffX = (double)pRecipeEvent->m_sRunState.m_nData[2] / 1000.0;
+						double dOffR = (double)pRecipeEvent->m_sRunState.m_nData[3] / 1000.0;
+						double dHeadReviewY = (double)pRecipeEvent->m_sRunState.m_nData[4] / 1000.0;
+						double dBackHeadGap = (double)pRecipeEvent->m_sRunState.m_nData[5] / 1000.0;
+						double dFrontHeadGap = (double)pRecipeEvent->m_sRunState.m_nData[6] / 1000.0;
+
+						// 1. Probe UnContact
+						m_pMgrPool_link->pMaintControlMgr->MoveCmdPos_ProbeUnContact(AXIS_PROBE_Z5, 0);
+						Sleep(500);
+						double dStageY = 0;
+						/*if (iStick > 0)
+							dStageY = dStick0Y - dStickY + dOffX;
+						else
+							dStageY = dOffX;*/
+
+						dStageY = dStickY + dOffX;
+
+						double dStageR = dStickR + dOffR;
+						m_pMgrPool_link->pMaintControlMgr->MoveCmdPosA(AXIS_LOADER_R, dStageR, true, SPEED_HIGH);
+						m_pMgrPool_link->pMaintControlMgr->DoWork_MotionDone(AXIS_LOADER_R);
+						m_pMgrPool_link->pMaintControlMgr->MoveCmdPosA(AXIS_X, dStageY, true, SPEED_HIGH);
+
+						// 3. Head position
+						double dGlassContactPos = dHeadReviewY;
+						double dHeadX = dCellY + dGlassContactPos;
+
+						// Head gap
+						double dHeadGap = 0;
+						if (nTestMode == 2 || nTestMode == 3)
+							m_pMgrPool_link->pMaintControlMgr->GetInterlockPos(nullptr, &dHeadGap, nullptr);
+						else
+							m_pMgrPool_link->pMaintControlMgr->GetInterlockPos(nullptr, nullptr, nullptr, &dHeadGap);
+						double dHeadGapRcp = dBackHeadGap;
+						if (dHeadGapRcp > dHeadGap) dHeadGap = dHeadGapRcp;
+
+						// 2-Head pairing from cell X positions in fData[10+]
+						double dLeft = dCellX, dRight = dCellX;
+						bool bFoundPair = false;
+						for (int ic = 0; ic < nCellCnt && ic < 40; ic++) {
+							if (ic == iCell) continue;
+							double dOX = pRecipeEvent->m_sRunState.m_fData[10 + ic];
+							if (fabs(dCellX - dOX) > dHeadGap) {
+								if (dCellX > dOX) { dLeft = dCellX; dRight = dOX; }
+								else { dLeft = dOX; dRight = dCellX; }
+								bFoundPair = true; break;
+							}
+						}
+						if (!bFoundPair) {
+							if (dCellX > 50) { dLeft = dCellX; dRight = dCellX - dHeadGap; }
+							else { dLeft = dCellX + dHeadGap; dRight = dCellX; }
+						}
+
+						double dLeft2 = dLeft, dRight2 = dRight;
+						if (nCellCnt == 1) {
+							double dFG = dFrontHeadGap / 2;
+							if (dLeft >= dRight) { dLeft2 = dFG * -1; dRight2 = dFG; }
+							else { dLeft2 = dFG; dRight2 = dFG * -1; }
+						}
+
+						double dSafeZ1 = 0, dSafeZ2 = 0;
+						m_pMgrPool_link->pPositionConfigMgr->GetSafetyPosition(nullptr, nullptr, nullptr, nullptr, nullptr, &dSafeZ1, &dSafeZ2);
+
+						// HeadZ from shared memory (set by DlgTestMode from g_inRcpInfo)
+						double dReviewZ = pRecipeEvent->m_sRunState.m_fData[8];
+						double dSpecZ   = pRecipeEvent->m_sRunState.m_fData[9];
+						double dQualZ   = (double)pRecipeEvent->m_sRunState.m_nData[0] / 1000.0;
+						double dAngleZ  = (double)pRecipeEvent->m_sRunState.m_nData[1] / 1000.0;
+
+						stMotorPosition stPos[20];
+						ZeroMemory(&stPos, sizeof(stPos));
+						int nAxis = 0;
+
+						switch (nTestMode) {
+						case 0: // Review
+							stPos[nAxis].axis=AXIS_Y1; stPos[nAxis].dPosition=dLeft;  nAxis++;
+							stPos[nAxis].axis=AXIS_Y2; stPos[nAxis].dPosition=dRight; nAxis++;
+							stPos[nAxis].axis=AXIS_Y3; stPos[nAxis].dPosition=dLeft2; nAxis++;
+							stPos[nAxis].axis=AXIS_Y4; stPos[nAxis].dPosition=dRight2; nAxis++;
+							stPos[nAxis].axis=AXIS_X2; stPos[nAxis].dPosition=dHeadX+dOffX; nAxis++;
+							// LYS 2026-09-07 Z1(OCP 미사용) -> Sub Z(Z3/Z4) 화상 Sub Z
+							stPos[nAxis].axis=AXIS_Z3; stPos[nAxis].dPosition=GetRecipeInfo()->m_sMotionSubZ.m_fVisionSubzRight; nAxis++;
+							stPos[nAxis].axis=AXIS_Z4; stPos[nAxis].dPosition=GetRecipeInfo()->m_sMotionSubZ.m_fVisionSubzLeft; nAxis++;
+							stPos[nAxis].axis=AXIS_Z2; stPos[nAxis].dPosition=dSafeZ2; nAxis++;
+							m_pMgrPool_link->pMaintControlMgr->MoveCmdPosReview(iStick, stPos, nAxis, SPEED_HIGH);
+							break;
+						case 1: // WAD
+							stPos[nAxis].axis=AXIS_Y1; stPos[nAxis].dPosition=dLeft;  nAxis++;
+							stPos[nAxis].axis=AXIS_Y2; stPos[nAxis].dPosition=dRight; nAxis++;
+							stPos[nAxis].axis=AXIS_Y3; stPos[nAxis].dPosition=dLeft2; nAxis++;
+							stPos[nAxis].axis=AXIS_Y4; stPos[nAxis].dPosition=dRight2; nAxis++;
+							stPos[nAxis].axis=AXIS_X2; stPos[nAxis].dPosition=dHeadX+dOffX; nAxis++;
+							// LYS 2026-09-07 Z1(OCP 미사용) -> Sub Z(Z3/Z4) 특성(WAD) Sub Z
+							stPos[nAxis].axis=AXIS_Z3; stPos[nAxis].dPosition=GetRecipeInfo()->m_sMotionSubZ.m_fWadSubzRight; nAxis++;
+							stPos[nAxis].axis=AXIS_Z4; stPos[nAxis].dPosition=GetRecipeInfo()->m_sMotionSubZ.m_fWadSubzLeft; nAxis++;
+							stPos[nAxis].axis=AXIS_Z2; stPos[nAxis].dPosition= dSafeZ2; nAxis++;
+							m_pMgrPool_link->pMaintControlMgr->MoveCmdPosWAD(stPos, nAxis, SPEED_HIGH);
+							break;
+						case 2: // Vision
+							stPos[nAxis].axis=AXIS_Y1; stPos[nAxis].dPosition=dLeft;  nAxis++;
+							stPos[nAxis].axis=AXIS_Y2; stPos[nAxis].dPosition=dRight; nAxis++;
+							stPos[nAxis].axis=AXIS_Y3; stPos[nAxis].dPosition=dLeft2; nAxis++;
+							stPos[nAxis].axis=AXIS_Y4; stPos[nAxis].dPosition=dRight2; nAxis++;
+							stPos[nAxis].axis=AXIS_X3; stPos[nAxis].dPosition=dHeadX+dOffX; nAxis++;
+							stPos[nAxis].axis=AXIS_Z1; stPos[nAxis].dPosition= dSafeZ1; nAxis++;
+							stPos[nAxis].axis=AXIS_Z2; stPos[nAxis].dPosition= dQualZ; nAxis++;
+							m_pMgrPool_link->pMaintControlMgr->MoveCmdPosVision(stPos, nAxis, SPEED_HIGH);
+							break;
+						case 3: // Angle
+							stPos[nAxis].axis=AXIS_Y1; stPos[nAxis].dPosition=dLeft;  nAxis++;
+							stPos[nAxis].axis=AXIS_Y2; stPos[nAxis].dPosition=dRight; nAxis++;
+							stPos[nAxis].axis=AXIS_Y3; stPos[nAxis].dPosition=dLeft2; nAxis++;
+							stPos[nAxis].axis=AXIS_Y4; stPos[nAxis].dPosition=dRight2; nAxis++;
+							stPos[nAxis].axis=AXIS_X3; stPos[nAxis].dPosition=dHeadX+dOffX; nAxis++;
+							stPos[nAxis].axis=AXIS_Z1; stPos[nAxis].dPosition=dSafeZ1; nAxis++;
+							stPos[nAxis].axis=AXIS_Z2; stPos[nAxis].dPosition=dAngleZ; nAxis++;
+							m_pMgrPool_link->pMaintControlMgr->MoveCmdPosAngle(stPos, nAxis, SPEED_HIGH);
+							break;
+						}
+					}
+						break;
+					case 1: // PRE_CONTACT
+					{
+						S_RecipeInfo* pRI2 = GetRecipeInfo();
+						if (pRI2) {
+							double dfPre = pRI2->m_sContactPos.m_fPreContactPos;
+							m_pMgrPool_link->pMaintControlMgr->MoveCmdPos_ProbeContact(AXIS_PROBE_Z5, dfPre, dfPre, 0);
+						}
+					}
+						break;
+					case 2: // CONTACT
+					{
+						S_RecipeInfo* pRI2 = GetRecipeInfo();
+						if (pRI2) {
+							double dfPre = pRI2->m_sContactPos.m_fPreContactPos;
+							double dfEnd = pRI2->m_sContactPos.m_fEndContactPos;
+							double dOD   = pRI2->m_sContactPos.m_fAddOD;
+							m_pMgrPool_link->pMaintControlMgr->MoveCmdPos_ProbeContact(AXIS_PROBE_Z5, dfPre, dfEnd, dOD);
+						}
+					}
+						break;
+					case 3: // UNCONTACT
+					{
+						m_pMgrPool_link->pMaintControlMgr->MoveCmdPos_ProbeUnContact(AXIS_PROBE_Z5, 0);
+					}
+						break;
+					// LYS 2026-09-16 TestMode Save Image - Review(Align CCD) 카메라 2대 라이브 그랩 저장
+					//   경로 <RESULT_PATH>IMAGE\TEST_MODE\yyyy-mm-dd\CAM_LEFT|CAM_RIGHT\yyyymmdd_hhmmss.png
+					//   cam0 = LEFT(Y2 헤드) / cam1 = RIGHT(Y1 헤드) - Align 레시피 CCD 설정 FrontLeft/FrontRight 가 index 0/1 에 대응하는 규약과 동일
+					case 4: // SAVE_IMAGE
+					{
+						SYSTEMTIME st;
+						::GetLocalTime(&st);
+						CString strRoot = CSystemParamShare::GetInstance()->GetResultFolderPath();
+						if (strRoot.IsEmpty() == false && strRoot.Right(1) != _T("\\")) strRoot += _T("\\");
+						CString strBase;
+						strBase.Format(_T("%sIMAGE\\TEST_MODE\\%04d-%02d-%02d\\"), strRoot, st.wYear, st.wMonth, st.wDay);
+						CString strTime;
+						strTime.Format(_T("%04d%02d%02d_%02d%02d%02d"), st.wYear, st.wMonth, st.wDay, st.wHour, st.wMinute, st.wSecond);
+						const TCHAR* szCam[2] = { _T("CAM_LEFT"), _T("CAM_RIGHT") };
+						for (int iCam = 0; iCam < 2; iCam++)
+						{
+							CAlignCameraMgr* pCam = m_pMgrPool_link->pAlignCameraMgr[iCam];
+							CString strLog;
+							if (pCam == nullptr)
+							{
+								strLog.Format(_T("TestMode SaveImage %s SKIP - camera %d not created"), szCam[iCam], iCam + 1);
+								CLogWrapper::GetInstance()->KMLOG(WARN, strLog);
+								continue;
+							}
+							CString strDir;
+							strDir.Format(_T("%s%s\\"), strBase, szCam[iCam]);
+							MakeDir(strDir);
+							CString strFile;
+							strFile.Format(_T("%s%s.png"), strDir, strTime);
+
+							Image* pImg = imaqCreateImage(IMAQ_IMAGE_RGB, 7);
+							if (pImg == nullptr) continue;
+							if (pCam->SnapImage(pImg, false) == VTM_RV_SUCCESSED)
+							{
+								// LYS 2026-09-16 CStrToChar 는 new[] 반환(해제 없음, 09-16 까지 sizeof 버그도 있었음) -> CT2A 스택 변환으로 교체
+								//int nWrite = imaqWritePNGFile2(pImg, CStrToChar(strFile), 750, NULL, FALSE);
+								CT2A szFile(strFile);
+								int nWrite = imaqWritePNGFile2(pImg, (const char*)szFile, 750, NULL, FALSE);
+								strLog.Format(_T("TestMode SaveImage %s %s -> %s"), szCam[iCam], (nWrite != 0) ? _T("OK") : _T("WRITE NG"), strFile);
+								CLogWrapper::GetInstance()->KMLOG((nWrite != 0) ? SYST : WARN, strLog);
+							}
+							else
+							{
+								strLog.Format(_T("TestMode SaveImage %s NG - SnapImage failed (connected=%d)"), szCam[iCam], pCam->IsConnected() ? 1 : 0);
+								CLogWrapper::GetInstance()->KMLOG(WARN, strLog);
+							}
+							imaqDispose(pImg);
+						}
+					}
+						break;
+					// LYS 2026-09-16 TestMode 카메라 조그(상대 이동) - Review/WAD = Y1/Y2(BACK 갠트리), VISION/ANGLE = Y3/Y4(FRONT 갠트리)
+					//   nData[0]: 0=Both 1=Left(Y2/Y4) 2=Right(Y1/Y3), fData[0]: 상대거리 mm(부호 포함). 두 축 대기 없이 지령 후 완료 대기. |거리| 100mm 초과는 거부
+					case 5: // CAM_JOG
+					{
+						int nMode = (int)pRecipeEvent->m_sRunState.m_dwData3;
+						int nCam  = pRecipeEvent->m_sRunState.m_nData[0];
+						double dRel = pRecipeEvent->m_sRunState.m_fData[0];
+						int nAxisLeft  = (nMode <= 1) ? AXIS_Y2 : AXIS_Y4;
+						int nAxisRight = (nMode <= 1) ? AXIS_Y1 : AXIS_Y3;
+						bool bLeft  = (nCam == 0 || nCam == 1);
+						bool bRight = (nCam == 0 || nCam == 2);
+						CString strLog;
+						if (fabs(dRel) < 0.0005 || fabs(dRel) > 100.0)
+						{
+							strLog.Format(_T("TestMode CamJog SKIP - rel %.3f out of range (0.0005 ~ 100)"), dRel);
+							CLogWrapper::GetInstance()->KMLOG(WARN, strLog);
+							break;
+						}
+						strLog.Format(_T("TestMode CamJog mode=%d cam=%d rel=%.3f -> %s%s"), nMode, nCam, dRel,
+							bLeft  ? ((nMode <= 1) ? _T("Y2 ") : _T("Y4 ")) : _T(""),
+							bRight ? ((nMode <= 1) ? _T("Y1") : _T("Y3")) : _T(""));
+						CLogWrapper::GetInstance()->KMLOG(SYST, strLog);
+
+						CMaintControlMgr* pMaint = m_pMgrPool_link->pMaintControlMgr;
+						long nRetL = df_MOTION_RV_SUCCESSED, nRetR = df_MOTION_RV_SUCCESSED;
+						if (bLeft)  nRetL = pMaint->MoveCmdPosR(nAxisLeft, dRel, false, SPEED_LOW);
+						if (bRight) nRetR = pMaint->MoveCmdPosR(nAxisRight, dRel, false, SPEED_LOW);
+						if (bLeft  && nRetL == df_MOTION_RV_SUCCESSED) nRetL = pMaint->DoWork_MotionDone(nAxisLeft);
+						if (bRight && nRetR == df_MOTION_RV_SUCCESSED) nRetR = pMaint->DoWork_MotionDone(nAxisRight);
+						if (nRetL != df_MOTION_RV_SUCCESSED || nRetR != df_MOTION_RV_SUCCESSED)
+						{
+							strLog.Format(_T("TestMode CamJog NG - left ret=%ld right ret=%ld"), nRetL, nRetR);
+							CLogWrapper::GetInstance()->KMLOG(WARN, strLog);
+						}
+					}
+						break;
+					}
+				}
+					break;
+				default:
+					break;
+				}
+
+				//pRecipeEvent->m_sRunState.m_nRunStatus = M_RUN_END;
+				pRecipeEvent->m_sRunState.m_nRunStatus = (bCmdNG == true) ? M_RUN_NG : M_RUN_END;	// LYS 2026-09-16
+
+				GetShareMemoryMgrPtr()->SetSys_ProcessStatus(SPS_IDLE);
+			}
+			else
+			{
+				pRecipeEvent->m_sRunState.m_nRunStatus = M_RUN_NG;
+			}
+		}
+	}
+
+	return 0;
+}

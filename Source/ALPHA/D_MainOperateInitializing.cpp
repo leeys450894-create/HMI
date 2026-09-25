@@ -172,7 +172,7 @@ void CD_MainOperateInitializing::OnTimer(UINT_PTR nIDEvent)
 					str.Format(_T("Initializing...MotionHoming 1. Lift Pin"));			
 					break;
 				case 5:
-					str.Format(_T("Initializing...MotionHoming 2.Z Axis")); 
+					str.Format(_T("Initializing...MotionHoming 2.Z Axis / Sub")); 
 					break;
 				case 6:
 					str.Format(_T("Initializing...MotionHoming"));
@@ -184,7 +184,7 @@ void CD_MainOperateInitializing::OnTimer(UINT_PTR nIDEvent)
 					str.Format(_T("Initializing...MotionHoming 4.Probe Z"));
 					break;
 				case 9:
-					str.Format(_T("Initializing...MotionHoming 5.Probe Cross"));
+					str.Format(_T("Initializing...MotionHoming 5.Probe XY"));
 					break;
 				case 10:
 					str.Format(_T("Initializing...MotionHoming 6.Probe Gantry"));
@@ -193,7 +193,7 @@ void CD_MainOperateInitializing::OnTimer(UINT_PTR nIDEvent)
 					str.Format(_T("Initializing...MotionHoming 7.Stage"));
 					break;
 				case 12:
-					str.Format(_T("Initializing...MotionHoming 8.Stage Rotate"));
+					str.Format(_T("Initializing...MotionHoming 8.Stage Rotate / AutoChangeX"));
 					break;
 				case 13:
 					str.Format(_T("Initializing...MotionHoming 9.Auto Change Pos Check"));

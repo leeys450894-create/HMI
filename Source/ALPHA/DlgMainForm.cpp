@@ -7,6 +7,7 @@
 #include "Manager\SystemConfigMgr.h"	// LYS 2026-06-26 OCP option
 #include "afxdialogex.h"
 #include "AuroraMgr.h"
+#include "Alarm\AlarmController.h"	// LYS 2026-09-02 SW Limit 알람용
 #include "SystemParamShare.h"
 
 #include "MainSubDlgWin.h"
@@ -16,8 +17,11 @@
 #include "Manager\IOMapControlMgr.h"
 #include "Manager\SequenceManager.h"
 #include "Manager\MaintControlMgr.h"
+#include "DoWork\SystemInitialize.h"	// LYS 2026-09-10 EQ BUSY 판정(Is_ThreadRun)
+#include "DoWork\DoWorkGlassSequence.h"	// LYS 2026-09-10 EQ BUSY 판정(Is_ThreadRun)
 #include "Manager\ShareMemoryMgr.h"
 #include "Manager/MCCLogMgr.h"
+#include "Recipe/RecipeEditMgr.h"	// LYS 2026-09-19 FDC SHARE 레시피 OD(GetRecipeInfo)
 #include "Manager/RecipeMgr.h"
 #include "Manager/SACCMgr.h"
 #include "Alarm\AlarmMonitorMgr.h"
@@ -34,6 +38,7 @@
 #include "DlgSubData.h"
 #include "DlgSubManual.h"
 #include "CD_PopUp_Alarm_F.h"
+#include "CD_PopUp_Safety_Map.h"	// LYS 2026-09-24 EMS/DOOR 상태 지도 팝업
 #include "FunctionModule/FunctionModuleEQState.h"
 
 #include "..\Include\DefinesCIM.h"
@@ -116,6 +121,7 @@ CDlgMainForm::CDlgMainForm(CAuroraMgr *pAuroraMgr, CWnd* pParent /*=NULL*/)
 	, m_pWorkThread(NULL)
 	, m_bCloseSystem(false)
 	, m_lOldACSafety(-1)
+	, m_lOldEqBusy(-1)
 {
 	m_vecpMainSubDlg.clear();
 	m_vecpMainSubDlg.resize(enumNavigateIDCount, nullptr);
@@ -141,6 +147,7 @@ CDlgMainForm::CDlgMainForm(CAuroraMgr *pAuroraMgr, CWnd* pParent /*=NULL*/)
 	// Alarm
 //	m_pPopUp_AlarmDlg = nullptr;
 	m_pPopUp_AlarmDlg = new CD_PopUp_Alarm_F(pAuroraMgr->GetMaintControlMgr());
+	m_pPopUp_SafetyMapDlg = new CD_PopUp_Safety_Map(pAuroraMgr->GetMaintControlMgr());	// LYS 2026-09-24
 
 	//----------------------------------------------------------
 	// FONT 만들기
@@ -192,6 +199,12 @@ CDlgMainForm::~CDlgMainForm()
 		m_pPopUp_AlarmDlg->DestroyWindow();
 		delete m_pPopUp_AlarmDlg;
 		m_pPopUp_AlarmDlg = nullptr;
+	}
+	if (m_pPopUp_SafetyMapDlg)	// LYS 2026-09-24
+	{
+		m_pPopUp_SafetyMapDlg->DestroyWindow();
+		delete m_pPopUp_SafetyMapDlg;
+		m_pPopUp_SafetyMapDlg = nullptr;
 	}
 
 	// 2023.03.06 add
@@ -257,6 +270,7 @@ ON_BN_CLICKED(IDC_BTN_ZOOM_IN5, &CDlgMainForm::OnBnClickedBtnZoomIn5)
 ON_BN_CLICKED(IDC_BTN_ZOOM_IN7, &CDlgMainForm::OnBnClickedBtnZoomIn7)
 ON_BN_CLICKED(IDC_CHK_LIVE_CCD1, &CDlgMainForm::OnBnClickedChkLiveCcd1)
 ON_BN_CLICKED(IDC_CHK_LIVE_CCD2, &CDlgMainForm::OnBnClickedChkLiveCcd2)
+ON_BN_CLICKED(IDC_BTN_CCD_RESET, &CDlgMainForm::OnBnClickedBtnCcdReset)	// LYS 2026-09-07
 END_MESSAGE_MAP()
 
 
@@ -386,6 +400,10 @@ BOOL CDlgMainForm::OnInitDialog()
 	//---------------------------------------------------------------------
 	m_pPopUp_AlarmDlg->Create(IDD_PUPUP_ALARM_F, this);
 	m_pPopUp_AlarmDlg->ShowWindow(SW_HIDE);
+
+	// LYS 2026-09-24 EMS/DOOR 상태 지도 - 숨겨 두고 비트가 들어오면 타이머(MAIN_STATE_TIMER_ID)의 AutoPopup 이 띄운다.
+	m_pPopUp_SafetyMapDlg->Create(IDD_POPUP_SAFETY_MAP, this);
+	m_pPopUp_SafetyMapDlg->ShowWindow(SW_HIDE);
 
 	//---------------------------------------------------------------------
 	// message 전달을 위해서 hwnd 를 받아 둔다.
@@ -944,6 +962,61 @@ void CDlgMainForm::__InitialListData()
 }
 
 
+// LYS 2026-09-15 모션 엔코더(Current) 값이 음수이면 그 셀(Current 열)만 빨간색으로 표시한다.
+//   %.4f 표시 기준으로 음수로 보이는 값(-0.00005 미만)만 판정 - 0 부근 노이즈로 깜빡이지 않게.
+// LYS 2026-09-23 배경색 대신 글자색만 빨갛게 바꾼다. 배경은 건드리지 않으므로 이전 색을 기억할 필요가 없고,
+//   양수로 돌아오면 글자색을 기본(CLR_DEFAULT)으로 되돌린다. 메인 그리드는 호출 직전에 전 열을 검정으로
+//   되돌리므로(아래 __RefreshListData) 음수 셀만 매 갱신마다 빨강으로 덮인다. 구 함수는 아래 #if 0 에 남겨 두었다.
+static void PaintNegativeEncoderCell(CGridCtrl& grid, int nRow, int nCol, double dPos)
+{
+	const COLORREF clrNeg = RGB(255, 0, 0);
+	const bool bNeg = (dPos < -0.00005);
+
+	if (nRow < grid.GetFixedRowCount() || nRow >= grid.GetRowCount() || nCol < 0 || nCol >= grid.GetColumnCount())
+		return;
+
+	const COLORREF clr = grid.GetItemFgColour(nRow, nCol);
+	if (bNeg)
+	{
+		if (clr != clrNeg)
+			grid.SetItemFgColour(nRow, nCol, clrNeg);
+	}
+	else if (clr == clrNeg)
+	{
+		grid.SetItemFgColour(nRow, nCol, CLR_DEFAULT);
+	}
+}
+
+#if 0	// LYS 2026-09-23 구: 배경색 방식 (원복 시 위 함수를 지우고 이 블록을 살릴 것)
+#include <map>
+static void PaintNegativeEncoderCell_Bk(CGridCtrl& grid, int nRow, int nCol, double dPos)
+{
+	static std::map<std::pair<CGridCtrl*, long>, COLORREF> s_mapPrevBk;	// (grid, row*100+col) -> 칠하기 전 색
+	const COLORREF clrNeg = RGB(255, 0, 0);
+	const bool bNeg = (dPos < -0.00005);
+
+	if (nRow < grid.GetFixedRowCount() || nRow >= grid.GetRowCount() || nCol < 0 || nCol >= grid.GetColumnCount())
+		return;
+
+	const std::pair<CGridCtrl*, long> key(&grid, (long)nRow * 100 + nCol);
+	COLORREF clr = grid.GetItemBkColour(nRow, nCol);
+	if (bNeg)
+	{
+		if (clr != clrNeg)
+		{
+			s_mapPrevBk[key] = clr;
+			grid.SetItemBkColour(nRow, nCol, clrNeg);
+		}
+	}
+	else if (clr == clrNeg)
+	{
+		std::map<std::pair<CGridCtrl*, long>, COLORREF>::iterator it = s_mapPrevBk.find(key);
+		grid.SetItemBkColour(nRow, nCol, (it != s_mapPrevBk.end()) ? it->second : CLR_DEFAULT);
+		if (it != s_mapPrevBk.end()) s_mapPrevBk.erase(it);
+	}
+}
+#endif
+
 void CDlgMainForm::__RefreshListData()
 {
 	m_gridListMotionInfo.SetRedraw(FALSE);
@@ -1114,6 +1187,7 @@ void CDlgMainForm::__RefreshListData()
 				m_gridListMotionInfo.SetItemFgColour(i + 1, n, RGB(0, 0, 0));
 			}
 
+			PaintNegativeEncoderCell(m_gridListMotionInfo, i + 1, enumColumnName_Value3, m_stMoterInfo[iAxis].dPosition);	// LYS 2026-09-15 엔코더 음수 -> Current 셀만 빨간 배경
 			i++;
 		}
 	}
@@ -1308,11 +1382,13 @@ LRESULT CDlgMainForm::OnCcdLiveMode(WPARAM wp, LPARAM lp)
 	switch (index)
 	{
 		case enumSeqItemID_CCD_LIVE_START:
+			CLogWrapper::GetInstance()->KMLOG(SYST, _T("CCD LIVE START (display on)"));	// LYS 2026-09-07 알람 시 라이브 꺼짐 분석용
 			for (int i = 0; i < 2; i++) m_pMainAlignCCD[i]->SetCCDLive(true);
 			m_chkLiveH1.SetCheck(true);
 			m_chkLiveH2.SetCheck(true);
 		break;
 		case enumSeqItemID_CCD_LIVE_STOP:
+			CLogWrapper::GetInstance()->KMLOG(SYST, _T("CCD LIVE STOP (display off, grab thread keeps running)"));	// LYS 2026-09-07 알람 시 라이브 꺼짐 분석용
 			for (int i = 0; i < 2; i++) m_pMainAlignCCD[i]->SetCCDLive(false);
 			m_chkLiveH1.SetCheck(false);
 			m_chkLiveH2.SetCheck(false);
@@ -1329,6 +1405,8 @@ void CDlgMainForm::OnTimer(UINT_PTR nIDEvent)
 	if (nIDEvent == MAIN_STATE_TIMER_ID)
 	{
 		UpdateInformation();
+		if (m_pPopUp_SafetyMapDlg != nullptr)	// LYS 2026-09-24 EMS/DOOR 비트가 하나라도 1 이면 상태 지도 팝업
+			m_pPopUp_SafetyMapDlg->AutoPopup();
 	}
 
 	else if (nIDEvent == MAIN_STATE_TIMER_ID+1)
@@ -1338,6 +1416,12 @@ void CDlgMainForm::OnTimer(UINT_PTR nIDEvent)
 		// 알람을 처리 할 수 있도록 Monitoring 을 시작한다.
 		//--------------------------------------------------------------------
 		m_pAuroraMgr->GetAlarmMonitorMgrPtr()->SetMonitoringStart();
+
+		// LYS 2026-09-23 MC OFF 시 Probe Z 긴급 후퇴 감시도 같이 시작한다 (CMotionProbeToMcOffMove, Config.ini [PROBE_MCOFF]).
+		m_pAuroraMgr->GetMaintControlMgr()->StartMotionProbeToMcOffMove(
+			CSystemParamShare::GetInstance()->GetLoggerFolderPath(),
+			CSystemParamShare::GetInstance()->GetConfigFolderPath(),
+			m_pAuroraMgr->GetCommTcpIpFactoryMgrPtr());
 	}
 
 	else if (nIDEvent == MAIN_STATE_TIMER_ID+2)
@@ -1472,10 +1556,76 @@ void CDlgMainForm::GetMonitor()
 
 	GetMonitorIO();
 
+	// LYS 2026-09-10 설비 상태 비트 출력 (M4981 AC X Safety / M4982 EQ BUSY)
+	SetEqStatusBit();
+
 	// MCC
 	SetMCCSignal();
 }
 
+
+// LYS 2026-09-10 설비 상태 비트 출력 - 모니터 스레드(50ms)에서 평가하고 값이 바뀔 때만 PLC에 쓴다.
+//   M4981 PLC_BIT_W_AC_X_SAFETY_POS : AUTO CHANGE GANTRY(X4) 엔코더가 Safety 위치 ±0.1mm 이내면 ON
+//   M4982 PLC_BIT_W_EQ_BUSY_ON      : 초기화 / Cycle 시퀀스 동작 중 ON, IDLE 이면 OFF
+void CDlgMainForm::SetEqStatusBit()
+{
+	if (m_bCloseSystem == true)
+		return;
+
+	if (m_pAuroraMgr == nullptr)
+		return;
+
+	CMaintControlMgr* pImpl = m_pAuroraMgr->GetMaintControlMgr();
+	if (pImpl == nullptr)
+		return;
+
+	CIOMapControlMgr* pIO = pImpl->GetIOMapControlMgrPtr();
+	if (pIO == nullptr)
+		return;
+
+	// M4981 : AUTO CHANGE X(X4) 가 Safety 위치에 있는가
+	long lSafety = 0;
+	CPositionConfigMgr* pPos = pImpl->GetPositionConfigMgr();
+	if (pPos != nullptr)
+	{
+		double dSafetyPos = 0.;
+		pPos->GetACPosition(nullptr, &dSafetyPos, nullptr);	// ProbeChange.ini [ACXPOS] POS3
+		if (fabs(pImpl->GetOrgPos(AXIS_X4) - dSafetyPos) <= 0.1)
+			lSafety = 1;
+	}
+
+	if (m_lOldACSafety != lSafety)
+	{
+		pIO->SetMemoryNBitToDevice(PLC_BIT_W_AC_X_SAFETY_POS, lSafety, 1);
+		m_lOldACSafety = lSafety;
+	}
+
+	// M4982 : 설비 BUSY (Initial / Cycle 시퀀스 동작 중). Is_ThreadRun 은 ThreadRun 수행 중에만 true
+	long lBusy = 0;
+	long lInitRun = 0, lCycleRun = 0;
+	CSequenceManager* pSeq = CSequenceManager::GetInstance();
+	if (pSeq != nullptr)
+	{
+		CSystemInitialize* pInit = pSeq->GetSystemInitialize();
+		CDoWorkGlassSequence* pGlass = pSeq->GeDoWorkGlassSequence();
+
+		if (pInit != nullptr && pInit->Is_ThreadRun() == true)		lInitRun = 1;
+		if (pGlass != nullptr && pGlass->Is_ThreadRun() == true)	lCycleRun = 1;
+
+		if (lInitRun == 1 || lCycleRun == 1)
+			lBusy = 1;
+	}
+
+	if (m_lOldEqBusy != lBusy)
+	{
+		pIO->SetMemoryNBitToDevice(PLC_BIT_W_EQ_BUSY_ON, lBusy, 1);
+		m_lOldEqBusy = lBusy;
+
+		CString strLog;
+		strLog.Format(_T("EQ BUSY bit -> %d (Init:%d, Cycle:%d)"), lBusy, lInitRun, lCycleRun);
+		CLogWrapper::GetInstance()->KMLOG(SYST, strLog);
+	}
+}
 
 void CDlgMainForm::GetMonitorMotion()
 {
@@ -1678,6 +1828,17 @@ void CDlgMainForm::GetMonitorMotion()
 			m_pAuroraMgr->GetShareMemoryMgrPtr()->GetSharedMemory()->stMotionStatus[iAxis].dAxisPos = m_stMoterInfo[iAxis].dPosition;
 			m_pAuroraMgr->GetShareMemoryMgrPtr()->GetSharedMemory()->stMotionStatus[iAxis].dAxisRMS = m_stMoterInfo[iAxis].dAxisRMS;
 
+			// LYS 2026-09-02 SW Limit 알람: homed+Enable 축이 SW 리밋 초과 시 MOTION_OVER_LIMIT_POS/NEG 발생
+			// (m_stMoterInfo[iAxis].bEnable && m_stMoterInfo[iAxis].bHomeDone)
+			//
+			//	double dSwMaxChk = pImpl->GetMotorControlMgrPtr()->GetMaxSWLimit(iAxis);
+			//	double dSwMinChk = pImpl->GetMotorControlMgrPtr()->GetMinSWLimit(iAxis);
+			//	if (m_stMoterInfo[iAxis].dPosition > dSwMaxChk)
+			//		CAlarmController::GetInstance()->SetAlarm(MOTION_SW_OVER_LIMIT_POS);
+			//	else if (m_stMoterInfo[iAxis].dPosition < dSwMinChk)
+			//		CAlarmController::GetInstance()->SetAlarm(MOTION_SW_OVER_LIMIT_NEG);
+			//
+
 			// jsyoon 2022.06.24 add
 			bool IonizerRun = false;
 			if (m_pAuroraMgr->GetMaintControlMgr()->GetIOMapControlMgrPtr()->GetParam_DIOMapMemoryBitImport(PLC_BIT_XIONIZER_REMOTE_STATE_01) == 1)
@@ -1688,6 +1849,18 @@ void CDlgMainForm::GetMonitorMotion()
 			CMCCLogMgr::GetInstance()->SetIonizerRun(IonizerRun);
 
 
+		}
+
+		// LYS 2026-09-19 FDC SHARE 칸(MCCB TRIP, 레시피 OD)을 축 루프 밖에서 한 번씩 넘긴다.
+		//                PLC 비트는 == 1 로만 판정한다(막힌 비트 9999 는 -1 을 돌려주고 -1 은 참이다).
+		{
+			int nMccbGps = (m_pAuroraMgr->GetMaintControlMgr()->GetIOMapControlMgrPtr()->GetParam_DIOMapMemoryBitImport(PLC_BIT_MAIN_GPS_CIRCUIT_BREAKER_TRIP) == 1) ? 1 : 0;
+			int nMccbUps = (m_pAuroraMgr->GetMaintControlMgr()->GetIOMapControlMgrPtr()->GetParam_DIOMapMemoryBitImport(PLC_BIT_MAIN_UPS_CIRCUIT_BREAKER_TRIP) == 1) ? 1 : 0;
+			CMCCLogMgr::GetInstance()->SetFdcMccbTrip(nMccbGps, nMccbUps);
+
+			// 측정에 쓰는 앱 쪽 레시피 사본(OpenRecipe 로 채워진다). 레시피를 열기 전에는 0.
+			S_RecipeInfo* pFdcRcp = (m_pAuroraMgr->GetRecipeEditMgrPtr() != nullptr) ? m_pAuroraMgr->GetRecipeEditMgrPtr()->GetRecipeInfo() : nullptr;
+			CMCCLogMgr::GetInstance()->SetFdcProbeOD((pFdcRcp != nullptr) ? pFdcRcp->m_sContactPos.m_fAddOD : 0.0);
 		}
 	}
 }
@@ -2227,6 +2400,7 @@ void CDlgMainForm::SetMCCSignal()
 
 void CDlgMainForm::OnBnClickedChkLiveCcd1()
 {
+	{ CString s; s.Format(_T("CCD1 LIVE checkbox -> %d (UI)"), m_chkLiveH1.GetCheck()); CLogWrapper::GetInstance()->KMLOG(SYST, s); }	// LYS 2026-09-07 라이브 꺼짐 분석용
 	// TODO: 여기에 컨트롤 알림 처리기 코드를 추가합니다.
 	if( m_chkLiveH1.GetCheck() == TRUE)
 		m_pMainAlignCCD[0]->SetCCDLive(true);
@@ -2237,9 +2411,23 @@ void CDlgMainForm::OnBnClickedChkLiveCcd1()
 
 void CDlgMainForm::OnBnClickedChkLiveCcd2()
 {
+	{ CString s; s.Format(_T("CCD2 LIVE checkbox -> %d (UI)"), m_chkLiveH2.GetCheck()); CLogWrapper::GetInstance()->KMLOG(SYST, s); }	// LYS 2026-09-07 라이브 꺼짐 분석용
 	// TODO: 여기에 컨트롤 알림 처리기 코드를 추가합니다.
 	if (m_chkLiveH2.GetCheck() == TRUE)
 		m_pMainAlignCCD[1]->SetCCDLive(true);
 	else
 		m_pMainAlignCCD[1]->SetCCDLive(false);
+}
+
+void CDlgMainForm::OnBnClickedBtnCcdReset()
+{
+	// LYS 2026-09-07 CCD RESET(재연결) 버튼: Align CCD 1/2 라이브 표시 ON + 카메라 재오픈/재접속 + 그랩 스레드 확인
+	CLogWrapper::GetInstance()->KMLOG(SYST, _T("CCD RESET button pressed"));
+	for (int i = 0; i < 2; i++)
+	{
+		if (m_pMainAlignCCD[i] != nullptr)
+			m_pMainAlignCCD[i]->ReconnectCCD();
+	}
+	m_chkLiveH1.SetCheck(TRUE);
+	m_chkLiveH2.SetCheck(TRUE);
 }

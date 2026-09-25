@@ -40,6 +40,12 @@ static CString ColumnName[] =
 	_T("PROBE IN"),
 	_T("LOADER SHUTTER OPEN"),
 	_T("SACC SHUTTER OPEN"),
+
+	// LYS 2026-09-15 5번째 열 추가 (4x4 -> 5x4): STAGE 180도 센서, AUTO CHANGE X SACC 위치, 나머지 2칸은 예비(더미)
+	_T("STAGE R(180)"),
+	_T("AC SACC POS"),
+	_T("GLASS ALIGN"),	// LYS 2026-09-15 Align 완료 표시 (완료 파랑 / 평시 회색)
+	_T("PROBE ALIGN"),
 };
 static long ColumnSize[] =
 {
@@ -47,6 +53,7 @@ static long ColumnSize[] =
 	140,
 	100,
 	150,
+	110,	// LYS 2026-09-15 5번째 열 (FitIOInfoColumnWidths 가 실제 글자 폭으로 다시 나눈다)
 };
 enum enumColumnName
 {
@@ -54,6 +61,7 @@ enum enumColumnName
 	enumColumnName_Value2,
 	enumColumnName_Value3,
 	enumColumnName_Value4,
+	enumColumnName_Value5,	// LYS 2026-09-15 5x4 확장
 	enumColumnName_End,
 };
 
@@ -378,10 +386,16 @@ void CDlgTitleBar::SetConnectStatus()
 		}
 		else
 		{
-			if (pCommMaintControlMgrPtr->IsInitializedMC())
+			// LYS 2026-08-31 MOTION lamp 3-state: Yellow=both ACS connected, Green=init/home done, Red=not connected
+			if (pCommMaintControlMgrPtr->IsConnectedMC()) 
 			{
 				fgColor = CLR_BLACK;
-				bkColor = CLR_GREEN; //  RGB(128, 255, 128);
+				bkColor = CLR_YELLOW;
+				if (pCommMaintControlMgrPtr->IsInitializedMC())
+				{
+					fgColor = CLR_BLACK;
+					bkColor = CLR_GREEN; //  RGB(128, 255, 128);
+				}
 			}
 		}
 
@@ -743,6 +757,58 @@ void CDlgTitleBar::OnDestroy()
 }
 
 
+// LYS 2026-09-15 IO 정보 그리드를 5x4 로 늘리면서 열 너비를 각 열의 가장 긴 라벨 폭에 비례해 나눈다.
+//   .rc 컨트롤 폭(287 DLU)은 오른쪽 LOT ID 칸과 붙어 있어 넓힐 수 없으므로, 고정값 대신 실제 글자 폭 비율로 클라이언트 폭을 채운다.
+static void FitIOInfoColumnWidths(CGridCtrl& grid, const CString* pNames, int nCols, int nRows)
+{
+	if (pNames == nullptr || nCols <= 0 || nCols > 16 || nRows <= 0 || ::IsWindow(grid.GetSafeHwnd()) == FALSE)
+		return;
+
+	CRect rc;
+	grid.GetClientRect(&rc);
+	if (rc.Width() <= nCols)
+		return;
+
+	CDC* pDC = grid.GetDC();
+	if (pDC == nullptr)
+		return;
+
+	CFont font;
+	CFont* pOldFont = nullptr;
+	CGridCellBase* pDef = grid.GetDefaultCell(FALSE, FALSE);
+	if (pDef != nullptr && pDef->GetFont() != nullptr && font.CreateFontIndirect(pDef->GetFont()))
+		pOldFont = pDC->SelectObject(&font);
+
+	int nWant[16] = { 0 };
+	int nSum = 0;
+	for (int c = 0; c < nCols; c++)
+	{
+		for (int r = 0; r < nRows; r++)
+		{
+			CSize sz = pDC->GetTextExtent(pNames[c * nRows + r]);
+			if (sz.cx + 8 > nWant[c])
+				nWant[c] = sz.cx + 8;	// 좌우 여백
+		}
+		if (nWant[c] < 40)
+			nWant[c] = 40;
+		nSum += nWant[c];
+	}
+
+	if (pOldFont != nullptr)
+		pDC->SelectObject(pOldFont);
+	grid.ReleaseDC(pDC);
+
+	int nUsed = 0;
+	for (int c = 0; c < nCols; c++)
+	{
+		int w = (c == nCols - 1) ? (rc.Width() - nUsed) : MulDiv(nWant[c], rc.Width(), nSum);
+		if (w < 1)
+			w = 1;
+		grid.SetColumnWidth(c, w);
+		nUsed += w;
+	}
+}
+
 void CDlgTitleBar::__InitListControl()
 {
 	// TODO: 여기에 구현 코드 추가.
@@ -764,7 +830,8 @@ void CDlgTitleBar::__InitialListData()
 {
 	// TODO: 여기에 구현 코드 추가.
 	m_gridListIOnfo.DeleteAllItems();
-	m_gridListIOnfo.SetColumnCount(4);
+	//m_gridListIOnfo.SetColumnCount(4);
+	m_gridListIOnfo.SetColumnCount(enumColumnName_End);	// LYS 2026-09-15 4x4 -> 5x4
 	m_gridListIOnfo.SetFixedRowCount(1);
 
 	m_gridListIOnfo.SetEditable(TRUE);
@@ -785,6 +852,8 @@ void CDlgTitleBar::__InitialListData()
 		}
 	}
 
+	FitIOInfoColumnWidths(m_gridListIOnfo, ColumnName, enumColumnName_End, 4);	// LYS 2026-09-15 라벨 폭 비례 열 너비
+
 	__RefreshListData();
 }
 
@@ -794,7 +863,8 @@ void CDlgTitleBar::__RefreshListData()
 	// TODO: 여기에 구현 코드 추가.
 	m_gridListIOnfo.SetRedraw(FALSE);
 
-	bool bIOInfo[16];
+	//bool bIOInfo[16];
+	bool bIOInfo[20];	// LYS 2026-09-15 5x4 확장 (16 -> 20)
 	ZeroMemory(&bIOInfo, sizeof(bIOInfo));
 	int n = 0;
 	int nBit = 0;
@@ -841,14 +911,29 @@ void CDlgTitleBar::__RefreshListData()
 		m_pAuroraMgr->GetPositionConfigMgrPtr()->GetSafetyPosition(&dSafetyStageX, &dSafetyHeadX1, &dSafetyHeadX2, &dSafetyHeadY1, &dSafetyHeadY2, &dSafetyZ, &dSafetyZ2);
 
 		double dPosZ1 = 0.0, dPosZ2 = 0.0;
-		dPosZ2 = m_pAuroraMgr->GetMaintControlMgr()->GetCurPos(AXIS_Z1);
-		dPosZ1 = m_pAuroraMgr->GetMaintControlMgr()->GetCurPos(AXIS_Z2);
-		if ( fabs(dSafetyZ - dPosZ1) > 0.1 )
-		{
-			bIOInfo[5] = false;
-		}
+		dPosZ1 = m_pAuroraMgr->GetMaintControlMgr()->GetCurPos(AXIS_Z1);
+		dPosZ2 = m_pAuroraMgr->GetMaintControlMgr()->GetCurPos(AXIS_Z2);
+		//if ( fabs(dSafetyZ - dPosZ1) > 0.1 )
+		//{
+		//	bIOInfo[5] = false;
+		//}
 
-		if (fabs(dSafetyZ2 - dPosZ2) > 0.1 )
+		// LYS 2026-09-04 Sub Z 축 Safety Pos 확인
+		double dWAD_SUB_Z_RIGHT = 0.0;
+		double dWAD_SUB_Z_LEFT = 0.0;
+		double dANG_VIS_SUB_Z_RIGHT = 0.0;
+		double dANG_VIS_SUB_Z_LEFT = 0.0;
+
+		m_pAuroraMgr->GetPositionConfigMgrPtr()->GetSubZSafetyPosition(&dWAD_SUB_Z_RIGHT, &dWAD_SUB_Z_LEFT, &dANG_VIS_SUB_Z_RIGHT, &dANG_VIS_SUB_Z_LEFT);
+
+		double dPosZ3 = 0.0, dPosZ4 = 0.0, dPosZ5 = 0.0, dPosZ6 = 0.0;
+		dPosZ3 = m_pAuroraMgr->GetMaintControlMgr()->GetCurPos(AXIS_Z3);
+		dPosZ4 = m_pAuroraMgr->GetMaintControlMgr()->GetCurPos(AXIS_Z4);
+		dPosZ5 = m_pAuroraMgr->GetMaintControlMgr()->GetCurPos(AXIS_Z5);
+		dPosZ6 = m_pAuroraMgr->GetMaintControlMgr()->GetCurPos(AXIS_Z6);
+
+		if (fabs(dSafetyZ2 - dPosZ2) > 0.1 && 
+			fabs(dWAD_SUB_Z_RIGHT - dPosZ3) > 0.1 && fabs(dWAD_SUB_Z_LEFT - dPosZ4) > 0.1 && fabs(dANG_VIS_SUB_Z_RIGHT - dPosZ5) > 0.1 && fabs(dANG_VIS_SUB_Z_LEFT - dPosZ6) > 0.1)
 		{
 			bIOInfo[5] = false;
 		}
@@ -963,6 +1048,28 @@ void CDlgTitleBar::__RefreshListData()
 				bIOInfo[15] |= true;
 		}
 
+		// LYS 2026-09-15 5번째 열: [16] STAGE R(180) = PLC_R_MOTION_LOADER_DEGREE_2(M4402), [17] ACX SACC POS = PLC_AUTO_CHANGE_X0_POSITION_04(M4343), [18]/[19] 더미(항상 OFF)
+		nBit = pImpl->GetParam_DIOMapMemoryBitImport(PLC_R_MOTION_LOADER_DEGREE_2);
+		if (nBit != -1)
+		{
+			if (nBit == 1)
+				bIOInfo[16] = true;
+		}
+
+		nBit = pImpl->GetParam_DIOMapMemoryBitImport(PLC_AUTO_CHANGE_X0_POSITION_04);
+		if (nBit != -1)
+		{
+			if (nBit == 1)
+				bIOInfo[17] = true;
+		}
+
+		// LYS 2026-09-15 [18]/[19] 더미 -> Glass/Probe Align 완료 (CMaintControlMgr 플래그: 정렬 성공 시 true, 오프셋 재설정·리셋 시 false)
+		if (m_pAuroraMgr->GetMaintControlMgr() != nullptr)
+		{
+			bIOInfo[18] = m_pAuroraMgr->GetMaintControlMgr()->IsGlassAlignDone();
+			bIOInfo[19] = m_pAuroraMgr->GetMaintControlMgr()->IsProbeAlignDone();
+		}
+
 		//	bIOInfo[14] = !pImpl->GetParam_DIOMapMemoryBitImport(PLC_BIT_SUTTER_SENSOR_CLOSE);
 
 		//	bIOInfo[15] = !pImpl->GetParam_DIOMapMemoryBitImport(PLC_R_PACC_SHUTTER_CLOSE_01) | !pImpl->GetParam_DIOMapMemoryBitImport(PLC_R_PACC_SHUTTER_CLOSE_02);
@@ -988,11 +1095,22 @@ void CDlgTitleBar::__RefreshListData()
 	//_T("SACC SHUTTER OPEN"),
 	//_T(""),
 
+	//_T("STAGE R(180)"),		// LYS 2026-09-15
+	//_T("ACX SACC POS"),
+	//_T("GLASS ALIGN"),
+	//_T("PROBE ALIGN"),
+
 	for (long nCol = 0; nCol < enumColumnName_End; nCol++)	// COL
 	{
 		for (long cRow = 0; cRow < 4; cRow++)	// ROW
 		{
-			if (bIOInfo[n] == true)
+			// LYS 2026-09-15 Align 완료 칸: 완료 파랑(글자 흰색) / 평시 회색(글자 검정)
+			if (n == 18 || n == 19)
+			{
+				m_gridListIOnfo.SetItemBkColour(cRow, nCol, (bIOInfo[n] == true) ? CLR_BLUE : CLR_GRAY);
+				m_gridListIOnfo.SetItemFgColour(cRow, nCol, (bIOInfo[n] == true) ? CLR_WHITE : CLR_BLACK);
+			}
+			else if (bIOInfo[n] == true)
 			{
 				if (n == 0 || n == 1 || n == 2 || n == 8 || n == 14 || n == 15 )	// Interlock
 				{

@@ -23,6 +23,7 @@ class CAlignCameraMgr : public CAuroraSubMgr
 	int						m_iCCDNum;
 	Rect					m_rectROI;
 	bool					m_bShowROI;
+	bool					m_bSimImageMissingLogged;	// LYS 2026-09-05 미연결 시 시뮬 이미지(Pattern/AlignN.png) 부재 WARN 1회 로그 플래그
 
 public:
 	bool	m_bClose;
@@ -44,6 +45,7 @@ public:
 	int		SetParam_CameraExposureTime_ms(long nExpTime_ms);
 	int		SetParam_CameraGain(long nGain);
 	int		PtrnMatch(CPtrnInfo* pPtrnInfo, float* pfScore, int nMeasLens = LENS_USE_MEAS, bool bGlass = true);
+	int		PtrnMatchBest(CPtrnInfo* pPtrnInfo, int nCount, float* pfBestScore, int* pnBestIdx, int nMeasLens = LENS_USE_ALIGN, bool bGlass = true);	// LYS 2026-09-25 등록 패턴 전부 매칭 후 최고 점수 패턴 채택 (스냅 1회)
 	int		SnapImage(Image* pImage, bool bDisplay = false);
 	int		SaveImage(Image* pImage, int iType);
 	int		SaveCurImage(int iType);

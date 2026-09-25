@@ -43,6 +43,7 @@ public:
 	virtual long		MoveCmdPosR(int iAxis, double dPos, bool bBlockMode = false, int iSpeed = 0) override;
 	virtual long		MoveCmdPosMulti(stMotorPosition *pPos, int iAxis, int iSpeed) override;
 	virtual long		MoveJog(int iAxis, bool bDir) override;
+	virtual long		MoveToPos(int iAxis, double dPos, int iSpeed = -1) override;	// LYS 2026-09-23 MC OFF Probe Z ±ä±Þ ÈÄÅð¿ë
 	virtual long		WaitMotionEnd(int iAxis, DWORD dwTimeout) override;
 	virtual bool		CheckMoveDone(int iAxis, DWORD dwTimeout) override;
 	virtual bool		CheckHomeDone(int iAxis, DWORD dwTimeout) override;

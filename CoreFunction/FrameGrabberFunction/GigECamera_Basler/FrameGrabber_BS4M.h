@@ -14,6 +14,7 @@ class CFrameGrabber_BS4M	// 4M Color Camera
     int				m_uiAcqWinHeight;
 
 	bool			m_bFGOpen;
+	bool			m_bOpenErrLogged = false;	// LYS 2026-09-07 IMAQdxOpenCamera 실패 로그 객체당 1회(성공 시 리셋)
     INTERFACE_ID	m_uiIntfaceId;
     SESSION_ID		m_uiSessionId;
     CString			m_strIntfName;

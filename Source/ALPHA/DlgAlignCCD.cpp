@@ -31,8 +31,14 @@ CDlgAlignCCD::CDlgAlignCCD(CAuroraMgr *pAuroraMgr, int nNum, CWnd* pParent /*=NU
 	, m_bShowCrossLine(true)
 	, m_nGrabNgCount(0)
 	, m_fScale(0)
+	, m_fScaleY(0)
 	, m_bShowImage2(false)
 	, m_bCCDLive(true)
+	, m_bGrabFail(false)
+	, m_bResetFailReported(false)
+	, m_bReapplyZoom(false)
+	, m_nReapplyFitCount(0)
+	, m_bReconnecting(false)
 {
 	g_bShowImage = false;
 
@@ -131,10 +137,13 @@ int CDlgAlignCCD::DoWorkStartGrab()
 	{
 		nRet = 1;
 
-		double dScaleX = 0, dScaleY = 0, dScale = 0;
-		CRect rect;
-		this->GetWindowRect(rect);
-		imaqSetWindowSize(m_iMoniImageWnd, m_iGrabSizeW, m_iGrabSizeH);
+		// LYS 2026-09-11 표시 크기 계산을 ApplyLiveViewFit() 으로 일원화 - CCD RESET 후에도 같은 계산을 다시 쓴다.
+		//                IMAQ 창을 원본 이미지 크기로 잡던 아래 줄은 창이 CCD 자리 밖으로 넘쳐 배율이
+		//                1 로 돌아가면 FOV 좌상단만 보이는 원인이었다. 원복 시 주석 해제.
+		//double dScaleX = 0, dScaleY = 0, dScale = 0;
+		//CRect rect;
+		//this->GetWindowRect(rect);
+		//imaqSetWindowSize(m_iMoniImageWnd, m_iGrabSizeW, m_iGrabSizeH);
 
 		if (m_pCCDReview != nullptr)
 		{
@@ -145,12 +154,12 @@ int CDlgAlignCCD::DoWorkStartGrab()
 //		imaqSetWindowSize(m_iMoniImageWnd2, m_iGrabSizeW, m_iGrabSizeH);
 		imaqDisplayImage(m_pAqcImage, m_iMoniImageWnd, TRUE);
 
-		dScaleX = (double)rect.Width()/*320*/ / m_iGrabSizeW;
-		dScaleY = (double)rect.Height()/*266*/ / m_iGrabSizeH;
-		dScale = (dScaleX > dScaleY ? dScaleY : dScaleX);
-		imaqZoomWindow2(m_iMoniImageWnd, (float)dScale, (float)dScale, IMAQ_NO_POINT);
-
-		m_fScale = (float)dScale;
+		//dScaleX = (double)rect.Width()/*320*/ / m_iGrabSizeW;
+		//dScaleY = (double)rect.Height()/*266*/ / m_iGrabSizeH;
+		//dScale = (dScaleX > dScaleY ? dScaleY : dScaleX);
+		//imaqZoomWindow2(m_iMoniImageWnd, (float)dScale, (float)dScale, IMAQ_NO_POINT);
+		//m_fScale = (float)dScale;
+		ApplyLiveViewFit();	// LYS 2026-09-11 창 크기 = CCD 자리 Rect, 배율 = 그 안에 FOV 전체가 들어가도록
 //		
 		BeginThread_WorkProc();
 		//size_t nPixel = m_iGrabSizeW * m_iGrabSizeH * 4;
@@ -294,6 +303,72 @@ UINT CDlgAlignCCD::WorkThreadProbeProc(LPVOID pParam)
 	return 0;
 }
 
+// LYS 2026-09-11 Live 표시를 CCD 자리 크기에 맞춘다.
+//   DlgMainForm 이 이 다이얼로그를 IDC_STATIC_POSITION_CCDn 의 Rect 로 MoveWindow 하므로
+//   GetClientRect() 가 곧 그 Rect 다. IMAQ 창을 그 크기로 잡고, FOV 전체가 그 안에 들어가도록 축소 배율을 건다.
+//   구 코드는 IMAQ 창을 원본 이미지 크기(예 1280x960)로 잡아 두고 배율만 줄였기 때문에,
+//   CCD RESET 으로 배율이 1 로 돌아가면 창이 자리보다 커서 FOV 좌상단만 보였다.
+void CDlgAlignCCD::ApplyLiveViewFit()
+{
+	// LYS 2026-09-14 배율은 실제 그랩된 영상(m_pAqcImage) 크기로 계산한다. CCD RESET 재접속 때 카메라 계층이 640x480 을 보고해
+	//   실제 1278x958 프레임에 0.44/0.5 배율이 걸려 FOV 좌상단만 보이던 문제(2026-09-14 20:23 live fit img=640x480).
+	//   영상이 아직 없으면(기동 직후) 종전대로 m_iGrabSizeW/H 를 쓴다. 크기가 바뀌면 1회 로그.
+	{
+		int iImgW = 0, iImgH = 0;
+		if (m_pAqcImage != nullptr && imaqGetImageSize(m_pAqcImage, &iImgW, &iImgH) != 0 && iImgW > 0 && iImgH > 0
+			&& (iImgW != m_iGrabSizeW || iImgH != m_iGrabSizeH))
+		{
+			CString strLog;
+			strLog.Format(_T("[AlignCCD%d] live fit grab size %dx%d -> actual image %dx%d"), m_iCCDNum + 1, m_iGrabSizeW, m_iGrabSizeH, iImgW, iImgH);
+			CLogWrapper::GetInstance()->KMLOG(SYST, strLog);
+			m_iGrabSizeW = iImgW;
+			m_iGrabSizeH = iImgH;
+		}
+	}
+
+	if (m_iGrabSizeW <= 0 || m_iGrabSizeH <= 0)
+		return;
+
+	if (::IsWindow(GetSafeHwnd()) == FALSE)
+		return;
+
+	CRect rect;
+	GetClientRect(&rect);
+	if (rect.Width() <= 0 || rect.Height() <= 0)
+		return;
+
+	double dScaleX = (double)rect.Width()  / m_iGrabSizeW;
+	double dScaleY = (double)rect.Height() / m_iGrabSizeH;
+	if (dScaleX <= 0.0 || dScaleY <= 0.0)
+		return;
+
+	// LYS 2026-09-11 CCD 자리(IDC_STATIC_POSITION_CCDn)를 꽉 채우도록 가로/세로 배율을 따로 건다.
+	//                구 코드는 작은 쪽 배율 하나만 써서 종횡비를 유지했는데, 자리는 160x160 DLU(거의 정사각)
+	//                이고 영상은 4:3 이라 아래쪽에 여백이 남았다. 그만큼 영상 중심이 자리 중심보다 위로
+	//                올라가 화면 한가운데 그려지는 크로스라인(ShowCrossLine, 이미지 중앙)이 중심에서 벗어났다.
+	//                m_fScale 은 좌표 변환에 쓰이는 곳이 없어(설정 전용) 비균등 배율이어도 계산에 영향 없음.
+	//                원복하려면 아래 두 줄을 주석 해제하고 imaqZoomWindow2 인자를 dScale 하나로 되돌릴 것.
+	//double dScale  = (dScaleX > dScaleY ? dScaleY : dScaleX);
+	//if (dScale <= 0.0)  return;
+
+	Point pt = { 0, 0 };
+	imaqMoveWindow(m_iMoniImageWnd, pt);
+	imaqSetWindowSize(m_iMoniImageWnd, rect.Width(), rect.Height());	// 창 = CCD 자리 Rect
+	imaqZoomWindow2(m_iMoniImageWnd, (float)dScaleX, (float)dScaleY, IMAQ_NO_POINT);
+
+	// 적용값이 바뀔 때만 1회 기록 - RESET 후 10프레임 반복 적용하므로 매번 찍으면 로그가 넘친다.
+	if (m_fScale != (float)dScaleX || m_fScaleY != (float)dScaleY)
+	{
+		CString strLog;
+		strLog.Format(_T("[AlignCCD%d] live fit rect=%dx%d img=%dx%d zoom=%.4f/%.4f"),
+			m_iCCDNum + 1, rect.Width(), rect.Height(), m_iGrabSizeW, m_iGrabSizeH, dScaleX, dScaleY);
+		CLogWrapper::GetInstance()->KMLOG(SYST, strLog);
+	}
+
+	m_fScale  = (float)dScaleX;
+	m_fScaleY = (float)dScaleY;
+}
+
 void CDlgAlignCCD::DisplayImage()
 {
 	int	   iMoniWnd = m_iMoniImageWnd;
@@ -302,6 +377,21 @@ void CDlgAlignCCD::DisplayImage()
 	OverlayText(m_pLiveImage);
 
 	imaqDisplayImage(m_pLiveImage, iMoniWnd, TRUE);
+
+	// LYS 2026-09-07 CCD RESET 후 첫 프레임에서 시작 시 저장한 창 크기/배율(m_fScale)을 다시 적용 - 리셋 후 표시 크기가 바뀌던 문제
+	// LYS 2026-09-11 저장값(m_fScale) 재사용 대신 ApplyLiveViewFit() 으로 다시 계산한다. 1회만 적용하면
+	//                그랩이 안정되기 전 프레임에서 끝나 배율이 되돌아가므로 여러 프레임에 걸쳐 반복한다.
+	if (m_bReapplyZoom == true)
+	{
+		m_bReapplyZoom = false;
+		m_nReapplyFitCount = 10;	// 라이브 루프 100ms x 10 = 약 1초
+	}
+
+	if (m_nReapplyFitCount > 0)
+	{
+		m_nReapplyFitCount--;
+		ApplyLiveViewFit();
+	}
 }
 
 void CDlgAlignCCD::DisplayImage2()
@@ -338,21 +428,56 @@ void CDlgAlignCCD::DisplayImage2()
 
 void CDlgAlignCCD::GrabImage()
 {
+	if (m_bReconnecting == true)	// LYS 2026-09-07 CCD RESET 진행 중에는 스냅/리셋 시도 안 함
+		return;
+
 	if (m_pAuroraMgr->GetAlignCameraMgr(m_iCCDNum)->SnapImage(m_pAqcImage, true) == VTM_RV_SUCCESSED)
 	{
 		m_nLiveTick = GetTickCount() / 100;
+
+		// LYS 2026-09-07 라이브 꺼짐 분석용(전이 시점만 기록): 그랩 실패 후 복구
+		if (m_bGrabFail == true)
+		{
+			m_bGrabFail = false;
+			m_bResetFailReported = false;
+			m_nGrabNgCount = 0;
+			CString strLog;
+			strLog.Format(_T("[AlignCCD%d] live grab RECOVERED"), m_iCCDNum + 1);
+			CLogWrapper::GetInstance()->KMLOG(WARN, strLog);
+		}
 
 		::PostMessage(this->m_hWnd, WM_MSG_DISPLAY_IMAGE, (WPARAM)0, (LPARAM)0);
 	}
 	else
 	{
+		// LYS 2026-09-07 OUT_OF_SERVICE 카메라는 무시 - NG 카운트/ResetGrabber(IMAQdx 재오픈 시도)를 하지 않는다.
+		//   미연결 카메라(cam1/cam2)가 3틱마다 재오픈을 시도하며 실패 로그를 쏟던 문제. 시뮬 이미지(Pattern\AlignN.png)가 있으면 위 성공 경로로 표시됨
+		if (m_pAuroraMgr->GetAlignCameraMgr(m_iCCDNum)->IsOutOfService() == true)
+			return;
+
 		m_nGrabNgCount++;
+
+		// LYS 2026-09-07 라이브 꺼짐 분석용(전이 시점만 기록): 그랩 실패 시작
+		if (m_bGrabFail == false)
+		{
+			m_bGrabFail = true;
+			CString strLog;
+			strLog.Format(_T("[AlignCCD%d] live grab NG started (IsConnected=%d, CCDLive=%d)"), m_iCCDNum + 1, m_pAuroraMgr->GetAlignCameraMgr(m_iCCDNum)->IsConnected() ? 1 : 0, m_bCCDLive ? 1 : 0);
+			CLogWrapper::GetInstance()->KMLOG(WARN, strLog);
+		}
 
 		if (m_nGrabNgCount > 2)
 		{
 			m_nGrabNgCount = 0;
 
-			m_pAuroraMgr->GetAlignCameraMgr(m_iCCDNum)->ResetGrabber();
+			bool bReset = m_pAuroraMgr->GetAlignCameraMgr(m_iCCDNum)->ResetGrabber();
+			if (bReset == false && m_bResetFailReported == false)
+			{
+				m_bResetFailReported = true;
+				CString strLog;
+				strLog.Format(_T("[AlignCCD%d] ResetGrabber FAIL (camera reopen failed; further failures not logged)"), m_iCCDNum + 1);
+				CLogWrapper::GetInstance()->KMLOG(WARN, strLog);
+			}
 		}
 	}
 
@@ -612,6 +737,40 @@ void CDlgAlignCCD::CBEventROIWnd(WindowEventType eventType, int windowNumber, To
 	TRACE(">> ROI_CB : WINDOW[%d] Tool[%d] event[%d]\n", windowNumber, tool, eventType);
 
 	return;
+}
+
+int CDlgAlignCCD::ReconnectCCD()
+{
+	// LYS 2026-09-07 CCD RESET(재연결): 연결 상태면 ResetGrabber로 강제 재오픈, 미연결이면 DoWorkStartGrab(InitDevice)로 재접속.
+	//   OUT_OF_SERVICE 카메라는 재접속 시도 없이 라이브 플래그만 ON. NG 카운트/실패 플래그 초기화, 그랩 스레드가 없으면 재기동
+	CAlignCameraMgr* pCam = m_pAuroraMgr->GetAlignCameraMgr(m_iCCDNum);
+	if (pCam == nullptr) return -1;
+
+	m_bReconnecting = true;	// LYS 2026-09-07 라이브 스레드가 GrabImage를 빠져나올 시간(루프 100ms)을 준 뒤 재연결
+	Sleep(250);
+
+	bool bWasConn = pCam->IsConnected();
+	bool bReset = true;
+	if (pCam->IsOutOfService() != true)
+	{
+		if (bWasConn == true)	bReset = pCam->ResetGrabber();
+		else					{ DoWorkStartGrab(); bReset = pCam->IsConnected(); }
+	}
+
+	m_nGrabNgCount = 0;
+	m_bGrabFail = false;
+	m_bResetFailReported = false;
+	bool bThreadRestart = (m_pWorkThread == NULL);
+	if (bThreadRestart) BeginThread_WorkProc();
+	m_bReapplyZoom = true;
+	m_bReconnecting = false;
+	SetCCDLive(true);
+
+	CString strLog;
+	strLog.Format(_T("[AlignCCD%d] RECONNECT: wasConnected=%d reset=%d nowConnected=%d OOS=%d thread=%s"), m_iCCDNum + 1, bWasConn ? 1 : 0, bReset ? 1 : 0, pCam->IsConnected() ? 1 : 0, pCam->IsOutOfService() ? 1 : 0, bThreadRestart ? _T("restarted") : _T("alive"));
+	CLogWrapper::GetInstance()->KMLOG(SYST, strLog);
+
+	return bReset ? 0 : -1;
 }
 
 int CDlgAlignCCD::SetCCDLive(bool bLive)

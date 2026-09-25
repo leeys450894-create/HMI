@@ -651,7 +651,9 @@ void	C_MakeCellDlg::OnRecipeUpdate ()
 		}
 		
 	//	sCell.m_fCellX = rcp->m_sMap.m_fGlobalMark.x + rcp->m_sMap.m_fCellCenter.x + fCellOffset + fBlockOffset;
-		sCell.m_fCellX = rcp->m_sMap.m_fAlignKey.x + rcp->m_sMap.m_fCellCenter.x - fCellOffset - fBlockOffset;	// jsyoon 2022.08.25 change	// LYS 2026-08-07 rotation-change: cells advance toward -Y from A01 anchor (mirrored arrangement)
+		// LYS 2026-09-07 앵커 부호 반전: GLOBALX/CELLOX(ini, 자동채움 -(size/2-F), X2-F)는 -Y 코너 기준이고, 2026-08-07 이후 셀은 A01(+Y측)에서 -Y로 진행하므로
+		//   A01 = -(GLOBALX + CELLOX). 구 코드(+앵커 -진행)는 -690에서 더 -로 나가 셀이 글래스 밖에 생성됨(OCP_TEST_LONG_GLASS 2026-09-07). ROTATE_0의 수작업 반전 레시피(+641→-641)와 동일 결과
+		sCell.m_fCellX = -(rcp->m_sMap.m_fAlignKey.x + rcp->m_sMap.m_fCellCenter.x) - fCellOffset - fBlockOffset;	// jsyoon 2022.08.25 change	// LYS 2026-08-07 rotation-change: cells advance toward -Y from A01 anchor (mirrored arrangement)
 
 		for (int i = 0; i < g_inRcpInfo.GetStickCount (); i++) {
 			g_inRcpInfo.AddCell (i, sCell);

@@ -4,6 +4,7 @@
 #include "DoWorkGlassSequenceImpl.h"
 #include "..\SystemParamShare.h"
 #include "..\Manager\SystemConfigMgr.h"
+#include "..\Manager\ShareMemoryMgr.h"	// LYS 2026-09-25 GetEqProbeAlignRecipeName
 
 //#include "RecipeEditMgr.h"
 #include "..\Manager\SequenceManager.h"
@@ -337,6 +338,16 @@ bool CDoWorkGlassAdsorptionStep_ProbeAlign::Run()
 	bool bRet = true;
 	int nRet = VTM_RV_SUCCESSED;
 
+	// LYS 2026-09-07 레시피 옵션 ALIGN USE(m_bUseAlign)가 OFF면 흡착 단계의 자동 Probe Align도 건너뜀
+	{
+		S_RecipeInfo* pRcpInfo = m_pShareItem->GetRecipeEditMgrPtr()->GetRecipeInfo();
+		if (pRcpInfo != nullptr && pRcpInfo->m_sOptionItem.m_bUseAlign != TRUE)
+		{
+			m_pShareItem->GetLogFileAccessorPtr()->KMLOG(SYST, _T("CDoWorkGlassAdsorptionStep_ProbeAlign Skip (recipe ALIGN USE = OFF)."));
+			return true;
+		}
+	}
+
 	if (CSequenceManager::GetInstance()->GetFunctionModuleEQState()->IsGlassSensorOn() == true)
 	{
 		m_pShareItem->GetLogFileAccessorPtr()->KMLOG(SYST, _T("CDoWorkGlassAdsorptionStep_ProbeAlign Start."));
@@ -390,6 +401,7 @@ bool CDoWorkGlassAdsorptionStep_ProbeAlign::Run()
 				CString strRecipeName;
 				CString strData, strProbeName;
 
+#if 0	// LYS 2026-09-25 P1~P5 5벌 복붙 switch -> CShareMemoryMgr::GetEqProbeAlignRecipeName 으로 통합 (규칙 동일)
 				switch (iProbe)
 				{
 				case df_PROBE_AGING1:
@@ -457,6 +469,9 @@ bool CDoWorkGlassAdsorptionStep_ProbeAlign::Run()
 					strRecipeName = _T("PROBE_MEAS");
 					break;
 				}
+#else
+				strRecipeName = m_pShareItem->GetShareMemoryMgrPtr()->GetEqProbeAlignRecipeName(iProbe);	// LYS 2026-09-25 PROBE_ALIGNn[_xx] / PROBE_MEAS[_xx]
+#endif
 
 				if (m_pShareItem->GetRecipeEditMgrPtr()->OpenAlignRecipe(strRecipeName) == VTM_RV_SUCCESSED)
 				{

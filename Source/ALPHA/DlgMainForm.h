@@ -36,6 +36,7 @@ class CMainSubDlgWin;
 class CDlgNaviBar;
 class CDlgAlignCCD;
 class CD_PopUp_Alarm_F;
+class CD_PopUp_Safety_Map;	// LYS 2026-09-24 EMS/DOOR 상태 지도 팝업
 class CIniHelper;
 class CDlgMainForm : public CD_AuroraDlgWin
 {
@@ -47,6 +48,7 @@ private:
 	CDlgNaviBar				*m_pMainNavigateDlg;
 	CDlgAlignCCD			*m_pMainAlignCCD[MAIN_CCD_MAX_NUM];
 	CD_PopUp_Alarm_F* m_pPopUp_AlarmDlg;
+	CD_PopUp_Safety_Map* m_pPopUp_SafetyMapDlg;	// LYS 2026-09-24 IDD_POPUP_SAFETY_MAP (EMS 17 / DOOR 4)
 	CIniHelper* m_pIniHelper;
 	CGridCtrl   m_gridListMotionInfo;
 	CGridCtrl   m_gridListIOnfo;
@@ -61,6 +63,7 @@ private:
 	HANDLE		m_hEvtThreadKilled;     //set by self	쓰레드가 죽었다는 핸들
 	CWinThread* m_pWorkThread;
 	long		m_lOldACSafety;
+	long		m_lOldEqBusy;	// LYS 2026-09-10 설비 BUSY 비트 마지막 출력값(엣지 판정)
 
 	static UINT WorkThreadProbeProc(LPVOID pParam);
 	void BeginThread_WorkProc();
@@ -120,6 +123,7 @@ public:
 	void GetMonitor();
 	void GetMonitorMotion();
 	void GetMonitorIO();
+	void SetEqStatusBit();	// LYS 2026-09-10 설비 상태 비트(M4981 AC X Safety / M4982 EQ BUSY) 출력
 	void SetMCCSignal();
 	void Finalize();
 	bool m_bCloseSystem;
@@ -131,6 +135,7 @@ public:
 	afx_msg void OnBnClickedBtnZoomIn7();
 	afx_msg void OnBnClickedChkLiveCcd1();
 	afx_msg void OnBnClickedChkLiveCcd2();
+	afx_msg void OnBnClickedBtnCcdReset();	// LYS 2026-09-07 CCD RESET(재연결) 버튼
 	CButton m_chkLiveH1;
 	CButton m_chkLiveH2;
 };

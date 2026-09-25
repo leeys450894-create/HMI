@@ -906,6 +906,9 @@
     <ClInclude Include="Manager\MaintControlMgr.h">
       <Filter>헤더 파일\Manager\HMI</Filter>
     </ClInclude>
+    <ClInclude Include="Manager\CMotionProbeToMcOffMove.h">
+      <Filter>헤더 파일\Manager\HMI</Filter>
+    </ClInclude>
     <ClInclude Include="Manager\ResumeInfoMgr.h">
       <Filter>헤더 파일\Manager\HMI</Filter>
     </ClInclude>
@@ -1063,6 +1066,9 @@
       <Filter>헤더 파일\DIALOG\HMI</Filter>
     </ClInclude>
     <ClInclude Include="CD_PopUp_Alarm_F.h">
+      <Filter>헤더 파일\DIALOG\POPUP</Filter>
+    </ClInclude>
+    <ClInclude Include="CD_PopUp_Safety_Map.h">
       <Filter>헤더 파일\DIALOG\POPUP</Filter>
     </ClInclude>
     <ClInclude Include="CD_PopUp_Motion_Move.h">
@@ -1676,6 +1682,9 @@
     <ClCompile Include="Manager\MaintControlMgr.cpp">
       <Filter>소스 파일\Manager\HMI</Filter>
     </ClCompile>
+    <ClCompile Include="Manager\CMotionProbeToMcOffMove.cpp">
+      <Filter>소스 파일\Manager\HMI</Filter>
+    </ClCompile>
     <ClCompile Include="Manager\ResumeInfoMgr.cpp">
       <Filter>소스 파일\Manager\HMI</Filter>
     </ClCompile>
@@ -1854,6 +1863,9 @@
       <Filter>소스 파일\DIALOG\POPUP</Filter>
     </ClCompile>
     <ClCompile Include="CD_PopUp_Alarm_F.cpp">
+      <Filter>소스 파일\DIALOG\POPUP</Filter>
+    </ClCompile>
+    <ClCompile Include="CD_PopUp_Safety_Map.cpp">
       <Filter>소스 파일\DIALOG\POPUP</Filter>
     </ClCompile>
     <ClCompile Include="Recipe\RecipeEditMgr.cpp">
@@ -2302,6 +2314,9 @@
       <Filter>리소스 파일</Filter>
     </Image>
     <Image Include="res\checkno32.bmp">
+      <Filter>리소스 파일</Filter>
+    </Image>
+    <Image Include="res\ENV_SAFETY.bmp">
       <Filter>리소스 파일</Filter>
     </Image>
   </ItemGroup>

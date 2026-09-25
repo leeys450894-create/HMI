@@ -18,6 +18,7 @@
 #define	eS5F2  _T("0502")
 #define eS2F2  _T("0202")
 #define eS2F3  _T("0203")
+#define eS2F9  _T("0209")		// LYS 2026-09-15 ELP Add Pab5 Map File
 #define eS2F10	_T("0210")
 #define eS2F12	_T("0212")
 #define eS6F2	_T("0602")
@@ -79,6 +80,7 @@ public:
 	CString GetResult() { return m_strPGResult; };
 	bool SetUserStop(int iCellNum);
 	int  GetAgingTime() { return m_nAgingTime; };
+	bool IsOCP() const;	// LYS 2026-09-07 OCP PG: ODD/EVEN split off (whole stick per command)
 
 	//=========================================================================
 	// INTERFACE

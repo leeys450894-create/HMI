@@ -10,6 +10,7 @@
 #include "..\Manager\PositionConfigMgr.h"
 #include "..\Manager\LightControlMgr.h"
 #include "..\Manager\MaintControlMgr.h"
+#include "DoWork/DoWorkGlassMeasureStep.h"	// LYS 2026-09-18 PickSingleCellHead / GetHeadOffsetY
 #include "common/CommonFunc.h"
 #include "..\D_RoiSet.h"
 #include "..\DoWork\DoWorkGlassSequence.h"
@@ -31,6 +32,7 @@ CRecipeEditMgr::CRecipeEditMgr(stAuroraMgrPool &MgrPool)
 {
 	SetName(_T("RECIPE_EDIT_MGR"));	
 	m_bRecipeDeleteFlag = false;
+	m_iTestModeLastStick = -1;	// LYS 2026-09-18 TestMode MOVE : 아직 선택된 스틱 없음
 
 	m_ptrnReview.ClearPtrn();
 
@@ -768,6 +770,7 @@ int	CRecipeEditMgr::SetDetectAlignPtrn(int nIndex)
 
 
 	// 이미지 패턴 매칭
+#if 0	// LYS 2026-09-25 구 코드: 첫 성공 패턴에서 break. 아래 PtrnMatchBest 로 대체.
 	for (size_t k = 0; k < 5; k++)	// Pattern
 	{
 		pPtrnInfo = &ptrnInfo[k];
@@ -784,6 +787,19 @@ int	CRecipeEditMgr::SetDetectAlignPtrn(int nIndex)
 			break;
 		}
 	}
+#else
+	// LYS 2026-09-25 등록 패턴 전부 매칭해 점수가 가장 높은 패턴 채택 (Align 레시피 화면 DETECT 테스트도 실행 경로와 동일하게).
+	{
+		int nBestPtrn = -1;
+		nRet = m_pMgrPool_link->pAlignCameraMgr[iCCD]->PtrnMatchBest(ptrnInfo, 5, &Score, &nBestPtrn, LENS_USE_ALIGN, bGlass);
+		if (nRet == VTM_RV_SUCCESSED && nBestPtrn >= 0)
+		{
+			MaxSorce = Score;
+			dPixelx = ptrnInfo[nBestPtrn].m_dRealX;	// 차이값(mm)
+			dPixely = ptrnInfo[nBestPtrn].m_dRealY;	// 차이값(mm)
+		}
+	}
+#endif
 
 	return nRet;
 }
@@ -830,6 +846,25 @@ S_RecipeMap* CRecipeEditMgr::GetRecipeMap()
 		return &m_pRecipeFunc->m_recipeMgr.m_sMap;
 	else
 		return nullptr;
+}
+
+// LYS 2026-09-09 Stick별 PROBE Z CONTACT OFFSET - 레시피 STAGE MOVE 그리드 5행(CONTACT OFFSET). End Contact 목표(End+OD)에만 가산, PreContact/UnContact 높이는 스틱 공통
+double CRecipeEditMgr::GetStickProbeZOffset(int iStick)
+{
+	S_RecipeData* pData = GetRecipeData();
+	if (pData == nullptr) return 0.0;
+	if (iStick < 0 || iStick >= (int)pData->m_vecStick.size()) return 0.0;
+
+	double dOffset = pData->m_vecStick[iStick].m_fProbeZOffset;
+	const double dLimit = 1.0;	// mm - 오입력 보호(프로브 과압입 방지)
+	if (fabs(dOffset) > dLimit)
+	{
+		CString strLog;
+		strLog.Format(_T("Stick %d PROBE Z CONTACT OFFSET %.4f exceeds +/-%.1f mm -> clamped"), iStick + 1, dOffset, dLimit);
+		CLogWrapper::GetInstance()->KMLOG(WARN, strLog);
+		dOffset = (dOffset > 0.0) ? dLimit : -dLimit;
+	}
+	return dOffset;
 }
 
 UINT CRecipeEditMgr::ThreadRun(LPVOID p1)
@@ -880,6 +915,12 @@ UINT CRecipeEditMgr::ThreadRun()
 			// 2023.08.09 add Process Interlock
 			if ( GetShareMemoryMgrPtr()->GetSys_ProcessStatus() != SPS_IDLE || CSequenceManager::GetInstance()->IsEngineCompleteAll() != true)
 			{
+				// LYS 2026-09-16 거부 사유를 OCP 로그에 남긴다(모달은 이 워커 스레드에서 뜨므로 메인 창 뒤에 숨을 수 있다)
+				{
+					CString strLog;
+					strLog.Format(_T("Recipe cmd %d rejected - ProcessStatus=%d, EngineCompleteAll=%d"), (int)pRecipeEvent->m_sRunState.m_dwData1, GetShareMemoryMgrPtr()->GetSys_ProcessStatus(), CSequenceManager::GetInstance()->IsEngineCompleteAll() ? 1 : 0);
+					CLogWrapper::GetInstance()->KMLOG(WARN, strLog);
+				}
 				CD_DisplayMessage dlg(_T("프로세스 진행 중 입니다. 정지 후 사용하세요."));
 				dlg.DoModal();
 
@@ -893,6 +934,8 @@ UINT CRecipeEditMgr::ThreadRun()
 				GetShareMemoryMgrPtr()->SetSys_ProcessStatus(SPS_CYCLETEST);
 
 				pRecipeEvent->m_sRunState.m_nRunStatus = M_RUN_PROC;
+
+				bool bCmdNG = false;	// LYS 2026-09-16 Align PROC 실패 시 M_RUN_NG 로 응답
 
 				switch (pRecipeEvent->m_sRunState.m_dwData1)
 				{
@@ -1236,7 +1279,8 @@ UINT CRecipeEditMgr::ThreadRun()
 					pRecipeEvent->m_sRunState.m_fData[2] = m_pMgrPool_link->pMaintControlMgr->GetCurPos(AXIS_X2); // < -BACK Y
 					pRecipeEvent->m_sRunState.m_fData[3] = m_pMgrPool_link->pMaintControlMgr->GetCurPos(AXIS_Y1); // < -BACK LEFT
 					pRecipeEvent->m_sRunState.m_fData[4] = m_pMgrPool_link->pMaintControlMgr->GetCurPos(AXIS_Y2); // < -BACK RIGHT
-					pRecipeEvent->m_sRunState.m_fData[5] = m_pMgrPool_link->pMaintControlMgr->GetCurPos(AXIS_Z1); // < -BACK Z
+					pRecipeEvent->m_sRunState.m_fData[5] = m_pMgrPool_link->pMaintControlMgr->GetCurPos(AXIS_Z3); // LYS 2026-09-04 SUB Z RIGHT
+					pRecipeEvent->m_sRunState.m_fData[6] = m_pMgrPool_link->pMaintControlMgr->GetCurPos(AXIS_Z4); // LYS 2026-09-04 SUB Z LEFT
 				}
 				break;
 				case M_CMD_GLASS_MOVE:
@@ -1272,18 +1316,25 @@ UINT CRecipeEditMgr::ThreadRun()
 						bool bRet = false;
 						CDoWorkGlassSequence* pDoWorkGlassSeq = CSequenceManager::GetInstance()->GeDoWorkGlassSequence();
 						bRet = pDoWorkGlassSeq->ItemStart(_T("SEQUENCE_ITEM_DWGLASS_SEQ_GLASS_SW_ALIGN"), true);
+						if (bRet != true)	// LYS 2026-09-16 실패(알람은 ItemStart 가 띄움) -> DLL 에 NG 응답, 즉시 종료
+						{
+							CLogWrapper::GetInstance()->KMLOG(WARN, _T("Manual Glass Align NG - command ends with M_RUN_NG"));
+							bCmdNG = true;
+						}
 					}
 				}
 				break;
 				case M_CMD_PROBE_GET_POS:
 				{
 					pRecipeEvent->m_sRunState.m_fData[0] = m_pMgrPool_link->pMaintControlMgr->GetCurPos(AXIS_PROBE_X9); //  PROBE Y
-					pRecipeEvent->m_sRunState.m_fData[1] = m_pMgrPool_link->pMaintControlMgr->GetCurPos(AXIS_PROBE_Y5); // PROBE X
+					// LYS 2026-09-17 Y5/Y1/Y2 는 GetOrgPos(엔코더값) 로 저장 - MOVE 가 MoveOrgPosMulti(보상 미적용)로 가므로 GET->MOVE 왕복이 일치한다. X9 는 종전대로 CurPos/CmdPos 쌍.
+					pRecipeEvent->m_sRunState.m_fData[1] = m_pMgrPool_link->pMaintControlMgr->GetOrgPos(AXIS_PROBE_Y5); // PROBE X
 					pRecipeEvent->m_sRunState.m_fData[2] = m_pMgrPool_link->pMaintControlMgr->GetCurPos(AXIS_X2);       // <-BACK Y
-					pRecipeEvent->m_sRunState.m_fData[3] = m_pMgrPool_link->pMaintControlMgr->GetCurPos(AXIS_Y1);		// < -BACK LEFT
-					pRecipeEvent->m_sRunState.m_fData[4] = m_pMgrPool_link->pMaintControlMgr->GetCurPos(AXIS_Y2);		// < -BACK RIGHT
-					pRecipeEvent->m_sRunState.m_fData[5] = m_pMgrPool_link->pMaintControlMgr->GetCurPos(AXIS_Z1);		// < -BACK Z
-					pRecipeEvent->m_sRunState.m_fData[6] = m_pMgrPool_link->pMaintControlMgr->GetCurPos(AXIS_X);		 // < -STAGE Y
+					pRecipeEvent->m_sRunState.m_fData[3] = m_pMgrPool_link->pMaintControlMgr->GetOrgPos(AXIS_Y1);		// < -BACK RIGHT
+					pRecipeEvent->m_sRunState.m_fData[4] = m_pMgrPool_link->pMaintControlMgr->GetOrgPos(AXIS_Y2);		// < -BACK LEFT
+					pRecipeEvent->m_sRunState.m_fData[5] = m_pMgrPool_link->pMaintControlMgr->GetCurPos(AXIS_Z3); // LYS 2026-09-04 SUB Z RIGHT
+					pRecipeEvent->m_sRunState.m_fData[6] = m_pMgrPool_link->pMaintControlMgr->GetCurPos(AXIS_Z4); // LYS 2026-09-04 SUB Z LEFT
+					pRecipeEvent->m_sRunState.m_fData[7] = m_pMgrPool_link->pMaintControlMgr->GetCurPos(AXIS_X);  // LYS 2026-09-04 STAGE Y (reindex 6->7)
 				}
 				break;
 				case M_CMD_PROBE_MOVE:
@@ -1309,6 +1360,11 @@ UINT CRecipeEditMgr::ThreadRun()
 						bool bRet = false;
 						CDoWorkGlassSequence* pDoWorkGlassSeq = CSequenceManager::GetInstance()->GeDoWorkGlassSequence();
 						bRet = pDoWorkGlassSeq->ItemStart(_T("SEQUENCE_ITEM_DWGLASS_SEQ_PROBE_SW_ALIGN"), true);
+						if (bRet != true)	// LYS 2026-09-16 실패(알람은 ItemStart 가 띄움) -> DLL 에 NG 응답, 즉시 종료
+						{
+							CLogWrapper::GetInstance()->KMLOG(WARN, _T("Manual Probe Align NG - command ends with M_RUN_NG"));
+							bCmdNG = true;
+						}
 
 						m_pMgrPool_link->pMaintControlMgr->GetShareMemoryMgrPtr()->SetSys_ProbeChange(0);
 					}
@@ -1705,10 +1761,73 @@ UINT CRecipeEditMgr::ThreadRun()
 						double dHeadReviewY = (double)pRecipeEvent->m_sRunState.m_nData[4] / 1000.0;
 						double dBackHeadGap = (double)pRecipeEvent->m_sRunState.m_nData[5] / 1000.0;
 						double dFrontHeadGap = (double)pRecipeEvent->m_sRunState.m_nData[6] / 1000.0;
+						// LYS 2026-09-18 Review 헤드 Y 오프셋 (DlgTestMode 가 fData[52]/[53] 로 보냄).
+						//                측정 스텝(DoWorkGlassMeasureStep)과 같은 교차 규약을 그대로 쓴다 -
+						//                m_fHeadReviewLeft -> dRightReview(Y2), m_fHeadReviewRight -> dLeftReview(Y1).
+						double dRightReview = pRecipeEvent->m_sRunState.m_fData[52];	// m_fHeadReviewLeft  -> AXIS_Y2
+						double dLeftReview  = pRecipeEvent->m_sRunState.m_fData[53];	// m_fHeadReviewRight -> AXIS_Y1
 
 						// 1. Probe UnContact
-						m_pMgrPool_link->pMaintControlMgr->MoveCmdPos_ProbeUnContact(AXIS_PROBE_Z5, 0);
-						Sleep(500);
+						// LYS 2026-09-18 스틱이 실제로 바뀔 때만 UnContact 한다.
+						//                한 스틱 안에서는 스테이지(X / LOADER_R) 목표가 같아 글래스가 움직이지 않으므로
+						//                프로브를 컨택한 채로 헤드만 셀 사이를 이동해도 된다.
+						//                실측 시퀀스와 같은 동작이다(스틱당 1회 컨택 후 헤드만 이동).
+						//m_pMgrPool_link->pMaintControlMgr->MoveCmdPos_ProbeUnContact(AXIS_PROBE_Z5, 0);
+						//Sleep(500);
+						//                같은 스틱이면 보통 스테이지 목표도 같지만, 레시피 오프셋을 중간에 고칠 수 있다.
+						//                그래서 실제 스테이지 목표도 비교해 움직일 상황이면 UnContact 한다.
+						//                이 조건은 UnContact 를 더 하게만 만들지 빠뜨리지는 않는다.
+						bool bNeedUnContact = (iStick != m_iTestModeLastStick);
+						if (bNeedUnContact == false)
+						{
+							double dChkStageY = dStickY + dOffX;
+							double dChkStageR = dStickR + dOffR;
+							if (fabs(dChkStageY - m_pMgrPool_link->pMaintControlMgr->GetCurPos(AXIS_X)) > 0.1 ||
+								fabs(dChkStageR - m_pMgrPool_link->pMaintControlMgr->GetCurPos(AXIS_LOADER_R)) > 0.1)
+							{
+								bNeedUnContact = true;
+							}
+						}
+
+						if (bNeedUnContact == true)
+						{
+							CString strLogUC;
+							strLogUC.Format(_T("TestMode Move - stick %d -> %d, probe UnContact first"), m_iTestModeLastStick, iStick);
+							CLogWrapper::GetInstance()->KMLOG(SYST, strLogUC);
+							m_pMgrPool_link->pMaintControlMgr->MoveCmdPos_ProbeUnContact(AXIS_PROBE_Z5, 0);
+							Sleep(500);
+						}
+						else
+						{
+							CString strLogUC;
+							strLogUC.Format(_T("TestMode Move - same stick %d (cell %d), stage not moving, probe UnContact skipped"), iStick, iCell);
+							CLogWrapper::GetInstance()->KMLOG(SYST, strLogUC);
+						}
+						m_iTestModeLastStick = iStick;
+
+						// LYS 2026-09-18 VISION / ANGLE 은 FRONT 갠트리(X3) 기반이라, Review/WAD 자세에서 넘어오면
+						//                Z3/Z4 가 하강 상태여서 X2 가 안전 위치로 빠지지 못해 이동이 안 된다.
+						//                MoveCmdPosReview / MoveCmdPosWAD 는 자체 후퇴가 있지만
+						//                MoveCmdPosVision / MoveCmdPosAngle 에는 없어 여기서 먼저 올린다.
+						//                MoveCmdPosMulti 로 보내는 이유가 X2 인터락이다 - BACK 갠트리 정지를 기다린 뒤
+						//                Z3/Z4 를 내보내고, P5 유닛과 겹치는 하강은 거부한다.
+						if (nTestMode == 2 || nTestMode == 3)
+						{
+							double dSubZSafety = m_pMgrPool_link->pMaintControlMgr->GetMotorControlMgrPtr()->GetInterlockSubZSafety();
+							double dCurZ3 = m_pMgrPool_link->pMaintControlMgr->GetOrgPos(AXIS_Z3);
+							double dCurZ4 = m_pMgrPool_link->pMaintControlMgr->GetOrgPos(AXIS_Z4);
+							if (dCurZ3 > dSubZSafety + 0.1 || dCurZ4 > dSubZSafety + 0.1)
+							{
+								stMotorPosition stSubZSafe[2];
+								CMaintControlMgr::ClearMotorPos(stSubZSafe, 2);
+								stSubZSafe[0].axis = AXIS_Z3;	stSubZSafe[0].dPosition = dSubZSafety;
+								stSubZSafe[1].axis = AXIS_Z4;	stSubZSafe[1].dPosition = dSubZSafety;
+								CString strLogSZ;
+								strLogSZ.Format(_T("TestMode Move %s - SubZ retract to safety (Z3:%.3f Z4:%.3f -> %.3f)"), (nTestMode == 2) ? _T("VISION") : _T("ANGLE"), dCurZ3, dCurZ4, dSubZSafety);
+								CLogWrapper::GetInstance()->KMLOG(SYST, strLogSZ);
+								m_pMgrPool_link->pMaintControlMgr->MoveCmdPosMulti(stSubZSafe, 2, SPEED_HIGH, true, false);
+							}
+						}
 						double dStageY = 0;
 						/*if (iStick > 0)
 							dStageY = dStick0Y - dStickY + dOffX;
@@ -1718,9 +1837,18 @@ UINT CRecipeEditMgr::ThreadRun()
 						dStageY = dStickY + dOffX;
 
 						double dStageR = dStickR + dOffR;
-						m_pMgrPool_link->pMaintControlMgr->MoveCmdPosA(AXIS_LOADER_R, dStageR, true, SPEED_HIGH);
-						m_pMgrPool_link->pMaintControlMgr->DoWork_MotionDone(AXIS_LOADER_R);
-						m_pMgrPool_link->pMaintControlMgr->MoveCmdPosA(AXIS_X, dStageY, true, SPEED_HIGH);
+						//m_pMgrPool_link->pMaintControlMgr->MoveCmdPosA(AXIS_LOADER_R, dStageR, true, SPEED_HIGH);
+						//m_pMgrPool_link->pMaintControlMgr->DoWork_MotionDone(AXIS_LOADER_R);
+						//m_pMgrPool_link->pMaintControlMgr->MoveCmdPosA(AXIS_X, dStageY, true, SPEED_HIGH);
+						// LYS 2026-09-21 스테이지가 안 움직이는 경우(같은 스틱, 목표 차이 0.1 이내 - 위 bNeedUnContact 판정)에는 스테이지 지령을 보내지 않는다.
+						//   이때는 프로브를 올리지 않았으므로(컨택 유지) 스테이지 지령이 Probe Z 컨택 인터락(3032)에 걸려 Heavy 알람이 뜨고,
+						//   그 리셋을 기다리느라 헤드 Cross(Y1~Y4) 이동이 밀렸다. 헤드만 가면 되는 경우다.
+						if (bNeedUnContact == true)
+						{
+							m_pMgrPool_link->pMaintControlMgr->MoveCmdPosA(AXIS_LOADER_R, dStageR, true, SPEED_HIGH);
+							m_pMgrPool_link->pMaintControlMgr->DoWork_MotionDone(AXIS_LOADER_R);
+							m_pMgrPool_link->pMaintControlMgr->MoveCmdPosA(AXIS_X, dStageY, true, SPEED_HIGH);
+						}
 
 						// 3. Head position
 						double dGlassContactPos = dHeadReviewY;
@@ -1759,6 +1887,148 @@ UINT CRecipeEditMgr::ThreadRun()
 							else { dLeft2 = dFG; dRight2 = dFG * -1; }
 						}
 
+						// LYS 2026-09-18 TestMode 는 셀 하나만 보는 동작이라 위의 2-Head 페어링(반대 헤드를 다른 셀에
+						//                올리는 방식)은 쓰지 않는다. 실제 Cycle 의 '짝 없는 단독 셀' 처리와 같게 맞춘다
+						//                (DoWorkGlassMeasureStep 2236행 등 5곳: cellX > 0 이면 Head2 슬롯, 아니면 Head1 슬롯
+						//                + 반대 슬롯은 더미 -> MarkIdleHeadSafety -> ApplyIdleHeadSafetyY 로 [SAFETY] 치환).
+						//                  - 셀 X >  0 -> BACK 은 Y1, FRONT 는 Y3 가 담당 / 반대 헤드는 Safety
+						//                  - 셀 X <= 0 -> BACK 은 Y2, FRONT 는 Y4 가 담당 / 반대 헤드는 Safety
+						//                판정 기준 '> 0' 도 Cycle 과 동일하다(2026-09-14 에 50 -> 0 으로 확정).
+						//                Position.ini [HEAD_OFFSET] 은 MoveCmdPosWAD/Vision/Angle 이 축별로 더하므로
+						//                여기서는 셀 좌표를 그대로 넘긴다(Cycle 과 동일). Review 는 HEAD_OFFSET 키가 없고
+						//                레시피 USER OFFSET(m_fHeadReviewLeft/Right)을 호출자가 더하는 규약이라 여기서 더한다.
+						//                쉬는 헤드 Safety 와 목표 간격이 인터락 미달이면 ApplyIdleHeadSafetyY 가 WARN 을 남긴다.
+						{
+							// LYS 2026-09-18 담당 헤드 선택도 Cycle 과 같은 함수를 쓴다(DoWorkGlassMeasureStep 의 PickSingleCellHead).
+							//                Review(0) 는 Position.ini [HEAD_OFFSET] 키가 없어 레시피 USER OFFSET 을 넘기고,
+							//                나머지는 그 모드의 HEAD_OFFSET Y 를 넘긴다(0 WAD / 1 ANGLE / 2 VISION).
+							//bool bCellOnHead2 = (dCellX > 0.0);	// Head2 = Y1(BACK) / Y3(FRONT)
+							double dOffHeadP = 0.0, dOffHeadM = 0.0;
+							if (nTestMode == 0)
+							{
+								dOffHeadP = dLeftReview;	dOffHeadM = dRightReview;
+							}
+							else
+							{
+								int nOffMode = (nTestMode == 1) ? 0 : ((nTestMode == 2) ? 2 : 1);	// WAD / VISION / ANGLE
+								GetHeadOffsetY(m_pMgrPool_link->pPositionConfigMgr, nOffMode, &dOffHeadP, &dOffHeadM);
+							}
+							const bool bFrontGantry = (nTestMode == 2 || nTestMode == 3);
+							bool bCellOnHead2 = (PickSingleCellHead(m_pMgrPool_link->pPositionConfigMgr, m_pMgrPool_link->pMaintControlMgr,
+								dCellX, dOffHeadP, dOffHeadM, bFrontGantry, _T("TESTMODE")) != 0);
+
+							if (bCellOnHead2 == true)
+							{
+								dLeft   = dCellX + ((nTestMode == 0) ? dLeftReview : 0.0);
+								dRight  = df_HEAD_Y_IDLE_SAFETY;
+								dLeft2  = dCellX;
+								dRight2 = df_HEAD_Y_IDLE_SAFETY;
+							}
+							else
+							{
+								dLeft   = df_HEAD_Y_IDLE_SAFETY;
+								dRight  = dCellX + ((nTestMode == 0) ? dRightReview : 0.0);
+								dLeft2  = df_HEAD_Y_IDLE_SAFETY;
+								dRight2 = dCellX;
+							}
+
+							CString strLogHead;
+							strLogHead.Format(_T("TestMode Move mode %d - cell %d X:%.3f -> %s head (Y1:%.3f Y2:%.3f Y3:%.3f Y4:%.3f), idle head -> [SAFETY]"),
+								nTestMode, iCell, dCellX, bCellOnHead2 ? _T("Y1/Y3") : _T("Y2/Y4"), dLeft, dRight, dLeft2, dRight2);
+							CLogWrapper::GetInstance()->KMLOG(SYST, strLogHead);
+						}
+
+						// LYS 2026-09-22 TEST MODE 카메라 싱크 - Review/WAD/VISION/ANGLE 모두 Cycle 처럼 짝 셀을 반대 헤드에 같이 올린다
+						//   (A01+K01 -> B01+L01 ...). 위 블록은 셀 하나만 보고 반대 헤드를 [SAFETY] 로 보내서 늘 한 헤드씩만 움직였다.
+						//   짝은 Cycle(DoWorkGlassMeasureStep)과 같은 MakeHeadPairByOrder 에 '헤드 오프셋 반영 간격'을 넘겨 정한다.
+						//     간격 = dGap - (+측 오프셋 - -측 오프셋). 셀 X 는 DlgTestMode 가 fData[10~49] 에 셀 순번대로 싣는다.
+						//     WAD    : INTERLOCKHEADGAPB(4번째 인자) / BackHeadGap 중 큰 값, HEAD_OFFSET 모드 0, BACK Y1/Y2
+						//     VISION : GetInterlockPos 2번째 인자 / BackHeadGap 중 큰 값, HEAD_OFFSET 모드 2, FRONT Y3/Y4
+						//     ANGLE  : INTERLOCKHEADGAPB(4번째 인자) / BackHeadGap 중 큰 값, HEAD_OFFSET 모드 1, FRONT Y3/Y4 (Cycle ANGLE 과 동일)
+						//     REVIEW : WAD 와 같은 간격, 오프셋은 레시피 USER OFFSET(dLeftReview->Y1, dRightReview->Y2). Cycle 의 Review 는
+						//              셀 단위 짝이 없어(스틱 첫/끝 셀) WAD 규칙을 따른다. Review 만 오프셋을 여기서 더한다(위 단독 처리와 같은 규약).
+						//   +측 헤드(Y1/Y3) = X 가 큰 셀, -측 헤드(Y2/Y4) = X 가 작은 셀(Cycle 의 dLeft/dRight, dLeft2/dRight2 와 같다).
+						//   HEAD_OFFSET 은 MoveCmdPosWAD/Vision/Angle 이 축별로 더한다. 짝이 없거나 간격 미달이면 위의 단독 셀 처리를 그대로 쓴다.
+						//   차이: Cycle 은 샘플링(M_SPEC 선택)/AGING 스킵 셀을 빼고 짝을 짓지만 TEST MODE 는 스틱의 전 셀로 짓는다.
+						if (nTestMode >= 0 && nTestMode <= 3 && nCellCnt > 1)
+						{
+							const bool bFrontPair = (nTestMode == 2 || nTestMode == 3);
+							LPCTSTR pszPairTag = (nTestMode == 0) ? _T("TESTMODE REVIEW") : ((nTestMode == 1) ? _T("TESTMODE WAD") : ((nTestMode == 2) ? _T("TESTMODE VISION") : _T("TESTMODE ANGLE")));
+
+							double dPairHeadGap = 0.0;
+							if (nTestMode == 2)
+								m_pMgrPool_link->pMaintControlMgr->GetInterlockPos(nullptr, &dPairHeadGap, nullptr);
+							else
+								m_pMgrPool_link->pMaintControlMgr->GetInterlockPos(nullptr, nullptr, nullptr, &dPairHeadGap);
+							if (dBackHeadGap > dPairHeadGap) dPairHeadGap = dBackHeadGap;
+
+							double dPairOffP = 0.0, dPairOffM = 0.0;
+							if (nTestMode == 0)
+							{
+								dPairOffP = dLeftReview;	dPairOffM = dRightReview;
+							}
+							else
+							{
+								int nPairOffMode = (nTestMode == 1) ? 0 : ((nTestMode == 2) ? 2 : 1);	// WAD / VISION / ANGLE
+								GetHeadOffsetY(m_pMgrPool_link->pPositionConfigMgr, nPairOffMode, &dPairOffP, &dPairOffM);
+							}
+							double dPairGap = dPairHeadGap - (dPairOffP - dPairOffM);
+
+							int nPairCnt = (nCellCnt < 40) ? nCellCnt : 40;
+							vector<S_CellInfo> vecTmCell(nPairCnt);
+							for (int ic = 0; ic < nPairCnt; ic++)
+							{
+								vecTmCell[ic].m_nArea  = ic;
+								vecTmCell[ic].m_fCellX = pRecipeEvent->m_sRunState.m_fData[10 + ic];
+								_stprintf_s(vecTmCell[ic].m_chCellID, CH_LEN, _T("#%d"), ic);
+							}
+
+							vector<int> vecPair(nPairCnt, -1);
+							MakeHeadPairByOrder(vecTmCell, nullptr, nPairCnt, dPairGap, vecPair.data(), pszPairTag);
+
+							int iMate = -1;
+							if (iCell >= 0 && iCell < nPairCnt)
+							{
+								if (vecPair[iCell] >= 0)
+									iMate = vecPair[iCell];
+								else
+								{
+									for (int ic = 0; ic < nPairCnt; ic++)
+									{
+										if (vecPair[ic] == iCell) { iMate = ic; break; }
+									}
+								}
+							}
+
+							CString strLogPair;
+							if (iMate >= 0)
+							{
+								double dMateX = vecTmCell[iMate].m_fCellX;
+								double dPlusX  = (dCellX > dMateX) ? dCellX : dMateX;	// plus-side head Y1 / Y3
+								double dMinusX = (dCellX > dMateX) ? dMateX : dCellX;	// minus-side head Y2 / Y4
+								if (bFrontPair == true)
+								{
+									dLeft2  = dPlusX;	// AXIS_Y3
+									dRight2 = dMinusX;	// AXIS_Y4
+								}
+								else
+								{
+									dLeft  = dPlusX  + ((nTestMode == 0) ? dLeftReview  : 0.0);	// AXIS_Y1
+									dRight = dMinusX + ((nTestMode == 0) ? dRightReview : 0.0);	// AXIS_Y2
+								}
+								strLogPair.Format(_T("TestMode Move %s - camera sync pair cell %d(X:%.3f) + cell %d(X:%.3f) -> %s:%.3f %s:%.3f (PairGap %.3f)"),
+									pszPairTag, iCell, dCellX, iMate, dMateX,
+									bFrontPair ? _T("Y3") : _T("Y1"), bFrontPair ? dLeft2 : dLeft,
+									bFrontPair ? _T("Y4") : _T("Y2"), bFrontPair ? dRight2 : dRight, dPairGap);
+							}
+							else
+							{
+								strLogPair.Format(_T("TestMode Move %s - cell %d(X:%.3f) has no pair (PairGap %.3f), single head"), pszPairTag, iCell, dCellX, dPairGap);
+							}
+							CLogWrapper::GetInstance()->KMLOG(SYST, strLogPair);
+						}
+
+
 						double dSafeZ1 = 0, dSafeZ2 = 0;
 						m_pMgrPool_link->pPositionConfigMgr->GetSafetyPosition(nullptr, nullptr, nullptr, nullptr, nullptr, &dSafeZ1, &dSafeZ2);
 
@@ -1774,43 +2044,149 @@ UINT CRecipeEditMgr::ThreadRun()
 
 						switch (nTestMode) {
 						case 0: // Review
+							// LYS 2026-09-18 BACK 갠트리(X2) 이동이라 FRONT 헤드는 쉰다. Y3/Y4 를 df_HEAD_Y_IDLE_SAFETY
+							//                마커로 넘기면 ApplyIdleHeadSafetyY 가 Position.ini [SAFETY] 의
+							//                SafetyHeadY3/Y4 원시좌표로 바꿔 준다(헤드·정렬 오프셋이 더해지지 않는다).
+							//                Safety 값을 직접 넣으면 오프셋만큼 어긋나므로 마커를 쓸 것.
+							//                종속 갠트리 X3 는 이동 함수 안에서 이미 SafetyHeadX2 로 간다.
 							stPos[nAxis].axis=AXIS_Y1; stPos[nAxis].dPosition=dLeft;  nAxis++;
 							stPos[nAxis].axis=AXIS_Y2; stPos[nAxis].dPosition=dRight; nAxis++;
-							stPos[nAxis].axis=AXIS_Y3; stPos[nAxis].dPosition=dLeft2; nAxis++;
-							stPos[nAxis].axis=AXIS_Y4; stPos[nAxis].dPosition=dRight2; nAxis++;
+							//stPos[nAxis].axis=AXIS_Y3; stPos[nAxis].dPosition=dLeft2; nAxis++;
+							//stPos[nAxis].axis=AXIS_Y4; stPos[nAxis].dPosition=dRight2; nAxis++;
+							stPos[nAxis].axis=AXIS_Y3; stPos[nAxis].dPosition=df_HEAD_Y_IDLE_SAFETY; nAxis++;
+							stPos[nAxis].axis=AXIS_Y4; stPos[nAxis].dPosition=df_HEAD_Y_IDLE_SAFETY; nAxis++;
 							stPos[nAxis].axis=AXIS_X2; stPos[nAxis].dPosition=dHeadX+dOffX; nAxis++;
-							stPos[nAxis].axis=AXIS_Z1; stPos[nAxis].dPosition=dReviewZ; nAxis++;
+							// LYS 2026-09-07 Z1(OCP 미사용) -> Sub Z(Z3/Z4) 화상 Sub Z
+							// LYS 2026-09-18 Review 의 Sub Z 목표를 측정 레시피 화상 Sub Z 가 아니라
+							//                GLASS ALIGN 레시피(.alg 꼬리 _SUB_Z_ 블록) 값으로 바꿨다.
+							//                Glass Align 스텝이 읽는 것과 같은 소스다.
+							//                m_sGlsAlign.m_fSubZRight -> AXIS_Z3, m_fSubZLeft -> AXIS_Z4.
+							//stPos[nAxis].axis=AXIS_Z3; stPos[nAxis].dPosition=GetRecipeInfo()->m_sMotionSubZ.m_fVisionSubzRight; nAxis++;
+							//stPos[nAxis].axis=AXIS_Z4; stPos[nAxis].dPosition=GetRecipeInfo()->m_sMotionSubZ.m_fVisionSubzLeft; nAxis++;
+							{
+								// LYS 2026-09-18 값은 DLL 이 공유메모리로 실어 보낸다(DlgTestMode, fData[50]/[51]).
+								//                앱 쪽 GetRecipeMgrPtr()->m_sAlign 은 RECIPE 화면 경로에서 로드되지 않아
+								//                항상 0 이었다 - 측정 경로(OpenRecipe/OpenAlignRecipe)에서만 채워진다.
+								//double dAlignSubZR = 0.0, dAlignSubZL = 0.0;
+								//S_RecipeMgr* pRcpMgr = GetRecipeMgrPtr();
+								//if (pRcpMgr != nullptr)
+								//{
+								//	dAlignSubZR = pRcpMgr->m_sAlign.m_sGlsAlign.m_fSubZRight;
+								//	dAlignSubZL = pRcpMgr->m_sAlign.m_sGlsAlign.m_fSubZLeft;
+								//}
+								double dAlignSubZR = pRecipeEvent->m_sRunState.m_fData[50];
+								double dAlignSubZL = pRecipeEvent->m_sRunState.m_fData[51];
+								// LYS 2026-09-18 글래스가 움직이지 않는 이동(같은 스틱 안에서 셀만 바뀜)이면 Sub Z 를 건드리지 않는다.
+								//                헤드 Y(Cross)만 가면 되므로 Z3/Z4 를 목록에 넣지 않고 후퇴도 건너뛴다.
+								//                bNeedUnContact 는 '스틱 변경 또는 스테이지 실제 이동' 이라 그대로 판정에 쓴다.
+								if (bNeedUnContact == true)
+								{
+									CString strLogAZ;
+									strLogAZ.Format(_T("TestMode Move REVIEW - SubZ from GLASS ALIGN recipe (Z3:%.3f Z4:%.3f)"), dAlignSubZR, dAlignSubZL);
+									CLogWrapper::GetInstance()->KMLOG(SYST, strLogAZ);
+									stPos[nAxis].axis=AXIS_Z3; stPos[nAxis].dPosition=dAlignSubZR; nAxis++;
+									stPos[nAxis].axis=AXIS_Z4; stPos[nAxis].dPosition=dAlignSubZL; nAxis++;
+								}
+								else
+								{
+									CString strLogAZ;
+									strLogAZ.Format(_T("TestMode Move REVIEW - same stick, SubZ left as is (recipe Z3:%.3f Z4:%.3f, cur Z3:%.3f Z4:%.3f)"),
+										dAlignSubZR, dAlignSubZL,
+										m_pMgrPool_link->pMaintControlMgr->GetOrgPos(AXIS_Z3), m_pMgrPool_link->pMaintControlMgr->GetOrgPos(AXIS_Z4));
+									CLogWrapper::GetInstance()->KMLOG(SYST, strLogAZ);
+								}
+							}
 							stPos[nAxis].axis=AXIS_Z2; stPos[nAxis].dPosition=dSafeZ2; nAxis++;
-							m_pMgrPool_link->pMaintControlMgr->MoveCmdPosReview(iStick, stPos, nAxis, SPEED_HIGH);
+							//m_pMgrPool_link->pMaintControlMgr->MoveCmdPosReview(iStick, stPos, nAxis, SPEED_HIGH);
+							// LYS 2026-09-18 같은 스틱이면 Sub Z 후퇴까지 건너뛰도록 마지막 인자로 알린다.
+							m_pMgrPool_link->pMaintControlMgr->MoveCmdPosReview(iStick, stPos, nAxis, SPEED_HIGH, true, (bNeedUnContact != true));
 							break;
 						case 1: // WAD
+							// LYS 2026-09-18 BACK 갠트리(X2) 이동이라 FRONT 헤드는 쉰다. Y3/Y4 를 df_HEAD_Y_IDLE_SAFETY
+							//                마커로 넘기면 ApplyIdleHeadSafetyY 가 Position.ini [SAFETY] 의
+							//                SafetyHeadY3/Y4 원시좌표로 바꿔 준다(헤드·정렬 오프셋이 더해지지 않는다).
+							//                Safety 값을 직접 넣으면 오프셋만큼 어긋나므로 마커를 쓸 것.
+							//                종속 갠트리 X3 는 이동 함수 안에서 이미 SafetyHeadX2 로 간다.
 							stPos[nAxis].axis=AXIS_Y1; stPos[nAxis].dPosition=dLeft;  nAxis++;
 							stPos[nAxis].axis=AXIS_Y2; stPos[nAxis].dPosition=dRight; nAxis++;
-							stPos[nAxis].axis=AXIS_Y3; stPos[nAxis].dPosition=dLeft2; nAxis++;
-							stPos[nAxis].axis=AXIS_Y4; stPos[nAxis].dPosition=dRight2; nAxis++;
+							//stPos[nAxis].axis=AXIS_Y3; stPos[nAxis].dPosition=dLeft2; nAxis++;
+							//stPos[nAxis].axis=AXIS_Y4; stPos[nAxis].dPosition=dRight2; nAxis++;
+							stPos[nAxis].axis=AXIS_Y3; stPos[nAxis].dPosition=df_HEAD_Y_IDLE_SAFETY; nAxis++;
+							stPos[nAxis].axis=AXIS_Y4; stPos[nAxis].dPosition=df_HEAD_Y_IDLE_SAFETY; nAxis++;
 							stPos[nAxis].axis=AXIS_X2; stPos[nAxis].dPosition=dHeadX+dOffX; nAxis++;
-							stPos[nAxis].axis=AXIS_Z1; stPos[nAxis].dPosition= dSpecZ; nAxis++;
+							// LYS 2026-09-07 Z1(OCP 미사용) -> Sub Z(Z3/Z4) 특성(WAD) Sub Z
+							// LYS 2026-09-18 값을 DLL 이 공유메모리로 넘긴 것(fData[58]/[59])으로 바꿨다.
+							//                GetRecipeInfo() 는 앱 쪽 C_OutRecipeFunc 사본이고 RECIPE 화면 경로에서는
+							//                OpenRecipe 가 불리지 않아 비어 있다 - Z3/Z4 가 늘 0 으로 내려가고 있었다.
+							//                Review(fData[50]/[51]) · VISION/ANGLE(fData[54~57]) 과 같은 처리다.
+							//stPos[nAxis].axis=AXIS_Z3; stPos[nAxis].dPosition=GetRecipeInfo()->m_sMotionSubZ.m_fWadSubzRight; nAxis++;
+							//stPos[nAxis].axis=AXIS_Z4; stPos[nAxis].dPosition=GetRecipeInfo()->m_sMotionSubZ.m_fWadSubzLeft; nAxis++;
+							{
+								double dWadSubZR = pRecipeEvent->m_sRunState.m_fData[58];
+								double dWadSubZL = pRecipeEvent->m_sRunState.m_fData[59];
+								CString strLogWZ;
+								strLogWZ.Format(_T("TestMode Move WAD - SubZ from recipe (Z3:%.3f Z4:%.3f)"), dWadSubZR, dWadSubZL);
+								CLogWrapper::GetInstance()->KMLOG(SYST, strLogWZ);
+								stPos[nAxis].axis=AXIS_Z3; stPos[nAxis].dPosition=dWadSubZR; nAxis++;
+								stPos[nAxis].axis=AXIS_Z4; stPos[nAxis].dPosition=dWadSubZL; nAxis++;
+							}
 							stPos[nAxis].axis=AXIS_Z2; stPos[nAxis].dPosition= dSafeZ2; nAxis++;
 							m_pMgrPool_link->pMaintControlMgr->MoveCmdPosWAD(stPos, nAxis, SPEED_HIGH);
 							break;
 						case 2: // Vision
-							stPos[nAxis].axis=AXIS_Y1; stPos[nAxis].dPosition=dLeft;  nAxis++;
-							stPos[nAxis].axis=AXIS_Y2; stPos[nAxis].dPosition=dRight; nAxis++;
+							// LYS 2026-09-18 FRONT 갠트리(X3) 이동이라 BACK 헤드는 쉰다. Y1/Y2 를 df_HEAD_Y_IDLE_SAFETY
+							//                마커로 넘기면 ApplyIdleHeadSafetyY 가 Position.ini [SAFETY] 의
+							//                SafetyHeadY1/Y2 원시좌표로 바꿔 준다(헤드·정렬 오프셋이 더해지지 않는다).
+							//                Safety 값을 직접 넣으면 오프셋만큼 어긋나므로 마커를 쓸 것.
+							//                종속 갠트리 X2 는 이동 함수 안에서 이미 SafetyHeadX1 로 간다.
+							//stPos[nAxis].axis=AXIS_Y1; stPos[nAxis].dPosition=dLeft;  nAxis++;
+							//stPos[nAxis].axis=AXIS_Y2; stPos[nAxis].dPosition=dRight; nAxis++;
+							stPos[nAxis].axis=AXIS_Y1; stPos[nAxis].dPosition=df_HEAD_Y_IDLE_SAFETY; nAxis++;
+							stPos[nAxis].axis=AXIS_Y2; stPos[nAxis].dPosition=df_HEAD_Y_IDLE_SAFETY; nAxis++;
 							stPos[nAxis].axis=AXIS_Y3; stPos[nAxis].dPosition=dLeft2; nAxis++;
 							stPos[nAxis].axis=AXIS_Y4; stPos[nAxis].dPosition=dRight2; nAxis++;
 							stPos[nAxis].axis=AXIS_X3; stPos[nAxis].dPosition=dHeadX+dOffX; nAxis++;
 							stPos[nAxis].axis=AXIS_Z1; stPos[nAxis].dPosition= dSafeZ1; nAxis++;
 							stPos[nAxis].axis=AXIS_Z2; stPos[nAxis].dPosition= dQualZ; nAxis++;
+							// LYS 2026-09-18 Sub Z(Z5/Z6) 하강. 실제 싸이클 VISION 스텝과 같은 축·같은 레시피 값이다.
+							//                값은 DLL 이 공유메모리로 실어 보낸다(DlgTestMode, fData[54]/[55]) - 앱 사본은 비어 있다.
+							{
+								double dVisionSubZR = pRecipeEvent->m_sRunState.m_fData[54];
+								double dVisionSubZL = pRecipeEvent->m_sRunState.m_fData[55];
+								CString strLogVZ;
+								strLogVZ.Format(_T("TestMode Move VISION - SubZ from recipe (Z5:%.3f Z6:%.3f)"), dVisionSubZR, dVisionSubZL);
+								CLogWrapper::GetInstance()->KMLOG(SYST, strLogVZ);
+								stPos[nAxis].axis=AXIS_Z5; stPos[nAxis].dPosition=dVisionSubZR; nAxis++;
+								stPos[nAxis].axis=AXIS_Z6; stPos[nAxis].dPosition=dVisionSubZL; nAxis++;
+							}
 							m_pMgrPool_link->pMaintControlMgr->MoveCmdPosVision(stPos, nAxis, SPEED_HIGH);
 							break;
 						case 3: // Angle
-							stPos[nAxis].axis=AXIS_Y1; stPos[nAxis].dPosition=dLeft;  nAxis++;
-							stPos[nAxis].axis=AXIS_Y2; stPos[nAxis].dPosition=dRight; nAxis++;
+							// LYS 2026-09-18 FRONT 갠트리(X3) 이동이라 BACK 헤드는 쉰다. Y1/Y2 를 df_HEAD_Y_IDLE_SAFETY
+							//                마커로 넘기면 ApplyIdleHeadSafetyY 가 Position.ini [SAFETY] 의
+							//                SafetyHeadY1/Y2 원시좌표로 바꿔 준다(헤드·정렬 오프셋이 더해지지 않는다).
+							//                Safety 값을 직접 넣으면 오프셋만큼 어긋나므로 마커를 쓸 것.
+							//                종속 갠트리 X2 는 이동 함수 안에서 이미 SafetyHeadX1 로 간다.
+							//stPos[nAxis].axis=AXIS_Y1; stPos[nAxis].dPosition=dLeft;  nAxis++;
+							//stPos[nAxis].axis=AXIS_Y2; stPos[nAxis].dPosition=dRight; nAxis++;
+							stPos[nAxis].axis=AXIS_Y1; stPos[nAxis].dPosition=df_HEAD_Y_IDLE_SAFETY; nAxis++;
+							stPos[nAxis].axis=AXIS_Y2; stPos[nAxis].dPosition=df_HEAD_Y_IDLE_SAFETY; nAxis++;
 							stPos[nAxis].axis=AXIS_Y3; stPos[nAxis].dPosition=dLeft2; nAxis++;
 							stPos[nAxis].axis=AXIS_Y4; stPos[nAxis].dPosition=dRight2; nAxis++;
 							stPos[nAxis].axis=AXIS_X3; stPos[nAxis].dPosition=dHeadX+dOffX; nAxis++;
 							stPos[nAxis].axis=AXIS_Z1; stPos[nAxis].dPosition=dSafeZ1; nAxis++;
 							stPos[nAxis].axis=AXIS_Z2; stPos[nAxis].dPosition=dAngleZ; nAxis++;
+							// LYS 2026-09-18 Sub Z(Z5/Z6) 하강. VISION 과 축은 같지만 ANGLE 전용 값을 쓴다(fData[56]/[57]).
+							//                레시피 SUB Z 그리드의 ANGLE RIGHT/LEFT 이며, 구파일에는 없어 0 으로 온다.
+							{
+								double dAngleSubZR = pRecipeEvent->m_sRunState.m_fData[56];
+								double dAngleSubZL = pRecipeEvent->m_sRunState.m_fData[57];
+								CString strLogGZ;
+								strLogGZ.Format(_T("TestMode Move ANGLE - SubZ from recipe (Z5:%.3f Z6:%.3f)"), dAngleSubZR, dAngleSubZL);
+								CLogWrapper::GetInstance()->KMLOG(SYST, strLogGZ);
+								stPos[nAxis].axis=AXIS_Z5; stPos[nAxis].dPosition=dAngleSubZR; nAxis++;
+								stPos[nAxis].axis=AXIS_Z6; stPos[nAxis].dPosition=dAngleSubZL; nAxis++;
+							}
 							m_pMgrPool_link->pMaintControlMgr->MoveCmdPosAngle(stPos, nAxis, SPEED_HIGH);
 							break;
 						}
@@ -1841,6 +2217,92 @@ UINT CRecipeEditMgr::ThreadRun()
 						m_pMgrPool_link->pMaintControlMgr->MoveCmdPos_ProbeUnContact(AXIS_PROBE_Z5, 0);
 					}
 						break;
+					// LYS 2026-09-16 TestMode Save Image - Review(Align CCD) 카메라 2대 라이브 그랩 저장
+					//   경로 <RESULT_PATH>IMAGE\TEST_MODE\yyyy-mm-dd\CAM_LEFT|CAM_RIGHT\yyyymmdd_hhmmss.png
+					//   cam0 = LEFT(Y2 헤드) / cam1 = RIGHT(Y1 헤드) - Align 레시피 CCD 설정 FrontLeft/FrontRight 가 index 0/1 에 대응하는 규약과 동일
+					case 4: // SAVE_IMAGE
+					{
+						SYSTEMTIME st;
+						::GetLocalTime(&st);
+						CString strRoot = CSystemParamShare::GetInstance()->GetResultFolderPath();
+						if (strRoot.IsEmpty() == false && strRoot.Right(1) != _T("\\")) strRoot += _T("\\");
+						CString strBase;
+						strBase.Format(_T("%sIMAGE\\TEST_MODE\\%04d-%02d-%02d\\"), strRoot, st.wYear, st.wMonth, st.wDay);
+						CString strTime;
+						strTime.Format(_T("%04d%02d%02d_%02d%02d%02d"), st.wYear, st.wMonth, st.wDay, st.wHour, st.wMinute, st.wSecond);
+						const TCHAR* szCam[2] = { _T("CAM_LEFT"), _T("CAM_RIGHT") };
+						for (int iCam = 0; iCam < 2; iCam++)
+						{
+							CAlignCameraMgr* pCam = m_pMgrPool_link->pAlignCameraMgr[iCam];
+							CString strLog;
+							if (pCam == nullptr)
+							{
+								strLog.Format(_T("TestMode SaveImage %s SKIP - camera %d not created"), szCam[iCam], iCam + 1);
+								CLogWrapper::GetInstance()->KMLOG(WARN, strLog);
+								continue;
+							}
+							CString strDir;
+							strDir.Format(_T("%s%s\\"), strBase, szCam[iCam]);
+							MakeDir(strDir);
+							CString strFile;
+							strFile.Format(_T("%s%s.png"), strDir, strTime);
+
+							Image* pImg = imaqCreateImage(IMAQ_IMAGE_RGB, 7);
+							if (pImg == nullptr) continue;
+							if (pCam->SnapImage(pImg, false) == VTM_RV_SUCCESSED)
+							{
+								// LYS 2026-09-16 CStrToChar 는 new[] 반환(해제 없음, 09-16 까지 sizeof 버그도 있었음) -> CT2A 스택 변환으로 교체
+								//int nWrite = imaqWritePNGFile2(pImg, CStrToChar(strFile), 750, NULL, FALSE);
+								CT2A szFile(strFile);
+								int nWrite = imaqWritePNGFile2(pImg, (const char*)szFile, 750, NULL, FALSE);
+								strLog.Format(_T("TestMode SaveImage %s %s -> %s"), szCam[iCam], (nWrite != 0) ? _T("OK") : _T("WRITE NG"), strFile);
+								CLogWrapper::GetInstance()->KMLOG((nWrite != 0) ? SYST : WARN, strLog);
+							}
+							else
+							{
+								strLog.Format(_T("TestMode SaveImage %s NG - SnapImage failed (connected=%d)"), szCam[iCam], pCam->IsConnected() ? 1 : 0);
+								CLogWrapper::GetInstance()->KMLOG(WARN, strLog);
+							}
+							imaqDispose(pImg);
+						}
+					}
+						break;
+					// LYS 2026-09-16 TestMode 카메라 조그(상대 이동) - Review/WAD = Y1/Y2(BACK 갠트리), VISION/ANGLE = Y3/Y4(FRONT 갠트리)
+					//   nData[0]: 0=Both 1=Left(Y2/Y4) 2=Right(Y1/Y3), fData[0]: 상대거리 mm(부호 포함). 두 축 대기 없이 지령 후 완료 대기. |거리| 100mm 초과는 거부
+					case 5: // CAM_JOG
+					{
+						int nMode = (int)pRecipeEvent->m_sRunState.m_dwData3;
+						int nCam  = pRecipeEvent->m_sRunState.m_nData[0];
+						double dRel = pRecipeEvent->m_sRunState.m_fData[0];
+						int nAxisLeft  = (nMode <= 1) ? AXIS_Y2 : AXIS_Y4;
+						int nAxisRight = (nMode <= 1) ? AXIS_Y1 : AXIS_Y3;
+						bool bLeft  = (nCam == 0 || nCam == 1);
+						bool bRight = (nCam == 0 || nCam == 2);
+						CString strLog;
+						if (fabs(dRel) < 0.0005 || fabs(dRel) > 100.0)
+						{
+							strLog.Format(_T("TestMode CamJog SKIP - rel %.3f out of range (0.0005 ~ 100)"), dRel);
+							CLogWrapper::GetInstance()->KMLOG(WARN, strLog);
+							break;
+						}
+						strLog.Format(_T("TestMode CamJog mode=%d cam=%d rel=%.3f -> %s%s"), nMode, nCam, dRel,
+							bLeft  ? ((nMode <= 1) ? _T("Y2 ") : _T("Y4 ")) : _T(""),
+							bRight ? ((nMode <= 1) ? _T("Y1") : _T("Y3")) : _T(""));
+						CLogWrapper::GetInstance()->KMLOG(SYST, strLog);
+
+						CMaintControlMgr* pMaint = m_pMgrPool_link->pMaintControlMgr;
+						long nRetL = df_MOTION_RV_SUCCESSED, nRetR = df_MOTION_RV_SUCCESSED;
+						if (bLeft)  nRetL = pMaint->MoveCmdPosR(nAxisLeft, dRel, false, SPEED_LOW);
+						if (bRight) nRetR = pMaint->MoveCmdPosR(nAxisRight, dRel, false, SPEED_LOW);
+						if (bLeft  && nRetL == df_MOTION_RV_SUCCESSED) nRetL = pMaint->DoWork_MotionDone(nAxisLeft);
+						if (bRight && nRetR == df_MOTION_RV_SUCCESSED) nRetR = pMaint->DoWork_MotionDone(nAxisRight);
+						if (nRetL != df_MOTION_RV_SUCCESSED || nRetR != df_MOTION_RV_SUCCESSED)
+						{
+							strLog.Format(_T("TestMode CamJog NG - left ret=%ld right ret=%ld"), nRetL, nRetR);
+							CLogWrapper::GetInstance()->KMLOG(WARN, strLog);
+						}
+					}
+						break;
 					}
 				}
 					break;
@@ -1848,7 +2310,8 @@ UINT CRecipeEditMgr::ThreadRun()
 					break;
 				}
 
-				pRecipeEvent->m_sRunState.m_nRunStatus = M_RUN_END;
+				//pRecipeEvent->m_sRunState.m_nRunStatus = M_RUN_END;
+				pRecipeEvent->m_sRunState.m_nRunStatus = (bCmdNG == true) ? M_RUN_NG : M_RUN_END;	// LYS 2026-09-16
 
 				GetShareMemoryMgrPtr()->SetSys_ProcessStatus(SPS_IDLE);
 			}

@@ -19,6 +19,28 @@ struct stGlassMeasAreaInfo
 
 class CBaseSequenceImpl;
 class CMeasureSequenceItemEngine;
+// LYS 2026-09-14 2Head 셀 짝짓기(순번 방식) - Measure 스텝 5벌(WAD/VISION/COLOR/ANGLE/VISION_COLOR)과
+//                수동 측정(CDlgSubManual_Meas::MakeMeasGroup)이 함께 쓴다.
+//   -측(X<0) / +측(X>=0) 셀을 각각 레시피 순서로 늘어놓고 k 번째끼리 묶어 pnPair[-측 index] = +측 index 로 채운다.
+//   짝이 없거나 두 셀 거리가 dHeadGap 이하이면 -1 (호출부 잔여 패스에서 단독 측정). pbUse == nullptr 이면 전 셀 사용.
+//   반환값 = 만들어진 짝 수.
+int MakeHeadPairByOrder(const vector<S_CellInfo>& vecCell, const bool* pbUse, int nArea, double dHeadGap, int* pnPair, LPCTSTR pszTag);
+// LYS 2026-09-14 짝 없는 셀 그룹(S_MeasPos 한쪽 m_nArea < 0)의 가짜 목표를 받은 Y1~Y4 축을 df_HEAD_Y_IDLE_SAFETY 로 바꾼다.
+//   가짜 목표 = 그 슬롯 m_fCellX + dShiftX (WAD Multi Point 는 포인트 X 만큼 더해 지령하므로 그 값을 넘긴다).
+//   실제 좌표 치환은 MoveCmdPosWAD/Vision/Color/Angle 의 ApplyIdleHeadSafetyY 가 한다. 반환 = 바꾼 축 수.
+struct stMotorPosition;
+class CPositionConfigMgr;
+class CMaintControlMgr;
+// LYS 2026-09-18 짝 없는 단독 셀을 어느 헤드가 맡을지 고른다. 반환 1 = Head2(+측 Y1/Y3), 0 = Head1(-측 Y2/Y4).
+//   구 규칙은 셀 X 부호만 봤다(2026-09-14 '> 0'). ANGLE 처럼 헤드 오프셋이 큰 모드는 같은 셀이라도
+//   담당 헤드에 따라 쉬는 헤드와의 간격이 크게 달라지고, 오프셋을 더한 목표가 그 축 SW 리밋을 벗어나기도 한다.
+//   그래서 두 후보를 다 계산해 '갈 수 있고 간격이 큰 쪽'을 고른다. 둘 다 범위 밖이면 구 부호 규칙으로 되돌아간다.
+//   dOffPlus/dOffMinus = 그 모드의 HEAD_OFFSET Y (Review 처럼 HEAD_OFFSET 이 없으면 0 또는 레시피 오프셋).
+int  PickSingleCellHead(CPositionConfigMgr* pPosCfg, CMaintControlMgr* pMaint, double dCellX,
+                        double dOffPlus, double dOffMinus, bool bFrontGantry, LPCTSTR pszTag);
+// LYS 2026-09-18 Position.ini [HEAD_OFFSET] Y 두 개를 한 번에 (nMode : 0 WAD / 1 ANGLE / 2 VISION / 3 COLOR)
+void GetHeadOffsetY(CPositionConfigMgr* pPosCfg, int nMode, double* pdPlus, double* pdMinus);
+int MarkIdleHeadSafety(stMotorPosition* pPos, int nAxis, const S_MeasPos& measPos, double dShiftX);
 class CDoWorkGlassMeasureStep
 {
 protected:

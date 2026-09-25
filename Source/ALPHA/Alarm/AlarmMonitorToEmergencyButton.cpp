@@ -75,7 +75,7 @@ UINT CAlarmMonitorToEmergencyButton::ThreadRun(LPVOID p1)
         {
 			// EMERGENCY 버튼은 매우 위험하므로 최대한 빠르게 체크 한다.
 			//Sleep(100);
-			Sleep(200);	// jsyoon 20211020 change
+			Sleep(50);	// jsyoon 20211020 change
 
             pThis->ThreadRun();
         }
@@ -128,7 +128,14 @@ UINT CAlarmMonitorToEmergencyButton::ThreadRun()
 		}
 	}
 
-	if (m_nNGCount > 3)
+	// LYS 2026-09-22 EMS 는 한 번만 1 로 읽혀도 즉시 중알람 (구: 4회 연속 1 이어야 발생).
+	//   읽는 값은 PLC 가 논리 처리한 M 비트 캐시라 전기적 채터링이 없고, 통신 실패(-1)는 위에서 이미 제외된다.
+	//   캐시는 M 스캐너가 약 220~250ms 마다 갱신하고 이 스레드는 약 70~95ms 마다 읽어서, PLC 가 한 스캔만 1 로 잡은
+	//   신호는 2~3 회만 읽혀 카운트가 3 을 못 넘었다 -> IO 그리드(같은 캐시, 1초 갱신)에는 보이는데 알람은 안 떴다.
+	//   EMS 01~16(M4010~4019, M4420~4425) 16개 모두 이 클래스라 전부 적용된다.
+	//   스캔 주기보다 짧은 펄스는 캐시에도 안 남으므로 그런 신호까지 잡으려면 PLC 측 래치가 필요하다.
+	//if (m_nNGCount > 3)
+	if (m_nNGCount >= 1)
 	{
 		CWindowEventHandler::GetInstance()->SendMessageToUI(enumWndID_FRAME, WM_MSG_UPDATE_POSITION_STATE, m_iEMOPosST, NULL);
 

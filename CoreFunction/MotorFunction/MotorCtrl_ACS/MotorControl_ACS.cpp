@@ -712,6 +712,29 @@ long CMotorControl_ACS::MoveJog(int iAxis, bool bDir)
     return acsc_Jog(hAcs, 0, m_cAxis[iAxis].m_iAxisMap, bDirection, NULL);
 }
 
+// LYS 2026-09-23 MC OFF Probe Z 긴급 후퇴용 절대 이동 - IT_8.6G_HBS CMotorControl_ACS::MoveToPos 이식.
+//   MoveCmdPosA 와 달리 STATE_MOT_DISABLE 검사를 하지 않는다(MC 가 끊기는 순간에도 일단 보낸다 - 꺼졌으면 ACS 가 거부).
+//   속도는 iSpeed != -1 이면 그 등급으로 바꾼다(긴급 후퇴는 SPEED_HIGH). 목표는 축 DimMin/Max 로 클램프한다.
+//   반환: MoveToPoint 와 같다(0 = 실패, 그 외 성공). 완료 대기는 없다.
+long CMotorControl_ACS::MoveToPos(int iAxis, double dPos, int iSpeed)
+{
+    int iAcs_mapping = m_cAxis[iAxis].m_iACSMap;
+    HANDLE hAcs = (iAcs_mapping < df_MAX_CTRL) ? m_hAcs[iAcs_mapping] : ACSC_INVALID;
+    if (hAcs == ACSC_INVALID) return -1;
+    if (m_cAxis[iAxis].m_setting.bUse == FALSE)
+        return 0;
+
+    if (iSpeed != -1)	SetSpeed(iAxis, iSpeed, 2);
+
+    if (dPos > m_cAxis[iAxis].m_setting.dDimMax) dPos = m_cAxis[iAxis].m_setting.dDimMax;
+    if (dPos < m_cAxis[iAxis].m_setting.dDimMin) dPos = m_cAxis[iAxis].m_setting.dDimMin;
+
+    double dMovePos = dPos - m_cAxis[iAxis].m_setting.dHomePos;
+    double dMovePos2 = dMovePos * m_cAxis[iAxis].m_iDir;
+
+    return MoveToPoint(iAxis, dMovePos2);
+}
+
 long CMotorControl_ACS::WaitMotionEnd(int iAxis, DWORD dwTimeout)
 {
     // LYS 2026-07-13 dual controller dispatch

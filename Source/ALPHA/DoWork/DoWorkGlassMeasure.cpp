@@ -41,7 +41,7 @@ CDoWorkGlassMeasure::CDoWorkGlassMeasure(stAuroraMgrPool &MgrPool)
 	m_vecSeqStep.push_back(dynamic_cast<CDoWorkGlassMeasureStep*>(new CDoWorkGlassMeasureStep_Probe_Contact(this, m_pMeasSeqItemEngine)));			// Probe Contact
 
 	// LYS 2026-06-30 Measure Step Ãß°¡ (OST, RTEST, AGING)
-	m_vecSeqStep.push_back(dynamic_cast<CDoWorkGlassMeasureStep*>(new CDoWorkGlassMeasureStep_OST(this, m_pMeasSeqItemEngine)));
+	m_vecSeqStep.push_back(dynamic_cast<CDoWorkGlassMeasureStep*>(new CDoWorkGlassMeasureStep_OST(this, m_pMeasSeqItemEngine))); 
 	m_vecSeqStep.push_back(dynamic_cast<CDoWorkGlassMeasureStep*>(new CDoWorkGlassMeasureStep_RTEST(this, m_pMeasSeqItemEngine)));
 	m_vecSeqStep.push_back(dynamic_cast<CDoWorkGlassMeasureStep*>(new CDoWorkGlassMeasureStep_AGING(this, m_pMeasSeqItemEngine)));
 	m_vecSeqStep.push_back(dynamic_cast<CDoWorkGlassMeasureStep*>(new CDoWorkGlassMeasureStep_AGING_PTN(this, m_pMeasSeqItemEngine)));	// LYS 2026-08-06 AgingCycle E3: per-item lighting

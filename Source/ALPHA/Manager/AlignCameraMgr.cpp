@@ -14,6 +14,7 @@ CAlignCameraMgr::CAlignCameraMgr(CString strConfigPath, CString strParamPath, CS
     : m_pIniHelper(new CIniHelper)
 	, m_pimaqctrlROI(nullptr)
 	, m_bShowROI(false)
+	, m_bSimImageMissingLogged(false)	// LYS 2026-09-05
 	, m_strRecipePath(strParamPath)
 	, m_strResultPath(strResultPath)
 {
@@ -93,6 +94,7 @@ void CAlignCameraMgr::Finalize()
 
 bool CAlignCameraMgr::InitDevice()
 {
+	CCriticalSectionSync single(&m_cs_get, TRUE);	// LYS 2026-09-07 라이브 스레드(SnapImage/ResetGrabber)와 직렬화 - CCD RESET 버튼 경합 방지
 	if (m_pFunction != nullptr)
 		return 	m_pFunction->CreateGrabber();
 	else
@@ -101,6 +103,7 @@ bool CAlignCameraMgr::InitDevice()
 
 void CAlignCameraMgr::CloseDevice()
 {
+	CCriticalSectionSync single(&m_cs_get, TRUE);	// LYS 2026-09-07
 	if (m_pFunction != nullptr)
 		m_pFunction->DeleteGrabber();
 }
@@ -225,8 +228,23 @@ int CAlignCameraMgr::SnapImage(Image* pImage, bool bDisplay)
 		{
 			CString strFilePath;
 			sFileName.Format(_T("%s%sAlign%d.png"), m_strRecipePath, STR_DIR_PATTERN, m_iCCDNum + 1);
-			if (m_pimaqctrlROI->LoadPattern(sFileName, pSnapImage) == TRUE)
+			// LYS 2026-09-05 시뮬 이미지 파일이 없으면 imaqReadFile을 호출하지 않는다.
+			//   라이브 스레드(DlgAlignCCD)가 100ms마다 호출하므로 파일 부재 시 IMAQImageCtrl.cpp(861) "File not found" TRACE가 초당 10회 쏟아지던 문제.
+			if (GetFileAttributes(sFileName) == INVALID_FILE_ATTRIBUTES)
+			{
+				if (m_bSimImageMissingLogged == false)
+				{
+					m_bSimImageMissingLogged = true;
+					CString strLog;
+					strLog.Format(_T("AlignCamera%d not connected and sim image not found: %s (live view stays blank)"), m_iCCDNum + 1, sFileName);
+					CLogWrapper::GetInstance()->KMLOG(WARN, strLog);
+				}
+			}
+			else if (m_pimaqctrlROI->LoadPattern(sFileName, pSnapImage) == TRUE)
+			{
+				m_bSimImageMissingLogged = false;
 				ret = true;
+			}
 		}
 	}
 	else
@@ -542,6 +560,136 @@ int CAlignCameraMgr::PtrnMatch(CPtrnInfo* pPtrnInfo, float* pfScore, int nMeasLe
 			nRet = VISION_PATTERN_DETECTED_FAIL;
 	}
 	///
+
+	return nRet;
+}
+
+// LYS 2026-09-25 등록된 패턴(pPtrnInfo[0..nCount-1], 빈 이름은 건너뜀)을 한 번 스냅한 영상에 전부 매칭하고
+//   점수가 가장 높은 패턴을 채택한다. 구 PtrnMatch 는 패턴 1개만 처리하고 Align 호출부가 첫 성공 패턴에서 break 하여
+//   "가장 높은 rate" 선택이 되지 않았다. 패턴마다 PtrnMatch 를 부르면 스냅이 N 번 일어나므로 여기서는 스냅 1회로 비교한다.
+//   결과: VTM_RV_SUCCESSED + *pnBestIdx(채택 인덱스, 없으면 -1) + *pfBestScore, pPtrnInfo[best].m_dRealX/Y 에 차이값(mm).
+//   ROI 표시·오버레이 저장은 채택 패턴 기준. 한 줄 로그에 패턴별 점수를 남긴다 ([AlignCCDn] PtrnMatchBest ...).
+int CAlignCameraMgr::PtrnMatchBest(CPtrnInfo* pPtrnInfo, int nCount, float* pfBestScore, int* pnBestIdx, int nMeasLens, bool bGlass)
+{
+	int nRet = VTM_RV_SUCCESSED;
+	int nBest = -1;
+	float fBest = -1.f;
+	CRect rectBest(0, 0, 0, 0);
+	CString strLog, strName, strPath;
+	Rect rectROI;
+	ZeroMemory(&rectROI, sizeof(Rect));
+
+	if (pfBestScore != nullptr) *pfBestScore = 0.f;
+	if (pnBestIdx != nullptr) *pnBestIdx = -1;
+	if (pPtrnInfo == nullptr || nCount <= 0)
+		return (nMeasLens == LENS_USE_ALIGN) ? VISION_ALIGN_DETECTED_FAIL : VISION_PATTERN_DETECTED_FAIL;
+
+	nRet = SnapImage(m_pSnapImage);
+	Image* pSnapImage = imaqCreateImage(IMAQ_IMAGE_RGB, INT_IMAGE_BORDER_SIZE);
+	imaqDuplicate(pSnapImage, m_pSnapImage);
+	imaqClearOverlay(m_pOverlayImage, NULL);
+
+	strLog.Format(_T("[AlignCCD%d] PtrnMatchBest(%s):"), m_iCCDNum + 1,
+		(nMeasLens == LENS_USE_ALIGN) ? ((bGlass == true) ? _T("GLASS") : _T("PROBE")) : _T("MEAS"));
+
+	if (nRet == VTM_RV_SUCCESSED && m_pimaqctrlROI != nullptr)
+	{
+		double mmPerPixelX = 3.78 / 1000.0, mmPerPixelY = 3.78 / 1000.0;	// PtrnMatch 와 동일 배율
+		int iW = 0, iH = 0;
+		imaqGetImageSize(m_pSnapImage, &iW, &iH);
+
+		for (int k = 0; k < nCount; k++)
+		{
+			CPtrnInfo* pInfo = &pPtrnInfo[k];
+			strName.Format(_T("%s"), pInfo->m_strName);
+			strName.Trim();
+			if (strName.IsEmpty() == TRUE) continue;	// 미등록 슬롯
+
+			imaqDuplicate(pInfo->m_pImgInput, m_pSnapImage);	// 모든 패턴을 같은 스냅 영상으로 비교
+
+			if (nMeasLens == LENS_USE_MEAS)
+				strPath.Format(_T("%s%s%s"), m_strRecipePath, STR_DIR_PATTERN, strName);
+			else
+				strPath.Format(_T("%s%s%s"), m_strRecipePath, STR_DIR_ALIGN, strName);
+			BOOL bLearn = m_pimaqctrlROI->LoadPattern(strPath, pInfo->m_pImgOrg);
+			if (bLearn == FALSE)
+			{
+				strPath.Format(_T("%s%s%s"), m_strRecipePath, STR_DIR_ALIGN, strName);
+				bLearn = m_pimaqctrlROI->LoadPattern(strPath, pInfo->m_pImgOrg);
+			}
+			if (bLearn == FALSE)
+			{
+				strLog.AppendFormat(_T(" #%d '%s'=LOAD NG"), k, strName);
+				continue;
+			}
+
+			CRect rect(0, 0, 0, 0);
+			float fScore = 0.f;
+			BOOL bSearch = FALSE;
+			if (nMeasLens == LENS_USE_ALIGN)
+				bSearch = m_pimaqctrlROI->SearchPattern(pInfo->m_pImgInput, pInfo->m_pImgOrg, (float)pInfo->m_dThreshold, bLearn, MATCH_SCORE, FALSE, &rect, &fScore, pInfo->m_iMethod, pInfo->m_nThreshold);
+			else
+				bSearch = m_pimaqctrlROI->SearchPattern(pInfo->m_pImgInput, pInfo->m_pImgOrg, (float)pInfo->m_dThreshold, bLearn, MATCH_DISTANCE, TRUE, &rect, &fScore, 0, 0, 1);
+
+			if (bSearch == FALSE)
+			{
+				strLog.AppendFormat(_T(" #%d '%s'=NG(%.1f)"), k, strName, fScore);
+				continue;
+			}
+
+			PointFloat midPoint;
+			midPoint.x = (float)(rect.left + (rect.Width() / 2)) - (iW / 2);
+			midPoint.y = (float)(rect.top  + (rect.Height() / 2)) - (iH / 2);
+			pInfo->m_dRealX = (midPoint.x * mmPerPixelX);
+			pInfo->m_dRealY = (midPoint.y * mmPerPixelY);
+			strLog.AppendFormat(_T(" #%d '%s'=%.1f"), k, strName, fScore);
+
+			if (fScore > fBest)
+			{
+				fBest = fScore;
+				nBest = k;
+				rectBest = rect;
+			}
+		}
+
+		if (nBest >= 0)
+		{
+			rectROI.left = rectBest.left;
+			rectROI.top = rectBest.top;
+			rectROI.height = rectBest.Height();
+			rectROI.width = rectBest.Width();
+			strLog.AppendFormat(_T(" -> best #%d (%.1f) dXY %.4f, %.4f mm"), nBest, fBest, pPtrnInfo[nBest].m_dRealX, pPtrnInfo[nBest].m_dRealY);
+		}
+		else
+		{
+			strLog += _T(" -> NONE");
+		}
+
+		SetShowROI((nBest >= 0), rectROI);
+		imaqOverlayRect(pSnapImage, rectROI, &IMAQ_RGB_RED, IMAQ_DRAW_VALUE, NULL);
+		imaqMergeOverlay(m_pOverlayImage, pSnapImage, NULL, 256, NULL);
+
+		if (nMeasLens == LENS_USE_ALIGN)
+			SaveImage(m_pOverlayImage, (bGlass == true) ? 0 : 1);	// Glass / Probe
+		else
+			SaveImage(m_pOverlayImage, 2);		// MEASURE
+	}
+	else
+	{
+		strLog += _T(" snap NG");
+	}
+
+	IMAQ_DISPOSE(pSnapImage);
+
+	CLogWrapper::GetInstance()->KMLOG((nBest >= 0) ? SYST : WARN, strLog);
+
+	if (pfBestScore != nullptr) *pfBestScore = (nBest >= 0) ? fBest : 0.f;
+	if (pnBestIdx != nullptr) *pnBestIdx = nBest;
+
+	if (nBest >= 0)
+		nRet = VTM_RV_SUCCESSED;
+	else
+		nRet = (nMeasLens == LENS_USE_ALIGN) ? VISION_ALIGN_DETECTED_FAIL : VISION_PATTERN_DETECTED_FAIL;
 
 	return nRet;
 }

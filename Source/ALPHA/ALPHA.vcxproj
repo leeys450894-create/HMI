@@ -456,6 +456,7 @@ copy $(OutDir)$(TargetName).pdb "$(ProjectDir)..\Bin\"
     <ClInclude Include="BaseSequenceBody.h" />
     <ClInclude Include="BaseSequenceImpl.h" />
     <ClInclude Include="CD_PopUp_Alarm_F.h" />
+    <ClInclude Include="CD_PopUp_Safety_Map.h" />
     <ClInclude Include="CD_PopUp_Motion_Move.h" />
     <ClInclude Include="CD_SelectColor.h" />
     <ClInclude Include="CommTcpIpObjectAgingPG.h" />
@@ -491,7 +492,7 @@ copy $(OutDir)$(TargetName).pdb "$(ProjectDir)..\Bin\"
     <ClInclude Include="DlgSubManual.h" />
     <ClInclude Include="DlgSubManual_Ionizer.h" />
     <ClInclude Include="DlgSubManual_Meas.h" />
-<ClInclude Include="DlgSubManual_STEP.h" />
+    <ClInclude Include="DlgSubManual_STEP.h" />
     <ClInclude Include="DlgSubManual_AgingSet.h" />
     <ClInclude Include="DlgSubManual_MultiMeas.h" />
     <ClInclude Include="DlgSubOperate.h" />
@@ -564,6 +565,7 @@ copy $(OutDir)$(TargetName).pdb "$(ProjectDir)..\Bin\"
     <ClInclude Include="Manager\LightControlMgr.h" />
     <ClInclude Include="Manager\LogInControlMgr.h" />
     <ClInclude Include="Manager\MaintControlMgr.h" />
+    <ClInclude Include="Manager\CMotionProbeToMcOffMove.h" />
     <ClInclude Include="Manager\MCCLogMgr.h" />
     <ClInclude Include="Manager\MotorControlMgr.h" />
     <ClInclude Include="Manager\NetworkConfigMgr.h" />
@@ -710,6 +712,7 @@ copy $(OutDir)$(TargetName).pdb "$(ProjectDir)..\Bin\"
     <ClCompile Include="BaseSequenceBody.cpp" />
     <ClCompile Include="BaseSequenceImpl.cpp" />
     <ClCompile Include="CD_PopUp_Alarm_F.cpp" />
+    <ClCompile Include="CD_PopUp_Safety_Map.cpp" />
     <ClCompile Include="CD_PopUp_Motion_Move.cpp" />
     <ClCompile Include="CD_SelectColor.cpp" />
     <ClCompile Include="CommTcpIpObjectAgingPG.cpp" />
@@ -747,7 +750,7 @@ copy $(OutDir)$(TargetName).pdb "$(ProjectDir)..\Bin\"
     <ClCompile Include="DlgSubManual.cpp" />
     <ClCompile Include="DlgSubManual_Ionizer.cpp" />
     <ClCompile Include="DlgSubManual_Meas.cpp" />
-<ClCompile Include="DlgSubManual_STEP.cpp" />
+    <ClCompile Include="DlgSubManual_STEP.cpp" />
     <ClCompile Include="DlgSubManual_AgingSet.cpp" />
     <ClCompile Include="DlgSubManual_MultiMeas.cpp" />
     <ClCompile Include="DlgSubOperate.cpp" />
@@ -817,6 +820,7 @@ copy $(OutDir)$(TargetName).pdb "$(ProjectDir)..\Bin\"
     <ClCompile Include="Manager\LightControlMgr.cpp" />
     <ClCompile Include="Manager\LogInControlMgr.cpp" />
     <ClCompile Include="Manager\MaintControlMgr.cpp" />
+    <ClCompile Include="Manager\CMotionProbeToMcOffMove.cpp" />
     <ClCompile Include="Manager\MCCLogMgr.cpp" />
     <ClCompile Include="Manager\MotorControlMgr.cpp" />
     <ClCompile Include="Manager\NetworkConfigMgr.cpp" />
@@ -908,6 +912,7 @@ copy $(OutDir)$(TargetName).pdb "$(ProjectDir)..\Bin\"
     <Image Include="res\Bitmap\btn_redg.bmp" />
     <Image Include="res\check32.bmp" />
     <Image Include="res\checkno32.bmp" />
+    <Image Include="res\ENV_SAFETY.bmp" />
     <Image Include="res\logo.bmp" />
     <Image Include="res\navigator\bitmap1.bmp" />
     <Image Include="res\Navigator\cycle_icon.ico" />

@@ -368,6 +368,32 @@ BOOL	C_InRecipeFunc::LoadRcpFile (CString strRcpName)
 		m_recipeMgr.m_sInfo.m_sMotionAngle.Clear();
 	}
 
+	// LYS 2026-09-09 Stick별 PROBE Z CONTACT OFFSET 로드 (V1009+ 꼬리 블록). 구파일은 S_StickInfo 생성자 기본값 0.0 유지
+	if (nVersion > RECIPE_FILE_V1009) {
+		ReadString (&File);	// _STICK_CONTACT_OFFSET_ Header
+		CStringArray strArrZ;
+		CString strZ = ReadString (&File);
+		dfcArryParsing (&strArrZ, strZ);
+		for (int i = 0; i < (int)m_recipeMgr.m_sData.m_vecStick.size (); i++) {
+			if (i < strArrZ.GetSize ()) m_recipeMgr.m_sData.m_vecStick[i].m_fProbeZOffset = _wtof (strArrZ.GetAt (i));
+			else                        m_recipeMgr.m_sData.m_vecStick[i].m_fProbeZOffset = 0.0;
+		}
+	}
+
+	// LYS 2026-09-18 ANGLE Sub Z 로드 (V1010+ 꼬리 블록).
+	//                기존 _HEAD_SUBZ_ 블록(V1005)에 두 값을 되살려 끼우면 V1005~V1009 로 저장된
+	//                레시피가 그 뒤 항목부터 통째로 밀려 깨진다. 그래서 꼬리에 새 블록으로 붙인다.
+	if (nVersion > RECIPE_FILE_V1010) {
+		ReadString (&File);	// _ANGLE_SUBZ_ Header
+		m_recipeMgr.m_sInfo.m_sMotionSubZ.m_fAngleSubzRight = ReadDouble (&File);
+		m_recipeMgr.m_sInfo.m_sMotionSubZ.m_fAngleSubzLeft  = ReadDouble (&File);
+	}
+	else {
+		// 구파일에는 값이 없다. VISION 값을 물려받지 않고 0 으로 둔다(예전엔 VISION 값으로 같이 움직였다).
+		m_recipeMgr.m_sInfo.m_sMotionSubZ.m_fAngleSubzRight = 0.0;
+		m_recipeMgr.m_sInfo.m_sMotionSubZ.m_fAngleSubzLeft  = 0.0;
+	}
+
 	File.Close ();
 
 	return TRUE;
@@ -476,6 +502,25 @@ BOOL	C_InRecipeFunc::LoadAlignRcpFile (CString strAlignRcpName)
 	m_recipeMgr.m_sAlign.m_sMargin.m_sProbeMargin.m_fR			= ReadDouble (&File);
 	m_recipeMgr.m_sAlign.m_sMargin.m_sProbeMargin.m_nCentering  = ReadInt (&File);
 	m_recipeMgr.m_sAlign.m_sMargin.m_sProbeMargin.m_nFindPtn	= ReadInt (&File);
+
+	// LYS 2026-09-04 SUB Z trailing block + EOF detect (versionless backward compat)
+	{
+		CString strSubZHdr;
+		if (File.ReadString (strSubZHdr) && strSubZHdr.Find (_T("_SUB_Z_")) >= 0)   // new file
+		{
+			m_recipeMgr.m_sAlign.m_sGlsAlign.m_fSubZRight   = ReadDouble (&File);
+			m_recipeMgr.m_sAlign.m_sGlsAlign.m_fSubZLeft    = ReadDouble (&File);
+			m_recipeMgr.m_sAlign.m_sProbeAlign.m_fSubZRight = ReadDouble (&File);
+			m_recipeMgr.m_sAlign.m_sProbeAlign.m_fSubZLeft  = ReadDouble (&File);
+		}
+		else   // old file : copy legacy BACK Z into both SUB Z
+		{
+			m_recipeMgr.m_sAlign.m_sGlsAlign.m_fSubZRight   = m_recipeMgr.m_sAlign.m_sGlsAlign.m_fFrontZ;
+			m_recipeMgr.m_sAlign.m_sGlsAlign.m_fSubZLeft    = m_recipeMgr.m_sAlign.m_sGlsAlign.m_fFrontZ;
+			m_recipeMgr.m_sAlign.m_sProbeAlign.m_fSubZRight = m_recipeMgr.m_sAlign.m_sProbeAlign.m_fBackZ;
+			m_recipeMgr.m_sAlign.m_sProbeAlign.m_fSubZLeft  = m_recipeMgr.m_sAlign.m_sProbeAlign.m_fBackZ;
+		}
+	}
 
 	File.Close ();
 

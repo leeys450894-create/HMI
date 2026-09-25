@@ -310,10 +310,16 @@ bool CDoWorkGlassAGINGStep_Aging::Run()
 				stPosition[3].dPosition = dRight;
 				stPosition[4].axis = AXIS_X2;   nAxis++;
 				stPosition[4].dPosition = dCurPos; // pRecipeData->m_vecStick[0].m_fStageY + dOffsetX;
-				stPosition[5].axis = AXIS_Z1;   nAxis++;
-				stPosition[5].dPosition = pRecipeData->m_sHeadZ.m_fQualityZ;
-				stPosition[6].axis = AXIS_Z2;   nAxis++;
-				stPosition[6].dPosition = pRecipeData->m_sHeadZ.m_fReviewZ;
+				// LYS 2026-09-07 Z1(BACK Z, OCP 미사용) -> Sub Z RIGHT/LEFT(Z3/Z4), 레시피 화상 Sub Z
+				{
+					S_RecipeInfo* pRcpSubZ = m_pShareItem->GetRecipeEditMgrPtr()->GetRecipeInfo();
+					stPosition[5].axis = AXIS_Z3;   nAxis++;
+					stPosition[5].dPosition = (pRcpSubZ != nullptr) ? pRcpSubZ->m_sMotionSubZ.m_fVisionSubzRight : 0.0;
+					stPosition[6].axis = AXIS_Z2;   nAxis++;
+					stPosition[6].dPosition = pRecipeData->m_sHeadZ.m_fReviewZ;
+					stPosition[7].axis = AXIS_Z4;   nAxis++;
+					stPosition[7].dPosition = (pRcpSubZ != nullptr) ? pRcpSubZ->m_sMotionSubZ.m_fVisionSubzLeft : 0.0;
+				}
 
 				lRet = m_pShareItem->GetMaintControlMgrPtr()->MoveCmdPosReview(iStick, stPosition, nAxis, SPEED_HIGH);
 			}
@@ -824,6 +830,16 @@ bool CDoWorkGlassAGINGStep_Move_Second::Run()
 			dEMove = pReciepInfo->m_sContactPos.m_fEndContactPos;
 			dOD = pReciepInfo->m_sContactPos.m_fAddOD;
 
+			// LYS 2026-09-09 OCP(P5 강제)에서 P5 슬롯의 스틱(m_nAgingStartStick[4])에 설정된 PROBE Z CONTACT OFFSET을 End에 가산. 슬롯 미지정(-1)이면 0
+			if (m_pShareItem->GetSystemConfigMgrPtr() && m_pShareItem->GetSystemConfigMgrPtr()->IsOCP())
+			{
+				int iZStick = m_pShareItem->GetShareMemoryMgrPtr()->GetSharedMemory()->m_nAgingStartStick[4];
+				double dZOffset = (iZStick >= 0) ? m_pShareItem->GetRecipeEditMgrPtr()->GetStickProbeZOffset(iZStick) : 0.0;
+				dEMove += dZOffset;
+				CString strLog;
+				strLog.Format(_T("AGING Probe Contact stick=%d offset=%.4f -> Z5 target=%.4f"), iZStick + 1, dZOffset, dEMove + dOD);
+				m_pShareItem->GetLogFileAccessorPtr()->KMLOG(SYST, strLog);
+			}
 			// 2023.05.12 change
 			lRet = m_pShareItem->GetMaintControlMgrPtr()->MoveCmdPos_ProbeContact(21, dfMove, dEMove, dOD);	 // Probe가 있는곳만 Contact
 			//if (nMaxStick == 5) // 2022.12.21 add 
@@ -1137,10 +1153,16 @@ bool CDoWorkGlassAGINGStep_Aging_Second::Run()
 				stPosition[3].dPosition = dRight;
 				stPosition[4].axis = AXIS_X2;   nAxis++;
 				stPosition[4].dPosition = pRecipeData->m_vecStick[0].m_fStageY + dOffsetX;
-				stPosition[5].axis = AXIS_Z1;   nAxis++;
-				stPosition[5].dPosition = pRecipeData->m_sHeadZ.m_fQualityZ;
-				stPosition[6].axis = AXIS_Z2;   nAxis++;
-				stPosition[6].dPosition = pRecipeData->m_sHeadZ.m_fReviewZ;
+				// LYS 2026-09-07 Z1(BACK Z, OCP 미사용) -> Sub Z RIGHT/LEFT(Z3/Z4), 레시피 화상 Sub Z
+				{
+					S_RecipeInfo* pRcpSubZ = m_pShareItem->GetRecipeEditMgrPtr()->GetRecipeInfo();
+					stPosition[5].axis = AXIS_Z3;   nAxis++;
+					stPosition[5].dPosition = (pRcpSubZ != nullptr) ? pRcpSubZ->m_sMotionSubZ.m_fVisionSubzRight : 0.0;
+					stPosition[6].axis = AXIS_Z2;   nAxis++;
+					stPosition[6].dPosition = pRecipeData->m_sHeadZ.m_fReviewZ;
+					stPosition[7].axis = AXIS_Z4;   nAxis++;
+					stPosition[7].dPosition = (pRcpSubZ != nullptr) ? pRcpSubZ->m_sMotionSubZ.m_fVisionSubzLeft : 0.0;
+				}
 
 				lRet = m_pShareItem->GetMaintControlMgrPtr()->MoveCmdPosReview(iStick, stPosition, nAxis, SPEED_HIGH);
 			}
@@ -1682,6 +1704,16 @@ bool CDoWorkGlassAGINGStep_Move_3::Run()
 			dEMove = pReciepInfo->m_sContactPos.m_fEndContactPos;
 			dOD = pReciepInfo->m_sContactPos.m_fAddOD;
 
+			// LYS 2026-09-09 OCP(P5 강제)에서 P5 슬롯의 스틱(m_nAgingStartStick[4])에 설정된 PROBE Z CONTACT OFFSET을 End에 가산. 슬롯 미지정(-1)이면 0
+			if (m_pShareItem->GetSystemConfigMgrPtr() && m_pShareItem->GetSystemConfigMgrPtr()->IsOCP())
+			{
+				int iZStick = m_pShareItem->GetShareMemoryMgrPtr()->GetSharedMemory()->m_nAgingStartStick[4];
+				double dZOffset = (iZStick >= 0) ? m_pShareItem->GetRecipeEditMgrPtr()->GetStickProbeZOffset(iZStick) : 0.0;
+				dEMove += dZOffset;
+				CString strLog;
+				strLog.Format(_T("AGING Probe Contact stick=%d offset=%.4f -> Z5 target=%.4f"), iZStick + 1, dZOffset, dEMove + dOD);
+				m_pShareItem->GetLogFileAccessorPtr()->KMLOG(SYST, strLog);
+			}
 			// 2023.05.12 change
 			lRet = m_pShareItem->GetMaintControlMgrPtr()->MoveCmdPos_ProbeContact(21, dfMove, dEMove, dOD);	 // Probe가 있는곳만 Contact
 			//if (nMaxStick == 5) // 2022.12.21 add 
@@ -1988,10 +2020,16 @@ bool CDoWorkGlassAGINGStep_Aging_3::Run()
 				stPosition[3].dPosition = dRight;
 				stPosition[4].axis = AXIS_X2;   nAxis++;
 				stPosition[4].dPosition = pRecipeData->m_vecStick[0].m_fStageY + dOffsetX;
-				stPosition[5].axis = AXIS_Z1;   nAxis++;
-				stPosition[5].dPosition = pRecipeData->m_sHeadZ.m_fQualityZ;
-				stPosition[6].axis = AXIS_Z2;   nAxis++;
-				stPosition[6].dPosition = pRecipeData->m_sHeadZ.m_fReviewZ;
+				// LYS 2026-09-07 Z1(BACK Z, OCP 미사용) -> Sub Z RIGHT/LEFT(Z3/Z4), 레시피 화상 Sub Z
+				{
+					S_RecipeInfo* pRcpSubZ = m_pShareItem->GetRecipeEditMgrPtr()->GetRecipeInfo();
+					stPosition[5].axis = AXIS_Z3;   nAxis++;
+					stPosition[5].dPosition = (pRcpSubZ != nullptr) ? pRcpSubZ->m_sMotionSubZ.m_fVisionSubzRight : 0.0;
+					stPosition[6].axis = AXIS_Z2;   nAxis++;
+					stPosition[6].dPosition = pRecipeData->m_sHeadZ.m_fReviewZ;
+					stPosition[7].axis = AXIS_Z4;   nAxis++;
+					stPosition[7].dPosition = (pRcpSubZ != nullptr) ? pRcpSubZ->m_sMotionSubZ.m_fVisionSubzLeft : 0.0;
+				}
 
 				lRet = m_pShareItem->GetMaintControlMgrPtr()->MoveCmdPosReview(iStick, stPosition, nAxis, SPEED_HIGH);
 			}

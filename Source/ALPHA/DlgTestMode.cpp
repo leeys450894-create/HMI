@@ -367,7 +367,7 @@ int CDlgTestMode::ManualMoveToCell()
 		stPosition[0].axis = AXIS_Y1;   nAxis++; stPosition[0].dPosition = dLeft;
 		stPosition[1].axis = AXIS_Y2;   nAxis++; stPosition[1].dPosition = dRight;
 		stPosition[2].axis = AXIS_X2;   nAxis++; stPosition[2].dPosition = dHeadX + dOffsetX;
-		stPosition[3].axis = AXIS_Z1;   nAxis++; stPosition[3].dPosition = dSafetyZ2;
+		stPosition[3].axis = AXIS_Z3;   nAxis++; stPosition[3].dPosition = 0.0;	// LYS 2026-09-07 Review: Z1(OCP 미사용) -> Sub Z(Z3). 안전높이(0) 유지, 하강 없음
 		stPosition[4].axis = AXIS_Z2;   nAxis++; stPosition[4].dPosition = pRecipeData->m_sHeadZ.m_fReviewZ;
 		nRet = pMaintCtrl->MoveCmdPosReview(iStick, stPosition, nAxis, SPEED_HIGH);
 		break;
@@ -375,7 +375,7 @@ int CDlgTestMode::ManualMoveToCell()
 		stPosition[0].axis = AXIS_Y1;   nAxis++; stPosition[0].dPosition = dLeft;
 		stPosition[1].axis = AXIS_Y2;   nAxis++; stPosition[1].dPosition = dRight;
 		stPosition[2].axis = AXIS_X2;   nAxis++; stPosition[2].dPosition = dHeadX + dOffsetX;
-		stPosition[3].axis = AXIS_Z1;   nAxis++; stPosition[3].dPosition = dSafetyZ2;
+		stPosition[3].axis = AXIS_Z3;   nAxis++; stPosition[3].dPosition = 0.0;	// LYS 2026-09-07 WAD: Z1(OCP 미사용) -> Sub Z(Z3). 안전높이(0) 유지, 하강 없음
 		stPosition[4].axis = AXIS_Z2;   nAxis++; stPosition[4].dPosition = pRecipeData->m_sHeadZ.m_fSpecZ;
 		nRet = pMaintCtrl->MoveCmdPosWAD(stPosition, nAxis, SPEED_HIGH);
 		break;
@@ -383,7 +383,7 @@ int CDlgTestMode::ManualMoveToCell()
 		stPosition[0].axis = AXIS_Y3;   nAxis++; stPosition[0].dPosition = dLeft;
 		stPosition[1].axis = AXIS_Y4;   nAxis++; stPosition[1].dPosition = dRight;
 		stPosition[2].axis = AXIS_X3;   nAxis++; stPosition[2].dPosition = dHeadX + dOffsetX;
-		stPosition[3].axis = AXIS_Z1;   nAxis++; stPosition[3].dPosition = pRecipeData->m_sHeadZ.m_fQualityZ;
+		//stPosition[3].axis = AXIS_Z1;   nAxis++; stPosition[3].dPosition = pRecipeData->m_sHeadZ.m_fQualityZ;
 		stPosition[4].axis = AXIS_Z2;   nAxis++; stPosition[4].dPosition = dSafetyZ1;
 		nRet = pMaintCtrl->MoveCmdPosVision(stPosition, nAxis, SPEED_HIGH);
 		break;
@@ -391,7 +391,7 @@ int CDlgTestMode::ManualMoveToCell()
 		stPosition[0].axis = AXIS_Y1;   nAxis++; stPosition[0].dPosition = dLeft;
 		stPosition[1].axis = AXIS_Y2;   nAxis++; stPosition[1].dPosition = dRight;
 		stPosition[2].axis = AXIS_X2;   nAxis++; stPosition[2].dPosition = dHeadX + dOffsetX;
-		stPosition[3].axis = AXIS_Z1;   nAxis++; stPosition[3].dPosition = dSafetyZ2;
+		//stPosition[3].axis = AXIS_Z1;   nAxis++; stPosition[3].dPosition = dSafetyZ2;
 		stPosition[4].axis = AXIS_Z2;   nAxis++; stPosition[4].dPosition = pRecipeData->m_sHeadZ.m_fAngleZ;
 		nRet = pMaintCtrl->MoveCmdPosAngle(stPosition, nAxis, SPEED_HIGH);
 		break;

@@ -74,6 +74,12 @@ long CMotorImpl::MoveJog(int iAxis, bool bDir)
 	return -1;
 }
 
+// LYS 2026-09-23 MC OFF Probe Z 긴급 후퇴용 (ACS 만 구현, 나머지 컨트롤러는 미지원 -1)
+long CMotorImpl::MoveToPos(int iAxis, double dPos, int iSpeed)
+{
+	return -1;
+}
+
 long CMotorImpl::WaitMotionEnd(int iAxis, DWORD dwTimeout)
 {
 	return -1;

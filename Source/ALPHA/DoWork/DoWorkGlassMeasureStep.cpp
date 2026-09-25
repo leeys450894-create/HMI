@@ -288,6 +288,168 @@ void CDoWorkGlassMeasureStep::ClearInnerIDForAging(int* pnCellNum)
 // OCP는 셀마다 마스크를 평가하므로 동일하게 맞춘다.
 // 의도적 fail-open: 사이클 없음 / 맵 없음 / 맵 행이 짧음은 모두 false(측정)라 기존 경로 불변.
 //=========================================================================
+// LYS 2026-09-14 2Head 셀 짝짓기 - 순번 방식 (선언부 DoWorkGlassMeasureStep.h 주석 참조)
+//   구 방식은 X<50 인 셀마다 A01 부터 "헤드 간격보다 멀리 떨어진 첫 셀"을 찾아 묶었다.
+//   (1) 50 기준에 걸린 +측 셀(2026-09-12 레시피 J01 X=41.8)이 -측으로 분류돼 J01-T01 이 1번 그룹이 되었고
+//   (2) 헤드 간격 값에 따라 짝이 한 칸씩 밀리며(L01-A01 / O01-A01 시작) 뒤쪽 셀이 단독 측정으로 남았다.
+//   이제 헤드 간격은 짝 선택에 쓰지 않고, 순번으로 묶인 쌍의 간섭 검사에만 쓴다.
+//=========================================================================
+// LYS 2026-09-18 단독 셀 담당 헤드 선택 (부호 -> 간격). 선언부 주석 참조.
+//=========================================================================
+void GetHeadOffsetY(CPositionConfigMgr* pPosCfg, int nMode, double* pdPlus, double* pdMinus)
+{
+	if (pdPlus  != nullptr) *pdPlus  = 0.0;
+	if (pdMinus != nullptr) *pdMinus = 0.0;
+	if (pPosCfg == nullptr) return;
+
+	double dX = 0.0, dY = 0.0, dZ = 0.0;
+	pPosCfg->GetHeadOffset(0, nMode, &dX, &dY, &dZ);	if (pdPlus  != nullptr) *pdPlus  = dY;
+	pPosCfg->GetHeadOffset(1, nMode, &dX, &dY, &dZ);	if (pdMinus != nullptr) *pdMinus = dY;
+}
+
+int PickSingleCellHead(CPositionConfigMgr* pPosCfg, CMaintControlMgr* pMaint, double dCellX,
+                       double dOffPlus, double dOffMinus, bool bFrontGantry, LPCTSTR pszTag)
+{
+	// 구 규칙(되돌아갈 기본값)
+	const int nFallback = (dCellX > 0) ? 1 : 0;
+	if (pPosCfg == nullptr || pMaint == nullptr) return nFallback;
+	if (pszTag == nullptr) pszTag = _T("");
+
+	const int nAxPlus  = bFrontGantry ? AXIS_Y3 : AXIS_Y1;
+	const int nAxMinus = bFrontGantry ? AXIS_Y4 : AXIS_Y2;
+
+	double dSafetyY1 = 0.0, dSafetyY2 = 0.0;
+	pPosCfg->GetSafetyPosition(nullptr, nullptr, nullptr, &dSafetyY1, &dSafetyY2, nullptr, nullptr);
+	double dSafetyY3 = dSafetyY1, dSafetyY4 = dSafetyY2;
+	pPosCfg->GetFrontHeadSafetyPosition(&dSafetyY3, &dSafetyY4);
+
+	const double dSafPlus  = bFrontGantry ? dSafetyY3 : dSafetyY1;
+	const double dSafMinus = bFrontGantry ? dSafetyY4 : dSafetyY2;
+
+	// Head2 : +측 축이 셀을 맡고 -측 축이 Safety 로 빠진다
+	double dGap2 = -1.0;
+	const double dAct2 = dCellX + dOffPlus;
+	if (dAct2 <= pMaint->GetMaxSWLimit(nAxPlus) && dAct2 >= pMaint->GetMinSWLimit(nAxPlus))
+		dGap2 = fabs(dAct2 - dSafMinus);
+
+	// Head1 : -측 축이 셀을 맡는다
+	double dGap1 = -1.0;
+	const double dAct1 = dCellX + dOffMinus;
+	if (dAct1 <= pMaint->GetMaxSWLimit(nAxMinus) && dAct1 >= pMaint->GetMinSWLimit(nAxMinus))
+		dGap1 = fabs(dAct1 - dSafPlus);
+
+	if (dGap2 < 0.0 && dGap1 < 0.0)
+	{
+		CString strLog;
+		strLog.Format(_T("[%s] PickHead cellX=%.3f - both heads out of SW limit (Head2 %.3f / Head1 %.3f), keep sign rule"),
+			pszTag, dCellX, dAct2, dAct1);
+		CLogWrapper::GetInstance()->KMLOG(WARN, strLog);
+		return nFallback;
+	}
+
+	const int nPick = (dGap2 >= dGap1) ? 1 : 0;
+
+	// 구 규칙과 달라질 때만 남긴다(셀마다 찍으면 글래스당 수십 줄이 된다).
+	if (nPick != nFallback)
+	{
+		CString strLog;
+		strLog.Format(_T("[%s] PickHead cellX=%.3f : %s -> %s (gap Head2 %.1f / Head1 %.1f)"),
+			pszTag, dCellX, nFallback ? _T("Head2") : _T("Head1"), nPick ? _T("Head2") : _T("Head1"), dGap2, dGap1);
+		CLogWrapper::GetInstance()->KMLOG(SYST, strLog);
+	}
+
+	return nPick;
+}
+
+int MakeHeadPairByOrder(const vector<S_CellInfo>& vecCell, const bool* pbUse, int nArea, double dHeadGap, int* pnPair, LPCTSTR pszTag)
+{
+	if (pnPair == nullptr || nArea <= 0) return 0;
+	if (pszTag == nullptr) pszTag = _T("");
+
+	for (int iCell = 0; iCell < nArea; iCell++)
+		pnPair[iCell] = -1;
+
+
+	vector<int> vecMinus, vecPlus;
+	for (int iCell = 0; iCell < nArea && iCell < (int)vecCell.size(); iCell++)
+	{
+		if (pbUse != nullptr && pbUse[iCell] != true)
+			continue;
+
+		if (vecCell[iCell].m_fCellX < 0)
+			vecMinus.push_back(iCell);
+		else
+			vecPlus.push_back(iCell);
+	}
+
+	int nMinus = (int)vecMinus.size();
+	int nPlus = (int)vecPlus.size();
+	int nCandidate = (nMinus < nPlus) ? nMinus : nPlus;
+	int nPair = 0;
+	int nGapNG = 0;	// LYS 2026-09-14
+	CString strFirstNG;
+	CString strLog;
+
+	for (int k = 0; k < nCandidate; k++)
+	{
+		const S_CellInfo& cellMinus = vecCell[vecMinus[k]];
+		const S_CellInfo& cellPlus = vecCell[vecPlus[k]];
+		double dDist = fabs(cellMinus.m_fCellX - cellPlus.m_fCellX);
+
+		if (dDist > dHeadGap)
+		{
+			pnPair[vecMinus[k]] = vecPlus[k];
+			nPair++;
+		}
+		else
+		{
+			// LYS 2026-09-14 쌍마다 WARN 을 찍으면 단변(스틱 폭 626.98 < 헤드 간격 720, 전 쌍 미달이 정상)에서 글래스당 백여 줄이 된다.
+			//   첫 건만 기억해 두었다가 아래 요약 한 줄(SYST)에 붙인다.
+			//strLog.Format(_T("[%s] HeadPair NG %s(X:%.3f) - %s(X:%.3f) dist %.3f <= HeadGap %.3f, measure single"),
+			//	pszTag, cellMinus.m_chCellID, cellMinus.m_fCellX, cellPlus.m_chCellID, cellPlus.m_fCellX, dDist, dHeadGap);
+			//CLogWrapper::GetInstance()->KMLOG(WARN, strLog);
+			if (nGapNG == 0)
+				strFirstNG.Format(_T(" firstNG %s(X:%.3f)-%s(X:%.3f) dist %.3f"), cellMinus.m_chCellID, cellMinus.m_fCellX, cellPlus.m_chCellID, cellPlus.m_fCellX, dDist);
+			nGapNG++;
+		}
+	}
+
+	strLog.Format(_T("[%s] HeadPair by order: minus=%d plus=%d pair=%d gapNG=%d single=%d HeadGap=%.3f%s"),
+		pszTag, nMinus, nPlus, nPair, nGapNG, nMinus + nPlus - nPair * 2, dHeadGap, (LPCTSTR)strFirstNG);
+	CLogWrapper::GetInstance()->KMLOG(SYST, strLog);
+
+	return nPair;
+}
+
+// LYS 2026-09-14 쉬는 헤드 표시 (선언부 DoWorkGlassMeasureStep.h 주석 참조).
+//   가짜 목표는 dLeft/dRight(그리고 dLeft2/dRight2)에 m_fCellX 를 그대로 대입해 만든 값이라 같은 식으로 계산하면 정확히 일치한다.
+//   nMeasArea==1 분기처럼 +-gap/2 로 덮어쓴 축은 값이 달라 건드리지 않는다.
+int MarkIdleHeadSafety(stMotorPosition* pPos, int nAxis, const S_MeasPos& measPos, double dShiftX)
+{
+	if (pPos == nullptr) return 0;
+
+	int nMark = 0;
+	for (int iSlot = 0; iSlot < 2; iSlot++)
+	{
+		if (measPos.m_sCellInfo[iSlot].m_nArea >= 0)
+			continue;
+
+		double dDummy = measPos.m_sCellInfo[iSlot].m_fCellX + dShiftX;
+		for (int k = 0; k < nAxis; k++)
+		{
+			int iAxis = pPos[k].axis;
+			if (iAxis != AXIS_Y1 && iAxis != AXIS_Y2 && iAxis != AXIS_Y3 && iAxis != AXIS_Y4)
+				continue;
+			if (fabs(pPos[k].dPosition - dDummy) > 1.0e-6)
+				continue;
+
+			pPos[k].dPosition = df_HEAD_Y_IDLE_SAFETY;
+			nMark++;
+		}
+	}
+	return nMark;
+}
+
 bool CDoWorkGlassMeasureStep::IsAgingCellSkip(int iKind, int iCell)
 {
 	if (m_pMeasSeqItemEngine == NULL) return false;
@@ -743,8 +905,14 @@ bool CDoWorkGlassMeasureStep_MoveMeasureArea::Run()
 				stPosition[2].axis = AXIS_X2;   nAxis++;
 				//stPosition[2].dPosition = pRecipeData->m_vecStick[0].m_fStageY + dOffsetX;
 				stPosition[2].dPosition = dOffsetX;		// LYS 2026-06-29
-				stPosition[3].axis = AXIS_Z1;   nAxis++;
-				stPosition[3].dPosition = pRecipeData->m_sHeadZ.m_fReviewZ;
+				// LYS 2026-09-07 Z1(BACK Z, OCP 미사용) -> Sub Z RIGHT/LEFT(Z3/Z4), 레시피 화상 Sub Z
+				{
+					S_RecipeInfo* pRcpSubZ = m_pShareItem->GetRecipeEditMgrPtr()->GetRecipeInfo();
+					stPosition[3].axis = AXIS_Z3;   nAxis++;
+					stPosition[3].dPosition = (pRcpSubZ != nullptr) ? pRcpSubZ->m_sMotionSubZ.m_fVisionSubzRight : 0.0;
+					stPosition[4].axis = AXIS_Z4;   nAxis++;
+					stPosition[4].dPosition = (pRcpSubZ != nullptr) ? pRcpSubZ->m_sMotionSubZ.m_fVisionSubzLeft : 0.0;
+				}
 				//stPosition[4].axis = AXIS_Z2;   nAxis++;
 				//stPosition[4].dPosition = pRecipeData->m_sHeadZ.m_fReviewZ;
 
@@ -1817,6 +1985,15 @@ bool CDoWorkGlassMeasureStep_Probe_Contact::Run()
 			dEMove = pRecipeInfo->m_sContactPos.m_fEndContactPos;
 			dOD = pRecipeInfo->m_sContactPos.m_fAddOD;
 
+			// LYS 2026-09-09 Stick별 PROBE Z CONTACT OFFSET(레시피 STAGE MOVE 5행, +=하강)을 End Contact에만 가산. Pre/UnContact 높이는 공통
+			double dZOffset = m_pShareItem->GetRecipeEditMgrPtr()->GetStickProbeZOffset(iStick);
+			dEMove += dZOffset;
+			{
+				CString strLog;
+				strLog.Format(_T("Probe Contact stick=%d offset=%.4f -> Z5 target=%.4f (End %.4f + OD %.4f)"), iStick + 1, dZOffset, dEMove + dOD, dEMove - dZOffset, dOD);
+				m_pShareItem->GetLogFileAccessorPtr()->KMLOG(SYST, strLog);
+			}
+
 			dCurZ = m_pShareItem->GetMaintControlMgrPtr()->GetCurPos(AXIS_PROBE_Z5);
 
 			if (fabs(dCurZ - (dEMove + dOD)) > 0.001)
@@ -1899,6 +2076,11 @@ bool CDoWorkGlassMeasureStep_Measure_WAD::Run()
 
 	m_pShareItem->GetLogFileAccessorPtr()->KMLOG(SYST, _T("CDoWorkGlassMeasureStep_Measure_WAD Start."));
 
+	//m_pShareItem->GetCommTcpIpFactoryMgr()->DoWorkInspectStart(enumTCPIpFactorytID_PG, enumTCPIpFactoryt_PGEvent_5);	// Turn On All		// LYS 2026-09-15 Manual TEST
+	//
+	//Sleep(1000);
+	//m_pShareItem->GetCommTcpIpFactoryMgr()->DoWorkInspectStart(enumTCPIpFactorytID_PG, enumTCPIpFactoryt_PGEvent_6);	// Turn On All		// LYS 2026-09-15 Manual TEST
+
 	bool bRet = true;
 	bool bUseMeas = true;
 	bool bUseMTP = false;
@@ -1962,6 +2144,17 @@ bool CDoWorkGlassMeasureStep_Measure_WAD::Run()
 			dHeadGap = dHeadGapRcp;
 		}
 
+		// LYS 2026-09-21 짝 판정 간격(헤드 오프셋 반영)을 함수 범위에 둔다 - 아래 그룹 생성 재검사도 이 값을 쓴다.
+		//   축 목표 = 셀 X + HEAD_OFFSET 이라 두 헤드 목표 간격 = 셀 거리 + (HEAD1_WAD_Y - HEAD2_WAD_Y).
+		//   인터락(INTERLOCKHEADGAPB / 레시피 BackHeadGap 중 큰 값)은 축 목표 간격을 보므로 셀 거리 기준은 dHeadGap - (o1 - o2).
+		double dPairGapWad = dHeadGap;
+		{
+			double dOffX = 0.0, dOffY1 = 0.0, dOffY2 = 0.0, dOffZ = 0.0;
+			m_pShareItem->GetPositionConfigMgrPtr()->GetHeadOffset(0, 0, &dOffX, &dOffY1, &dOffZ);	// HEAD1_WAD_Y (Y1)
+			m_pShareItem->GetPositionConfigMgrPtr()->GetHeadOffset(1, 0, &dOffX, &dOffY2, &dOffZ);	// HEAD2_WAD_Y (Y2)
+			dPairGapWad = dHeadGap - (dOffY1 - dOffY2);
+		}
+
 		double dGlassConactPos = 0;
 //		dGlassConactPos = m_pShareItem->GetMaintControlMgrPtr()->GetCurPos(AXIS_PROBE_X9) - 20;
 
@@ -1987,6 +2180,33 @@ bool CDoWorkGlassMeasureStep_Measure_WAD::Run()
 		S_MeasPos measPos;
 		cellFirst.Clear();
 		cellSecond.Clear();
+
+		// LYS 2026-09-14 2Head 짝을 순번 방식으로 먼저 정한다 (MakeHeadPairByOrder 주석 참조).
+		//   -측 셀 k 번째 <-> +측 셀 k 번째 (A01-K01, B01-L01 ...). 필터는 아래 루프와 같은 조건을 미리 적용한다.
+		int* pnPair = new int[nArea];
+		{
+			bool* pbUse = new bool[nArea];
+			for (int iCell = 0; iCell < nArea; iCell++)
+			{
+				pbUse[iCell] = true;
+				if (IsAgingCellSkip(enumAgingMeasKind_WAD, iCell))
+					pbUse[iCell] = false;
+				if (bUseSampling == true && pRecipeData->m_vecStick[iStick].m_vecCell[iCell].m_nSelectCell[M_SPEC] != 1)
+					pbUse[iCell] = false;
+			}
+			// LYS 2026-09-14 짝 조건에 헤드 오프셋 반영. 축 목표 = 셀 X + 오프셋이므로 두 헤드 목표 간격 = 셀 거리 + (HEAD1 - HEAD2 오프셋).
+			//   인터락(dHeadGap)은 축 목표 간격을 보므로 셀 거리 조건은 dHeadGap - (o1 - o2). WAD(+168/-168)는 384, VISION(0)은 그대로,
+			//   ANGLE(-272/+272)은 1264 가 되어 사실상 단독 측정으로 간다(2026-09-14 센서 배치 기준).
+			double dPairGap = dHeadGap;
+			{
+				double dOffX = 0.0, dOffY1 = 0.0, dOffY2 = 0.0, dOffZ = 0.0;
+				m_pShareItem->GetPositionConfigMgrPtr()->GetHeadOffset(0, 0, &dOffX, &dOffY1, &dOffZ);
+				m_pShareItem->GetPositionConfigMgrPtr()->GetHeadOffset(1, 0, &dOffX, &dOffY2, &dOffZ);
+				dPairGap = dHeadGap - (dOffY1 - dOffY2);
+			}
+			MakeHeadPairByOrder(pRecipeData->m_vecStick[iStick].m_vecCell, pbUse, nArea, dPairGap, pnPair, _T("WAD"));
+			delete[] pbUse;
+		}
 
 		if (nArea > 1)
 		{
@@ -2038,9 +2258,15 @@ bool CDoWorkGlassMeasureStep_Measure_WAD::Run()
 								}
 							}
 
-							if (cellFirst.m_fCellX < 50)
+							// LYS 2026-09-14 순번으로 정해진 짝(pnPair)만 묶는다. 구 조건(아래 주석)은 X<50 셀에 가장 먼저 걸린 먼 셀을 묶었다.
+							//if (cellFirst.m_fCellX < 50)
+							if (cellFirst.m_fCellX < 0 && pnPair[iGroup] == iSearch)
 							{
-								if (fabs(cellFirst.m_fCellX - cellSecond.m_fCellX) > dHeadGap)
+								// LYS 2026-09-21 재검사도 헤드 오프셋 반영 간격으로 본다. 구 조건은 셀 거리를 오프셋 없이 dHeadGap 과 비교해,
+								//   MakeHeadPairByOrder 가 만든 짝(A01<->K01 셀 거리 729.77, 헤드 간격 1065.77)을 765.6 미달로 전부 깨뜨렸다
+								//   -> WAD 20셀이 모두 단독 측정(2026-09-21 18:01, 로그 pair=10 인데 idle head Y2 -> SAFETY 반복).
+								//if (fabs(cellFirst.m_fCellX - cellSecond.m_fCellX) > dHeadGap)
+								if (fabs(cellFirst.m_fCellX - cellSecond.m_fCellX) > dPairGapWad)
 								{
 									pbSet[iGroup] = true;
 									pbSet[iSearch] = true;
@@ -2086,7 +2312,17 @@ bool CDoWorkGlassMeasureStep_Measure_WAD::Run()
 
 				cellFirst = pRecipeData->m_vecStick[iStick].m_vecCell[iGroup];
 
-				if (cellFirst.m_fCellX > 50 )  // Head 2
+				// LYS 2026-09-14 단독 셀 헤드 판정은 기존 50 기준 유지 - 0 으로 두면 X=0 셀을 RIGHT 헤드가 맡아 화질/시야각 Y3=-50(HW 리밋 -66 근처)이 된다.
+				// LYS 2026-09-14 (재변경) 단독 셀 헤드 판정 50 -> 0. VISION 오프셋이 0 이 되어 X=0 셀을 Y3/Y1 이 맡아도 되고,
+				//   ANGLE(Y3 = X-272)은 J01(41.8) 같은 +측 소형 X 셀을 Y3 로 보내야 쉬는 Y4 Safety(-860)와 근접센서 간격(580)이 나온다.
+				//if (cellFirst.m_fCellX > 50 )  // Head 2
+				// LYS 2026-09-18 담당 헤드를 셀 X 부호 대신 '갈 수 있고 쉬는 헤드와 간격이 큰 쪽'으로 고른다.
+				//                구 줄은 바로 아래에 남겨 두었다(원복 시 이 블록 제거 후 주석 해제).
+				//if (cellFirst.m_fCellX > 0)  // Head 2
+				double dOffHeadP = 0.0, dOffHeadM = 0.0;
+				GetHeadOffsetY(m_pShareItem->GetPositionConfigMgrPtr(), 0, &dOffHeadP, &dOffHeadM);
+				if (PickSingleCellHead(m_pShareItem->GetPositionConfigMgrPtr(), m_pShareItem->GetMaintControlMgrPtr(),
+					cellFirst.m_fCellX, dOffHeadP, dOffHeadM, false, _T("WAD")) != 0)  // Head 2
 				{
 					measPos.Clear();
 					//measPos.dHeadFrontG = cellFirst.m_fCellY + dGlassConactPos;
@@ -2133,6 +2369,7 @@ bool CDoWorkGlassMeasureStep_Measure_WAD::Run()
 		}
 
 		delete[] pbSet;
+		delete[] pnPair;	// LYS 2026-09-14
 
 		long nRet = df_MOTION_RV_SUCCESSED;
 		nMeasArea = (int)vecMeasGroup.size();
@@ -2396,20 +2633,35 @@ bool CDoWorkGlassMeasureStep_Measure_WAD::Run()
 							stPosition[2].dPosition = dLeft2;
 							stPosition[3].axis = AXIS_Y4;   nAxis++;
 							stPosition[3].dPosition = dRight2;
+							// LYS 2026-09-14 OCP: 첫 이동의 FRONT 헤드 Y3/Y4 는 셀이 아니라 [SAFETY] 로 보낸다 (df_HEAD_Y_IDLE_SAFETY -> MoveCmdPos* 의 ApplyIdleHeadSafetyY 가 치환).
+							//   WAD 첫 이동에서 반대편(FRONT) 헤드가 셀을 따라갈 이유가 없다(FRONT 갠트리는 SafetyHeadX2 에 있다).
+							//if (m_pShareItem->GetSystemConfigMgrPtr() && m_pShareItem->GetSystemConfigMgrPtr()->IsOCP())
+							//{
+							//	stPosition[2].dPosition = df_HEAD_Y_IDLE_SAFETY;
+							//	stPosition[3].dPosition = df_HEAD_Y_IDLE_SAFETY;
+							//}
+							// LYS 2026-09-21 위 블록을 다시 살린다 - WAD 첫 이동의 FRONT 헤드 Y3/Y4 는 셀을 따라가지 않고 [SAFETY] 로 간다.
+							//   주석 상태에서는 Y3/Y4 가 셀 좌표(dLeft2/dRight2)로 나가 A01(690.2)에서 Y3 상한 697 까지 6.8mm 뿐이었고,
+							//   WAD 가 짝 측정(A01+K01)이 된 뒤로는 셀이나 Glass Align 보정이 조금만 커져도 3901 이 난다.
+							//   마커는 MoveCmdPosWAD 의 ApplyIdleHeadSafetyY 가 SafetyHeadY3/Y4 원시좌표로 바꾼다. 둘째 이동부터는 Y3/Y4 를 안 보낸다.
+							if (m_pShareItem->GetSystemConfigMgrPtr() && m_pShareItem->GetSystemConfigMgrPtr()->IsOCP())
+							{
+								stPosition[2].dPosition = df_HEAD_Y_IDLE_SAFETY;
+								stPosition[3].dPosition = df_HEAD_Y_IDLE_SAFETY;
+							}
 							// LYS 2026-06-26 OCP: X3 primary axis for ANGLE
 							// LYS 2026-07-24 WAD gantry axis = X2 (user-confirmed; OCP AXIS_X was ignored by MoveCmdPosWAD)
 							stPosition[4].axis = AXIS_X2;	nAxis++;
 							stPosition[4].dPosition = vecMeasGroup[i].dHeadBackG + dOffsetX;
-							stPosition[5].axis = AXIS_Z1;   nAxis++;
-							stPosition[5].dPosition = vecMeasGroup[i].dHeadBackZ;
-							stPosition[6].axis = AXIS_Z2;   nAxis++;
-							stPosition[6].dPosition = vecMeasGroup[i].dHeadFrontZ; 
+							// LYS 2026-09-07 Z1(BACK Z, OCP 미사용) 항목 제거 - Sub Z(Z3/Z4)로 대체
+							stPosition[5].axis = AXIS_Z2;   nAxis++;
+							stPosition[5].dPosition = -1000;		// LYS 2026-09-10 Safety로 변경 하자
 
 							// LYS 2026-08-28 Sub Z(Z3/Z4) - WAD(특성) 측정
-							stPosition[7].axis = AXIS_Z3;   nAxis++;
-							stPosition[7].dPosition = (pReciepInfo != nullptr) ? pReciepInfo->m_sMotionSubZ.m_fWadSubzRight : 0.0;
-							stPosition[8].axis = AXIS_Z4;   nAxis++;
-							stPosition[8].dPosition = (pReciepInfo != nullptr) ? pReciepInfo->m_sMotionSubZ.m_fWadSubzLeft : 0.0;
+							stPosition[6].axis = AXIS_Z3;   nAxis++;
+							stPosition[6].dPosition = (pReciepInfo != nullptr) ? pReciepInfo->m_sMotionSubZ.m_fWadSubzRight : 0.0;
+							stPosition[7].axis = AXIS_Z4;   nAxis++;
+							stPosition[7].dPosition = (pReciepInfo != nullptr) ? pReciepInfo->m_sMotionSubZ.m_fWadSubzLeft : 0.0;
 						}
 
 						// jsyoon 2022.05.27 add
@@ -2418,10 +2670,10 @@ bool CDoWorkGlassMeasureStep_Measure_WAD::Run()
 						dXPos = vecMeasGroup[i].dHeadBackG - m_pShareItem->GetMaintControlMgrPtr()->GetCurPos(AXIS_X) - pReciepInfo->m_sMotionOffsetPos.m_fHeadReviewY;
 
 						m_pShareItem->GetCommTcpIpFactoryMgr()->SetMeasPos(enumTCPIpFactorytID_WAD, dXPos, dLeft, dRight);
-
 						/*!
 						* 이동시 Cross 축만 모션 완료 확인을 나중에 한다
 						*/
+						MarkIdleHeadSafety(stPosition, nAxis, vecMeasGroup[i], 0.0);	// LYS 2026-09-14 짝 없는 셀의 쉬는 헤드 -> [SAFETY]
 						nRet = m_pShareItem->GetMaintControlMgrPtr()->MoveCmdPosWAD(stPosition, nAxis, SPEED_HIGH, false);
 						if (nRet == VTM_RV_SUCCESSED)
 						{
@@ -2674,6 +2926,7 @@ bool CDoWorkGlassMeasureStep_Measure_WAD::Run()
 								stPosM[nAxisM].dPosition = vecMeasGroup[i].dHeadBackG + dOffsetX - ptMulti.dPosY;
 								nAxisM++;
 
+								MarkIdleHeadSafety(stPosM, nAxisM, vecMeasGroup[i], ptMulti.dPosX);	// LYS 2026-09-14 짝 없는 셀의 쉬는 헤드 -> [SAFETY]
 								nRet = m_pShareItem->GetMaintControlMgrPtr()->MoveCmdPosWAD(stPosM, nAxisM, SPEED_HIGH, false);
 
 								if (nRet == VTM_RV_SUCCESSED)
@@ -2876,6 +3129,33 @@ bool CDoWorkGlassMeasureStep_Measure_VISION::Run()
 		cellFirst.Clear();
 		cellSecond.Clear();
 
+		// LYS 2026-09-14 2Head 짝을 순번 방식으로 먼저 정한다 (MakeHeadPairByOrder 주석 참조).
+		//   -측 셀 k 번째 <-> +측 셀 k 번째 (A01-K01, B01-L01 ...). 필터는 아래 루프와 같은 조건을 미리 적용한다.
+		int* pnPair = new int[nArea];
+		{
+			bool* pbUse = new bool[nArea];
+			for (int iCell = 0; iCell < nArea; iCell++)
+			{
+				pbUse[iCell] = true;
+				if (IsAgingCellSkip(enumAgingMeasKind_VISION, iCell))
+					pbUse[iCell] = false;
+				if (bUseSampling == true && pRecipeData->m_vecStick[iStick].m_vecCell[iCell].m_nSelectCell[M_QUALITY] != 1)
+					pbUse[iCell] = false;
+			}
+			// LYS 2026-09-14 짝 조건에 헤드 오프셋 반영. 축 목표 = 셀 X + 오프셋이므로 두 헤드 목표 간격 = 셀 거리 + (HEAD1 - HEAD2 오프셋).
+			//   인터락(dHeadGap)은 축 목표 간격을 보므로 셀 거리 조건은 dHeadGap - (o1 - o2). WAD(+168/-168)는 384, VISION(0)은 그대로,
+			//   ANGLE(-272/+272)은 1264 가 되어 사실상 단독 측정으로 간다(2026-09-14 센서 배치 기준).
+			double dPairGap = dHeadGap;
+			{
+				double dOffX = 0.0, dOffY1 = 0.0, dOffY2 = 0.0, dOffZ = 0.0;
+				m_pShareItem->GetPositionConfigMgrPtr()->GetHeadOffset(0, 2, &dOffX, &dOffY1, &dOffZ);
+				m_pShareItem->GetPositionConfigMgrPtr()->GetHeadOffset(1, 2, &dOffX, &dOffY2, &dOffZ);
+				dPairGap = dHeadGap - (dOffY1 - dOffY2);
+			}
+			MakeHeadPairByOrder(pRecipeData->m_vecStick[iStick].m_vecCell, pbUse, nArea, dPairGap, pnPair, _T("VISION"));
+			delete[] pbUse;
+		}
+
 		if (nArea > 1)
 		{
 			for (int iGroup = 0; iGroup < nArea; iGroup++)
@@ -2926,7 +3206,9 @@ bool CDoWorkGlassMeasureStep_Measure_VISION::Run()
 								}
 							}
 
-							if (cellFirst.m_fCellX < 50)
+							// LYS 2026-09-14 순번으로 정해진 짝(pnPair)만 묶는다. 구 조건(아래 주석)은 X<50 셀에 가장 먼저 걸린 먼 셀을 묶었다.
+							//if (cellFirst.m_fCellX < 50)
+							if (cellFirst.m_fCellX < 0 && pnPair[iGroup] == iSearch)
 							{
 								if (fabs(cellFirst.m_fCellX - cellSecond.m_fCellX) > dHeadGap)
 								{
@@ -2975,7 +3257,17 @@ bool CDoWorkGlassMeasureStep_Measure_VISION::Run()
 
 				cellFirst = pRecipeData->m_vecStick[iStick].m_vecCell[iGroup];
 
-				if (cellFirst.m_fCellX > 50)
+				// LYS 2026-09-14 단독 셀 헤드 판정은 기존 50 기준 유지 - 0 으로 두면 X=0 셀을 RIGHT 헤드가 맡아 화질/시야각 Y3=-50(HW 리밋 -66 근처)이 된다.
+				// LYS 2026-09-14 (재변경) 단독 셀 헤드 판정 50 -> 0. VISION 오프셋이 0 이 되어 X=0 셀을 Y3/Y1 이 맡아도 되고,
+				//   ANGLE(Y3 = X-272)은 J01(41.8) 같은 +측 소형 X 셀을 Y3 로 보내야 쉬는 Y4 Safety(-860)와 근접센서 간격(580)이 나온다.
+				//if (cellFirst.m_fCellX > 50)
+				// LYS 2026-09-18 담당 헤드를 셀 X 부호 대신 '갈 수 있고 쉬는 헤드와 간격이 큰 쪽'으로 고른다.
+				//                구 줄은 바로 아래에 남겨 두었다(원복 시 이 블록 제거 후 주석 해제).
+				//if (cellFirst.m_fCellX > 0)  // Head 2
+				double dOffHeadP = 0.0, dOffHeadM = 0.0;
+				GetHeadOffsetY(m_pShareItem->GetPositionConfigMgrPtr(), 2, &dOffHeadP, &dOffHeadM);
+				if (PickSingleCellHead(m_pShareItem->GetPositionConfigMgrPtr(), m_pShareItem->GetMaintControlMgrPtr(),
+					cellFirst.m_fCellX, dOffHeadP, dOffHeadM, true, _T("VISION")) != 0)  // Head 2
 				{
 					measPos.Clear();
 					//measPos.dHeadBackG = cellFirst.m_fCellY + dGlassConactPos;
@@ -3025,6 +3317,7 @@ bool CDoWorkGlassMeasureStep_Measure_VISION::Run()
 		}
 
 		delete[] pbSet;
+		delete[] pnPair;	// LYS 2026-09-14
 
 		double dGlassSize = 0; // 925 / 2;
 		long nRet = df_MOTION_RV_SUCCESSED;
@@ -3327,6 +3620,13 @@ bool CDoWorkGlassMeasureStep_Measure_VISION::Run()
 						stPosition[2].dPosition = dLeft;
 						stPosition[3].axis = AXIS_Y2;   nAxis++;
 						stPosition[3].dPosition = dRight;
+						// LYS 2026-09-14 OCP: 첫 이동의 BACK 헤드 Y1/Y2 는 셀이 아니라 [SAFETY] 로 보낸다 (df_HEAD_Y_IDLE_SAFETY -> MoveCmdPos* 의 ApplyIdleHeadSafetyY 가 치환).
+						//   FRONT 측정 첫 이동에서 BACK 헤드가 셀 좌표 + ANGLE 오프셋(MoveCmdPosVision/Angle)으로 나가 ?272 면 Y1-Y2 간격이 인터락(720) 미달로 거부된다. BACK 갠트리는 이때 SafetyHeadX1 에 있다.
+						if (m_pShareItem->GetSystemConfigMgrPtr() && m_pShareItem->GetSystemConfigMgrPtr()->IsOCP())
+						{
+							stPosition[2].dPosition = df_HEAD_Y_IDLE_SAFETY;
+							stPosition[3].dPosition = df_HEAD_Y_IDLE_SAFETY;
+						}
 				
 						stPosition[4].axis = AXIS_X3;   nAxis++;
 						//stPosition[4].dPosition = vecMeasGroup[i].dHeadBackG + dOffsetX;
@@ -3351,7 +3651,8 @@ bool CDoWorkGlassMeasureStep_Measure_VISION::Run()
 						stPosition[12].axis = AXIS_FILTER2;   nAxis++;
 						stPosition[12].dPosition = 0;
 
-						// LYS 2026-08-28 Sub Z(Z5/Z6) - VISION/ANGLE(화질/시야각) 측정 공용
+						// LYS 2026-08-28 Sub Z(Z5/Z6)
+						// LYS 2026-09-18 ANGLE 이 전용 값(m_fAngleSubz*)으로 갈라져 여기는 VISION 전용이 됐다.
 						stPosition[13].axis = AXIS_Z5;   nAxis++;
 						stPosition[13].dPosition = (pReciepInfo != nullptr) ? pReciepInfo->m_sMotionSubZ.m_fVisionSubzRight : 0.0;
 						stPosition[14].axis = AXIS_Z6;   nAxis++;
@@ -3361,6 +3662,7 @@ bool CDoWorkGlassMeasureStep_Measure_VISION::Run()
 					/*!
 					* 이동시 Cross 축만 모션 완료 확인을 나중에 한다
 					*/
+					MarkIdleHeadSafety(stPosition, nAxis, vecMeasGroup[i], 0.0);	// LYS 2026-09-14 짝 없는 셀의 쉬는 헤드 -> [SAFETY]
 					nRet = m_pShareItem->GetMaintControlMgrPtr()->MoveCmdPosVision(stPosition, nAxis, SPEED_HIGH, false);
 
 					if (nRet == VTM_RV_SUCCESSED)
@@ -3610,7 +3912,7 @@ bool CDoWorkGlassMeasureStep_Measure_VISION::Run()
 
 	CWindowEventHandler::GetInstance()->SendMessageToUI(enumWndID_FRAME, WM_MSG_UPDATE_POSITION_STATE, enumDoWorkStateID_MEASURE_End, 4);
 
-	
+	//m_pShareItem->GetCommTcpIpFactoryMgr()->DoWorkInspectStart(enumTCPIpFactorytID_PG, enumTCPIpFactoryt_PGEvent_8);	// Turn On All		// LYS 2026-09-15 Manual TEST
 
 	return bRet;
 }
@@ -3698,6 +4000,31 @@ bool CDoWorkGlassMeasureStep_Measure_COLOR::Run()
 		cellFirst.Clear();
 		cellSecond.Clear();
 
+		// LYS 2026-09-14 2Head 짝을 순번 방식으로 먼저 정한다 (MakeHeadPairByOrder 주석 참조).
+		//   -측 셀 k 번째 <-> +측 셀 k 번째 (A01-K01, B01-L01 ...). 필터는 아래 루프와 같은 조건을 미리 적용한다.
+		int* pnPair = new int[nArea];
+		{
+			bool* pbUse = new bool[nArea];
+			for (int iCell = 0; iCell < nArea; iCell++)
+			{
+				pbUse[iCell] = true;
+				if (bUseSampling == true && pRecipeData->m_vecStick[iStick].m_vecCell[iCell].m_nSelectCell[M_COLOR] != 1)
+					pbUse[iCell] = false;
+			}
+			// LYS 2026-09-14 짝 조건에 헤드 오프셋 반영. 축 목표 = 셀 X + 오프셋이므로 두 헤드 목표 간격 = 셀 거리 + (HEAD1 - HEAD2 오프셋).
+			//   인터락(dHeadGap)은 축 목표 간격을 보므로 셀 거리 조건은 dHeadGap - (o1 - o2). WAD(+168/-168)는 384, VISION(0)은 그대로,
+			//   ANGLE(-272/+272)은 1264 가 되어 사실상 단독 측정으로 간다(2026-09-14 센서 배치 기준).
+			double dPairGap = dHeadGap;
+			{
+				double dOffX = 0.0, dOffY1 = 0.0, dOffY2 = 0.0, dOffZ = 0.0;
+				m_pShareItem->GetPositionConfigMgrPtr()->GetHeadOffset(0, 3, &dOffX, &dOffY1, &dOffZ);
+				m_pShareItem->GetPositionConfigMgrPtr()->GetHeadOffset(1, 3, &dOffX, &dOffY2, &dOffZ);
+				dPairGap = dHeadGap - (dOffY1 - dOffY2);
+			}
+			MakeHeadPairByOrder(pRecipeData->m_vecStick[iStick].m_vecCell, pbUse, nArea, dPairGap, pnPair, _T("COLOR"));
+			delete[] pbUse;
+		}
+
 		if (nArea > 1)
 		{
 			for (int iGroup = 0; iGroup < nArea; iGroup++)
@@ -3733,7 +4060,9 @@ bool CDoWorkGlassMeasureStep_Measure_COLOR::Run()
 								}
 							}
 
-							if (cellFirst.m_fCellX < 50)
+							// LYS 2026-09-14 순번으로 정해진 짝(pnPair)만 묶는다. 구 조건(아래 주석)은 X<50 셀에 가장 먼저 걸린 먼 셀을 묶었다.
+							//if (cellFirst.m_fCellX < 50)
+							if (cellFirst.m_fCellX < 0 && pnPair[iGroup] == iSearch)
 							{
 								if (fabs(cellFirst.m_fCellX - cellSecond.m_fCellX) > dHeadGap)
 								{
@@ -3777,7 +4106,17 @@ bool CDoWorkGlassMeasureStep_Measure_COLOR::Run()
 
 				cellFirst = pRecipeData->m_vecStick[iStick].m_vecCell[iGroup];
 
-				if (cellFirst.m_fCellX > 50)
+				// LYS 2026-09-14 단독 셀 헤드 판정은 기존 50 기준 유지 - 0 으로 두면 X=0 셀을 RIGHT 헤드가 맡아 화질/시야각 Y3=-50(HW 리밋 -66 근처)이 된다.
+				// LYS 2026-09-14 (재변경) 단독 셀 헤드 판정 50 -> 0. VISION 오프셋이 0 이 되어 X=0 셀을 Y3/Y1 이 맡아도 되고,
+				//   ANGLE(Y3 = X-272)은 J01(41.8) 같은 +측 소형 X 셀을 Y3 로 보내야 쉬는 Y4 Safety(-860)와 근접센서 간격(580)이 나온다.
+				//if (cellFirst.m_fCellX > 50)
+				// LYS 2026-09-18 담당 헤드를 셀 X 부호 대신 '갈 수 있고 쉬는 헤드와 간격이 큰 쪽'으로 고른다.
+				//                구 줄은 바로 아래에 남겨 두었다(원복 시 이 블록 제거 후 주석 해제).
+				//if (cellFirst.m_fCellX > 0)  // Head 2
+				double dOffHeadP = 0.0, dOffHeadM = 0.0;
+				GetHeadOffsetY(m_pShareItem->GetPositionConfigMgrPtr(), 3, &dOffHeadP, &dOffHeadM);
+				if (PickSingleCellHead(m_pShareItem->GetPositionConfigMgrPtr(), m_pShareItem->GetMaintControlMgrPtr(),
+					cellFirst.m_fCellX, dOffHeadP, dOffHeadM, true, _T("COLOR")) != 0)  // Head 2
 				{
 					measPos.Clear();
 					measPos.dHeadBackG = cellFirst.m_fCellY + dGlassConactPos;
@@ -3819,6 +4158,7 @@ bool CDoWorkGlassMeasureStep_Measure_COLOR::Run()
 		}
 
 		delete[] pbSet;
+		delete[] pnPair;	// LYS 2026-09-14
 
 		double dGlassSize = 0; // 925 / 2;
 		long nRet = df_MOTION_RV_SUCCESSED;
@@ -4033,6 +4373,7 @@ bool CDoWorkGlassMeasureStep_Measure_COLOR::Run()
 
 						double fSafetyH1 = 0.0, fSafetyH2 = 0.0;
 						m_pShareItem->GetPositionConfigMgrPtr()->GetSafetyPosition(nullptr, nullptr, nullptr, &fSafetyH1, &fSafetyH2, nullptr, nullptr);
+						m_pShareItem->GetPositionConfigMgrPtr()->GetFrontHeadSafetyPosition(&fSafetyH1, &fSafetyH2);	// LYS 2026-09-14 아래 dLeft2/dRight2 는 FRONT 헤드(Y3/Y4)라 FRONT Safety 키를 쓴다
 						if (bOneCell) {
 							if (k == 0)	dLeft2  = fSafetyH1;
 							else		dRight2 = fSafetyH2;
@@ -4056,6 +4397,13 @@ bool CDoWorkGlassMeasureStep_Measure_COLOR::Run()
 							stPosition[2].dPosition = dLeft;
 							stPosition[3].axis = AXIS_Y2;   nAxis++;
 							stPosition[3].dPosition = dRight;
+							// LYS 2026-09-14 OCP: 첫 이동의 BACK 헤드 Y1/Y2 는 셀이 아니라 [SAFETY] 로 보낸다 (df_HEAD_Y_IDLE_SAFETY -> MoveCmdPos* 의 ApplyIdleHeadSafetyY 가 치환).
+							//   FRONT 측정 첫 이동에서 BACK 헤드가 셀 좌표 + ANGLE 오프셋(MoveCmdPosVision/Angle)으로 나가 ?272 면 Y1-Y2 간격이 인터락(720) 미달로 거부된다. BACK 갠트리는 이때 SafetyHeadX1 에 있다.
+							if (m_pShareItem->GetSystemConfigMgrPtr() && m_pShareItem->GetSystemConfigMgrPtr()->IsOCP())
+							{
+								stPosition[2].dPosition = df_HEAD_Y_IDLE_SAFETY;
+								stPosition[3].dPosition = df_HEAD_Y_IDLE_SAFETY;
+							}
 						
 							stPosition[4].axis = AXIS_X3;   nAxis++;
 							stPosition[4].dPosition = vecMeasGroup[i].dHeadBackG + dOffsetX;	// 2023.07.05 add
@@ -4069,6 +4417,7 @@ bool CDoWorkGlassMeasureStep_Measure_COLOR::Run()
 						/*!
 						* 이동시 Cross 축만 모션 완료 확인을 나중에 한다
 						*/
+						MarkIdleHeadSafety(stPosition, nAxis, vecMeasGroup[i], 0.0);	// LYS 2026-09-14 짝 없는 셀의 쉬는 헤드 -> [SAFETY]
 						nRet = m_pShareItem->GetMaintControlMgrPtr()->MoveCmdPosColor(stPosition, nAxis, SPEED_HIGH, false);
 
 						if (nRet == VTM_RV_SUCCESSED)
@@ -4308,7 +4657,34 @@ bool CDoWorkGlassMeasureStep_Measure_ANGLE::Run()
 
 		// LYS 2026-08-26 특성 Z축 인터락
 		double dBackZ = 0;
-		m_pShareItem->GetPositionConfigMgrPtr()->GetSafetyPosition(nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, &dBackZ);
+		//m_pShareItem->GetPositionConfigMgrPtr()->GetSafetyPosition(nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, &dBackZ);
+
+		// LYS 2026-09-14 2Head 짝을 순번 방식으로 먼저 정한다 (MakeHeadPairByOrder 주석 참조).
+		//   -측 셀 k 번째 <-> +측 셀 k 번째 (A01-K01, B01-L01 ...). 필터는 아래 루프와 같은 조건을 미리 적용한다.
+		int* pnPair = new int[nArea];
+		{
+			bool* pbUse = new bool[nArea];
+			for (int iCell = 0; iCell < nArea; iCell++)
+			{
+				pbUse[iCell] = true;
+				if (IsAgingCellSkip(enumAgingMeasKind_ANGLE, iCell))
+					pbUse[iCell] = false;
+				if (bUseSampling == true && pRecipeData->m_vecStick[iStick].m_vecCell[iCell].m_nSelectCell[M_ANGLE] != 1)
+					pbUse[iCell] = false;
+			}
+			// LYS 2026-09-14 짝 조건에 헤드 오프셋 반영. 축 목표 = 셀 X + 오프셋이므로 두 헤드 목표 간격 = 셀 거리 + (HEAD1 - HEAD2 오프셋).
+			//   인터락(dHeadGap)은 축 목표 간격을 보므로 셀 거리 조건은 dHeadGap - (o1 - o2). WAD(+168/-168)는 384, VISION(0)은 그대로,
+			//   ANGLE(-272/+272)은 1264 가 되어 사실상 단독 측정으로 간다(2026-09-14 센서 배치 기준).
+			double dPairGap = dHeadGap;
+			{
+				double dOffX = 0.0, dOffY1 = 0.0, dOffY2 = 0.0, dOffZ = 0.0;
+				m_pShareItem->GetPositionConfigMgrPtr()->GetHeadOffset(0, 1, &dOffX, &dOffY1, &dOffZ);
+				m_pShareItem->GetPositionConfigMgrPtr()->GetHeadOffset(1, 1, &dOffX, &dOffY2, &dOffZ);
+				dPairGap = dHeadGap - (dOffY1 - dOffY2);
+			}
+			MakeHeadPairByOrder(pRecipeData->m_vecStick[iStick].m_vecCell, pbUse, nArea, dPairGap, pnPair, _T("ANGLE"));
+			delete[] pbUse;
+		}
 
 		if (nArea > 1)
 		{
@@ -4360,7 +4736,9 @@ bool CDoWorkGlassMeasureStep_Measure_ANGLE::Run()
 								}
 							}
 
-							if (cellFirst.m_fCellX < 50)
+							// LYS 2026-09-14 순번으로 정해진 짝(pnPair)만 묶는다. 구 조건(아래 주석)은 X<50 셀에 가장 먼저 걸린 먼 셀을 묶었다.
+							//if (cellFirst.m_fCellX < 50)
+							if (cellFirst.m_fCellX < 0 && pnPair[iGroup] == iSearch)
 							{
 								if (fabs(cellFirst.m_fCellX - cellSecond.m_fCellX) > dHeadGap)
 								{
@@ -4406,7 +4784,17 @@ bool CDoWorkGlassMeasureStep_Measure_ANGLE::Run()
 
 				cellFirst = pRecipeData->m_vecStick[iStick].m_vecCell[iGroup];
 
-				if (cellFirst.m_fCellX > 50)
+				// LYS 2026-09-14 단독 셀 헤드 판정은 기존 50 기준 유지 - 0 으로 두면 X=0 셀을 RIGHT 헤드가 맡아 화질/시야각 Y3=-50(HW 리밋 -66 근처)이 된다.
+				// LYS 2026-09-14 (재변경) 단독 셀 헤드 판정 50 -> 0. VISION 오프셋이 0 이 되어 X=0 셀을 Y3/Y1 이 맡아도 되고,
+				//   ANGLE(Y3 = X-272)은 J01(41.8) 같은 +측 소형 X 셀을 Y3 로 보내야 쉬는 Y4 Safety(-860)와 근접센서 간격(580)이 나온다.
+				//if (cellFirst.m_fCellX > 50)
+				// LYS 2026-09-18 담당 헤드를 셀 X 부호 대신 '갈 수 있고 쉬는 헤드와 간격이 큰 쪽'으로 고른다.
+				//                구 줄은 바로 아래에 남겨 두었다(원복 시 이 블록 제거 후 주석 해제).
+				//if (cellFirst.m_fCellX > 0)  // Head 2
+				double dOffHeadP = 0.0, dOffHeadM = 0.0;
+				GetHeadOffsetY(m_pShareItem->GetPositionConfigMgrPtr(), 1, &dOffHeadP, &dOffHeadM);
+				if (PickSingleCellHead(m_pShareItem->GetPositionConfigMgrPtr(), m_pShareItem->GetMaintControlMgrPtr(),
+					cellFirst.m_fCellX, dOffHeadP, dOffHeadM, true, _T("ANGLE")) != 0)  // Head 2
 				{
 					measPos.Clear();
 					measPos.dHeadFrontG = cellFirst.m_fCellY + dGlassConactPos;
@@ -4452,6 +4840,7 @@ bool CDoWorkGlassMeasureStep_Measure_ANGLE::Run()
 		}
 
 		delete[] pbSet;
+		delete[] pnPair;	// LYS 2026-09-14
 
 		double dGlassSize = 0;//925 / 2;
 		long nRet = df_MOTION_RV_SUCCESSED;
@@ -4619,7 +5008,7 @@ bool CDoWorkGlassMeasureStep_Measure_ANGLE::Run()
 					ClearInnerIDForAging(nUseCELLID);	// LYS 2026-08-12 AgingCycle R2
 					GenMeasID(nUseCELLID, bMeasProbe, *cCellID);
 
-					stMotorPosition stPosition[20];	// LYS 2026-08-19 7 head + 10 angle module axes
+					stMotorPosition stPosition[22];	// LYS 2026-08-19 7 head + 10 angle module axes
 					ZeroMemory(&stPosition, sizeof(stPosition));
 					int nAxis = 0;
 
@@ -4684,10 +5073,10 @@ bool CDoWorkGlassMeasureStep_Measure_ANGLE::Run()
 					}
 					else
 					{
-						stPosition[0].axis = AXIS_Y1;   nAxis++;
-						stPosition[0].dPosition = dLeft;
-						stPosition[1].axis = AXIS_Y2;   nAxis++;
-						stPosition[1].dPosition = dRight;
+						//stPosition[0].axis = AXIS_Y1;   nAxis++;
+						//stPosition[0].dPosition = dLeft;
+						//stPosition[1].axis = AXIS_Y2;   nAxis++;
+						//stPosition[1].dPosition = dRight;
 						stPosition[2].axis = AXIS_Y3;   nAxis++;
 						stPosition[2].dPosition = dLeft2;
 						stPosition[3].axis = AXIS_Y4;   nAxis++;
@@ -4736,17 +5125,28 @@ bool CDoWorkGlassMeasureStep_Measure_ANGLE::Run()
 							stPosition[16].axis = AXIS_ANGLE_AZM2;	nAxis++;
 							stPosition[16].dPosition = pReciepInfo->m_sMotionAngle.m_fAngleAzimuth2;
 
-							// LYS 2026-08-28 Sub Z(Z5/Z6) - VISION/ANGLE(화질/시야각) 측정 공용
+							//LYS 2026-08-28 Sub Z(Z5/Z6) - VISION/ANGLE(화질/시야각) 측정 공용
+							// LYS 2026-09-18 ANGLE 은 VISION 과 Sub Z 축(Z5/Z6)은 같지만 목표 높이를 따로 쓴다.
+							//                광학계가 달라 초점 거리가 같지 않다. 레시피 SUB Z 그리드의 ANGLE RIGHT/LEFT.
+							//                구파일(V1009 이하)에는 값이 없어 0 으로 로드된다 - 레시피에 값을 넣고 저장할 것.
 							stPosition[17].axis = AXIS_Z5;	nAxis++;
-							stPosition[17].dPosition = pReciepInfo->m_sMotionSubZ.m_fVisionSubzRight;
+							//stPosition[17].dPosition = pReciepInfo->m_sMotionSubZ.m_fVisionSubzRight;
+							stPosition[17].dPosition = pReciepInfo->m_sMotionSubZ.m_fAngleSubzRight;
 							stPosition[18].axis = AXIS_Z6;	nAxis++;
-							stPosition[18].dPosition = pReciepInfo->m_sMotionSubZ.m_fVisionSubzLeft;
+							//stPosition[18].dPosition = pReciepInfo->m_sMotionSubZ.m_fVisionSubzLeft;
+							stPosition[18].dPosition = pReciepInfo->m_sMotionSubZ.m_fAngleSubzLeft;
+
+							stPosition[19].axis = AXIS_Z3;	nAxis++;
+							stPosition[19].dPosition = 0;
+							stPosition[20].axis = AXIS_Z4;	nAxis++;
+							stPosition[20].dPosition = 0;
 						}
 					}
 
 					/*!
 					* 이동시 Cross 축만 모션 완료 확인을 나중에 한다
 					*/
+					MarkIdleHeadSafety(stPosition, nAxis, vecMeasGroup[i], 0.0);	// LYS 2026-09-14 짝 없는 셀의 쉬는 헤드 -> [SAFETY]
 					nRet = m_pShareItem->GetMaintControlMgrPtr()->MoveCmdPosAngle(stPosition, nAxis, SPEED_HIGH, false);
 
 					if (nRet == VTM_RV_SUCCESSED)
@@ -5058,6 +5458,31 @@ bool CDoWorkGlassMeasureStep_Measure_VISION_COLOR::Run()
 		cellFirst.Clear();
 		cellSecond.Clear();
 
+		// LYS 2026-09-14 2Head 짝을 순번 방식으로 먼저 정한다 (MakeHeadPairByOrder 주석 참조).
+		//   -측 셀 k 번째 <-> +측 셀 k 번째 (A01-K01, B01-L01 ...). 필터는 아래 루프와 같은 조건을 미리 적용한다.
+		int* pnPair = new int[nArea];
+		{
+			bool* pbUse = new bool[nArea];
+			for (int iCell = 0; iCell < nArea; iCell++)
+			{
+				pbUse[iCell] = true;
+				if (bUseSampling == true && pRecipeData->m_vecStick[iStick].m_vecCell[iCell].m_nSelectCell[M_QUALITY] != 1)
+					pbUse[iCell] = false;
+			}
+			// LYS 2026-09-14 짝 조건에 헤드 오프셋 반영. 축 목표 = 셀 X + 오프셋이므로 두 헤드 목표 간격 = 셀 거리 + (HEAD1 - HEAD2 오프셋).
+			//   인터락(dHeadGap)은 축 목표 간격을 보므로 셀 거리 조건은 dHeadGap - (o1 - o2). WAD(+168/-168)는 384, VISION(0)은 그대로,
+			//   ANGLE(-272/+272)은 1264 가 되어 사실상 단독 측정으로 간다(2026-09-14 센서 배치 기준).
+			double dPairGap = dHeadGap;
+			{
+				double dOffX = 0.0, dOffY1 = 0.0, dOffY2 = 0.0, dOffZ = 0.0;
+				m_pShareItem->GetPositionConfigMgrPtr()->GetHeadOffset(0, 2, &dOffX, &dOffY1, &dOffZ);
+				m_pShareItem->GetPositionConfigMgrPtr()->GetHeadOffset(1, 2, &dOffX, &dOffY2, &dOffZ);
+				dPairGap = dHeadGap - (dOffY1 - dOffY2);
+			}
+			MakeHeadPairByOrder(pRecipeData->m_vecStick[iStick].m_vecCell, pbUse, nArea, dPairGap, pnPair, _T("VISION_COLOR"));
+			delete[] pbUse;
+		}
+
 		if (nArea > 1)
 		{
 			for (int iGroup = 0; iGroup < nArea; iGroup++)
@@ -5093,7 +5518,9 @@ bool CDoWorkGlassMeasureStep_Measure_VISION_COLOR::Run()
 								}
 							}
 
-							if (cellFirst.m_fCellX < 50)
+							// LYS 2026-09-14 순번으로 정해진 짝(pnPair)만 묶는다. 구 조건(아래 주석)은 X<50 셀에 가장 먼저 걸린 먼 셀을 묶었다.
+							//if (cellFirst.m_fCellX < 50)
+							if (cellFirst.m_fCellX < 0 && pnPair[iGroup] == iSearch)
 							{
 								if (fabs(cellFirst.m_fCellX - cellSecond.m_fCellX) > dHeadGap)
 								{
@@ -5138,7 +5565,17 @@ bool CDoWorkGlassMeasureStep_Measure_VISION_COLOR::Run()
 
 				cellFirst = pRecipeData->m_vecStick[iStick].m_vecCell[iGroup];
 
-				if (cellFirst.m_fCellX > 50)
+				// LYS 2026-09-14 단독 셀 헤드 판정은 기존 50 기준 유지 - 0 으로 두면 X=0 셀을 RIGHT 헤드가 맡아 화질/시야각 Y3=-50(HW 리밋 -66 근처)이 된다.
+				// LYS 2026-09-14 (재변경) 단독 셀 헤드 판정 50 -> 0. VISION 오프셋이 0 이 되어 X=0 셀을 Y3/Y1 이 맡아도 되고,
+				//   ANGLE(Y3 = X-272)은 J01(41.8) 같은 +측 소형 X 셀을 Y3 로 보내야 쉬는 Y4 Safety(-860)와 근접센서 간격(580)이 나온다.
+				//if (cellFirst.m_fCellX > 50)
+				// LYS 2026-09-18 담당 헤드를 셀 X 부호 대신 '갈 수 있고 쉬는 헤드와 간격이 큰 쪽'으로 고른다.
+				//                구 줄은 바로 아래에 남겨 두었다(원복 시 이 블록 제거 후 주석 해제).
+				//if (cellFirst.m_fCellX > 0)  // Head 2
+				double dOffHeadP = 0.0, dOffHeadM = 0.0;
+				GetHeadOffsetY(m_pShareItem->GetPositionConfigMgrPtr(), 2, &dOffHeadP, &dOffHeadM);
+				if (PickSingleCellHead(m_pShareItem->GetPositionConfigMgrPtr(), m_pShareItem->GetMaintControlMgrPtr(),
+					cellFirst.m_fCellX, dOffHeadP, dOffHeadM, true, _T("VISION_COLOR")) != 0)  // Head 2
 				{
 					measPos.Clear();
 					measPos.dHeadBackG = cellFirst.m_fCellY + dGlassConactPos;
@@ -5180,6 +5617,7 @@ bool CDoWorkGlassMeasureStep_Measure_VISION_COLOR::Run()
 		}
 
 		delete[] pbSet;
+		delete[] pnPair;	// LYS 2026-09-14
 
 		double dGlassSize = 0; // 925 / 2;
 		long nRet = df_MOTION_RV_SUCCESSED;
@@ -5480,6 +5918,13 @@ bool CDoWorkGlassMeasureStep_Measure_VISION_COLOR::Run()
 						stPosition[2].dPosition = dLeft;
 						stPosition[3].axis = AXIS_Y2;   nAxis++;
 						stPosition[3].dPosition = dRight;
+						// LYS 2026-09-14 OCP: 첫 이동의 BACK 헤드 Y1/Y2 는 셀이 아니라 [SAFETY] 로 보낸다 (df_HEAD_Y_IDLE_SAFETY -> MoveCmdPos* 의 ApplyIdleHeadSafetyY 가 치환).
+						//   FRONT 측정 첫 이동에서 BACK 헤드가 셀 좌표 + ANGLE 오프셋(MoveCmdPosVision/Angle)으로 나가 ?272 면 Y1-Y2 간격이 인터락(720) 미달로 거부된다. BACK 갠트리는 이때 SafetyHeadX1 에 있다.
+						if (m_pShareItem->GetSystemConfigMgrPtr() && m_pShareItem->GetSystemConfigMgrPtr()->IsOCP())
+						{
+							stPosition[2].dPosition = df_HEAD_Y_IDLE_SAFETY;
+							stPosition[3].dPosition = df_HEAD_Y_IDLE_SAFETY;
+						}
 
 						stPosition[4].axis = AXIS_X3;   nAxis++;
 						stPosition[4].dPosition = vecMeasGroup[i].dHeadBackG + dOffsetX;	// 2023.07.05 add
@@ -5507,6 +5952,7 @@ bool CDoWorkGlassMeasureStep_Measure_VISION_COLOR::Run()
 					/*!
 					* 이동시 Cross 축만 모션 완료 확인을 나중에 한다
 					*/
+					MarkIdleHeadSafety(stPosition, nAxis, vecMeasGroup[i], 0.0);	// LYS 2026-09-14 짝 없는 셀의 쉬는 헤드 -> [SAFETY]
 					nRet = m_pShareItem->GetMaintControlMgrPtr()->MoveCmdPosVision(stPosition, nAxis, SPEED_HIGH, false);
 
 					if (nRet == VTM_RV_SUCCESSED)
@@ -5795,7 +6241,9 @@ bool CDoWorkGlassMeasureStep_OST::Run()
 		///
 
 
-		if (nCellCnt > 10)
+		// LYS 2026-09-07 OCP PG ages/tests the whole stick in one command - skip the Ensis EVEN round (same gate as AGING)
+		bool bIsOCP = (m_pShareItem->GetSystemConfigMgrPtr() && m_pShareItem->GetSystemConfigMgrPtr()->IsOCP());
+		if (!bIsOCP && nCellCnt > 10)
 		{
 			lRet = m_pShareItem->GetCommTcpIpFactoryMgr()->DoWorkInspectStart(enumTCPIpFactorytID_PG, enumTCPIpFactoryt_PG_TEST_2);
 			if (lRet == VTM_RV_SUCCESSED)
@@ -5893,7 +6341,9 @@ bool CDoWorkGlassMeasureStep_RTEST::Run()
 		///
 
 
-		if (nCellCnt > 10)
+		// LYS 2026-09-07 OCP PG ages/tests the whole stick in one command - skip the Ensis EVEN round (same gate as AGING)
+		bool bIsOCP = (m_pShareItem->GetSystemConfigMgrPtr() && m_pShareItem->GetSystemConfigMgrPtr()->IsOCP());
+		if (!bIsOCP && nCellCnt > 10)
 		{
 			lRet = m_pShareItem->GetCommTcpIpFactoryMgr()->DoWorkInspectStart(enumTCPIpFactorytID_PG, enumTCPIpFactoryt_PG_TEST_3);
 			if (lRet == VTM_RV_SUCCESSED)
@@ -6058,17 +6508,21 @@ bool CDoWorkGlassMeasureStep_AGING::Run()
 		std::vector<S_AgingTargetAlarm> vecAgingTarget;
 		if (bIsOCP)
 		{
-			bAgingAlarmUse = (CAgingAlarmCheck::GetAlarmUse() == TRUE);
-			if (bAgingAlarmUse)
+			if (m_pShareItem->GetCommTcpIpFactoryMgr()->IsOutOfService(enumTCPIpFactorytID_PG) != true)
 			{
-				CAgingAlarmCheck::DeleteAgingResultFile();
-				if (!CAgingAlarmCheck::LoadTargetRcp(m_pShareItem->GetRecipeEditMgrPtr()->GetRecipeID(), vecAgingTarget))
+				bAgingAlarmUse = (CAgingAlarmCheck::GetAlarmUse() == TRUE);
+				if (bAgingAlarmUse)
 				{
-					m_pShareItem->GetLogFileAccessorPtr()->KMLOG(SYST, _T("CDoWorkGlassMeasureStep_AGING target rcp open fail."));
-					m_pShareItem->SetFail(true, PROPERTY_AGING_RCP_OPEN_FAIL);
-					return false;
+					CAgingAlarmCheck::DeleteAgingResultFile();
+					if (!CAgingAlarmCheck::LoadTargetRcp(m_pShareItem->GetRecipeEditMgrPtr()->GetRecipeID(), vecAgingTarget))
+					{
+						m_pShareItem->GetLogFileAccessorPtr()->KMLOG(SYST, _T("CDoWorkGlassMeasureStep_AGING target rcp open fail."));
+						m_pShareItem->SetFail(true, PROPERTY_AGING_RCP_OPEN_FAIL);
+						return false;
+					}
 				}
 			}
+
 		}
 
         // Start
@@ -6475,5 +6929,8 @@ bool CDoWorkGlassMeasureStep_AGING::Run()
 
     m_pShareItem->GetLogFileAccessorPtr()->KMLOG(SYST, _T("CDoWorkGlassMeasureStep_AGING End."));
 
-    return bRet;
+	if (m_pShareItem->GetCommTcpIpFactoryMgr()->IsOutOfService(enumTCPIpFactorytID_PG) != true)
+		return bRet;
+	else
+		return true;
 }

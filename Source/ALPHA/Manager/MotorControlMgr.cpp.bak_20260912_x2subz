@@ -1,0 +1,3176 @@
+//#include "stdafx.h"
+#include "pch.h"
+
+#include "MotorControlMgr.h"
+#include "common\IniHelper.h"
+#include "..\AuroraFuncDefine.h"
+//#include "Alarm\AlarmIDList.h"
+//#include "AlarmIDList.h"  // jsyoon 2022.01,.19 change
+#include "..\Alarm\AlarmController.h"
+
+#ifdef _DEBUG
+#define new DEBUG_NEW
+#endif
+
+CMotorControlMgr::CMotorControlMgr(CString strAppPath, CString strConfigPath, CString strLogPath)
+    : m_pIniHelper(new CIniHelper)
+	, m_pLogFileAccessor(new CLogFileAccessor)
+	, m_bInitialized(false)
+	, m_bIsOCP(false)
+	, m_dInterlockPos(0)
+	, m_dInterlockGantryGap(500)
+	, m_dInterlockHeadGap(100)
+	, m_dInterlockHeadGapB(100)
+	, m_dInterlockProbeGap(200)
+	, m_dInterlockLifePinPos(575)
+	, m_dInterlockProbeSizeX(300)
+	, m_dInterlockProbeZSafety(-600)
+	, m_dInterlockSubZSafety(0)
+{
+    SetName(_T("MOTOR_CONTROL_MGR"));
+
+	// 로그 생성하기
+	const CString strFolderPath = strLogPath + _T("Control\\Motion\\");
+	const CString strLogFile = strFolderPath + _T("Motion.log");
+	MakeDir(strFolderPath);
+	m_pLogFileAccessor->Initialize(strLogFile);
+	//////
+
+	const CString strFilePath = strConfigPath + _T("\\CoreFunction\\CoreFunction.ini");
+    m_pIniHelper->SetFilePath(strFilePath);
+
+    LinkIniFile(false);
+
+	
+	ZeroMemory(&m_dMoveOffset, sizeof(m_dMoveOffset));
+	ZeroMemory(&m_dMovePos, sizeof(m_dMovePos));
+
+    //----------------------------------------------------------------------
+    //----------------------------------------------------------------------
+	m_pFunction = new CMotorFunction(m_strControlType, strConfigPath, strFilePath, GetName());
+
+	InitDevice();
+}
+
+CMotorControlMgr::~CMotorControlMgr()
+{
+    Finalize();
+}
+
+bool CMotorControlMgr::LinkIniFile(bool bSave)
+{
+    m_pIniHelper->Link(bSave, GetName(), _T("USE"),				&m_bUse,				true);
+    m_pIniHelper->Link(bSave, GetName(), _T("OUT_OF_SERVICE"),	&m_bOutOfService,		false);
+    m_pIniHelper->Link(bSave, GetName(), _T("DEVICE_TYPE"),		&m_strControlType,		(CString)_T("ACS"));
+	m_pIniHelper->Link(bSave, GetName(), _T("INTERLOCKPOS"),	&m_dInterlockPos,		200.000);
+	m_pIniHelper->Link(bSave, GetName(), _T("INTERLOCKGANGAP"), &m_dInterlockGantryGap, 500.000);
+	m_pIniHelper->Link(bSave, GetName(), _T("INTERLOCKHEADGAP"),	&m_dInterlockHeadGap, 40.000);
+	m_pIniHelper->Link(bSave, GetName(), _T("INTERLOCKHEADGAPB"),   &m_dInterlockHeadGapB, 710.000);
+	m_pIniHelper->Link(bSave, GetName(), _T("INTERLOCKPROBEGAP"),   &m_dInterlockProbeGap, 200.000);
+	m_pIniHelper->Link(bSave, GetName(), _T("INTERLOCKLIFTPIN"),    &m_dInterlockLifePinPos, 575.000);
+	m_pIniHelper->Link(bSave, GetName(), _T("INTERLOCKPROBESIZEX"), &m_dInterlockProbeSizeX, 300.000);	// LYS 2026-08-25
+	m_pIniHelper->Link(bSave, GetName(), _T("INTERLOCKPROBEZSAFETY"), &m_dInterlockProbeZSafety, -600.000);	// LYS 2026-08-26
+	m_pIniHelper->Link(bSave, GetName(), _T("INTERLOCKSUBZSAFETY"), &m_dInterlockSubZSafety, 0.000);	// LYS 2026-09-02 Z3/Z4 Sub Z 안전위치 (SUBZ_SAFETY=0 미러)
+
+	CString strLog;
+	strLog.Format(_T("USE:%d, OUT_OF_SERVICE:%d, DEVICE_TYPE:%s, INTERLOCKPOS:%.3f, INTERLOCKGANGAP:%.3f, INTERLOCKHEADGAP:%.3f, INTERLOCKHEADGAPB:%.3f, INTERLOCKPROBEGAP:%.3f"), m_bUse, m_bOutOfService, m_strControlType, m_dInterlockPos, m_dInterlockGantryGap, m_dInterlockHeadGap, m_dInterlockHeadGapB, m_dInterlockProbeGap);
+	m_pLogFileAccessor->KMLOG(SYST, strLog);
+	
+    return m_pIniHelper->IsReadEnable();
+}
+
+// LYS 2026-06-26 OCP mode: disable P1-P4 all axes
+// LYS 2026-08-25 P5 gantry X is no longer disabled - see the list below.
+void CMotorControlMgr::DisableAxesForOCP()
+{
+	m_bIsOCP = true;
+
+	if (!m_pFunction) return;
+
+	// P1-P4 Probe axes: X1-X8, Y1-Y4, Z1-Z4
+	int nDisableAxes[] = {
+		AXIS_PROBE_X1, AXIS_PROBE_X2, AXIS_PROBE_X3, AXIS_PROBE_X4,
+		AXIS_PROBE_X5, AXIS_PROBE_X6, AXIS_PROBE_X7, AXIS_PROBE_X8,
+		AXIS_PROBE_Y1, AXIS_PROBE_Y2, AXIS_PROBE_Y3, AXIS_PROBE_Y4,
+		AXIS_PROBE_Z1, AXIS_PROBE_Z2, AXIS_PROBE_Z3, AXIS_PROBE_Z4,
+		AXIS_Z1,	// LYS 2026-09-02 OCP에서 head BACK Z(AXIS_Z1) 미사용 처리
+		// LYS 2026-08-25 X9/X10은 목록에서 제외 - HW 컨셉 변경으로 P5 유닛은 X로 움직여야 한다.
+		// LYS 2026-09-05 AXIS_PROBE_Y5(PBY5, PROBE CROSS)도 목록에서 제외 - Probe Align Y 센터링은 PBY5를 움직여야 함(HW 확인됨).
+		//   Config_Motion_ACS.dat PBY5 USE[1]/ACS0/HW28 그대로 사용. 이 함수는 P1~P4 + BACK Z(Z1)만 끈다.
+	};
+
+	for (int i = 0; i < _countof(nDisableAxes); i++)
+	{
+		axis_data_type* pAxis = m_pFunction->GetAxisProperty(nDisableAxes[i]);
+		if (pAxis)
+			pAxis->bUse = FALSE;
+	}
+
+	CString strLog;
+	strLog.Format(_T("OCP Mode: Disabled %d axes (P1-P4 probe all + BACK Z); P5 X9/X10/Y5 active"), _countof(nDisableAxes));
+	m_pLogFileAccessor->KMLOG(SYST, strLog);
+}
+
+void CMotorControlMgr::Finalize()
+{
+    //----------------------------------------------------------------------
+    // 데이터 삭제
+    //----------------------------------------------------------------------
+	if(m_pFunction)
+	{
+		delete m_pFunction;
+		m_pFunction = nullptr;
+	}
+	
+	if(m_pIniHelper)
+    {
+        delete m_pIniHelper;
+        m_pIniHelper = nullptr;
+    }
+
+	//----------------------------------------------------------------------
+	// 데이터 삭제
+	//----------------------------------------------------------------------
+	if (m_pLogFileAccessor)
+	{
+		delete m_pLogFileAccessor;
+		m_pLogFileAccessor = nullptr;
+	}
+}
+
+
+
+
+CString	CMotorControlMgr::GetDeviceName()
+{
+	return m_pFunction->GetDeviceName();
+}
+
+bool CMotorControlMgr::InitDevice()
+{
+	return m_pFunction->InitDevice();
+}
+
+void CMotorControlMgr::SetInitialize(bool value)
+{
+	m_bInitialized = value;
+}
+
+bool CMotorControlMgr::IsInitialized() const
+{
+	if (IsOutOfService() != true)
+		return m_bInitialized;
+	else
+		return true;
+}
+
+bool CMotorControlMgr::IsConnected() const
+{
+	return m_pFunction->IsConnected();
+}
+
+bool CMotorControlMgr::IsUseDevice() const
+{
+	return m_bUse;
+}
+
+bool CMotorControlMgr::IsOutOfService() const
+{
+	return m_bOutOfService;
+}
+
+
+
+
+
+
+
+long CMotorControlMgr::ResetDevice(int iAxis)
+{
+	CCriticalSectionSync single(&m_cs, TRUE);
+
+	return m_pFunction->ResetDevice(iAxis);
+}
+
+long CMotorControlMgr::MoveHome(int iAxis)
+{
+	long nRet = df_MOTION_RV_SUCCESSED;
+
+	CCriticalSectionSync single(&m_cs, TRUE);
+
+	return m_pFunction->MoveHome(iAxis);
+
+	return nRet;
+}
+
+long CMotorControlMgr::MoveCmdPosA_Move(int iAxis, double dPos, bool bBlockMode, int iSpeed, int iLens, int iTube)
+{
+	long nRet = df_MOTION_RV_SUCCESSED;
+
+	CCriticalSectionSync single(&m_cs, TRUE);
+
+	long lRet = 0;
+	lRet = m_pFunction->MoveCmdPosA(iAxis, dPos, bBlockMode, iSpeed, iLens, iTube);
+	// LYS 2026-09-02 check lRet (was nRet) so a failed absolute move is reported
+	if (lRet == 1)
+	{
+		nRet = df_MOTION_RV_SUCCESSED;
+	}
+	else if (lRet == -1)
+	{
+		nRet = MEI_NOT_CREATED;
+	}
+	else
+	{
+		nRet = MOTION_CMDPOS_ERROR; // MOTION_MOVE_ALARM + iAxis;
+	}
+
+	return nRet;
+}
+
+// LYS 2026-08-25 P5 프로브 유닛은 INTERLOCKPROBESIZEX(기본 300mm) 폭의 블록이다.
+// Back Gantry X2가 그 블록 안으로 들어가면 안 되므로 요청 X2 위치와의 겹침을 검사한다.
+bool CMotorControlMgr::IsProbeUnitOverlapX(double dHeadX)
+{
+	double dProbeX = 0.;
+	dProbeX = GetOrgPos(AXIS_PROBE_X9);
+
+	double dLow = dProbeX - 1.0;			// absorb the +-1mm park tolerance
+	double dHigh = dProbeX + m_dInterlockProbeSizeX;
+
+	if (dLow <= dHeadX && dHeadX <= dHigh)
+		return true;
+
+	return false;
+}
+
+
+// LYS 2026-08-26 X2 (BACK GANTRY) 가 Probe 지나갈 때 Unit Z축 무조건 상승 시켜야함
+long CMotorControlMgr::RetractHeadZForProbeUnit(double dTargetX2, LPCTSTR pszFrom)
+{
+	// P5 밴드 [X9-1 .. X9+SIZE] 와 겹치는지로 판정한다.
+	double dCurX2 = 0.;
+	dCurX2 = GetOrgPos(AXIS_X2);
+
+	double dPathMin = (dCurX2 < dTargetX2) ? dCurX2 : dTargetX2;
+	double dPathMax = (dCurX2 < dTargetX2) ? dTargetX2 : dCurX2;
+
+	double dProbeX = 0.;
+	dProbeX = GetOrgPos(AXIS_PROBE_X9);
+
+	// 경로 전체가 밴드 한쪽 밖에 있을 때만 통과
+	if (dPathMax < dProbeX - 1.0 || dProbeX + m_dInterlockProbeSizeX < dPathMin)
+		return df_MOTION_RV_SUCCESSED;
+
+	// LYS 2026-09-02 Z1 미사용 -> Z3/Z4(Sub Z RIGHT/LEFT)를 SUBZ_SAFETY(0)로 리트랙트
+	double dCurZ3 = GetOrgPos(AXIS_Z3);
+	double dCurZ4 = GetOrgPos(AXIS_Z4);
+
+	if (dCurZ3 <= m_dInterlockSubZSafety && dCurZ4 <= m_dInterlockSubZSafety)
+		return df_MOTION_RV_SUCCESSED;
+
+	CString strLog;
+	strLog.Format(_T("%s X2 path crosses PROBE UNIT band(X9:%.3f, SIZE:%.1f), X2 %.3f -> %.3f - retract Z3/Z4(%.3f,%.3f) -> %.3f"),
+		pszFrom, dProbeX, m_dInterlockProbeSizeX, dCurX2, dTargetX2,
+		dCurZ3, dCurZ4, m_dInterlockSubZSafety);
+	m_pLogFileAccessor->KMLOG(SYST, strLog, true);
+
+	long nRet = df_MOTION_RV_SUCCESSED;
+
+	stMotorPosition stRetractSubZ[2];
+	ZeroMemory(&stRetractSubZ, sizeof(stRetractSubZ));
+	stRetractSubZ[0].axis = AXIS_Z3;
+	stRetractSubZ[0].dPosition = m_dInterlockSubZSafety;
+	stRetractSubZ[1].axis = AXIS_Z4;
+	stRetractSubZ[1].dPosition = m_dInterlockSubZSafety;
+
+	nRet = MoveCmdPosMulti(stRetractSubZ, 2, SPEED_HIGH, true);
+
+	if (nRet != df_MOTION_RV_SUCCESSED)
+	{
+		strLog.Format(_T("%s Z3/Z4 retract FAIL(RET:%d) - X2 move abandoned"), pszFrom, nRet);
+		m_pLogFileAccessor->KMLOG(WARN, strLog, true);
+	}
+
+	return nRet;
+}
+
+long CMotorControlMgr::MoveCmdPosA_Sub(int iAxis, double dPos, bool bBlockMode, int iSpeed, int iLens, int iTube)
+{
+	long nRet = df_MOTION_RV_SUCCESSED;
+
+	bool bDir = true;
+
+	// LYS 2026-09-02 ABS 목표값 SW 리밋 체크 (초과 시 SW 리밋 알람 → 래퍼 SetAlarm)
+	{
+		if (dPos > GetMaxSWLimit(iAxis))
+			return MOTION_SW_OVER_LIMIT_POS;
+		else if (dPos < GetMinSWLimit(iAxis))
+			return MOTION_SW_OVER_LIMIT_NEG;
+	}
+
+	// LYS 2026-09-02 Z3/Z4 하강 시 프로브유닛 겹침이면 거부 (Z1 미사용 대체)
+	// // LYS 2026-09-05 인터락 임시 해제
+	//if ((iAxis == AXIS_Z3 || iAxis == AXIS_Z4) && dPos > GetOrgPos(iAxis))
+	//{
+	//	if (IsProbeUnitOverlapX(GetOrgPos(AXIS_X2)) == true)
+	//	{
+	//		CString strLogZ34;
+	//		strLogZ34.Format(_T("MoveCmdPosA_Sub Z%d DOWN NG - PROBE UNIT(X9:%.3f, SIZE:%.1f) vs X2:%.3f, %.3f -> %.3f"), iAxis, GetOrgPos(AXIS_PROBE_X9), m_dInterlockProbeSizeX, GetOrgPos(AXIS_X2), GetOrgPos(iAxis), dPos);
+	//		m_pLogFileAccessor->KMLOG(WARN, strLogZ34, true);
+	//		return MOTION_INTERLOCK_CHECK_ALARM + iAxis;
+	//	}
+	//}
+
+	// Stage
+	if (iAxis == AXIS_X)
+	{
+		// R 위치 확인후 0 혹은 180 도 근처일때만 이동
+		if (nRet == df_MOTION_RV_SUCCESSED)
+		{
+			double dCurPos = 0;
+			dCurPos = GetOrgPos(AXIS_LOADER_R);
+			//	if ((fabs(dCurPos - 0) < 2 || fabs(dCurPos - 180) < 2) || fabs(dCurPos-90) < 2 || fabs(dCurPos-270) < 1)
+			if (fabs(dCurPos) < 2 || fabs(dCurPos - 90) < 2 || fabs(dCurPos - 180) < 2 || fabs(dCurPos - 270) < 2)	// LYS 2026-08-07 rotation-change: station angles {0,90,180,270}
+			{
+				;
+			}
+			else
+			{
+				nRet = MOTION_ROTATE_POS_ERROR;
+			}
+		}
+		
+		// R 이동시 X 이동 금지
+		if (nRet == df_MOTION_RV_SUCCESSED)
+		{	
+			if (CheckMoveDone(AXIS_LOADER_R, 10) != true)
+			{
+				nRet = MTOR_MOVE_DONE_TIME_OUT_ALARM + AXIS_R;
+			}
+		}
+	}
+
+	// Loader Rotate
+	else if (iAxis == AXIS_LOADER_R)
+	{
+		// Loader Rotate 이동 제한 위치
+		if (nRet == df_MOTION_RV_SUCCESSED)
+		{
+			double dCurPos = 0;
+			dCurPos = GetOrgPos(AXIS_LOADER_R);
+			if (fabs(dCurPos - dPos) > 2)
+			{
+				if (GetOrgPos(AXIS_X) < m_dInterlockPos)
+				{
+					if (IsOutOfService() == true) nRet == df_MOTION_RV_SUCCESSED;
+					else nRet = MOTION_ROTATE_POS_ERROR;
+				}
+			}
+		}
+	}
+
+	// Head Gantry
+	else if (iAxis == AXIS_X2)  // WAD
+	{
+		double dCur = 0, dMoveGap = 0;
+		// Gantry 간 충동 방지
+		if (nRet == df_MOTION_RV_SUCCESSED)
+		{
+			dCur = GetOrgPos(AXIS_X3);
+
+			if (bDir)
+			{
+				dMoveGap = fabs(dPos - dCur);
+			}
+			else
+			{
+				dMoveGap = fabs(dCur - dPos);
+			}
+
+			if (dMoveGap < m_dInterlockGantryGap - 0.01)
+			{
+				nRet = MOTION_INTERLOCK_7;
+			}
+		}
+
+		// Probe 이동 시 X2 이동 금지
+		if (nRet == VTM_RV_SUCCESSED)
+		{
+			if (CheckMoveDone(AXIS_PROBE_X9, 10) != true)
+			{
+				nRet = MTOR_MOVE_DONE_TIME_OUT_ALARM + AXIS_PROBE_X9;
+			}
+		}
+		
+		// LYS 2026-09-12 Remove Interlock
+		// Probe unit 충동 방지
+		//if (nRet == VTM_RV_SUCCESSED)
+		//{
+		//	dCur = GetOrgPos(AXIS_PROBE_X9);
+		//
+		//	if (dPos <  (dCur - 5) )		// Probe Unit을 넘어가는 경우
+		//	{
+		//		nRet = MOTION_INTERLOCK_5;
+		//	}
+		//}
+
+		// Head Z축 이동 시 X2 이동 금지 WAD 기구물 충동 방지
+		if (nRet == VTM_RV_SUCCESSED)
+		{
+			if (CheckMoveDone(AXIS_Z2, 10) != true)
+			{
+				nRet = MTOR_MOVE_DONE_TIME_OUT_ALARM + AXIS_Z2;
+			}
+		}
+
+		// Head Down 시 이동 위치 제한
+		if (nRet == VTM_RV_SUCCESSED)	// jsyoon 2022.04.18 add Interlock
+		{
+			dCur = GetOrgPos(AXIS_Z2);
+
+			if (dCur > 0.1)
+			{
+				if (dPos < ( GetMinSWLimit(AXIS_X2) + 35) ) // jsyoon 2022.05.18 change 80 to 35
+				{
+					nRet = MOTION_INTERLOCK_8;
+				}
+			}
+		}
+
+		// LYS 2026-08-26 X2 (BACK GANTRY) 가 Probe 지나갈 때 Unit Z축 무조건 상승 시켜야함
+		if (nRet == df_MOTION_RV_SUCCESSED)
+		{
+			nRet = RetractHeadZForProbeUnit(dPos, _T("MoveCmdPosA_Sub"));
+		}
+	}
+	else if (iAxis == AXIS_X3)  // Vision
+	{
+		double dCur = 0, dMoveGap = 0;
+
+		// Gantry 간 충동 방지
+		if (nRet == df_MOTION_RV_SUCCESSED)
+		{
+			dCur = GetOrgPos(AXIS_X2);
+			if (bDir)
+			{
+				dMoveGap = fabs(dCur - dPos);
+			}
+			else
+			{
+				dMoveGap = fabs(dPos - dCur);
+			}
+
+			if (dMoveGap < m_dInterlockGantryGap - 0.01)
+			{
+				nRet = MOTION_INTERLOCK_7;
+			}
+		}
+		
+		// Probe 이동 시 X3 이동 금지
+		if (nRet == VTM_RV_SUCCESSED)
+		{
+			if (CheckMoveDone(AXIS_PROBE_X9, 10) != true)
+			{
+				nRet = MTOR_MOVE_DONE_TIME_OUT_ALARM + AXIS_PROBE_X9;
+			}
+		}
+
+		// jsyoon 2022.09.30 add
+		// Head Down 시 이동 금지
+		if (nRet == VTM_RV_SUCCESSED)
+		{
+			double dCurZ = 0, dMoveGap = 0;
+			dCurZ = GetOrgPos(AXIS_Z1);
+			if (dCurZ > 1)
+			{
+				nRet = MOTION_INTERLOCK_5;
+			}
+
+			// LYS 2026-09-09 FRONT Z(Z2) 하강 상태(>1)에서 X3 목표가 100 이상이면 이동 금지 - X3는 정상 동작에서 양수 영역으로 가지 않음.
+			//   위 Z1 체크는 X2<->Z1 / X3<->Z2 짝이 교차된 것이고 OCP에선 Z1 USE0라 dead. 알람은 기존 Head Gantry 인터락(MOTION_INTERLOCK_5) 재사용
+			if (nRet == VTM_RV_SUCCESSED)
+			{
+				double dCurZ2 = GetOrgPos(AXIS_Z2);
+				if (dCurZ2 > 1 && dPos >= 100.0)
+				{
+					CString strLogX3;
+					strLogX3.Format(_T("MoveCmdPosA_Sub X3 NG - FRONT Z(Z2) DOWN %.3f, X3 %.3f -> %.3f (target >= 100 blocked)"), dCurZ2, GetOrgPos(AXIS_X3), dPos);
+					m_pLogFileAccessor->KMLOG(WARN, strLogX3, true);
+					nRet = MOTION_INTERLOCK_5;
+				}
+			}
+			//if (dCurZ > 10)
+			//{
+			//	// Z
+			//	if ((GetAxisProperty(AXIS_PROBE_Z1)->bUse && GetOrgPos(AXIS_PROBE_Z1) < -5.1) ||
+			//		(GetAxisProperty(AXIS_PROBE_Z2)->bUse && GetOrgPos(AXIS_PROBE_Z2) < -5.1) ||
+			//		(GetAxisProperty(AXIS_PROBE_Z3)->bUse && GetOrgPos(AXIS_PROBE_Z3) < -5.1) ||
+			//		(GetAxisProperty(AXIS_PROBE_Z4)->bUse && GetOrgPos(AXIS_PROBE_Z4) < -5.1) ||
+			//		(GetAxisProperty(AXIS_PROBE_Z5)->bUse && GetOrgPos(AXIS_PROBE_Z5) < -5.1))
+			//	{
+			//		nRet = MOTION_INTERLOCK_7;
+			//	}
+
+			//	// PROBE
+			//	if (nRet == VTM_RV_SUCCESSED)
+			//	{
+			//		dCur = GetOrgPos(AXIS_PROBE_X9);
+
+			//		if (dPos < dCur - 5 )
+			//		{
+			//			nRet = MOTION_INTERLOCK_CHECK_ALARM + AXIS_PROBE_X9;
+			//		}
+
+			//		dCur = GetOrgPos(AXIS_PROBE_X7);
+
+			//		if (dPos < dCur - 5)
+			//		{
+			//			nRet = MOTION_INTERLOCK_CHECK_ALARM + AXIS_PROBE_X7;
+			//		}
+
+			//		dCur = GetOrgPos(AXIS_PROBE_X5);
+
+			//		if (dPos < dCur - 5)
+			//		{
+			//			nRet = MOTION_INTERLOCK_CHECK_ALARM + AXIS_PROBE_X5;
+			//		}
+
+			//		dCur = GetOrgPos(AXIS_PROBE_X3);
+
+			//		if (dPos < dCur - 5)
+			//		{
+			//			nRet = MOTION_INTERLOCK_CHECK_ALARM + AXIS_PROBE_X3;
+			//		}
+
+			//		dCur = GetOrgPos(AXIS_PROBE_X1);
+
+			//		if (dPos < dCur - 5)
+			//		{
+			//			nRet = MOTION_INTERLOCK_CHECK_ALARM + AXIS_PROBE_X1;
+			//		}
+			//	}
+			//}
+		}
+	}
+
+	// head
+	else if (iAxis == AXIS_Y1)
+	{
+		double dCur = 0, dMoveGap = 0;
+		// Head 간 충동 방지
+		if (nRet == df_MOTION_RV_SUCCESSED)
+		{
+			dCur = GetOrgPos(AXIS_Y2);
+
+			if (bDir)
+			{
+				dMoveGap = fabs(dPos - dCur);
+			}
+			else
+			{
+				dMoveGap = fabs(dCur - dPos);
+			}
+
+			if (dMoveGap < m_dInterlockHeadGapB)	// 2023.03.08 change
+			{
+				nRet = MOTION_INTERLOCK_7;
+			}
+		}
+	}
+	else if (iAxis == AXIS_Y2)
+	{
+		double dCur = 0, dMoveGap = 0;
+		// Head 간 충동 방지
+		if (nRet == df_MOTION_RV_SUCCESSED)
+		{
+			dCur = GetOrgPos(AXIS_Y1);
+			if (bDir)
+			{
+				dMoveGap = fabs(dCur - dPos);
+			}
+			else
+			{
+				dMoveGap = fabs(dPos - dCur);
+			}
+
+			//	if (dMoveGap < m_dInterlockHeadGap)
+			if (dMoveGap < m_dInterlockHeadGapB)	// 2023.03.08 change
+			{
+				nRet = MOTION_INTERLOCK_7;
+			}
+		}
+	}
+	else if (iAxis == AXIS_Y3)
+	{
+		double dCur = 0, dMoveGap = 0;
+		// Head 간 충동 방지
+		if (nRet == df_MOTION_RV_SUCCESSED)
+		{
+			dCur = GetOrgPos(AXIS_Y4);
+
+			if (bDir)
+			{
+				dMoveGap = fabs(dPos - dCur);
+			}
+			else
+			{
+				dMoveGap = fabs(dCur - dPos);
+			}
+
+			if (dMoveGap < m_dInterlockHeadGap)
+			{
+				nRet = MOTION_INTERLOCK_7;
+			}
+		}
+	}
+	else if (iAxis == AXIS_Y4)
+	{
+		double dCur = 0, dMoveGap = 0;
+		// Head 간 충동 방지
+		if (nRet == df_MOTION_RV_SUCCESSED)
+		{
+			dCur = GetOrgPos(AXIS_Y3);
+			if (bDir)
+			{
+				dMoveGap = fabs(dCur - dPos);
+			}
+			else
+			{
+				dMoveGap = fabs(dPos - dCur);
+			}
+
+			if (dMoveGap < m_dInterlockHeadGap)
+			{
+				nRet = MOTION_INTERLOCK_7;
+			}
+		}
+	}
+
+	// Probe
+	else if (iAxis == AXIS_PROBE_X1)
+	{
+		double dCur = 0, dMoveGap = 0;
+		// Probe 간 충돌 방지
+		if (nRet == df_MOTION_RV_SUCCESSED)
+		{
+			dCur = GetOrgPos(AXIS_PROBE_X3);
+			if (bDir)
+			{
+				dMoveGap = fabs(dCur - dPos);
+			}
+			else
+			{
+				dMoveGap = fabs(dPos - dCur);
+			}
+
+			if (dMoveGap < m_dInterlockProbeGap)
+			{
+				nRet = MOTION_INTERLOCK_7;
+			}
+		}
+	}
+	else if (iAxis == AXIS_PROBE_X3)
+	{
+		double dCur = 0, dMoveGap = 0;
+		// Probe 간 충돌 방지
+		if (nRet == df_MOTION_RV_SUCCESSED)
+		{
+			dCur = GetOrgPos(AXIS_PROBE_X1);
+			if (bDir)
+			{
+				dMoveGap = fabs(dPos - dCur);
+			}
+			else
+			{
+				dMoveGap = fabs(dCur - dPos);
+			}
+
+			if (dMoveGap < m_dInterlockProbeGap)
+			{
+				nRet = MOTION_INTERLOCK_7;
+			}
+		}
+		
+		// Probe 간 충돌 방지
+		if (nRet == df_MOTION_RV_SUCCESSED)
+		{
+			dCur = GetOrgPos(AXIS_PROBE_X5);
+			if (bDir)
+			{
+				dMoveGap = fabs(dCur - dPos);
+			}
+			else
+			{
+				dMoveGap = fabs(dPos - dCur);
+			}
+
+			if (dMoveGap < m_dInterlockProbeGap)
+			{
+				nRet = MOTION_INTERLOCK_7;
+			}
+		}
+	}
+	else if (iAxis == AXIS_PROBE_X5)
+	{
+		double dCur = 0, dMoveGap = 0;
+		// Probe 간 충돌 방지
+		if (nRet == df_MOTION_RV_SUCCESSED)
+		{
+			dCur = GetOrgPos(AXIS_PROBE_X3);
+			if (bDir)
+			{
+				dMoveGap = fabs(dPos - dCur);
+			}
+			else
+			{
+				dMoveGap = fabs(dCur - dPos);
+			}
+
+			if (dMoveGap < m_dInterlockProbeGap)
+			{
+				nRet = MOTION_INTERLOCK_7;
+			}
+		}
+
+		// Probe 간 충돌 방지
+		if (nRet == df_MOTION_RV_SUCCESSED)
+		{
+			dCur = GetOrgPos(AXIS_PROBE_X7);
+			if (bDir)
+			{
+				dMoveGap = fabs(dCur - dPos);
+			}
+			else
+			{
+				dMoveGap = fabs(dPos - dCur);
+			}
+
+			if (dMoveGap < m_dInterlockProbeGap)
+			{
+				nRet = MOTION_INTERLOCK_7;
+			}
+		}
+	}
+	else if (iAxis == AXIS_PROBE_X7)
+	{
+		// Probe 간 충돌 방지
+		double dCur = 0, dMoveGap = 0;
+		if (nRet == df_MOTION_RV_SUCCESSED)
+		{
+			dCur = GetOrgPos(AXIS_PROBE_X5);
+			if (bDir)
+			{
+				dMoveGap = fabs(dPos - dCur);
+			}
+			else
+			{
+				dMoveGap = fabs(dCur - dPos);
+			}
+
+			if (dMoveGap < m_dInterlockProbeGap)
+			{
+				nRet = MOTION_INTERLOCK_7;
+			}
+		}
+		
+		// Probe 간 충돌 방지
+		if (nRet == df_MOTION_RV_SUCCESSED)
+		{
+			dCur = GetOrgPos(AXIS_PROBE_X9);
+			if (bDir)
+			{
+				dMoveGap = fabs(dCur - dPos);
+			}
+			else
+			{
+				dMoveGap = fabs(dPos - dCur);
+			}
+
+			if (dMoveGap < m_dInterlockProbeGap)
+			{
+				nRet = MOTION_INTERLOCK_7;
+			}
+		}
+	}
+	else if (iAxis == AXIS_PROBE_X9)
+	{
+		// Probe 간 충돌 방지
+		double dCur = 0, dMoveGap = 0;
+		// LYS 2026-08-25 OCP엔 P4 갠트리가 없어 GetOrgPos(AXIS_PROBE_X7)이 0을 반환하고,
+		// 이 INTERLOCKPROBEGAP(173mm) 검사가 X9의 SW 리밋 안 모든 목표를 거부한다. OCP는 스킵.
+		if (nRet == df_MOTION_RV_SUCCESSED && !m_bIsOCP)
+		{
+			dCur = GetOrgPos(AXIS_PROBE_X7);
+			if (bDir)
+			{
+				dMoveGap = fabs(dPos - dCur);
+			}
+			else
+			{
+				dMoveGap = fabs(dCur - dPos);
+			}
+
+			if (dMoveGap < m_dInterlockProbeGap)
+			{
+				nRet = MOTION_INTERLOCK_7;
+			}
+		}
+
+		// jsyoon 2022.04.14 add
+		// Probe unut 과 Head 충돌 방지
+		if (nRet == VTM_RV_SUCCESSED)
+		{
+			dCur = GetOrgPos(AXIS_X2);
+
+			if (dPos > dCur + 5)
+			{
+				nRet = MOTION_INTERLOCK_7;
+			}
+		}
+		///
+	}
+	else if (iAxis == AXIS_Z1)	// jsyoon 2022.09.30 add
+	{
+		double dMoveZ1 = dPos;
+
+		// LYS 2026-08-26 Z1은 +방향이 하강(안전 -600, 측정 0)이라 목표 > 현재 = 하강, 상승은 항상 허용.
+		if (nRet == df_MOTION_RV_SUCCESSED && dMoveZ1 > GetOrgPos(AXIS_Z1))
+		{
+			if (IsProbeUnitOverlapX(GetOrgPos(AXIS_X2)) == true)
+			{
+				nRet = MOTION_INTERLOCK_CHECK_ALARM + AXIS_Z1;
+
+				CString strLog;
+				strLog.Format(_T("MoveCmdPosA_Sub Z1 DOWN NG - PROBE UNIT(X9:%.3f, SIZE:%.1f) vs BACK GANTRY(X2:%.3f), Z1 %.3f -> %.3f"),
+					GetOrgPos(AXIS_PROBE_X9), m_dInterlockProbeSizeX, GetOrgPos(AXIS_X2),
+					GetOrgPos(AXIS_Z1), dMoveZ1);
+				m_pLogFileAccessor->KMLOG(WARN, strLog, true);
+			}
+		}
+
+		if (dPos > 1)
+		{
+			// Head Z 이동 시 Probe Unit 충돌 인터락
+			if (nRet == VTM_RV_SUCCESSED)
+			{
+				// LYS 2026-09-02 미사용 프로브 Z축은 인터락에서 제외 (bUse 가드)
+				if ((GetAxisProperty(AXIS_PROBE_Z1)->bUse && GetOrgPos(AXIS_PROBE_Z1) < -5.1) ||
+					(GetAxisProperty(AXIS_PROBE_Z2)->bUse && GetOrgPos(AXIS_PROBE_Z2) < -5.1) ||
+					(GetAxisProperty(AXIS_PROBE_Z3)->bUse && GetOrgPos(AXIS_PROBE_Z3) < -5.1) ||
+					(GetAxisProperty(AXIS_PROBE_Z4)->bUse && GetOrgPos(AXIS_PROBE_Z4) < -5.1) ||
+					(GetAxisProperty(AXIS_PROBE_Z5)->bUse && GetOrgPos(AXIS_PROBE_Z5) < -5.1))
+				{
+					nRet = MOTION_INTERLOCK_7;
+				}
+			}
+			
+		}
+	}
+	else if (iAxis == AXIS_Z2)		// jsyoon 2022.04.18 add Interlock
+	{
+		if (dPos > 1)
+		{
+			// Head Z 이동 시 Probe Unit 충돌 인터락
+			if (nRet == VTM_RV_SUCCESSED)
+			{
+				// LYS 2026-09-02 미사용 프로브 Z축은 인터락에서 제외 (bUse 가드)
+				if ((GetAxisProperty(AXIS_PROBE_Z1)->bUse && GetOrgPos(AXIS_PROBE_Z1) < -5.1) ||
+					(GetAxisProperty(AXIS_PROBE_Z2)->bUse && GetOrgPos(AXIS_PROBE_Z2) < -5.1) ||
+					(GetAxisProperty(AXIS_PROBE_Z3)->bUse && GetOrgPos(AXIS_PROBE_Z3) < -5.1) ||
+					(GetAxisProperty(AXIS_PROBE_Z4)->bUse && GetOrgPos(AXIS_PROBE_Z4) < -5.1) ||
+					(GetAxisProperty(AXIS_PROBE_Z5)->bUse && GetOrgPos(AXIS_PROBE_Z5) < -5.1))
+				{
+					nRet = MOTION_INTERLOCK_7;
+				}
+			}
+			
+			double dCur = 0.;
+
+			// Head Z 이동 범위 인터락
+			if (nRet == VTM_RV_SUCCESSED)
+			{			
+				dCur = GetOrgPos(AXIS_X2);
+
+				if (dCur < GetMinSWLimit(AXIS_X2) + 35)	// 35 is Revivew Lens 지름 +
+				{
+					nRet = MOTION_INTERLOCK_7;
+				}
+			}
+
+			// LYS 2026-08-25 FRONT Z(Z2)는 FRONT 갠트리(X3)에 실리고 그 스트로크는 P5에 닿지 않아
+			// Head/Probe 인터락이 필요 없다. 여기 있던 검사는 BACK 갠트리 X2를 보고 있어 짝이 틀렸다.
+		}
+	}
+	else if (iAxis == AXIS_LOADER_Z)	// 2023.04.10 add Life Pin, Prebe Unit Interlock
+	{
+		// Loader  Z 이동 범위 인터락
+		if (nRet == VTM_RV_SUCCESSED)
+		{
+			double dCur = 0;
+			dCur = GetOrgPos(AXIS_X);
+
+			if (dCur < GetMaxSWLimit(AXIS_X) - 100) // Safety 위치	
+			{
+				nRet = MOTION_INTERLOCK_3;
+			}
+		}
+
+		// Loader Z 이동시 Probe Unit이 Loader 에 있을 경우 충동 방지
+		if (nRet == df_MOTION_RV_SUCCESSED)
+		{
+			// LYS 2026-08-25 복구 - OCP 갠트리 X가 움직이므로 Loader Z 인터락이 그 위치를 다시 봐야 한다.
+			{
+				double dCur = 0;
+				dCur = GetOrgPos(AXIS_PROBE_X9);
+
+				if (dCur > m_dInterlockLifePinPos)
+				{
+					nRet = MOTION_INTERLOCK_3;
+				}
+			}
+		}
+	}
+	else
+	{
+		// jsyoon 2022.09.30 add
+		// Probe Unit 과 Head Z 충돌 인터락
+		if (iAxis == AXIS_PROBE_Z1 || iAxis == AXIS_PROBE_Z2 || iAxis == AXIS_PROBE_Z3 || iAxis == AXIS_PROBE_Z4 || iAxis == AXIS_PROBE_Z5)
+		{
+			if (dPos < -5.1)
+			{
+				if (nRet == df_MOTION_RV_SUCCESSED)
+				{
+					double dCur = 0;
+					dCur = GetOrgPos(AXIS_Z1);
+					if (dCur > 1)
+					{
+						nRet = MOTION_INTERLOCK_7;
+					}
+				}
+				
+				if (nRet == df_MOTION_RV_SUCCESSED)
+				{
+					double dCur = 0;
+					dCur = GetOrgPos(AXIS_Z2);
+					if (dCur > 1)
+					{
+						nRet = MOTION_INTERLOCK_7;
+					}
+				}
+			}
+		}
+	 }
+	
+	// Probe Master Slave 틀어짐 
+	if (iAxis == AXIS_PROBE_X2 || iAxis == AXIS_PROBE_X4 || iAxis == AXIS_PROBE_X6 || iAxis == AXIS_PROBE_X8 || iAxis == AXIS_PROBE_X10)
+	{
+		double dCur = 0, dMoveGap = 0;
+		dCur = GetOrgPos(iAxis - 1);
+		dMoveGap = fabs(dPos - dCur);	// Master - Slave
+		if (dMoveGap > 5)
+		{
+			nRet = MOTION_INTERLOCK_7;
+		}
+	}
+
+	// Probe Z Contect
+	if (nRet == df_MOTION_RV_SUCCESSED)
+	{
+		if (iAxis == AXIS_X || iAxis == AXIS_LOADER_R ||
+			iAxis == AXIS_PROBE_X1 || iAxis == AXIS_PROBE_X2 || iAxis == AXIS_PROBE_X3 || iAxis == AXIS_PROBE_X4 || iAxis == AXIS_PROBE_X5 || iAxis == AXIS_PROBE_X6 || iAxis == AXIS_PROBE_X7 || iAxis == AXIS_PROBE_X8 || iAxis == AXIS_PROBE_X9 || iAxis == AXIS_PROBE_X10 ||
+			iAxis == AXIS_PROBE_Y1 || iAxis == AXIS_PROBE_Y2 || iAxis == AXIS_PROBE_Y3 || iAxis == AXIS_PROBE_Y4 || iAxis == AXIS_PROBE_Y5 )
+		{
+			double dPROBE_Z1 = 0., dPROBE_Z2 = 0., dPROBE_Z3 = 0., dPROBE_Z4 = 0., dPROBE_Z5 = 0.;
+			dPROBE_Z1 = GetOrgPos(AXIS_PROBE_Z1);
+			dPROBE_Z2 = GetOrgPos(AXIS_PROBE_Z2);
+			dPROBE_Z3 = GetOrgPos(AXIS_PROBE_Z3);
+			dPROBE_Z4 = GetOrgPos(AXIS_PROBE_Z4);
+			dPROBE_Z5 = GetOrgPos(AXIS_PROBE_Z5);
+
+			// LYS 2026-09-02 미사용 프로브 Z축은 인터락에서 제외 (bUse 가드)
+			if ((GetAxisProperty(AXIS_PROBE_Z1)->bUse && dPROBE_Z1 > 0.1) ||
+				(GetAxisProperty(AXIS_PROBE_Z2)->bUse && dPROBE_Z2 > 0.1) ||
+				(GetAxisProperty(AXIS_PROBE_Z3)->bUse && dPROBE_Z3 > 0.1) ||
+				(GetAxisProperty(AXIS_PROBE_Z4)->bUse && dPROBE_Z4 > 0.1) ||
+				(GetAxisProperty(AXIS_PROBE_Z5)->bUse && dPROBE_Z5 > 0.1) )
+			{
+				stMotorPosition stPositionProbe[5];
+				stPositionProbe[0].axis = AXIS_PROBE_Z1;
+				stPositionProbe[0].dPosition = 0;
+				stPositionProbe[1].axis = AXIS_PROBE_Z2;
+				stPositionProbe[1].dPosition = 0;
+				stPositionProbe[2].axis = AXIS_PROBE_Z3;
+				stPositionProbe[2].dPosition = 0;
+				stPositionProbe[3].axis = AXIS_PROBE_Z4;
+				stPositionProbe[3].dPosition = 0;
+				stPositionProbe[4].axis = AXIS_PROBE_Z5;
+				stPositionProbe[4].dPosition = 0;
+
+				nRet = MoveCmdPosMulti(stPositionProbe, 5, SPEED_HIGH, true);
+
+				nRet = MOTION_INTERLOCK_8;
+
+				CString strLog;
+				strLog.Format(_T("MoveCmdPosA_Sub PROBE_Z NG(%.3f,%.3f,%.3f,%.3f,%.3f)"), dPROBE_Z1, dPROBE_Z2, dPROBE_Z3, dPROBE_Z4, dPROBE_Z5);
+				m_pLogFileAccessor->KMLOG(WARN, strLog, true);
+			}
+		}
+	}
+
+	// Head Z 와 Probe Unit 충돌 인터락
+	if (nRet == df_MOTION_RV_SUCCESSED)
+	{
+		if (iAxis == AXIS_PROBE_X1 || iAxis == AXIS_PROBE_X2 || iAxis == AXIS_PROBE_X3 || iAxis == AXIS_PROBE_X4 || iAxis == AXIS_PROBE_X5 || iAxis == AXIS_PROBE_X6 || iAxis == AXIS_PROBE_X7 || iAxis == AXIS_PROBE_X8 || iAxis == AXIS_PROBE_X9 || iAxis == AXIS_PROBE_X10 ||
+			iAxis == AXIS_PROBE_Y1 || iAxis == AXIS_PROBE_Y2 || iAxis == AXIS_PROBE_Y3 || iAxis == AXIS_PROBE_Y4 || iAxis == AXIS_PROBE_Y5)
+		{
+			if (nRet == df_MOTION_RV_SUCCESSED)
+			{
+				double dFront_Z = 0., dBack_Z = 0.;
+				dFront_Z = GetOrgPos(AXIS_Z1);
+				dBack_Z = GetOrgPos(AXIS_Z2);
+
+				// LYS 2026-09-02 미사용 헤드 Z축은 인터락에서 제외 (bUse 가드)
+				if ((GetAxisProperty(AXIS_Z1)->bUse && dFront_Z > 1) || (GetAxisProperty(AXIS_Z2)->bUse && dBack_Z > 1))
+				{
+					nRet = MOTION_INTERLOCK_8;
+
+					CString strLog;
+					strLog.Format(_T("MoveCmdPosA_Sub HEAD_Z NG(%.3f,%.3f,%.3f,%.3f,%.3f)"), dFront_Z, dBack_Z);
+					m_pLogFileAccessor->KMLOG(WARN, strLog, true);
+				}
+
+			}
+		}
+	}
+
+	// LOADER Z Down Interlock
+	if (nRet == df_MOTION_RV_SUCCESSED)
+	{
+		if (iAxis != AXIS_LOADER_Z)
+		{
+			double dCurPos = 0;
+			dCurPos = GetOrgPos(AXIS_LOADER_Z);
+			if (dCurPos > 0.1)
+			{
+				nRet = MOTION_INTERLOCK_1;
+			}
+		}
+	}
+
+	if (nRet == df_MOTION_RV_SUCCESSED)
+	{
+		if (IsOutOfService() == true)
+		{
+			if (GetMinSWLimit(iAxis) > dPos || GetMaxSWLimit(iAxis) < dPos)
+			{
+				return MOTION_INTERLOCK_CHECK_ALARM;
+			}
+
+			double dCur = 0, dMove = 0, dSpeed = 0;
+			dCur = GetOrgPos(iAxis);
+			dMove = dPos - dCur;
+			dSpeed = GetSpeed(iAxis, iSpeed);
+			int nStep = 0, nCnt = 0;
+			nStep = (int)(dMove / dSpeed);
+			nCnt = abs(nStep);
+
+			if (nStep > 0)
+			{
+				for (size_t i = 1; i <= nCnt; i++)
+				{
+					Sleep(dSpeed);
+					m_dMovePos[iAxis] = dCur + (dSpeed * i);
+				}
+			}
+			else if (nStep < 0)
+			{
+				for (size_t i = 1; i <= nCnt; i++)
+				{
+					Sleep(dSpeed);
+					m_dMovePos[iAxis] = dCur - (dSpeed * i);
+				}
+			}
+
+			if (nStep != 0) Sleep(1000);
+
+			if (iAxis == AXIS_PROBE_X1 || iAxis == AXIS_PROBE_X3 || iAxis == AXIS_PROBE_X5 || iAxis == AXIS_PROBE_X7 || iAxis == AXIS_PROBE_X9)
+			{
+				m_dMovePos[iAxis + 1] = dPos;
+			}
+
+			m_dMovePos[iAxis] = dPos;
+
+			return df_MOTION_RV_SUCCESSED;
+		}
+		else
+		{
+			if (m_pFunction->IsConnected() != true)
+			{
+				return MEI_NOT_CREATED;
+			}
+		}
+	}
+	else
+	{
+		return nRet;
+	}
+	
+	CString strLog;
+	strLog.Format(_T("MoveCmdPosA Move(AXIS:%d, POS:%.3f, SPPED:%d, DoneCheck:%d)"), iAxis, dPos, iSpeed, bBlockMode);
+	m_pLogFileAccessor->KMLOG(SYST, strLog, true);
+
+	if (nRet == df_MOTION_RV_SUCCESSED)
+	{
+		nRet = MoveCmdPosA_Move(iAxis, dPos, bBlockMode, iSpeed, iLens, iTube);
+	}
+	
+	//CCriticalSectionSync single(&m_cs, TRUE);
+	//
+	//if (nRet == df_MOTION_RV_SUCCESSED)
+	//{
+	//	long lRet = 0;
+	//	lRet = m_pFunction->MoveCmdPosA(iAxis, dPos, bBlockMode, iSpeed, iLens, iTube);
+	//	if (nRet == 1)
+	//	{
+	//		nRet = df_MOTION_RV_SUCCESSED;
+	//	}
+	//	else if (nRet == -1)
+	//	{
+	//		nRet = MEI_NOT_CREATED;
+	//	}
+	//	else
+	//	{
+	//		nRet = MOTION_CMDPOS_ERROR; // MOTION_MOVE_ALARM + iAxis;
+	//	}
+	//	//if (lRet == 1)
+	//	//	nRet = df_MOTION_RV_SUCCESSED;
+	//	//else
+	//	//	nRet = MOTION_MOVE_ALARM + iAxis;
+	//}
+
+	if (nRet == df_MOTION_RV_SUCCESSED)
+	{
+		if (bBlockMode == true)
+		{
+			int nLoop = 0;
+			do
+			{
+				Sleep(100);
+				nRet = m_pFunction->CheckMoveDone(iAxis, df_MOVINGDONE_TIME);
+				if (nRet == df_MOTION_RV_SUCCESSED)
+				{
+					double dDonePos = 0;
+					dDonePos = GetOrgPos(iAxis);
+					if (fabs(dDonePos - dPos) > 0.01)
+					{
+						nRet = MOTION_MOVE_ALARM + iAxis;
+					}
+				}
+
+				if (nRet == df_MOTION_RV_SUCCESSED)
+				{
+					break;
+				}
+
+				if (nLoop > 2)
+				{
+					nRet = MOTION_MOVE_ALARM + iAxis;
+					break;
+				}
+
+				nRet = MoveCmdPosA_Move(iAxis, dPos, bBlockMode, iSpeed, iLens, iTube);
+
+			//	nRet = m_pFunction->MoveCmdPosA(iAxis, dPos, bBlockMode, iSpeed, iLens, iTube); 
+				if (nRet != df_MOTION_RV_SUCCESSED)
+				{
+					break;
+				}
+
+				nLoop++;
+
+			} while (true);
+		}
+	}
+
+	return nRet;
+}
+
+long CMotorControlMgr::MoveCmdPosA(int iAxis, double dPos, bool bBlockMode, int iSpeed, int iLens, int iTube)
+{
+	CString strLog;
+	CString strAxis;
+	strAxis.Format(_T("%s"), GetAxisMapProperty(iAxis)->m_strAxisName);
+
+	strLog.Format(_T("MoveCmdPosA Start(AXIS:%s, POS:%.3f, SPPED:%d, DoneCheck:%d)"), strAxis, dPos, iSpeed, bBlockMode);
+	m_pLogFileAccessor->KMLOG(SYST, strLog, true);
+
+	long nRet = df_MOTION_RV_SUCCESSED;
+
+	nRet = MoveCmdPosA_Sub(iAxis, dPos, bBlockMode, iSpeed, iLens, iTube);
+
+	strLog.Format(_T("MoveCmdPosA End(AXIS:%s, POS:%.3f, RET:%d)"), strAxis, dPos, nRet);
+
+	if (nRet == VTM_RV_SUCCESSED)
+		m_pLogFileAccessor->KMLOG(SYST, strLog, true);
+	else
+	{
+		m_pLogFileAccessor->KMLOG(WARN, strLog, true);
+		CAlarmController::GetInstance()->SetAlarm(nRet);	// LYS 2026-09-02 raise alarm on move failure
+	}
+
+	return nRet;
+}
+
+long CMotorControlMgr::MoveCmdPosAModify(int iAxis, double dPos)
+{
+	CCriticalSectionSync single(&m_cs, TRUE);
+	
+	return m_pFunction->MoveCmdPosAModify(iAxis, dPos);
+}
+
+
+long CMotorControlMgr::MoveCmdPosR_Sub(int iAxis, double dPos, bool bBlockMode, int iSpeed)
+{
+	long nRet = df_MOTION_RV_SUCCESSED;
+	bool bDir = true;
+
+	// LYS 2026-09-02 REL 목표값 SW 리밋 체크 (초과 시 SW 리밋 알람 → 래퍼 SetAlarm)
+	if(iAxis != AXIS_X4)
+	{
+		double dSwTarget = GetCurPos(iAxis) + dPos;
+		 dSwTarget = GetOrgPos(iAxis) + dPos;
+		if (dSwTarget > GetMaxSWLimit(iAxis))
+			return MOTION_SW_OVER_LIMIT_POS;
+		else if (dSwTarget < GetMinSWLimit(iAxis))
+			return MOTION_SW_OVER_LIMIT_NEG;
+	}
+
+	// LYS 2026-09-02 Z3/Z4 하강 시 프로브유닛 겹침이면 거부 (Z1 미사용 대체)
+	//if ((iAxis == AXIS_Z3 || iAxis == AXIS_Z4) && dPos > 0.)
+	//{
+	//	if (IsProbeUnitOverlapX(GetOrgPos(AXIS_X2)) == true)
+	//	{
+	//		CString strLogZ34;
+	//		strLogZ34.Format(_T("MoveCmdPosR_Sub Z%d DOWN NG - PROBE UNIT(X9:%.3f, SIZE:%.1f) vs X2:%.3f, %.3f -> +%.3f"), iAxis, GetOrgPos(AXIS_PROBE_X9), m_dInterlockProbeSizeX, GetOrgPos(AXIS_X2), GetOrgPos(iAxis), dPos);
+	//		m_pLogFileAccessor->KMLOG(WARN, strLogZ34, true);
+	//		return MOTION_INTERLOCK_CHECK_ALARM + iAxis;
+	//	}
+	//}
+
+	// jsyoon 20210825 add Rotate Interlock
+	if (iAxis == AXIS_X)
+	{
+		// R 위치 확인후 0 혹은 180 도 근처일때만 이동
+		if (nRet == df_MOTION_RV_SUCCESSED)
+		{
+			double dCurPos = 0;
+			dCurPos = GetOrgPos(AXIS_LOADER_R);
+			if (fabs(dCurPos) < 2 || fabs(dCurPos - 90) < 2 || fabs(dCurPos - 180) < 2 || fabs(dCurPos - 270) < 2)	// LYS 2026-08-07 rotation-change: station angles {0,90,180,270}
+			{
+				;
+			}
+			else
+			{
+				nRet = MOTION_ROTATE_POS_ERROR;
+			}
+		}
+
+		// R 이동시 X 이동 금지
+		if (nRet == df_MOTION_RV_SUCCESSED)
+		{
+			if (CheckMoveDone(AXIS_LOADER_R, 10) != true)
+			{
+				nRet = MTOR_MOVE_DONE_TIME_OUT_ALARM + AXIS_R;
+			}
+		}
+	}
+	else if (iAxis == AXIS_LOADER_R)
+	{
+		// R 이동 위치 제한
+		if (nRet == df_MOTION_RV_SUCCESSED)
+		{
+			double dCurPos = 0;
+			dCurPos = GetOrgPos(AXIS_LOADER_R);
+			if (fabs(dCurPos) < 2 || fabs(dCurPos - 90) < 2 || fabs(dCurPos - 180) < 2 || fabs(dCurPos - 270) < 2)	// LYS 2026-08-07 rotation-change: station angles {0,90,180,270}
+			{
+				;
+			}
+			else
+			{
+				if (GetOrgPos(AXIS_X) < m_dInterlockPos)
+				{
+					nRet = MOTION_ROTATE_POS_ERROR;
+				}
+			}
+		}
+	}
+	else if (iAxis == AXIS_X2)
+	{
+		double dCur = 0, dMove = 0, dMoveGap = 0;
+		// Gantry 간 충동 방지
+		if (nRet == df_MOTION_RV_SUCCESSED)
+		{
+			dMove = GetOrgPos(AXIS_X2) + dPos;
+			dCur  = GetOrgPos(AXIS_X3);
+
+			if (bDir)
+			{
+				dMoveGap = fabs(dMove - dCur);
+			}
+			else
+			{
+				dMoveGap = fabs(dCur - dMove);
+			}
+
+			if (dMoveGap < m_dInterlockGantryGap - 0.01)
+			{
+				nRet = MOTION_INTERLOCK_7;
+			}
+		}	
+
+		// Probe 이동 시 X2 이동 금지
+		if (nRet == VTM_RV_SUCCESSED)
+		{
+			if (CheckMoveDone(AXIS_PROBE_X9, 10) != true)
+			{
+				nRet = MTOR_MOVE_DONE_TIME_OUT_ALARM + AXIS_PROBE_X9;
+			}
+		}
+
+		// Probe unit 충동 방지
+		//if (nRet == VTM_RV_SUCCESSED)
+		//{
+		//	dCur = GetOrgPos(AXIS_PROBE_X9);
+		//
+		//	if (dMove < (dCur - 5))		// Probe Unit을 넘어가는 경우
+		//	{
+		//		nRet = MOTION_INTERLOCK_5;
+		//	}
+		//}
+
+		// Head Z축 이동 시 X2 이동 금지 WAD 기구물 충동 방지
+		if (nRet == VTM_RV_SUCCESSED)
+		{
+			if (CheckMoveDone(AXIS_Z2, 10) != true)
+			{
+				nRet = MTOR_MOVE_DONE_TIME_OUT_ALARM + AXIS_Z2;
+			}
+		}
+
+		// Head Down 시 이동 위치 제한
+		if (nRet == VTM_RV_SUCCESSED)	// jsyoon 2022.04.18 add Interlock
+		{
+			dCur = GetOrgPos(AXIS_Z2);
+
+			if (dCur > 0.1)
+			{
+				if (dMove < (GetMinSWLimit(AXIS_X2) + 35)) // jsyoon 2022.05.18 change 80 to 35
+				{
+					nRet = MOTION_INTERLOCK_8;
+				}
+			}
+		}
+
+		// LYS 2026-08-26 X2 (BACK GANTRY) 가 Probe 지나갈 때 Unit Z축 무조건 상승 시켜야함
+		// 2026-09-10 임시 해제
+		if (nRet == df_MOTION_RV_SUCCESSED)
+		{
+			nRet = RetractHeadZForProbeUnit(GetOrgPos(AXIS_X2) + dPos, _T("MoveCmdPosR_Sub"));
+		}
+	}
+	else if (iAxis == AXIS_X3)
+	{
+		// Gantry 간 충동 방지
+		if (nRet == df_MOTION_RV_SUCCESSED)
+		{
+			double dCur = 0, dMove = 0, dMoveGap = 0;
+			dMove = GetOrgPos(AXIS_X3) + dPos;
+			dCur = GetOrgPos(AXIS_X2);
+			if (bDir)
+			{
+				dMoveGap = fabs(dCur - dMove);
+			}
+			else
+			{
+				dMoveGap = fabs(dMove - dCur);
+			}
+
+			if (dMoveGap < m_dInterlockGantryGap - 0.01)
+			{
+				nRet = MOTION_INTERLOCK_7;
+			}
+		}	
+
+		// Probe 이동 시 X3 이동 금지
+		if (nRet == VTM_RV_SUCCESSED)
+		{
+			if (CheckMoveDone(AXIS_PROBE_X9, 10) != true)
+			{
+				nRet = MTOR_MOVE_DONE_TIME_OUT_ALARM + AXIS_PROBE_X9;
+			}
+		}
+
+		// Head Down 시 이동 금지
+		if (nRet == VTM_RV_SUCCESSED)
+		{
+			double dCurZ = 0, dMoveGap = 0;
+			dCurZ = GetOrgPos(AXIS_Z1);
+			if (dCurZ > 1)
+			{
+				nRet = MOTION_INTERLOCK_5;
+			}
+
+			// LYS 2026-09-09 FRONT Z(Z2) 하강 상태(>1)에서 X3 목표가 100 이상이면 이동 금지 - X3는 정상 동작에서 양수 영역으로 가지 않음.
+			//   위 Z1 체크는 X2<->Z1 / X3<->Z2 짝이 교차된 것이고 OCP에선 Z1 USE0라 dead. 알람은 기존 Head Gantry 인터락(MOTION_INTERLOCK_5) 재사용
+			if (nRet == VTM_RV_SUCCESSED)
+			{
+				double dCurZ2 = GetOrgPos(AXIS_Z2);
+				double dTargetX3 = GetOrgPos(AXIS_X3) + dPos;
+				if (dCurZ2 > 1 && dTargetX3 >= 100.0)
+				{
+					CString strLogX3;
+					strLogX3.Format(_T("MoveCmdPosR_Sub X3 NG - FRONT Z(Z2) DOWN %.3f, X3 %.3f -> %.3f (target >= 100 blocked)"), dCurZ2, GetOrgPos(AXIS_X3), dTargetX3);
+					m_pLogFileAccessor->KMLOG(WARN, strLogX3, true);
+					nRet = MOTION_INTERLOCK_5;
+				}
+			}
+		}
+	}
+
+	else if (iAxis == AXIS_Y1)
+	{
+		double dCur = 0, dMove = 0, dMoveGap = 0;
+		// Head 간 충동 방지
+		if (nRet == VTM_RV_SUCCESSED)
+		{
+			dMove = GetOrgPos(AXIS_Y1) + dPos;
+			dCur = GetOrgPos(AXIS_Y2);
+
+			if (bDir)
+			{
+				dMoveGap = fabs(dMove - dCur);
+			}
+			else
+			{
+				dMoveGap = fabs(dCur - dMove);
+			}
+
+			if (dMoveGap < m_dInterlockHeadGapB)	// 2023.03.08 change
+			{
+				nRet = MOTION_INTERLOCK_7;
+			}
+		}
+		
+	}
+	else if (iAxis == AXIS_Y2)
+	{
+		double dCur = 0, dMove = 0, dMoveGap = 0;
+		// Head 간 충동 방지
+		if (nRet == VTM_RV_SUCCESSED)
+		{
+			dMove = GetOrgPos(AXIS_Y2) + dPos;
+			dCur = GetOrgPos(AXIS_Y1);
+			if (bDir)
+			{
+				dMoveGap = fabs(dCur - dMove);
+			}
+			else
+			{
+				dMoveGap = fabs(dMove - dCur);
+			}
+
+			if (dMoveGap < m_dInterlockHeadGapB)	// 2023.03.08 change
+			{
+				nRet = MOTION_INTERLOCK_7;
+			}
+		}
+		
+	}
+	else if (iAxis == AXIS_Y3)
+	{
+		double dCur = 0, dMove = 0, dMoveGap = 0;
+		// Head 간 충동 방지
+		if (nRet == VTM_RV_SUCCESSED)
+		{
+			dMove = GetOrgPos(AXIS_Y3) + dPos;
+			dCur = GetOrgPos(AXIS_Y4);
+
+			if (bDir)
+			{
+				dMoveGap = fabs(dMove - dCur);
+			}
+			else
+			{
+				dMoveGap = fabs(dCur - dMove);
+			}
+
+			if (dMoveGap < m_dInterlockHeadGap)
+			{
+				nRet = MOTION_INTERLOCK_7;
+			}
+		}	
+	}
+	else if (iAxis == AXIS_Y4)
+	{
+		double dCur = 0, dMove = 0, dMoveGap = 0;
+		// Head 간 충동 방지
+		if (nRet == VTM_RV_SUCCESSED)
+		{
+			dMove = GetOrgPos(AXIS_Y4) + dPos;
+			dCur = GetOrgPos(AXIS_Y3);
+			if (bDir)
+			{
+				dMoveGap = fabs(dCur - dMove);
+			}
+			else
+			{
+				dMoveGap = fabs(dMove - dCur);
+			}
+
+			if (dMoveGap < m_dInterlockHeadGap)
+			{
+				nRet = MOTION_INTERLOCK_7;
+			}
+		}
+	}
+	else if (iAxis == AXIS_PROBE_X1)
+	{
+		double dCur = 0, dMove = 0, dMoveGap = 0;
+		// Probe 간 충동 방지
+		if (nRet == VTM_RV_SUCCESSED)
+		{
+			dMove = GetOrgPos(iAxis) + dPos;
+			dCur = GetOrgPos(AXIS_PROBE_X3);
+			if (bDir)
+			{
+				dMoveGap = fabs(dCur - dMove);
+			}
+			else
+			{
+				dMoveGap = fabs(dMove - dCur);
+			}
+
+			if (dMoveGap < m_dInterlockProbeGap)
+			{
+				nRet = MOTION_INTERLOCK_7;
+			}
+		}
+	}
+	else if (iAxis == AXIS_PROBE_X3)
+	{
+		double dCur = 0, dMove = 0, dMoveGap = 0;
+		// Probe 간 충동 방지
+		if (nRet == VTM_RV_SUCCESSED)
+		{
+			dMove = GetOrgPos(iAxis) + dPos;
+			dCur = GetOrgPos(AXIS_PROBE_X1);
+			if (bDir)
+			{
+				dMoveGap = fabs(dMove - dCur);
+			}
+			else
+			{
+				dMoveGap = fabs(dCur - dMove);
+			}
+
+			if (dMoveGap < m_dInterlockProbeGap)
+			{
+				nRet = MOTION_INTERLOCK_7;
+			}
+		}
+		
+		// Probe 간 충동 방지
+		if (nRet == df_MOTION_RV_SUCCESSED)
+		{
+			dCur = GetOrgPos(AXIS_PROBE_X5);
+			if (bDir)
+			{
+				dMoveGap = fabs(dCur - dMove);
+			}
+			else
+			{
+				dMoveGap = fabs(dMove - dCur);
+			}
+
+			if (dMoveGap < m_dInterlockProbeGap)
+			{
+				nRet = MOTION_INTERLOCK_7;
+			}
+		}
+	}
+	else if (iAxis == AXIS_PROBE_X5)
+	{
+		double dCur = 0, dMove = 0, dMoveGap = 0;
+		// Probe 간 충동 방지
+		if (nRet == VTM_RV_SUCCESSED)
+		{
+			dMove = GetOrgPos(iAxis) + dPos;
+			dCur = GetOrgPos(AXIS_PROBE_X3);
+			if (bDir)
+			{
+				dMoveGap = fabs(dMove - dCur);
+			}
+			else
+			{
+				dMoveGap = fabs(dCur - dMove);
+			}
+
+			if (dMoveGap < m_dInterlockProbeGap)
+			{
+				nRet = MOTION_INTERLOCK_7;
+			}
+		}
+		
+		// Probe 간 충동 방지
+		if (nRet == df_MOTION_RV_SUCCESSED)
+		{
+			dCur = GetOrgPos(AXIS_PROBE_X7);
+			if (bDir)
+			{
+				dMoveGap = fabs(dCur - dMove);
+			}
+			else
+			{
+				dMoveGap = fabs(dMove - dCur);
+			}
+
+			if (dMoveGap < m_dInterlockProbeGap)
+			{
+				nRet = MOTION_INTERLOCK_7;
+			}
+		}
+	}
+	else if (iAxis == AXIS_PROBE_X7)
+	{
+		double dCur = 0, dMove = 0, dMoveGap = 0;
+		// Probe 간 충동 방지
+		if (nRet == VTM_RV_SUCCESSED)
+		{
+			dMove = GetOrgPos(iAxis) + dPos;
+			dCur = GetOrgPos(AXIS_PROBE_X5);
+			if (bDir)
+			{
+				dMoveGap = fabs(dMove - dCur);
+			}
+			else
+			{
+				dMoveGap = fabs(dCur - dMove);
+			}
+
+			if (dMoveGap < m_dInterlockProbeGap)
+			{
+				nRet = MOTION_INTERLOCK_7;
+			}
+		}
+		
+		// Probe 간 충동 방지
+		if (nRet == df_MOTION_RV_SUCCESSED)
+		{
+			dCur = GetOrgPos(AXIS_PROBE_X9);
+			if (bDir)
+			{
+				dMoveGap = fabs(dCur - dMove);
+			}
+			else
+			{
+				dMoveGap = fabs(dMove - dCur);
+			}
+
+			if (dMoveGap < m_dInterlockProbeGap)
+			{
+				nRet = MOTION_INTERLOCK_7;
+			}
+		}
+	}
+	else if (iAxis == AXIS_PROBE_X9)
+	{
+		double dCur = 0, dMove = 0, dMoveGap = 0;
+		// Probe 간 충동 방지
+		// LYS 2026-08-25 same P4-less reasoning as MoveCmdPosA_Sub.
+		if (nRet == VTM_RV_SUCCESSED && !m_bIsOCP)
+		{
+			dMove = GetOrgPos(iAxis) + dPos;
+			dCur = GetOrgPos(AXIS_PROBE_X7);
+			if (bDir)
+			{
+				dMoveGap = fabs(dMove - dCur);
+			}
+			else
+			{
+				dMoveGap = fabs(dCur - dMove);
+			}
+
+			if (dMoveGap < m_dInterlockProbeGap)
+			{
+				nRet = MOTION_INTERLOCK_7;
+			}
+		}
+	}
+	else if (iAxis == AXIS_LOADER_Z)	// 2023.04.10 add Life Pin, Prebe Unit Interlock
+	{
+		// Loader  Z 이동 범위 인터락
+		if (nRet == VTM_RV_SUCCESSED)
+		{
+			double dCur = 0;
+			dCur = GetOrgPos(AXIS_X);
+
+			if (dCur < GetMaxSWLimit(AXIS_X) - 100) // Safety 위치	
+			{
+				nRet = MOTION_INTERLOCK_3;
+			}
+		}
+
+		// Loader Z 이동시 Probe Unit이 Loader 에 있을 경우 충동 방지
+		if (nRet == df_MOTION_RV_SUCCESSED)
+		{
+			// LYS 2026-08-25 복구 - OCP 갠트리 X가 움직이므로 Loader Z 인터락이 그 위치를 다시 봐야 한다.
+			{
+				double dCur = 0;
+				dCur = GetOrgPos(AXIS_PROBE_X9);
+
+				if (dCur > m_dInterlockLifePinPos)
+				{
+					nRet = MOTION_INTERLOCK_3;
+				}
+			}
+		}
+	}
+
+	else if (iAxis == AXIS_Z1)	// jsyoon 2022.09.30 add
+	{
+		double dCur = 0, dMove = 0, dMoveGap = 0;
+		dMove = GetOrgPos(AXIS_Z1) + dPos;
+
+		double dMoveZ1 = dMove;
+
+		// LYS 2026-08-26 Z1은 +방향이 하강(안전 -600, 측정 0)이라 목표 > 현재 = 하강, 상승은 항상 허용.
+		if (nRet == df_MOTION_RV_SUCCESSED && dPos > 0.)
+		{
+			if (IsProbeUnitOverlapX(GetOrgPos(AXIS_X2)) == true)
+			{
+				nRet = MOTION_INTERLOCK_CHECK_ALARM + AXIS_Z1;
+
+				CString strLog;
+				strLog.Format(_T("MoveCmdPosR_Sub Z1 DOWN NG - PROBE UNIT(X9:%.3f, SIZE:%.1f) vs BACK GANTRY(X2:%.3f), Z1 %.3f -> %.3f"),
+					GetOrgPos(AXIS_PROBE_X9), m_dInterlockProbeSizeX, GetOrgPos(AXIS_X2),
+					GetOrgPos(AXIS_Z1), dMoveZ1);
+				m_pLogFileAccessor->KMLOG(WARN, strLog, true);
+			}
+		}
+
+		if (dMove > 1)
+		{
+			// Head Z 이동 시 Probe Unit 충돌 인터락
+			if (nRet == VTM_RV_SUCCESSED)
+			{
+				// LYS 2026-09-02 미사용 프로브 Z축은 인터락에서 제외 (bUse 가드)
+				if ((GetAxisProperty(AXIS_PROBE_Z1)->bUse && GetOrgPos(AXIS_PROBE_Z1) < -5.1) ||
+					(GetAxisProperty(AXIS_PROBE_Z2)->bUse && GetOrgPos(AXIS_PROBE_Z2) < -5.1) ||
+					(GetAxisProperty(AXIS_PROBE_Z3)->bUse && GetOrgPos(AXIS_PROBE_Z3) < -5.1) ||
+					(GetAxisProperty(AXIS_PROBE_Z4)->bUse && GetOrgPos(AXIS_PROBE_Z4) < -5.1) ||
+					(GetAxisProperty(AXIS_PROBE_Z5)->bUse && GetOrgPos(AXIS_PROBE_Z5) < -5.1))
+				{
+					nRet = MOTION_INTERLOCK_7;
+				}
+			}
+			
+		}
+	}
+	else if (iAxis == AXIS_Z2)		// jsyoon 2022.04.18 add Interlock
+	{
+		double dCur = 0, dMove = 0, dMoveGap = 0;
+		dMove = GetOrgPos(AXIS_Z2) + dPos;
+		if (dMove > 1)
+		{
+			// Head Z 이동 시 Probe Unit 충돌 인터락
+			if (nRet == VTM_RV_SUCCESSED)
+			{
+				// LYS 2026-09-02 미사용 프로브 Z축은 인터락에서 제외 (bUse 가드)
+				if ((GetAxisProperty(AXIS_PROBE_Z1)->bUse && GetOrgPos(AXIS_PROBE_Z1) < -5.1) ||
+					(GetAxisProperty(AXIS_PROBE_Z2)->bUse && GetOrgPos(AXIS_PROBE_Z2) < -5.1) ||
+					(GetAxisProperty(AXIS_PROBE_Z3)->bUse && GetOrgPos(AXIS_PROBE_Z3) < -5.1) ||
+					(GetAxisProperty(AXIS_PROBE_Z4)->bUse && GetOrgPos(AXIS_PROBE_Z4) < -5.1) ||
+					(GetAxisProperty(AXIS_PROBE_Z5)->bUse && GetOrgPos(AXIS_PROBE_Z5) < -5.1))
+				{
+					nRet = MOTION_INTERLOCK_7;
+				}
+			}
+			
+			// Head Z 이동 범위 제한
+			if (nRet == VTM_RV_SUCCESSED)
+			{
+				double dCurX2 = 0;
+				dCurX2 = GetOrgPos(AXIS_X2);
+
+				if (dCurX2 < GetMinSWLimit(AXIS_X2) + 35)	// 35 is Revivew Lens 지름 +
+				{
+					nRet = MOTION_INTERLOCK_7;
+				}
+			}
+
+			// LYS 2026-08-25 FRONT Z(Z2)는 FRONT 갠트리(X3)에 실리고 그 스트로크는 P5에 닿지 않아
+			// Head/Probe 인터락이 필요 없다. 여기 있던 검사는 BACK 갠트리 X2를 보고 있어 짝이 틀렸다.
+		}
+	}
+	else
+	{
+		// Probe Unit 과 Head Z 충돌 인터락
+		if (iAxis == AXIS_PROBE_Z1 || iAxis == AXIS_PROBE_Z2 || iAxis == AXIS_PROBE_Z3 || iAxis == AXIS_PROBE_Z4 || iAxis == AXIS_PROBE_Z5)
+		{
+			double dCur = 0, dMove = 0;
+			dMove = GetOrgPos(iAxis) + dPos;
+			if (dMove < -5.1)
+			{
+				if (nRet == df_MOTION_RV_SUCCESSED)
+				{
+					dCur = GetOrgPos(AXIS_Z1);
+					if (dCur > 1)
+					{
+						nRet = MOTION_INTERLOCK_7;
+					}
+				}
+
+				if (nRet == df_MOTION_RV_SUCCESSED)
+				{
+					dCur = GetOrgPos(AXIS_Z2);
+					if (dCur > 1)
+					{
+						nRet = MOTION_INTERLOCK_7;
+					}
+				}
+			}
+		}
+	 }
+
+	// Slave
+	if (iAxis == AXIS_PROBE_X2 || iAxis == AXIS_PROBE_X4 || iAxis == AXIS_PROBE_X6 || iAxis == AXIS_PROBE_X8 || iAxis == AXIS_PROBE_X10)
+	{
+		double dCur = 0, dMove = 0, dMoveGap = 0;
+		dMove = GetOrgPos(iAxis) + dPos;
+		dCur  = GetOrgPos(iAxis - 1);
+		dMoveGap = fabs(dMove - dCur);	// Master - Slave
+		if (dMoveGap > 5)
+		{
+			nRet = MOTION_INTERLOCK_7;
+		}
+	}
+
+	// Probe Z Contact
+	if (nRet == df_MOTION_RV_SUCCESSED)
+	{
+		//	if (iAxis == AXIS_X || iAxis == AXIS_LOADER_R)
+		if (iAxis == AXIS_X || iAxis == AXIS_LOADER_R ||
+			iAxis == AXIS_PROBE_X1 || iAxis == AXIS_PROBE_X2 || iAxis == AXIS_PROBE_X3 || iAxis == AXIS_PROBE_X4 || iAxis == AXIS_PROBE_X5 || iAxis == AXIS_PROBE_X6 || iAxis == AXIS_PROBE_X7 || iAxis == AXIS_PROBE_X8 || iAxis == AXIS_PROBE_X9 || iAxis == AXIS_PROBE_X10 ||
+			iAxis == AXIS_PROBE_Y1 || iAxis == AXIS_PROBE_Y2 || iAxis == AXIS_PROBE_Y3 || iAxis == AXIS_PROBE_Y4 || iAxis == AXIS_PROBE_Y5)
+		{
+			// LYS 2026-09-02 미사용 프로브 Z축은 인터락에서 제외 (bUse 가드)
+			if ((GetAxisProperty(AXIS_PROBE_Z1)->bUse && GetOrgPos(AXIS_PROBE_Z1) > 0.1) ||
+				(GetAxisProperty(AXIS_PROBE_Z2)->bUse && GetOrgPos(AXIS_PROBE_Z2) > 0.1) ||
+				(GetAxisProperty(AXIS_PROBE_Z3)->bUse && GetOrgPos(AXIS_PROBE_Z3) > 0.1) ||
+				(GetAxisProperty(AXIS_PROBE_Z4)->bUse && GetOrgPos(AXIS_PROBE_Z4) > 0.1) ||
+				(GetAxisProperty(AXIS_PROBE_Z5)->bUse && GetOrgPos(AXIS_PROBE_Z5) > 0.1))
+			{
+				double dPos = 0;
+
+			/*	stMotorPosition stPositionProbe[5];
+				stPositionProbe[0].axis = AXIS_PROBE_Z1;
+				stPositionProbe[0].dPosition = dPos;
+				stPositionProbe[1].axis = AXIS_PROBE_Z2;
+				stPositionProbe[1].dPosition = dPos;
+				stPositionProbe[2].axis = AXIS_PROBE_Z3;
+				stPositionProbe[2].dPosition = dPos;
+				stPositionProbe[3].axis = AXIS_PROBE_Z4;
+				stPositionProbe[3].dPosition = dPos;
+				stPositionProbe[4].axis = AXIS_PROBE_Z5;
+				stPositionProbe[4].dPosition = dPos;
+
+				nRet = MoveCmdPosMulti(stPositionProbe, 5, SPEED_HIGH, true);*/
+
+				nRet = MOTION_INTERLOCK_8;
+			}
+		}
+	}
+
+	// Head Z 와 Probe Unit 충돌 인터락
+	if (nRet == df_MOTION_RV_SUCCESSED)
+	{
+		if (iAxis == AXIS_PROBE_X1 || iAxis == AXIS_PROBE_X2 || iAxis == AXIS_PROBE_X3 || iAxis == AXIS_PROBE_X4 || iAxis == AXIS_PROBE_X5 || iAxis == AXIS_PROBE_X6 || iAxis == AXIS_PROBE_X7 || iAxis == AXIS_PROBE_X8 || iAxis == AXIS_PROBE_X9 || iAxis == AXIS_PROBE_X10 ||
+			iAxis == AXIS_PROBE_Y1 || iAxis == AXIS_PROBE_Y2 || iAxis == AXIS_PROBE_Y3 || iAxis == AXIS_PROBE_Y4 || iAxis == AXIS_PROBE_Y5)
+		{
+			if (nRet == df_MOTION_RV_SUCCESSED)
+			{
+				double dFront_Z = 0., dBack_Z = 0.;
+				dFront_Z = GetOrgPos(AXIS_Z1);
+				dBack_Z  = GetOrgPos(AXIS_Z2);
+
+				// LYS 2026-09-02 미사용 헤드 Z축은 인터락에서 제외 (bUse 가드)
+				if ((GetAxisProperty(AXIS_Z1)->bUse && dFront_Z > 1) || (GetAxisProperty(AXIS_Z2)->bUse && dBack_Z > 1))
+				{
+					nRet = MOTION_INTERLOCK_8;
+
+					CString strLog;
+					strLog.Format(_T("MoveCmdPosR_Sub HEAD_Z NG(%.3f,%.3f,%.3f,%.3f,%.3f)"), dFront_Z, dBack_Z);
+					m_pLogFileAccessor->KMLOG(WARN, strLog, true);
+				}
+			}
+		}
+	}
+
+	// LOADER Z Down Interlock
+	if (nRet == df_MOTION_RV_SUCCESSED)
+	{
+		if (iAxis != AXIS_LOADER_Z)
+		{
+			double dCurPos = 0;
+			dCurPos = GetOrgPos(AXIS_LOADER_Z);
+			if (dCurPos > 0.1)
+			{
+				nRet = MOTION_INTERLOCK_1;
+			}
+		}
+	}
+
+	if (nRet == df_MOTION_RV_SUCCESSED)
+	{
+		if (IsOutOfService() == true)
+		{
+			if (GetMinSWLimit(iAxis) > m_dMovePos[iAxis] + dPos || GetMaxSWLimit(iAxis) < m_dMovePos[iAxis] + dPos)
+			{
+				return MOTION_INTERLOCK_CHECK_ALARM;
+			}
+
+			if (iAxis == AXIS_PROBE_X1 || iAxis == AXIS_PROBE_X3 || iAxis == AXIS_PROBE_X5 || iAxis == AXIS_PROBE_X7 || iAxis == AXIS_PROBE_X9)
+			{
+				m_dMovePos[iAxis + 1] += dPos;
+			}
+
+			m_dMovePos[iAxis] += dPos;
+			return df_MOTION_RV_SUCCESSED;
+		}
+		else
+		{
+			if (m_pFunction->IsConnected() != true)
+			{
+				return MEI_NOT_CREATED;
+			}
+		}
+	}
+	else
+	{
+		return nRet;
+	}
+
+	CCriticalSectionSync single(&m_cs, TRUE);
+
+	if (nRet == df_MOTION_RV_SUCCESSED)
+	{
+		long lRet = 0;
+		lRet = m_pFunction->MoveCmdPosR(iAxis, dPos, bBlockMode, iSpeed);
+
+		// LYS 2026-09-02 상대이동 false 처리
+		if (lRet == 1)
+		{
+			nRet = df_MOTION_RV_SUCCESSED;
+		}
+		//else if (nRet == -1) 
+		//{
+		//	nRet = MEI_NOT_CREATED;
+		//}
+		else
+		{
+			nRet = MOTION_CMDPOS_ERROR; // MOTION_MOVE_ALARM + iAxis;
+		}
+
+		//if (lRet == 1)
+		//	nRet = df_MOTION_RV_SUCCESSED;
+		//else
+		//	nRet = MOTION_MOVE_ALARM + iAxis;
+	}
+
+	//if (nRet == df_MOTION_RV_SUCCESSED)
+	//{
+	//	if (iAxis == AXIS_X || iAxis == AXIS_Y || iAxis == AXIS_LOADER_R)
+	//	{
+	//		if (m_pFunction->GetCurPos(AXIS_UNIT_Z, 0, 0) < 0.1)
+	//		{
+	//			if (m_pFunction->MoveCmdPosR(iAxis, dPos, bBlockMode, iSpeed) != 0)
+	//				nRet = df_MOTION_RV_SUCCESSED;
+	//			else
+	//				nRet = MOTION_MOVE_ALARM + iAxis;
+	//		}
+	//		else
+	//		{
+	//			nRet = MOTION_PB_STANDBY_POS_FAIL;
+	//		}
+	//	}
+	//	//else if (iAxis == AXIS_Y1)
+	//	//{
+	//	//	double dCur = 0, dMovePos = 0;
+	//	//	dCur = m_pFunction->GetCurPos(AXIS_Z2, 0, 0); // +
+	//	//	dMovePos = m_pFunction->GetCurPos(AXIS_Y1, 0, 0) + dPos;
+	//	//	if (fabs(dCur - dMovePos) < m_dInterlockHeadGap)
+	//	//	{
+	//	//		nRet = MOTION_INTERLOCK_7;
+	//	//	}
+
+	//	//	if (nRet == df_MOTION_RV_SUCCESSED)
+	//	//	{
+	//	//		if (m_pFunction->MoveCmdPosR(iAxis, dPos, bBlockMode, iSpeed) != 0)
+	//	//			nRet = df_MOTION_RV_SUCCESSED;
+	//	//		else
+	//	//			nRet = MOTION_MOVE_ALARM + iAxis;
+	//	//	}
+	//	//}
+	//	//else if (iAxis == AXIS_Z2)
+	//	//{
+	//	//	double dCur = 0, dMovePos = 0;
+	//	//	dCur = m_pFunction->GetCurPos(AXIS_Y1, 0, 0); // -
+	//	//	dMovePos = m_pFunction->GetCurPos(AXIS_Z2, 0, 0) + dPos;
+	//	//	if (fabs(dMovePos - dCur) < m_dInterlockHeadGap)
+	//	//	{
+	//	//		nRet = MOTION_INTERLOCK_7;
+	//	//	}
+
+	//	//	if (nRet == df_MOTION_RV_SUCCESSED)
+	//	//	{
+	//	//		if (m_pFunction->MoveCmdPosR(iAxis, dPos, bBlockMode, iSpeed) != 0)
+	//	//			nRet = df_MOTION_RV_SUCCESSED;
+	//	//		else
+	//	//			nRet = MOTION_MOVE_ALARM + iAxis;
+	//	//	}
+	//	//}
+	//	else
+	//	{
+	//		if (m_pFunction->MoveCmdPosR(iAxis, dPos, bBlockMode, iSpeed) != 0)
+	//			nRet = df_MOTION_RV_SUCCESSED;
+	//		else
+	//			nRet = MOTION_MOVE_ALARM + iAxis;
+	//	}
+	//}
+
+	return nRet;
+}
+
+
+long CMotorControlMgr::MoveCmdPosR(int iAxis, double dPos, bool bBlockMode, int iSpeed)
+{
+	// jsyoon 20210831 change
+	CString strLog;
+	CString strAxis;
+	strAxis.Format(_T("%s"), GetAxisMapProperty(iAxis)->m_strAxisName);
+
+	strLog.Format(_T("MoveCmdPosR Start(AXIS:%s, POS:%.3f, SPPED:%d)"), strAxis, dPos, iSpeed);
+	m_pLogFileAccessor->KMLOG(SYST, strLog, true);
+
+	long nRet = df_MOTION_RV_SUCCESSED;
+
+	nRet = MoveCmdPosR_Sub(iAxis, dPos, bBlockMode, iSpeed);
+
+	strLog.Format(_T("MoveCmdPosR End(AXIS:%s, POS:%.3f, RET:%d)"), strAxis, dPos, nRet);
+
+	if( nRet == VTM_RV_SUCCESSED)
+		m_pLogFileAccessor->KMLOG(SYST, strLog, true);
+	else
+	{
+		m_pLogFileAccessor->KMLOG(WARN, strLog, true);
+		CAlarmController::GetInstance()->SetAlarm(nRet);	// LYS 2026-09-02 raise alarm on move failure
+	}
+		
+
+	return nRet;
+}
+
+long CMotorControlMgr::MoveCmdPosMulti_Move(stMotorPosition* pPos, int iAxis, int iSpeed)
+{
+	long nRet = df_MOTION_RV_SUCCESSED;
+
+	CCriticalSectionSync single(&m_cs, TRUE);
+
+	if (nRet == df_MOTION_RV_SUCCESSED)
+	{
+		long lRet = 0;
+		nRet = m_pFunction->MoveCmdPosMulti(pPos, iAxis, iSpeed);
+		if (nRet == 1)
+		{
+			nRet = df_MOTION_RV_SUCCESSED;
+		}
+		else if (nRet == -1)
+		{
+			nRet = MEI_NOT_CREATED;
+		}
+		else
+		{
+			nRet = MOTION_CMDPOS_ERROR; // MOTION_MOVE_ALARM + iAxis;
+		}
+	}
+
+	return nRet;
+}
+
+long CMotorControlMgr::MoveCmdPosMulti_Sub(stMotorPosition *pPos, int iAxis, int iSpeed, bool bDoneCheck)
+{
+	long nRet = df_MOTION_RV_SUCCESSED;
+	bool bDir = true;
+
+	// LYS 2026-09-02 멀티 이동 각 축 목표값 SW 리밋 체크 (절대좌표, 초과 시 SW 리밋 알람)
+	for (int iSw = 0; iSw < iAxis; iSw++)
+	{
+		int nSwAxis = pPos[iSw].axis;
+		if (nSwAxis < 0 || nSwAxis >= AXIS_TYPE_END) continue;
+		if (pPos[iSw].dPosition > GetMaxSWLimit(nSwAxis))
+		{
+			CAlarmController::GetInstance()->SetAlarm(MOTION_SW_OVER_LIMIT_POS);
+			return MOTION_SW_OVER_LIMIT_POS;
+		}
+		else if (pPos[iSw].dPosition < GetMinSWLimit(nSwAxis))
+		{
+			CAlarmController::GetInstance()->SetAlarm(MOTION_SW_OVER_LIMIT_NEG);
+			return MOTION_SW_OVER_LIMIT_NEG;
+		}
+
+		// LYS 2026-09-02 Z3/Z4 하강 시 프로브유닛 겹침이면 거부 (Z1 미사용 대체)
+		if ((nSwAxis == AXIS_Z3 || nSwAxis == AXIS_Z4) && pPos[iSw].dPosition > GetOrgPos(nSwAxis))
+		{
+			if (IsProbeUnitOverlapX(GetOrgPos(AXIS_X2)) == true)
+			{
+				CString strLogZ34;
+				strLogZ34.Format(_T("MoveCmdPosMulti_Sub Z%d DOWN NG - PROBE UNIT(X9:%.3f, SIZE:%.1f) vs X2:%.3f, %.3f -> %.3f"), nSwAxis, GetOrgPos(AXIS_PROBE_X9), m_dInterlockProbeSizeX, GetOrgPos(AXIS_X2), GetOrgPos(nSwAxis), pPos[iSw].dPosition);
+				m_pLogFileAccessor->KMLOG(WARN, strLogZ34, true);
+				CAlarmController::GetInstance()->SetAlarm(MOTION_INTERLOCK_CHECK_ALARM + nSwAxis);
+				return MOTION_INTERLOCK_CHECK_ALARM + nSwAxis;
+			}
+		}
+	}
+
+	// jsyoon 20210825 add Rotate Interlock
+	for (size_t i = 0; i < iAxis; i++)
+	{
+		if (pPos[i].axis == AXIS_X)
+		{
+			// R 위치 확인후 0 혹은 180 도 근처일때만 이동
+			double dCurPos = 0;
+			dCurPos = GetOrgPos(AXIS_LOADER_R);
+			if (!(fabs(dCurPos) < 1 || fabs(dCurPos - 90) < 1 || fabs(dCurPos - 180) < 1 || fabs(dCurPos - 270) < 1))	// LYS 2026-08-07 rotation-change: error unless at station angle (old cond was inverted)
+				//	if ((dCurPos > 0.1 && dCurPos < 179.9) || dCurPos < -0.1 || dCurPos > 180.1)
+			{
+				nRet = MOTION_ROTATE_POS_ERROR;
+				break;
+			}
+
+			// R 이동시 X 이동 금지
+			if (m_pFunction->CheckMoveDone(AXIS_LOADER_R, df_MOVINGDONE_TIME) != true)
+			{
+				nRet = MOTION_MOVE_DONE_ALARM + AXIS_LOADER_R;
+				break;
+			}
+		}
+		else if (pPos[i].axis == AXIS_LOADER_R)
+		{
+			if (GetOrgPos(AXIS_X) < m_dInterlockPos)
+			{
+				nRet = MOTION_ROTATE_POS_ERROR;
+			}
+		}
+		else if (pPos[i].axis == AXIS_Y1)
+		{
+			for (size_t j = 0; j < iAxis; j++)
+			{
+				if (pPos[j].axis == AXIS_Y2)
+				{
+					double dMoveGap = 0;
+					if (bDir)
+					{
+						dMoveGap = fabs(pPos[i].dPosition - pPos[j].dPosition);
+					}
+					else
+					{
+						dMoveGap = fabs(pPos[j].dPosition - pPos[i].dPosition);
+					}
+
+					if (dMoveGap < m_dInterlockHeadGap)		// LYS 2026-07-16 change
+					//if (dMoveGap < m_dInterlockHeadGapB)	// 2023.03.08 change
+					{
+						nRet = MOTION_INTERLOCK_7;
+					}
+
+					break;
+				}
+			}
+		}
+		else if (pPos[i].axis == AXIS_Y2)
+		{
+			for (size_t j = 0; j < iAxis; j++)
+			{
+				if (pPos[j].axis == AXIS_Y1)
+				{
+					double dMoveGap = 0;
+					if (bDir)
+					{
+						dMoveGap = fabs(pPos[j].dPosition - pPos[i].dPosition);
+					}
+					else
+					{
+						dMoveGap = fabs(pPos[i].dPosition - pPos[j].dPosition);
+					}
+
+					if (dMoveGap < m_dInterlockHeadGap)		// LYS 2026-07-16 change
+				//	if (dMoveGap < m_dInterlockHeadGapB)	// 2023.03.08 change
+					{
+						nRet = MOTION_INTERLOCK_7;
+					}
+
+					break;
+				}
+			}
+		}
+		else if (pPos[i].axis == AXIS_Y3)
+		{
+			for (size_t j = 0; j < iAxis; j++)
+			{
+				if (pPos[j].axis == AXIS_Y4)
+				{
+					double dMoveGap = 0;
+					if (bDir)
+					{
+						dMoveGap = fabs(pPos[i].dPosition - pPos[j].dPosition);
+					}
+					else
+					{
+						dMoveGap = fabs(pPos[j].dPosition - pPos[i].dPosition);
+					}
+
+					if (dMoveGap < m_dInterlockHeadGap)
+					{
+						nRet = MOTION_INTERLOCK_7;
+					}
+
+					break;
+				}
+			}
+		}
+		else if (pPos[i].axis == AXIS_Y4)
+		{
+			for (size_t j = 0; j < iAxis; j++)
+			{
+				if (pPos[j].axis == AXIS_Y3)
+				{
+					double dMoveGap = 0;
+					if (bDir)
+					{
+						dMoveGap = fabs(pPos[j].dPosition - pPos[i].dPosition);
+					}
+					else
+					{
+						dMoveGap = fabs(pPos[i].dPosition - pPos[j].dPosition);
+					}
+
+					if (dMoveGap < m_dInterlockHeadGap)
+					{
+						nRet = MOTION_INTERLOCK_7;
+					}
+
+					break;
+				}
+			}
+		}
+		else if (pPos[i].axis == AXIS_X2)
+		{
+			// jsyoon 2022.04.14 add
+			double dCur = 0., dCurZ = 0.;
+			dCurZ = GetOrgPos(AXIS_Z);
+			// LYS 2026-07-31 remove
+			//if (dCurZ > -90)
+			//{
+			//	// Probe 충돌 인터락
+			//	dCur = GetOrgPos(AXIS_PROBE_X9);
+			//
+			//	if (pPos[i].dPosition < (dCur - 5))
+			//	{
+			//		nRet = MOTION_INTERLOCK_5;
+			//		break;
+			//	}
+			//
+			//	if (nRet == VTM_RV_SUCCESSED)	// jsyoon 2022.04.18 add Interlock
+			//	{
+			//		dCurZ = GetOrgPos(AXIS_Z);
+			//		if (dCurZ > 0.1)
+			//		{
+			//			// 시야각 WAD 충돌 인터락
+			//			if (pPos[i].dPosition < (GetMinSWLimit(AXIS_X2) + 35))  // jsyoon 2022.05.18 change 80 to 35
+			//			{
+			//				nRet = MOTION_INTERLOCK_8;
+			//			}
+			//		}
+			//	}
+			//}
+
+			// LYS 2026-08-26 X2 (BACK GANTRY) 가 Probe 지나갈 때 Unit Z축 무조건 상승 시켜야함
+			if (nRet == df_MOTION_RV_SUCCESSED)
+			{
+				nRet = RetractHeadZForProbeUnit(pPos[i].dPosition, _T("MoveCmdPosMulti_Sub"));
+			}
+
+			if (nRet != df_MOTION_RV_SUCCESSED)
+				break;
+		}
+		else if (pPos[i].axis == AXIS_X3)
+		{
+			// LYS 2026-09-09 FRONT Z(Z2) 하강 상태(>1)에서 X3 목표가 100 이상이면 이동 금지 (A/R_Sub와 동일). 멀티 래퍼는 SetAlarm을 안 하므로 여기서 직접 발생
+			double dCurZ2 = GetOrgPos(AXIS_Z2);
+			if (dCurZ2 > 1 && pPos[i].dPosition >= 100.0)
+			{
+				CString strLogX3;
+				strLogX3.Format(_T("MoveCmdPosMulti_Sub X3 NG - FRONT Z(Z2) DOWN %.3f, X3 %.3f -> %.3f (target >= 100 blocked)"), dCurZ2, GetOrgPos(AXIS_X3), pPos[i].dPosition);
+				m_pLogFileAccessor->KMLOG(WARN, strLogX3, true);
+				CAlarmController::GetInstance()->SetAlarm(MOTION_INTERLOCK_5);
+				nRet = MOTION_INTERLOCK_5;
+				break;
+			}
+		}
+		else if (pPos[i].axis == AXIS_Z1)	// jsyoon 2022.09.30 add
+		{
+			if (pPos[i].dPosition > 10)
+			{
+				// LYS 2026-09-02 미사용 프로브 Z축은 인터락에서 제외 (bUse 가드)
+				if ((GetAxisProperty(AXIS_PROBE_Z1)->bUse && GetOrgPos(AXIS_PROBE_Z1) < -5.1) ||
+					(GetAxisProperty(AXIS_PROBE_Z2)->bUse && GetOrgPos(AXIS_PROBE_Z2) < -5.1) ||
+					(GetAxisProperty(AXIS_PROBE_Z3)->bUse && GetOrgPos(AXIS_PROBE_Z3) < -5.1) ||
+					(GetAxisProperty(AXIS_PROBE_Z4)->bUse && GetOrgPos(AXIS_PROBE_Z4) < -5.1) ||
+					(GetAxisProperty(AXIS_PROBE_Z5)->bUse && GetOrgPos(AXIS_PROBE_Z5) < -5.1))
+				{
+					nRet = MOTION_INTERLOCK_7;
+					break;
+				}		
+			}
+
+			// LYS 2026-08-26 A_Sub와 같은 이유로 `> 10` 게이트 밖에 배치. 목표 > 현재 = 하강 판정.
+			if (pPos[i].dPosition > GetOrgPos(AXIS_Z1))
+			{
+				if (IsProbeUnitOverlapX(GetOrgPos(AXIS_X2)) == true)
+				{
+					nRet = MOTION_INTERLOCK_CHECK_ALARM + AXIS_Z1;
+
+					CString strLog;
+					strLog.Format(_T("MoveCmdPosMulti_Sub Z1 DOWN NG - PROBE UNIT(X9:%.3f, SIZE:%.1f) vs BACK GANTRY(X2:%.3f), Z1 %.3f -> %.3f"),
+						GetOrgPos(AXIS_PROBE_X9), m_dInterlockProbeSizeX, GetOrgPos(AXIS_X2),
+						GetOrgPos(AXIS_Z1), pPos[i].dPosition);
+					m_pLogFileAccessor->KMLOG(WARN, strLog, true);
+
+					break;
+				}
+			}
+		}
+		else if (pPos[i].axis == AXIS_PROBE_X9)
+		{
+			// jsyoon 2022.04.14 add
+			double dCur = 0;
+			dCur = GetOrgPos(AXIS_Z2);
+			if (dCur > -1)
+			{
+				dCur = GetOrgPos(AXIS_X2);
+
+				if (pPos[i].dPosition > dCur + 5)
+				{
+					nRet = MOTION_INTERLOCK_7;
+					break;
+				}
+			}
+		}
+		else if (pPos[i].axis == AXIS_Z2)		// jsyoon 2022.04.18 add Interlock
+		{
+			if (pPos[i].dPosition > 0)
+			{
+				double dCur = 0, dMoveGap = 0;
+				dCur = GetOrgPos(AXIS_X2);
+
+				if (dCur < GetMinSWLimit(AXIS_X2) + 35)  // jsyoon 2022.05.18 change 80 to 35
+				{
+					nRet = MOTION_INTERLOCK_8;
+				}
+			}
+		}
+		else if (pPos[i].axis == AXIS_PROBE_X1)
+		{
+			;
+		}
+		else
+		{
+			// jsyoon 2022.09.30 add
+			if (pPos[i].axis == AXIS_PROBE_Z1 || pPos[i].axis == AXIS_PROBE_Z2 || pPos[i].axis == AXIS_PROBE_Z3 || pPos[i].axis == AXIS_PROBE_Z4 || pPos[i].axis == AXIS_PROBE_Z5)
+			{
+				if (pPos[i].dPosition < -5.1 )
+				{
+					double dCur = 0;
+					dCur = GetOrgPos(AXIS_Z);
+					if (dCur > 10)
+					{
+						nRet = MOTION_INTERLOCK_7;
+						break;
+					}
+				}
+			}
+		}
+	}
+
+	if (nRet == df_MOTION_RV_SUCCESSED)
+	{
+		bool bProbeZMove = false;
+		int axis = 0;
+		for (size_t i = 0; i < iAxis; i++)
+		{
+			axis = pPos[i].axis;
+			if (axis == AXIS_X || axis == AXIS_LOADER_R || 
+				axis == AXIS_PROBE_X1 || axis == AXIS_PROBE_X2 || axis == AXIS_PROBE_X3 || axis == AXIS_PROBE_X4 || axis == AXIS_PROBE_X5 || axis == AXIS_PROBE_X6 || axis == AXIS_PROBE_X7 || axis == AXIS_PROBE_X8 || axis == AXIS_PROBE_X9 || axis == AXIS_PROBE_X10 ||
+				axis == AXIS_PROBE_Y1 || axis == AXIS_PROBE_Y2 || axis == AXIS_PROBE_Y3 || axis == AXIS_PROBE_Y4 || axis == AXIS_PROBE_Y5 )
+			{
+				bProbeZMove = true;
+				break;
+			}
+		}
+
+		if(bProbeZMove == true)
+		{
+			// LYS 2026-09-02 미사용 프로브 Z축은 인터락에서 제외 (bUse 가드)
+			if ((GetAxisProperty(AXIS_PROBE_Z1)->bUse && GetOrgPos(AXIS_PROBE_Z1) > 0.1) ||
+				(GetAxisProperty(AXIS_PROBE_Z2)->bUse && GetOrgPos(AXIS_PROBE_Z2) > 0.1) ||
+				(GetAxisProperty(AXIS_PROBE_Z3)->bUse && GetOrgPos(AXIS_PROBE_Z3) > 0.1) ||
+				(GetAxisProperty(AXIS_PROBE_Z4)->bUse && GetOrgPos(AXIS_PROBE_Z4) > 0.1) ||
+				(GetAxisProperty(AXIS_PROBE_Z5)->bUse && GetOrgPos(AXIS_PROBE_Z5) > 0.1))
+				//		if (GetCurPos(AXIS_PROBE_Z1) > 0 || GetCurPos(AXIS_PROBE_Z2) > 0 || GetCurPos(AXIS_PROBE_Z3) > 0 || GetCurPos(AXIS_PROBE_Z4) > 0 || GetCurPos(AXIS_PROBE_Z5) > 0)
+			{
+			/*	stMotorPosition stPositionProbe[5];
+				stPositionProbe[0].axis = AXIS_PROBE_Z1;
+				stPositionProbe[0].dPosition = 0;
+				stPositionProbe[1].axis = AXIS_PROBE_Z2;
+				stPositionProbe[1].dPosition = 0;
+				stPositionProbe[2].axis = AXIS_PROBE_Z3;
+				stPositionProbe[2].dPosition = 0;
+				stPositionProbe[3].axis = AXIS_PROBE_Z4;
+				stPositionProbe[3].dPosition = 0;
+				stPositionProbe[4].axis = AXIS_PROBE_Z5;
+				stPositionProbe[4].dPosition = 0;
+
+				nRet = MoveCmdPosMulti(stPositionProbe, 5, SPEED_HIGH, true);*/
+
+				nRet = MOTION_INTERLOCK_8;
+			}
+
+
+			if (nRet == df_MOTION_RV_SUCCESSED)
+			{
+				double dFront_Z = 0., dBack_Z = 0.;
+				dFront_Z = GetOrgPos(AXIS_Z1);
+				dBack_Z  = GetOrgPos(AXIS_Z2);
+
+				// LYS 2026-09-02 미사용 헤드 Z축은 인터락에서 제외 (bUse 가드)
+				if ((GetAxisProperty(AXIS_Z1)->bUse && dFront_Z > 1) || (GetAxisProperty(AXIS_Z2)->bUse && dBack_Z > 1))
+				{
+					nRet = MOTION_INTERLOCK_8;
+
+					CString strLog;
+					strLog.Format(_T("MoveCmdPosM Move HEAD_Z NG(%.3f,%.3f,%.3f,%.3f,%.3f)"), dFront_Z, dBack_Z);
+					m_pLogFileAccessor->KMLOG(WARN, strLog, true);
+				}
+			}
+		}
+	}
+
+	// jsyoon 2022.05.19 add Interlock
+	if (nRet == df_MOTION_RV_SUCCESSED)
+	{
+		double dCurPos = 0;
+		dCurPos = GetOrgPos(AXIS_LOADER_Z);
+		if (dCurPos > 0.1)
+		{
+			nRet = MOTION_INTERLOCK_1;
+		}
+	}
+
+	///
+	if (nRet == df_MOTION_RV_SUCCESSED)
+	{
+		if (IsOutOfService() == true)
+		{
+			CString strTemp, strTemp2;
+			strTemp.Empty();
+
+			for (size_t i = 0; i < iAxis; i++)
+			{
+				int axis = 0;
+				double Pos = 0;
+
+				axis = pPos[i].axis;
+				Pos = pPos[i].dPosition;
+
+				if (GetMinSWLimit(axis) > Pos || GetMaxSWLimit(axis) < Pos)
+				{
+					CString strLog;
+
+					int min = GetMinSWLimit(axis);
+					int max = GetMaxSWLimit(axis);
+					
+					strLog.Format(_T("MoveCmdPosM Move(AXIS:%s, POS:%.3f, NG)"), GetAxisMapProperty(axis)->m_strAxisName, Pos);
+					m_pLogFileAccessor->KMLOG(WARN, strLog, true);
+					return MOTION_INTERLOCK_CHECK_ALARM;
+				}
+
+				if (axis == AXIS_PROBE_X1 || axis == AXIS_PROBE_X3 || axis == AXIS_PROBE_X5 || axis == AXIS_PROBE_X7 || axis == AXIS_PROBE_X9)
+				{
+					m_dMovePos[axis + 1] = Pos;
+				}
+
+				strTemp2.Format(_T("AXIS:%s, POS:%.3f,"), GetAxisMapProperty(axis)->m_strAxisName, Pos);
+				strTemp += strTemp2;
+
+				m_dMovePos[axis] = Pos;	
+				Sleep(200);
+			}
+
+			CString strLog;
+			strLog.Format(_T("MoveCmdPosM Move(%s nAXIS:%d, SPPED:%d, DoneCheck:%d)"), strTemp, iAxis, iSpeed, bDoneCheck);
+			m_pLogFileAccessor->KMLOG(SYST, strLog, true);
+
+			return df_MOTION_RV_SUCCESSED;
+		}
+	}
+	else
+	{
+		return nRet;
+	}
+
+	CString strTemp, strTemp2;
+	strTemp.Empty();
+
+	for (size_t i = 0; i < iAxis; i++)
+	{
+		int axis = 0;
+		double Pos = 0;
+
+		axis = pPos[i].axis;
+		Pos = pPos[i].dPosition;
+
+		strTemp2.Format(_T("AXIS:%s, POS:%.3f,"), GetAxisMapProperty(axis)->m_strAxisName, Pos);
+		strTemp += strTemp2;
+	}
+
+	CString strLog;
+//	strLog.Format(_T("MoveCmdPosMulti_Move(AXIS:%d, POS:%.3f, nAXIS:%d, SPPED:%d, DoneCheck:%d)"), pPos[0].axis, pPos[0].dPosition, iAxis, iSpeed, bDoneCheck);
+	strLog.Format(_T("MoveCmdPosM Move(%s nAXIS:%d, SPPED:%d, DoneCheck:%d)"), strTemp, iAxis, iSpeed, bDoneCheck);
+	m_pLogFileAccessor->KMLOG(SYST, strLog, true);
+	
+	nRet = MoveCmdPosMulti_Move(pPos, iAxis, iSpeed);
+
+	//CCriticalSectionSync single(&m_cs, TRUE);
+
+	//if (nRet == df_MOTION_RV_SUCCESSED)
+	//{
+	//	long lRet = 0;
+	//	nRet = m_pFunction->MoveCmdPosMulti(pPos, iAxis, iSpeed);
+	//	if (nRet == 1)
+	//	{
+	//		nRet = df_MOTION_RV_SUCCESSED;
+	//	}
+	//	else if (nRet == -1)
+	//	{
+	//		nRet = MEI_NOT_CREATED;
+	//	}
+	//	else
+	//	{
+	//		nRet = MOTION_CMDPOS_ERROR; // MOTION_MOVE_ALARM + iAxis;
+	//	}
+	//}
+
+	if (nRet == df_MOTION_RV_SUCCESSED)
+	{
+		if (bDoneCheck == true)
+		{
+			for (size_t i = 0; i < iAxis; i++)
+			{
+				if (m_pFunction->CheckMoveDone(pPos[i].axis, df_MOVINGDONE_TIME * 3) != true)
+				{
+					nRet = MOTION_MOVE_DONE_ALARM + pPos[i].axis;
+					break;
+				}
+			}
+
+			double dCurPos = 0.0;
+			for (size_t i = 0; i < iAxis; i++)
+			{
+				dCurPos = GetOrgPos(pPos[i].axis);
+
+				if (fabs(dCurPos - pPos[i].dPosition) > 0.001)
+				{
+					nRet = MOTION_MOVE_DONE_ALARM + pPos[i].axis;
+					break;
+				}
+			}
+
+			if (nRet != df_MOTION_RV_SUCCESSED)
+			{
+				long lRet = 0;
+				nRet = MoveCmdPosMulti_Move(pPos, iAxis, iSpeed);
+			//	nRet = m_pFunction->MoveCmdPosMulti(pPos, iAxis, iSpeed);
+				if (nRet == 1)
+				{
+					nRet = df_MOTION_RV_SUCCESSED;
+				}
+				else if (nRet == -1)
+				{
+					nRet = MEI_NOT_CREATED;
+				}
+				else
+				{
+					nRet = MOTION_CMDPOS_ERROR; // MOTION_MOVE_ALARM + iAxis;
+				}
+
+				if (nRet == df_MOTION_RV_SUCCESSED)
+				{
+					for (size_t i = 0; i < iAxis; i++)
+					{
+						if (m_pFunction->CheckMoveDone(pPos[i].axis, df_MOVINGDONE_TIME * 3) != true)
+						{
+							nRet = MOTION_MOVE_DONE_ALARM + pPos[i].axis;
+							break;
+						}
+					}
+				}
+			}
+		}
+	}
+
+	return nRet;
+}
+
+long CMotorControlMgr::MoveCmdPosMulti(stMotorPosition *pPos, int iAxis, int iSpeed, bool bDoneCheck)
+{
+	CString strLog;
+	int nAxis = pPos[0].axis;
+	strLog.Format(_T("MoveCmdPosM Start(AXIS:%s, POS:%.3f, nAXIS:%d, SPPED:%d)"), GetAxisMapProperty(nAxis)->m_strAxisName, pPos[0].dPosition, iAxis, iSpeed);
+	m_pLogFileAccessor->KMLOG(SYST, strLog, true);
+
+	long nRet = df_MOTION_RV_SUCCESSED;
+
+	nRet = MoveCmdPosMulti_Sub(pPos, iAxis, iSpeed, bDoneCheck);
+
+	if (nRet != 1)
+	{
+		// LYS 2026-07-20 Add for Debug (TEMP)
+		int i = 1;
+	}
+
+	strLog.Format(_T("MoveCmdPosM End(AXIS:%s, POS:%.3f, nAXIS:%d, SPPED:%d, RET:%d)"), GetAxisMapProperty(nAxis)->m_strAxisName, pPos[0].dPosition, iAxis, iSpeed, nRet);
+	m_pLogFileAccessor->KMLOG(SYST, strLog, true);
+	
+	return nRet;
+}
+
+long CMotorControlMgr::MoveJog(int iAxis, bool bDir)
+{
+	CCriticalSectionSync single(&m_cs, TRUE);
+	
+	return m_pFunction->MoveJog(iAxis, bDir);
+}
+
+long CMotorControlMgr::WaitMotionEnd(int iAxis, DWORD dwTimeout)
+{
+	CCriticalSectionSync single(&m_cs_done, TRUE);
+	
+	return m_pFunction->WaitMotionEnd(iAxis, dwTimeout);
+}
+
+bool CMotorControlMgr::CheckMoveDone(int iAxis, DWORD dwTimeout)
+{
+	CCriticalSectionSync single(&m_cs_done, TRUE);
+
+	if (IsOutOfService() == true)
+	{
+		return true;
+	}
+	
+	return m_pFunction->CheckMoveDone(iAxis, dwTimeout);
+}
+
+long CMotorControlMgr::CheckHomeDone(int iAxis, DWORD dwTimeout)
+{
+	CCriticalSectionSync single(&m_cs_done, TRUE);
+
+	return m_pFunction->CheckHomeDone(iAxis, dwTimeout);
+}
+
+long CMotorControlMgr::CheckInterlock(CString strAxis)
+{
+	CCriticalSectionSync single(&m_cs_done, TRUE);
+
+	return m_pFunction->CheckInterlock(strAxis);
+}
+
+void CMotorControlMgr::StopHome()
+{
+	CCriticalSectionSync single(&m_cs_Stop, TRUE);
+	
+	return m_pFunction->StopHome();
+}
+
+long CMotorControlMgr::StopDevice(int iAxis)
+{
+	CCriticalSectionSync single(&m_cs_Stop, TRUE);
+	
+	return m_pFunction->StopDevice(iAxis);
+}
+
+long CMotorControlMgr::KillDevice(int iAxis)
+{
+	CCriticalSectionSync single(&m_cs_Stop, TRUE);
+	
+	return m_pFunction->KillDevice(iAxis);
+}
+
+long CMotorControlMgr::RunBuffer(int iAxis)
+{
+	CCriticalSectionSync single(&m_cs, TRUE);
+	
+	return m_pFunction->RunBuffer(iAxis);
+}
+
+long CMotorControlMgr::StopBuffer(int iAxis)
+{
+	CCriticalSectionSync single(&m_cs_Stop, TRUE);
+	
+	return m_pFunction->StopBuffer(iAxis);
+}
+
+
+//Set parameter
+long CMotorControlMgr::SetSpeed(int iAxis, int iSpeedType, int iSpeedMode)
+{
+	CCriticalSectionSync single(&m_cs_Set, TRUE);
+
+	return m_pFunction->SetSpeed(iAxis, iSpeedType, iSpeedMode);
+}
+
+long CMotorControlMgr::SetSpeedDirect_Sub(int iAxis, double dVel, double dAcc, double dDec, int iSpeedMode)
+{
+	CCriticalSectionSync single(&m_cs_Set, TRUE);
+
+	long nRet = df_MOTION_RV_SUCCESSED;
+	if (m_pFunction->IsConnected() != true)
+	{
+		return df_MOTION_RV_SUCCESSED;
+	}
+
+	nRet = m_pFunction->SetSpeedDirect(iAxis, dVel, dAcc, dDec, iSpeedMode);
+
+	return nRet;
+}
+
+long CMotorControlMgr::SetSpeedDirect(int iAxis, double dVel, double dAcc, double dDec, int iSpeedMode)
+{
+	long nRet = df_MOTION_RV_SUCCESSED;
+	
+	nRet = SetSpeedDirect_Sub(iAxis, dVel, dAcc, dDec, iSpeedMode);
+
+	CString strLog;
+	strLog.Format(_T("SetSpeedDirect(AXIS:%d, Vel:%.1f, ACC:%.1f, DCC%.1f), Ret = %d"), iAxis, dVel, dAcc, dDec, nRet);
+	m_pLogFileAccessor->KMLOG(SYST, strLog, true);
+
+	return nRet;
+}
+
+void CMotorControlMgr::SetHomeProperty(int iAxis, int iHomeMode, int iHomeClrMode, long lEzCount, int iOrgLogic, int iEzLogic, bool bErcOut, double dEscDist, double dOffsetDist)
+{
+	CCriticalSectionSync single(&m_cs_Set, TRUE);
+		
+	return m_pFunction->SetHomeProperty(iAxis, iHomeMode, iHomeClrMode, lEzCount, iOrgLogic, iEzLogic, bErcOut, dEscDist, dOffsetDist);
+}
+
+void CMotorControlMgr::SetAxisMapping(int iAxis, int iHwAxis)
+{
+	CCriticalSectionSync single(&m_cs_Set, TRUE);
+	
+	return m_pFunction->SetAxisMapping(iAxis, iHwAxis);
+}
+
+void CMotorControlMgr::SetAxisProperty(int iAxis, axis_data_type *type)
+{
+	CCriticalSectionSync single(&m_cs_Set, TRUE);
+	
+	return m_pFunction->SetAxisProperty(iAxis, type);
+}
+
+long CMotorControlMgr::SetAmpEnable(int iAxis, bool bOn)
+{
+	CCriticalSectionSync single(&m_cs_Set, TRUE);
+	
+	return m_pFunction->SetAmpEnable(iAxis, bOn);
+}
+
+void CMotorControlMgr::SetAddress(CString strAddress, int iPort)
+{
+	CCriticalSectionSync single(&m_cs_Set, TRUE);
+	
+	return m_pFunction->SetAddress(strAddress, iPort);
+}
+
+void CMotorControlMgr::SetHomeDone(int iAxis, bool bDone)
+{
+	CCriticalSectionSync single(&m_cs_Set, TRUE);
+	
+	return m_pFunction->SetHomeDone(iAxis, bDone);
+}
+
+long CMotorControlMgr::SetWriteBuffer(CString strEQPName, bool bDirectOut, int iValue)
+{
+	CCriticalSectionSync single(&m_cs_Set, TRUE);
+	
+	return m_pFunction->SetWriteBuffer(strEQPName, bDirectOut, iValue);
+}
+
+void CMotorControlMgr::SetInterlockName(std::map<int, CString> &mapVal)
+{
+	CCriticalSectionSync single(&m_cs_Set, TRUE);
+	
+	return m_pFunction->SetInterlockName(mapVal);
+}
+
+//Get parameter
+double CMotorControlMgr::GetCurPos(int iAxis, int iLens, int iTube)
+{
+	double dRet = 0.;
+	if (IsOutOfService() == true)
+	{
+		return m_dMovePos[iAxis] - m_dMoveOffset[iAxis];
+	}
+
+	CCriticalSectionSync single(&m_cs_Get, TRUE);
+
+	dRet = m_pFunction->GetCurPos(iAxis, iLens, iTube);
+
+	return dRet;
+}
+
+double CMotorControlMgr::GetOrgPos(int iAxis)
+{
+	double dRet = 0.;
+	if (IsOutOfService() == true)
+	{
+		return m_dMovePos[iAxis];
+	}
+
+	dRet = m_pFunction->GetCurPos(iAxis, -1, -1);
+
+	return dRet;
+}
+
+long CMotorControlMgr::GetMotorStatus(int iAxis, int nStatus)
+{
+	CCriticalSectionSync single(&m_cs_Get, TRUE);
+	
+	return m_pFunction->GetMotorStatus(iAxis, nStatus);
+}
+
+axis_data_type *CMotorControlMgr::GetAxisProperty(int iAxis)
+{
+	CCriticalSectionSync single(&m_cs_Get, TRUE);
+	
+	return m_pFunction->GetAxisProperty(iAxis);
+}
+
+CAxisType *CMotorControlMgr::GetAxisMapProperty(int iAxis)
+{
+	CCriticalSectionSync single(&m_cs_Get, TRUE);
+
+	return m_pFunction->GetAxisMapProperty(iAxis);
+}
+
+double CMotorControlMgr::GetSpeedVal(int iAxis)
+{
+	CCriticalSectionSync single(&m_cs_Get, TRUE);
+	
+	return m_pFunction->GetSpeedVal(iAxis);
+}
+
+double CMotorControlMgr::GetSpeed(int iAxis, long iSpeed)
+{
+	CCriticalSectionSync single(&m_cs_Get, TRUE);
+	
+	return m_pFunction->GetSpeed(iAxis, iSpeed);
+}
+
+long CMotorControlMgr::GetAmpEnable(int iAxis)
+{
+	CCriticalSectionSync single(&m_cs_Get, TRUE);
+	
+	return m_pFunction->GetAmpEnable(iAxis);
+}
+
+long CMotorControlMgr::GetHWLimit(int iAxis, short bDir)
+{
+	CCriticalSectionSync single(&m_cs_Get, TRUE);
+	
+	return m_pFunction->GetHWLimit(iAxis, bDir);
+}
+
+double CMotorControlMgr::GetMaxSWLimit(int iAxis)
+{
+	CCriticalSectionSync single(&m_cs_Get, TRUE);
+	
+	return m_pFunction->GetMaxSWLimit(iAxis);
+}
+
+double CMotorControlMgr::GetMinSWLimit(int iAxis)
+{
+	CCriticalSectionSync single(&m_cs_Get, TRUE);
+	
+	return m_pFunction->GetMinSWLimit(iAxis);
+}
+
+double CMotorControlMgr::GetVelocityHigh(int iAxis)
+{
+	CCriticalSectionSync single(&m_cs_Get, TRUE);
+	
+	return m_pFunction->GetVelocityHigh(iAxis);
+}
+
+double CMotorControlMgr::GetVelocityMiddle(int iAxis)
+{
+	CCriticalSectionSync single(&m_cs_Get, TRUE);
+	
+	return m_pFunction->GetVelocityMiddle(iAxis);
+}
+
+double CMotorControlMgr::GetVelocityLow(int iAxis)
+{
+	CCriticalSectionSync single(&m_cs_Get, TRUE);
+	
+	return m_pFunction->GetVelocityLow(iAxis);
+}
+
+long CMotorControlMgr::GetMoving(int iAxis)
+{
+	CCriticalSectionSync single(&m_cs_Get, TRUE);
+	
+	return m_pFunction->GetMoving(iAxis);
+}
+
+bool CMotorControlMgr::GetHomeDone(int iAxis)
+{
+	CCriticalSectionSync single(&m_cs_Get, TRUE);
+	
+	return m_pFunction->GetHomeDone(iAxis);
+}
+
+double CMotorControlMgr::GetMotorRMSValue(int iAxis)
+{
+	CCriticalSectionSync single(&m_cs_Get, TRUE);
+	
+	return m_pFunction->GetMotorRMSValue(iAxis);
+}
+
+CString	CMotorControlMgr::GetLastErrorString()
+{
+	CCriticalSectionSync single(&m_cs_Get, TRUE);
+	
+	return m_pFunction->GetLastErrorString();
+}
+
+double CMotorControlMgr::GetOffset(int iAxis)
+{
+	CCriticalSectionSync single(&m_cs_Get, TRUE);
+	
+	return m_pFunction->GetOffset(iAxis);
+}
+
+long CMotorControlMgr::GetInput(int port, int bit)
+{
+	CCriticalSectionSync single(&m_cs_Get, TRUE);
+	
+	return m_pFunction->GetInput(port, bit);
+}
+
+double CMotorControlMgr::GetFollowingErr(int iAxis)
+{
+	CCriticalSectionSync single(&m_cs_Get, TRUE);
+	
+	return m_pFunction->GetFollowingErr(iAxis);
+}
+
+double CMotorControlMgr::GetActualVel(int iAxis)
+{
+	CCriticalSectionSync single(&m_cs_Get, TRUE);
+	
+	return m_pFunction->GetActualVel(iAxis);
+}
+	
+void CMotorControlMgr::LinkDatFile(bool bSave)
+{
+	CCriticalSectionSync single(&m_cs, TRUE);
+
+	m_pFunction->LinkDatFile(bSave);
+}
+
+void CMotorControlMgr::SetMaxSWLimit(int iAxis, double dLimit)
+{
+	CCriticalSectionSync single(&m_cs, TRUE);
+
+	m_pFunction->SetMaxSWLimit(iAxis, dLimit);
+}
+
+void CMotorControlMgr::SetMinSWLimit(int iAxis, double dLimit)
+{
+	CCriticalSectionSync single(&m_cs, TRUE);
+
+	m_pFunction->SetMinSWLimit(iAxis, dLimit);
+}
+
+double CMotorControlMgr::GetHomeVel(int iAxis)
+{
+	CCriticalSectionSync single(&m_cs_Get, TRUE);
+
+	return m_pFunction->GetHomeVel(iAxis);
+}
+
+void CMotorControlMgr::SetHeadOffset(int iAxis, double dOffset)
+{
+	if (iAxis >= 0 && iAxis < 100)
+	{
+		m_dMoveOffset[iAxis] = dOffset;
+	}
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+// 별도로 사용하는 함수
+BOOL CMotorControlMgr::DoWork_MotionEnable(int iAxis)
+{
+	long bRet = df_MOTION_RV_SUCCESSED;
+
+    if ( iAxis == AXIS_ALL)
+    {	
+        for (int i = 0; i < AXIS_TYPE_END; i++ )
+        {
+			bRet |= GetAmpEnable(i);
+        }
+    }
+	else 
+	{	
+		bRet = GetAmpEnable(iAxis);
+	}
+
+	if(bRet == 0)
+	{
+		return TRUE;
+	}
+
+	return FALSE;
+}
+
+int CMotorControlMgr::DoWork_MotionDone(int iAxis)
+{
+	int nRet = df_MOTION_RV_SUCCESSED;
+
+	if (iAxis == AXIS_ALL)
+	{
+		for (int i = 0; i < AXIS_TYPE_END; i++)
+		{
+			nRet = DoWork_MotionDone(i);
+
+			if (nRet != df_MOTION_RV_SUCCESSED)
+			{
+				break;
+			}
+		}
+	}
+	else
+	{
+		if (GetAxisProperty(iAxis)->bUse != true)
+		{
+			return df_MOTION_RV_SUCCESSED;
+		}
+
+		if (IsOutOfService() == true)
+		{
+			return df_MOTION_RV_SUCCESSED;
+		}
+
+		if (IsConnected() != TRUE)
+		{
+			return MEI_NOT_CREATED;
+		}
+
+		if (iAxis == AXIS_Z7 || iAxis == AXIS_Z8)
+		{
+			;
+		}
+		else
+		{
+
+			CString strLog;
+			strLog.Format(_T("DoWork_MotionDone Start(AXIS:%d)"), iAxis);
+			m_pLogFileAccessor->KMLOG(SYST, strLog, true);
+
+			bool bRet = CheckMoveDone(iAxis, 30000);
+			if (!bRet)
+			{
+				nRet = MOTION_MOVE_DONE_ALARM + iAxis;
+			}
+
+			// LYS 2026-09-02 Move 중 HW 리밋 센서 감지
+			if (GetHWLimit(iAxis, TRUE) != true)
+			{
+				CAlarmController::GetInstance()->SetAlarm(MOTION_OVER_LIMIT_POS);
+				nRet = MOTION_OVER_LIMIT_POS;
+			}
+			else if (GetHWLimit(iAxis, FALSE) != true)
+			{
+				CAlarmController::GetInstance()->SetAlarm(MOTION_OVER_LIMIT_NEG);
+				nRet = MOTION_OVER_LIMIT_NEG;
+			}
+
+			if (nRet == df_MOTION_RV_SUCCESSED)
+			{
+				strLog.Format(_T("DoWork_MotionDone End(AXIS:%d)"), iAxis);
+				m_pLogFileAccessor->KMLOG(SYST, strLog, true);
+			}
+			else
+			{
+				strLog.Format(_T("DoWork_MotionDone NG(AXIS:%d)"), iAxis);
+				m_pLogFileAccessor->KMLOG(WARN, strLog, true);
+			}
+		}
+	}
+
+	return nRet;
+
+}
+
+CLogFileAccessor* CMotorControlMgr::GetLogFileAccessorPtr()
+{
+	return m_pLogFileAccessor;
+}
+
+void CMotorControlMgr::GetInterlockPos(double* dPosGantry, double* dPosHead, double* dPosProbe, double* dPosHeadB, double* dPosLiftPin)
+{
+	if (dPosGantry != nullptr) *dPosGantry = m_dInterlockGantryGap;
+	if (dPosHead != nullptr) *dPosHead     = m_dInterlockHeadGap;
+	if (dPosProbe != nullptr) *dPosProbe   = m_dInterlockProbeGap;
+	if (dPosHeadB != nullptr) *dPosHeadB   = m_dInterlockHeadGapB;	// 2023.03.08 add
+	if (dPosLiftPin != nullptr) * dPosLiftPin = m_dInterlockLifePinPos;	// 2023.04.11 add
+}

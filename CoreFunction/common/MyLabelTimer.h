@@ -37,6 +37,7 @@ public:
 	// common..
 	void	InitTimer(CString strName, CString strAppName, int iType, int iLamp = 0);
 	void	SetDisplayTime_MS(int iDelayTime_ms) { m_iDelayTime = iDelayTime_ms; }
+	void	SetLabel(LPCTSTR pszLabel) { m_strLabel = pszLabel; }	// LYS 2026-09-25 표시 라벨(예: ALIGN CCD1). 비어 있으면 종전 CH<n> 표기
 
 	// for LampTimer
 	void	WriteRegistry(int iLamp);
@@ -52,6 +53,7 @@ protected:
 	int			m_iDelayTime;
 	BOOL		m_bTimeOver;
 	BOOL		m_bTimeWarring;
+	CString		m_strLabel;		// LYS 2026-09-25
 
 	// for lampTimer
 public :

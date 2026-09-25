@@ -183,6 +183,7 @@ bool CDoWorkGlassSequenceEngine::ItemStart(CString strType, bool bCompleteCheck)
         strLog.Format(_T("Seq Item : %s - Start"), pItem->GetName().GetString());
         m_pLogFileAccessor->KMLOG(OPER, strLog);
 
+        bool bItemNG = false;	// LYS 2026-09-16
         if(bCompleteCheck == true)
         {
             m_hBreakEvent_link = pItem->GetCompleteEventHandle();
@@ -202,13 +203,46 @@ bool CDoWorkGlassSequenceEngine::ItemStart(CString strType, bool bCompleteCheck)
                 }
             }
 
+            // LYS 2026-09-16 수동 실행(레시피 Align PROC, Manual 화면, 초기화/흡착/프로브교체의 ItemStart)에서 항목이 실패해도 결과를 보지 않았다.
+            //                실패한 항목은 None 스텝에서 내린 m_bComplete 가 false 로 남아 IsEngineCompleteAll() 이 계속 false → 이후 모든 레시피/Maint 명령이
+            //                "프로세스 진행 중" 모달(워커 스레드에서 DoModal, 메인 창 뒤에 숨어 무응답처럼 보임)에 막혀 재기동해야 했다(2026-09-16 19:30/19:33/19:34 재기동).
+            //                자동 엔진 루프(아래 ThreadRun, 2023.08.23)와 같이 실패면 알람을 띄우고 complete 를 복구한 뒤 false 를 돌려준다.
+            if (m_bEngineBreak != true)
+            {
+                if (pItem->GetFail() == true)
+                {
+                    int iAlarmID = pItem->GetFailNum();
+                    strLog.Format(_T("Seq Item : %s - Fail Exit (alarm %d)"), pItem->GetName().GetString(), iAlarmID);
+                    m_pLogFileAccessor->KMLOG(WARN, strLog);
+                    if (iAlarmID > 0)
+                    {
+                        CAlarmController::GetInstance()->SetAlarm(iAlarmID);
+                    }
+                    bItemNG = true;
+                }
+                else if (pItem->GetStopUser() == true)
+                {
+                    strLog.Format(_T("Seq Item : %s - Stop User Exit"), pItem->GetName().GetString());
+                    m_pLogFileAccessor->KMLOG(WARN, strLog);
+                    bItemNG = true;
+                }
+                else if (pItem->GetComplete() != true)
+                {
+                    strLog.Format(_T("Seq Item : %s - Not Complete Exit"), pItem->GetName().GetString());
+                    m_pLogFileAccessor->KMLOG(WARN, strLog);
+                    bItemNG = true;
+                }
+                pItem->SetComplete(true);	// 항목은 끝났다 - 실패 여부는 알람/반환값으로 전달 (자동 엔진 2023.08.23 과 동일)
+            }
+
             strLog.Format(_T("Seq Item : %s - End"), pItem->GetName().GetString());
             m_pLogFileAccessor->KMLOG(OPER, strLog);
 
             CWindowEventHandler::GetInstance()->PostMessageToUI((enumSeqItemID)pItem->GetSeqItemNumber(), WM_MSG_SEQ_ITEM_COMPLTE, NULL, NULL);
         }
 
-        return true;
+        //return true;
+        return (bItemNG != true);	// LYS 2026-09-16 실패/정지/미완료면 false
     }
 
     return false;
@@ -875,6 +909,18 @@ bool CDoWorkGlassSequenceEngine::ThreadRu_nSequence(int cycle_index, bool bFirst
         if (m_vecItems[i])
         {
             // 동작 시작
+			// LYS 2026-09-07 레시피 옵션 ALIGN USE(m_bUseAlign)가 OFF면 Glass/Probe SW Align 아이템을 건너뜀 (수동 PROC 버튼은 영향 없음)
+			if (m_vecItems[i]->GetType() == _T("SEQUENCE_ITEM_DWGLASS_SEQ_GLASS_SW_ALIGN") ||
+				m_vecItems[i]->GetType() == _T("SEQUENCE_ITEM_DWGLASS_SEQ_PROBE_SW_ALIGN"))
+			{
+				S_RecipeInfo* pRcpInfo = GetRecipeEditMgrPtr()->GetRecipeInfo();
+				if (pRcpInfo != nullptr && pRcpInfo->m_sOptionItem.m_bUseAlign != TRUE)
+				{
+					strLog.Format(_T("Cycle Seq Item : %s - Skip (recipe ALIGN USE = OFF)"), m_vecItems[i]->GetName().GetString());
+					m_pLogFileAccessor->KMLOG(OPER, strLog);
+					continue;
+				}
+			}
 			m_vecItems[i]->Start();			
 			GetSeqTactTimeMgrPtr()->SetCycleIndex(cycle_index);
 

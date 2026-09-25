@@ -188,6 +188,13 @@ void CMCCLogMgr::SetMccMoterInfo(int iAxis, double dPos, double dSpeed)
 
 void CMCCLogMgr::SetMccMoterInfoCur(int iAxis, double dPos, double dSpeed, double dRMS)
 {
+	// LYS 2026-09-19 FDC 전송용 캐시는 MCC 사용 여부와 무관하게 채운다(UpdateSensor 가 읽는다).
+	static_assert(AXIS_TYPE_END <= CMCCLogMgr::FDC_AXIS_CACHE_MAX, "FDC axis cache too small");
+	if (iAxis >= 0 && iAxis < FDC_AXIS_CACHE_MAX)
+	{
+		m_dFdcAxisPos[iAxis] = dPos;
+		m_dFdcAxisRMS[iAxis] = dRMS;
+	}
 	if (m_pSharedMCC == nullptr)	// LYS 2026-07-31 MCC disabled (Config_MCC.ini [MCC] USE=0)
 		return;
 	// TODO: 여기에 구현 코드 추가.
@@ -219,7 +226,8 @@ void CMCCLogMgr::UpdateSensor()
 	double dTemperature[50];		 ZeroMemory(&dTemperature, sizeof(dTemperature));	// Temperature under
 
 	RDATA	stData[FDC_WDATA_END];	// y.yun 20190716 add
-	memset(stData, 0, sizeof(RDATA) * 1000);
+	//memset(stData, 0, sizeof(RDATA) * 1000);
+	memset(stData, 0, sizeof(stData));	// LYS 2026-09-19 배열 크기를 따라가게 했다 - FDC_WDATA_END 가 1000 보다 작아지면 1000 고정은 스택을 넘친다
 
 	for ( i = 0; i < FDC_WDATA_END; i++)
 	{
@@ -235,7 +243,8 @@ void CMCCLogMgr::UpdateSensor()
 //	strcpy_s(m_pSharedFDC->FDCValue.stMainWData[20].szData, sizeof(m_pSharedFDC->FDCValue.stMainWData[20].szData), T2A(m_strVersion));
 ////	strcpy_s(m_pSharedFDC->FDCValue.stMainWData[20].szData, sizeof(m_pSharedFDC->FDCValue.stMainWData[20].szData), T2A(_T("20220602")));
 
-	memcpy(stData, FDCMap.FDCValue.stFDCWData, sizeof(RDATA) * 1000);
+	//memcpy(stData, FDCMap.FDCValue.stFDCWData, sizeof(RDATA) * 1000);
+	memcpy(stData, FDCMap.FDCValue.stFDCWData, sizeof(stData));	// LYS 2026-09-19 위와 같은 이유 - 두 배열 모두 RDATA[FDC_WDATA_END]
 
 //	if (m_lLiveCheck != FDCMap.lLiveCheck)
 	{
@@ -271,6 +280,9 @@ void CMCCLogMgr::UpdateSensor()
 		// LYS 2026-07-31 I-Log dData 고정 슬롯 - Config\MCC\MCCNAME.csv 아날로그 행과 1:1 대응
 		// (GMI 동일: 온도 3 + 전력계 12 = 15슬롯, nCntILog=15).
 		// 온도 출처(FDC_LIST.xls): stFDCWData[1]=Temp_EBOX_F, [2]=Temp_EBOX_B, [3]=Temp_PCBOX.
+		// LYS 2026-09-19 ※ 위 출처는 옛 목록이다. 운용 FDC_LIST 명칭 기준으로 다시 묶었다(아래 pILog[0..2]).
+		//                EB_RACK_1/2 <- EL_BOX_GPS/UPS(1/2 번), PC_RACK <- PC_BOX(3 번). 슬롯 번호는 FDCSheardDefine.h
+		//                FDC_WDATA_TEMP_* 가 정한다(PLCMAdress.csv 온도 비트 순서).
 		// TODO: MCC_CONFIRM - PC_RACK/EB_RACK_1/EB_RACK_2 <-> PCBOX/EBOX_F/EBOX_B 명칭 확인 필요.
 		// TEST
 		if (m_pSharedMCC != nullptr) 
@@ -282,9 +294,12 @@ void CMCCLogMgr::UpdateSensor()
 			}
 
 			double* pILog = m_pSharedMCC->stMCCDataEQ_ILog.dData;
-			pILog[0] = m_pDFDCData[FDC_WDATA_TEMP_1 + 2];	// TEMP_PC_RACK   <- Temp_PCBOX
-			pILog[1] = m_pDFDCData[FDC_WDATA_TEMP_1 + 0];	// TEMP_EB_RACK_1 <- Temp_EBOX_F
-			pILog[2] = m_pDFDCData[FDC_WDATA_TEMP_1 + 1];	// TEMP_EB_RACK_2 <- Temp_EBOX_B
+			//pILog[0] = m_pDFDCData[FDC_WDATA_TEMP_1 + 2];	// TEMP_PC_RACK   <- Temp_PCBOX
+			//pILog[1] = m_pDFDCData[FDC_WDATA_TEMP_1 + 0];	// TEMP_EB_RACK_1 <- Temp_EBOX_F
+			//pILog[2] = m_pDFDCData[FDC_WDATA_TEMP_1 + 1];	// TEMP_EB_RACK_2 <- Temp_EBOX_B
+			pILog[0] = m_pDFDCData[FDC_WDATA_TEMP_PC_BOX];		// TEMP_PC_RACK   <- TEMP_SENS_PC_BOX      (LYS 2026-09-19)
+			pILog[1] = m_pDFDCData[FDC_WDATA_TEMP_EL_BOX_GPS];	// TEMP_EB_RACK_1 <- TEMP_SENS_EL_BOX_GPS
+			pILog[2] = m_pDFDCData[FDC_WDATA_TEMP_EL_BOX_UPS];	// TEMP_EB_RACK_2 <- TEMP_SENS_EL_BOX_UPS
 
 			// ELP ElecBox EB1/EB2 -> N01_*/N02_* (ELP item order: TEMP,SMOKE,VOLT,HARM_VOLT,CURR,HARM_CURR,LEAK_CURR,INST_PW,ACCUM_PW)
 			for (int iBox = 0; iBox < MAIN_WDATA_ELP_BOX_MAX; iBox++)
@@ -351,104 +366,312 @@ void CMCCLogMgr::UpdateSensor()
 		//m_pSharedFDC->FDCValue.dFDCData[FDC_ICE_MAIN_VER] = m_dMainVer;		// jsyoon 20171031 add
 
 
-		int nNext = 20;
+//		int nNext = 20;
+//		CString strName, strData;
+//		strName.Empty();
+//		strData.Empty();
+
+//	//	m_pSharedFDC->FDCValue.nMainDataCount = 1;
+
+//		USES_CONVERSION;
+//		strcpy_s(m_pSharedFDC->FDCValue.stMainWData[nNext].szName, sizeof(m_pSharedFDC->FDCValue.stMainWData[nNext].szName), T2A(_T("VERSION")));
+//		strcpy_s(m_pSharedFDC->FDCValue.stMainWData[nNext].szData, sizeof(m_pSharedFDC->FDCValue.stMainWData[nNext].szData), T2A(m_strVersion));		nNext++;
+//	//	strcpy_s(m_pSharedFDC->FDCValue.stMainWData[20].szData, sizeof(m_pSharedFDC->FDCValue.stMainWData[20].szData), T2A(_T("20220602")));
+
+//		strcpy_s(m_pSharedFDC->FDCValue.stMainWData[nNext].szName, sizeof(m_pSharedFDC->FDCValue.stMainWData[nNext].szName), T2A(_T("CIM_VERSION")));
+//		strcpy_s(m_pSharedFDC->FDCValue.stMainWData[nNext].szData, sizeof(m_pSharedFDC->FDCValue.stMainWData[nNext].szData), T2A(m_strVersion));		nNext++;
+
+//		strData.Format(_T("%d"), 10);
+//		strcpy_s(m_pSharedFDC->FDCValue.stMainWData[nNext].szName, sizeof(m_pSharedFDC->FDCValue.stMainWData[nNext].szName), T2A(_T("CIM_DISK_C")));
+//		strcpy_s(m_pSharedFDC->FDCValue.stMainWData[nNext].szData, sizeof(m_pSharedFDC->FDCValue.stMainWData[nNext].szData), T2A(strData));				nNext++;
+
+//		strData.Format(_T("%d"), 10);
+//		strcpy_s(m_pSharedFDC->FDCValue.stMainWData[nNext].szName, sizeof(m_pSharedFDC->FDCValue.stMainWData[nNext].szName), T2A(_T("CIM_DISK_D")));
+//		strcpy_s(m_pSharedFDC->FDCValue.stMainWData[nNext].szData, sizeof(m_pSharedFDC->FDCValue.stMainWData[nNext].szData), T2A(strData));				nNext++;
+
+
+//		strName.Format(_T("Ionizer Run"));
+//		strData.Format(_T("%d"), m_bIonizerRun);
+//		strcpy_s(m_pSharedFDC->FDCValue.stMainWData[nNext].szName, sizeof(m_pSharedFDC->FDCValue.stMainWData[nNext].szName), T2A(strName));
+//		strcpy_s(m_pSharedFDC->FDCValue.stMainWData[nNext].szData, sizeof(m_pSharedFDC->FDCValue.stMainWData[nNext].szData), T2A(strData));			nNext++;
+
+
+//		// LIGHT TIME
+//		for (size_t i = 0; i < 4; i++)
+//		{
+//			if (m_uLampTime[i] > 0)
+//			{
+//				strName.Format(_T("LAMP TIME%d"), i + 1);
+//				strData.Format(_T("%d"), m_uLampTime[i]);
+
+//				strcpy_s(m_pSharedFDC->FDCValue.stMainWData[nNext].szName, sizeof(m_pSharedFDC->FDCValue.stMainWData[nNext].szName), T2A(strName));
+//				strcpy_s(m_pSharedFDC->FDCValue.stMainWData[nNext].szData, sizeof(m_pSharedFDC->FDCValue.stMainWData[nNext].szData), T2A(strData));			
+//			}
+
+//			nNext++;
+//		}
+
+//		// Lift Pin
+//		for (size_t i = 0; i < 3; i++)
+//		{
+//			if (m_uLiftPinMoveTime[i] > 0.01)
+//			{
+//				strName.Format(_T("LIFT STEP%d"), i + 1);
+//				strData.Format(_T("%d"), m_uLiftPinMoveTime[i]);
+
+//				strcpy_s(m_pSharedFDC->FDCValue.stMainWData[nNext].szName, sizeof(m_pSharedFDC->FDCValue.stMainWData[nNext].szName), T2A(strName));
+//				strcpy_s(m_pSharedFDC->FDCValue.stMainWData[nNext].szData, sizeof(m_pSharedFDC->FDCValue.stMainWData[nNext].szData), T2A(strData));			
+//			}	
+
+//			nNext++;
+//		}
+
+//		int nAxisNum[24] = { AXIS_LOADER_Z, AXIS_X, AXIS_LOADER_R, AXIS_X4, AXIS_Z9,
+//				AXIS_Y1, AXIS_Y2, AXIS_X2, AXIS_Z2,
+//				AXIS_Y3, AXIS_Y4, AXIS_X3, AXIS_Z1,
+//				AXIS_THETA2, AXIS_ZOOM2, AXIS_FILTER2,
+//				AXIS_THETA1, AXIS_ZOOM1, AXIS_FILTER1,
+//				AXIS_PROBE_Z1 , AXIS_PROBE_Z2 , AXIS_PROBE_Z3 , AXIS_PROBE_Z4 , AXIS_PROBE_Z5 };
+
+//		// AXIS
+//		int nAxis = 0;
+//		for (size_t iAxis = 0; iAxis < 24; iAxis++)
+//		{
+//			nAxis = nAxisNum[iAxis];
+//			if (m_pSharedMCC != nullptr && m_pSharedMCC->stMCCDataEQ_ILog.stMoterInfo[nAxis].bUse)	// LYS 2026-07-31 null guard
+//			{
+//				strName.Format(_T("AXIS POS_%d"), nAxis);
+//				strData.Format(_T("%d"), (int)(m_pSharedMCC->stMCCDataEQ_ILog.stMoterInfo[nAxis].dAxisPos * 1000));
+
+//				// POS
+//				strcpy_s(m_pSharedFDC->FDCValue.stMainWData[nNext].szName, sizeof(m_pSharedFDC->FDCValue.stMainWData[nNext].szName), T2A(strName));
+//				strcpy_s(m_pSharedFDC->FDCValue.stMainWData[nNext].szData, sizeof(m_pSharedFDC->FDCValue.stMainWData[nNext].szData), T2A(strData));
+
+//				nNext++;
+
+//				strName.Format(_T("AXIS RMS_%d"), nAxis);
+//				strData.Format(_T("%.4f"),(m_pSharedMCC->stMCCDataEQ_ILog.stMoterInfo[nAxis].dAxisRMS));
+
+//				// RMS
+//				strcpy_s(m_pSharedFDC->FDCValue.stMainWData[nNext].szName, sizeof(m_pSharedFDC->FDCValue.stMainWData[nNext].szName), T2A(strName));
+//				strcpy_s(m_pSharedFDC->FDCValue.stMainWData[nNext].szData, sizeof(m_pSharedFDC->FDCValue.stMainWData[nNext].szData), T2A(strData));
+
+//				nNext++;
+//			}
+//		}
+
+//	
+		// LYS 2026-09-19 제어 -> FDC 를 운용 FDC 의 읽기 방식에 맞춰 고정 슬롯으로 다시 썼다.
+		//                운용 FDC 는 FDC_LIST SHARE 행을 stMainWData[0] 부터 순서대로 읽는다(FDCSheardDefine.h NUM_MAIN_WDATA_SHARE).
+		//                위 옛 코드는 20 번부터, 그것도 사용 축만 골라 가변 위치로 써서 어느 행과도 맞지 않았다 - 주석 처리.
+		//                축 대응: FDC_LIST 이름 <-> Config_Motion_ACS.dat NAME (VISION 1 = ZOOM1_Left 등 = AXIS_*2).
+		//                값: POSI = 모니터 루프의 GetCurPos (Maint 화면과 같은 값, mm/deg), LOAD = GetMotorRMSValue.
+		//                사용 안 하는 축(.dat USE[0])은 모니터 루프가 건너뛰어 0 으로 나간다.
+		int nNext = MAIN_WDATA_SHARE_END;
 		CString strName, strData;
-		strName.Empty();
-		strData.Empty();
-
-	//	m_pSharedFDC->FDCValue.nMainDataCount = 1;
-
 		USES_CONVERSION;
-		strcpy_s(m_pSharedFDC->FDCValue.stMainWData[nNext].szName, sizeof(m_pSharedFDC->FDCValue.stMainWData[nNext].szName), T2A(_T("VERSION")));
-		strcpy_s(m_pSharedFDC->FDCValue.stMainWData[nNext].szData, sizeof(m_pSharedFDC->FDCValue.stMainWData[nNext].szData), T2A(m_strVersion));		nNext++;
-	//	strcpy_s(m_pSharedFDC->FDCValue.stMainWData[20].szData, sizeof(m_pSharedFDC->FDCValue.stMainWData[20].szData), T2A(_T("20220602")));
-
-		strcpy_s(m_pSharedFDC->FDCValue.stMainWData[nNext].szName, sizeof(m_pSharedFDC->FDCValue.stMainWData[nNext].szName), T2A(_T("CIM_VERSION")));
-		strcpy_s(m_pSharedFDC->FDCValue.stMainWData[nNext].szData, sizeof(m_pSharedFDC->FDCValue.stMainWData[nNext].szData), T2A(m_strVersion));		nNext++;
-
-		strData.Format(_T("%d"), 10);
-		strcpy_s(m_pSharedFDC->FDCValue.stMainWData[nNext].szName, sizeof(m_pSharedFDC->FDCValue.stMainWData[nNext].szName), T2A(_T("CIM_DISK_C")));
-		strcpy_s(m_pSharedFDC->FDCValue.stMainWData[nNext].szData, sizeof(m_pSharedFDC->FDCValue.stMainWData[nNext].szData), T2A(strData));				nNext++;
-
-		strData.Format(_T("%d"), 10);
-		strcpy_s(m_pSharedFDC->FDCValue.stMainWData[nNext].szName, sizeof(m_pSharedFDC->FDCValue.stMainWData[nNext].szName), T2A(_T("CIM_DISK_D")));
-		strcpy_s(m_pSharedFDC->FDCValue.stMainWData[nNext].szData, sizeof(m_pSharedFDC->FDCValue.stMainWData[nNext].szData), T2A(strData));				nNext++;
-
-
-		strName.Format(_T("Ionizer Run"));
-		strData.Format(_T("%d"), m_bIonizerRun);
-		strcpy_s(m_pSharedFDC->FDCValue.stMainWData[nNext].szName, sizeof(m_pSharedFDC->FDCValue.stMainWData[nNext].szName), T2A(strName));
-		strcpy_s(m_pSharedFDC->FDCValue.stMainWData[nNext].szData, sizeof(m_pSharedFDC->FDCValue.stMainWData[nNext].szData), T2A(strData));			nNext++;
-
-
-		// LIGHT TIME
-		for (size_t i = 0; i < 4; i++)
 		{
-			if (m_uLampTime[i] > 0)
+			// LYS 2026-09-24 FDC_LIST 개정(FDC_LIST_after.csv): LOAD 는 35 축 중 16 축만 남았다(bLoad = 1).
+			//   POSI 는 35 축 그대로 슬롯 MTR_POSI_START(12)+i, LOAD 는 bLoad 축만 표 순서대로 MTR_LOAD_START(47)+n.
+			//   FDC_LIST 의 LOAD 행 순서가 POSI 순서의 부분열이라 표 하나에 플래그로 둔다. 구 코드는 아래 #if 0.
+			static const struct { int nAxis; const char* pszName; int bLoad; } s_FdcMtr[MAIN_WDATA_SHARE_MTR_CNT] = {
+			{ AXIS_X0,             "SMPL_PLATE_X",                1 },
+			{ AXIS_X2,             "BACK_HEAD_X",                 1 },
+			{ AXIS_X3,             "FRONT_HEAD_X",                1 },
+			{ AXIS_X4,             "AC_X",                        1 },
+			{ AXIS_Y1,             "BACK_HEAD_1_Y",               1 },
+			{ AXIS_Y2,             "BACK_HEAD_2_Y",               1 },
+			{ AXIS_Y3,             "FRONT_HEAD_1_Y",              1 },
+			{ AXIS_Y4,             "FRONT_HEAD_2_Y",              1 },
+			{ AXIS_Z2,             "FRONT_HEAD_Z",                1 },
+			{ AXIS_Z3,             "BACK_HEAD_1_SUB_Z",           1 },
+			{ AXIS_Z4,             "BACK_HEAD_2_SUB_Z",           1 },
+			{ AXIS_Z5,             "FRONT_HEAD_1_SUB_Z",          1 },
+			{ AXIS_Z6,             "FRONT_HEAD_2_SUB_Z",          1 },
+			{ AXIS_Z9,             "AC_Z",                        0 },
+			{ AXIS_ZOOM1,          "VISION_2_ZOOM",               0 },
+			{ AXIS_THETA1,         "VISION_2_ANG",                0 },
+			{ AXIS_FILTER1,        "VISION_2_FILTER",             0 },
+			{ AXIS_ZOOM2,          "VISION_1_ZOOM",               0 },
+			{ AXIS_THETA2,         "VISION_1_ANG",                0 },
+			{ AXIS_FILTER2,        "VISION_1_FILTER",             0 },
+			{ AXIS_LOADER_Z,       "LIFT_PIN",                    0 },
+			{ AXIS_LOADER_R,       "SMPL_PLATE_R",                1 },
+			{ AXIS_PROBE_X9,       "PROBE_X",                     1 },
+			{ AXIS_PROBE_Y5,       "PROBE_Y",                     1 },
+			{ AXIS_PROBE_Z5,       "PROBE_Z",                     0 },
+			{ AXIS_ANGLE_SF1,      "VIEWING_ANG_1_SCHEIMPFLUG",   0 },
+			{ AXIS_ANGLE_ROTATE1,  "VIEWING_ANG_1_ROTATE",        0 },
+			{ AXIS_ANGLE_ZOOM1,    "VIEWING_ANG_1_ZOOM",          0 },
+			{ AXIS_ANGLE_TILT1,    "VIEWING_ANG_1_TILT",          0 },
+			{ AXIS_ANGLE_AZM1,     "VIEWING_ANG_1_AZIMUTH",       0 },
+			{ AXIS_ANGLE_SF2,      "VIEWING_ANG_2_SCHEIMPFLUG",   0 },
+			{ AXIS_ANGLE_ROTATE2,  "VIEWING_ANG_2_ROTATE",        0 },
+			{ AXIS_ANGLE_ZOOM2,    "VIEWING_ANG_2_ZOOM",          0 },
+			{ AXIS_ANGLE_TILT2,    "VIEWING_ANG_2_TILT",          0 },
+			{ AXIS_ANGLE_AZM2,     "VIEWING_ANG_2_AZIMUTH",       0 },
+			};
+			int nLoad = 0;
+			for (int i = 0; i < MAIN_WDATA_SHARE_MTR_CNT; i++)
 			{
-				strName.Format(_T("LAMP TIME%d"), i + 1);
-				strData.Format(_T("%d"), m_uLampTime[i]);
-
-				strcpy_s(m_pSharedFDC->FDCValue.stMainWData[nNext].szName, sizeof(m_pSharedFDC->FDCValue.stMainWData[nNext].szName), T2A(strName));
-				strcpy_s(m_pSharedFDC->FDCValue.stMainWData[nNext].szData, sizeof(m_pSharedFDC->FDCValue.stMainWData[nNext].szData), T2A(strData));			
+				const int nAxis = s_FdcMtr[i].nAxis;
+				double dPos = 0.0, dRMS = 0.0;
+				if (nAxis >= 0 && nAxis < FDC_AXIS_CACHE_MAX)
+				{
+					dPos = m_dFdcAxisPos[nAxis];
+					dRMS = m_dFdcAxisRMS[nAxis];
+				}
+				RDATA& rPos = m_pSharedFDC->FDCValue.stMainWData[MAIN_WDATA_SHARE_MTR_POSI_START + i];
+				_snprintf_s(rPos.szName, sizeof(rPos.szName), _TRUNCATE, "MTR_%s_POSI", s_FdcMtr[i].pszName);
+				_snprintf_s(rPos.szData, sizeof(rPos.szData), _TRUNCATE, "%.3f", dPos);
+				if (s_FdcMtr[i].bLoad != 0 && nLoad < MAIN_WDATA_SHARE_MTR_LOAD_CNT)
+				{
+					RDATA& rLoad = m_pSharedFDC->FDCValue.stMainWData[MAIN_WDATA_SHARE_MTR_LOAD_START + nLoad];
+					_snprintf_s(rLoad.szName, sizeof(rLoad.szName), _TRUNCATE, "MTR_%s_LOAD", s_FdcMtr[i].pszName);
+					_snprintf_s(rLoad.szData, sizeof(rLoad.szData), _TRUNCATE, "%.2f", dRMS);
+					nLoad++;
+				}
+			}
+			{
+				static bool s_bLoadCntWarned = false;
+				if (nLoad != MAIN_WDATA_SHARE_MTR_LOAD_CNT && s_bLoadCntWarned == false)
+				{
+					s_bLoadCntWarned = true;
+					CString strLogL;
+					strLogL.Format(_T("FDC SHARE MTR LOAD count mismatch - table %d, FDC_LIST %d"), nLoad, (int)MAIN_WDATA_SHARE_MTR_LOAD_CNT);
+					CLogWrapper::GetInstance()->KMLOG(WARN, strLogL);
+				}
 			}
 
-			nNext++;
-		}
-
-		// Lift Pin
-		for (size_t i = 0; i < 3; i++)
-		{
-			if (m_uLiftPinMoveTime[i] > 0.01)
+			// LYS 2026-09-24 SHARE 2~11 PG 전력량 (FDC_LIST PG1_I_LEAK, PG2_I_LEAK, PG1_N03_T_PW/I_PW/VOL/CUR, PG2_N04_T_PW/I_PW/VOL/CUR).
+			//   출처는 ELP ElecBox 모니터(S10F01, m_dDataToELP) - PG1 = 전장 박스 1(box 0), PG2 = 전장 박스 2(box 1).
+			//   T_PW = ACCUM_PW(kWh), I_PW = INST_PW(kW), VOL = VOLT(V), CUR = CURR(A), I_LEAK = LEAK_CURR(mA). 형식은 400 번대 ELP 칸과 같은 %.4f.
 			{
-				strName.Format(_T("LIFT STEP%d"), i + 1);
-				strData.Format(_T("%d"), m_uLiftPinMoveTime[i]);
+				double dElpPg[MAIN_WDATA_ELP_BOX_MAX][MAIN_WDATA_ELP_ITEM_CNT];
+				{
+					CCriticalSectionSync single(&m_cs_ELP, TRUE);
+					memcpy(&dElpPg, &m_dDataToELP, sizeof(dElpPg));
+				}
+				static const struct { const char* pszName; int iBox; int iItem; } s_FdcPg[MAIN_WDATA_SHARE_PG_CNT] = {
+					{ "PG1_I_LEAK",   0, MAIN_WDATA_ELP_ITEM_LEAK_CURR },
+					{ "PG2_I_LEAK",   1, MAIN_WDATA_ELP_ITEM_LEAK_CURR },
+					{ "PG1_N03_T_PW", 0, MAIN_WDATA_ELP_ITEM_ACCUM_PW  },
+					{ "PG1_N03_I_PW", 0, MAIN_WDATA_ELP_ITEM_INST_PW   },
+					{ "PG1_N03_VOL",  0, MAIN_WDATA_ELP_ITEM_VOLT      },
+					{ "PG1_N03_CUR",  0, MAIN_WDATA_ELP_ITEM_CURR      },
+					{ "PG2_N04_T_PW", 1, MAIN_WDATA_ELP_ITEM_ACCUM_PW  },
+					{ "PG2_N04_I_PW", 1, MAIN_WDATA_ELP_ITEM_INST_PW   },
+					{ "PG2_N04_VOL",  1, MAIN_WDATA_ELP_ITEM_VOLT      },
+					{ "PG2_N04_CUR",  1, MAIN_WDATA_ELP_ITEM_CURR      },
+				};
+				for (int i = 0; i < MAIN_WDATA_SHARE_PG_CNT; i++)
+				{
+					RDATA& r = m_pSharedFDC->FDCValue.stMainWData[MAIN_WDATA_SHARE_PG_START + i];
+					_snprintf_s(r.szName, sizeof(r.szName), _TRUNCATE, "%s", s_FdcPg[i].pszName);
+					_snprintf_s(r.szData, sizeof(r.szData), _TRUNCATE, "%.4f", dElpPg[s_FdcPg[i].iBox][s_FdcPg[i].iItem]);
+				}
+			}
 
-				strcpy_s(m_pSharedFDC->FDCValue.stMainWData[nNext].szName, sizeof(m_pSharedFDC->FDCValue.stMainWData[nNext].szName), T2A(strName));
-				strcpy_s(m_pSharedFDC->FDCValue.stMainWData[nNext].szData, sizeof(m_pSharedFDC->FDCValue.stMainWData[nNext].szData), T2A(strData));			
-			}	
-
-			nNext++;
-		}
-
-		int nAxisNum[24] = { AXIS_LOADER_Z, AXIS_X, AXIS_LOADER_R, AXIS_X4, AXIS_Z9,
-				AXIS_Y1, AXIS_Y2, AXIS_X2, AXIS_Z2,
-				AXIS_Y3, AXIS_Y4, AXIS_X3, AXIS_Z1,
-				AXIS_THETA2, AXIS_ZOOM2, AXIS_FILTER2,
-				AXIS_THETA1, AXIS_ZOOM1, AXIS_FILTER1,
-				AXIS_PROBE_Z1 , AXIS_PROBE_Z2 , AXIS_PROBE_Z3 , AXIS_PROBE_Z4 , AXIS_PROBE_Z5 };
-
-		// AXIS
-		int nAxis = 0;
-		for (size_t iAxis = 0; iAxis < 24; iAxis++)
-		{
-			nAxis = nAxisNum[iAxis];
-			if (m_pSharedMCC != nullptr && m_pSharedMCC->stMCCDataEQ_ILog.stMoterInfo[nAxis].bUse)	// LYS 2026-07-31 null guard
+#if 0	// LYS 2026-09-24 구: LOAD 35 축 (FDC_LIST 2026-09-19 판)
+			static const struct { int nAxis; const char* pszName; } s_FdcMtr[MAIN_WDATA_SHARE_MTR_CNT] = {
+			{ AXIS_X0,             "SMPL_PLATE_X" },
+			{ AXIS_X2,             "BACK_HEAD_X" },
+			{ AXIS_X3,             "FRONT_HEAD_X" },
+			{ AXIS_X4,             "AC_X" },
+			{ AXIS_Y1,             "BACK_HEAD_1_Y" },
+			{ AXIS_Y2,             "BACK_HEAD_2_Y" },
+			{ AXIS_Y3,             "FRONT_HEAD_1_Y" },
+			{ AXIS_Y4,             "FRONT_HEAD_2_Y" },
+			{ AXIS_Z2,             "FRONT_HEAD_Z" },
+			{ AXIS_Z3,             "BACK_HEAD_1_SUB_Z" },
+			{ AXIS_Z4,             "BACK_HEAD_2_SUB_Z" },
+			{ AXIS_Z5,             "FRONT_HEAD_1_SUB_Z" },
+			{ AXIS_Z6,             "FRONT_HEAD_2_SUB_Z" },
+			{ AXIS_Z9,             "AC_Z" },
+			{ AXIS_ZOOM1,          "VISION_2_ZOOM" },
+			{ AXIS_THETA1,         "VISION_2_ANG" },
+			{ AXIS_FILTER1,        "VISION_2_FILTER" },
+			{ AXIS_ZOOM2,          "VISION_1_ZOOM" },
+			{ AXIS_THETA2,         "VISION_1_ANG" },
+			{ AXIS_FILTER2,        "VISION_1_FILTER" },
+			{ AXIS_LOADER_Z,       "LIFT_PIN" },
+			{ AXIS_LOADER_R,       "SMPL_PLATE_R" },
+			{ AXIS_PROBE_X9,       "PROBE_X" },
+			{ AXIS_PROBE_Y5,       "PROBE_Y" },
+			{ AXIS_PROBE_Z5,       "PROBE_Z" },
+			{ AXIS_ANGLE_SF1,      "VIEWING_ANG_1_SCHEIMPFLUG" },
+			{ AXIS_ANGLE_ROTATE1,  "VIEWING_ANG_1_ROTATE" },
+			{ AXIS_ANGLE_ZOOM1,    "VIEWING_ANG_1_ZOOM" },
+			{ AXIS_ANGLE_TILT1,    "VIEWING_ANG_1_TILT" },
+			{ AXIS_ANGLE_AZM1,     "VIEWING_ANG_1_AZIMUTH" },
+			{ AXIS_ANGLE_SF2,      "VIEWING_ANG_2_SCHEIMPFLUG" },
+			{ AXIS_ANGLE_ROTATE2,  "VIEWING_ANG_2_ROTATE" },
+			{ AXIS_ANGLE_ZOOM2,    "VIEWING_ANG_2_ZOOM" },
+			{ AXIS_ANGLE_TILT2,    "VIEWING_ANG_2_TILT" },
+			{ AXIS_ANGLE_AZM2,     "VIEWING_ANG_2_AZIMUTH" },
+			};
+			for (int i = 0; i < MAIN_WDATA_SHARE_MTR_CNT; i++)
 			{
-				strName.Format(_T("AXIS POS_%d"), nAxis);
-				strData.Format(_T("%d"), (int)(m_pSharedMCC->stMCCDataEQ_ILog.stMoterInfo[nAxis].dAxisPos * 1000));
+				const int nAxis = s_FdcMtr[i].nAxis;
+				double dPos = 0.0, dRMS = 0.0;
+				if (nAxis >= 0 && nAxis < FDC_AXIS_CACHE_MAX)
+				{
+					dPos = m_dFdcAxisPos[nAxis];
+					dRMS = m_dFdcAxisRMS[nAxis];
+				}
+				RDATA& rPos  = m_pSharedFDC->FDCValue.stMainWData[MAIN_WDATA_SHARE_MTR_POSI_START + i];
+				RDATA& rLoad = m_pSharedFDC->FDCValue.stMainWData[MAIN_WDATA_SHARE_MTR_LOAD_START + i];
+				// 이름은 참고용(FDC 는 szData 만 읽는다). 긴 이름은 szName[32] 를 넘으므로 잘라 쓴다.
+				_snprintf_s(rPos.szName,  sizeof(rPos.szName),  _TRUNCATE, "MTR_%s_POSI", s_FdcMtr[i].pszName);
+				_snprintf_s(rPos.szData,  sizeof(rPos.szData),  _TRUNCATE, "%.3f", dPos);
+				_snprintf_s(rLoad.szName, sizeof(rLoad.szName), _TRUNCATE, "MTR_%s_LOAD", s_FdcMtr[i].pszName);
+				_snprintf_s(rLoad.szData, sizeof(rLoad.szData), _TRUNCATE, "%.2f", dRMS);
+			}
+#endif
 
-				// POS
-				strcpy_s(m_pSharedFDC->FDCValue.stMainWData[nNext].szName, sizeof(m_pSharedFDC->FDCValue.stMainWData[nNext].szName), T2A(strName));
-				strcpy_s(m_pSharedFDC->FDCValue.stMainWData[nNext].szData, sizeof(m_pSharedFDC->FDCValue.stMainWData[nNext].szData), T2A(strData));
-
-				nNext++;
-
-				strName.Format(_T("AXIS RMS_%d"), nAxis);
-				strData.Format(_T("%.4f"),(m_pSharedMCC->stMCCDataEQ_ILog.stMoterInfo[nAxis].dAxisRMS));
-
-				// RMS
-				strcpy_s(m_pSharedFDC->FDCValue.stMainWData[nNext].szName, sizeof(m_pSharedFDC->FDCValue.stMainWData[nNext].szName), T2A(strName));
-				strcpy_s(m_pSharedFDC->FDCValue.stMainWData[nNext].szData, sizeof(m_pSharedFDC->FDCValue.stMainWData[nNext].szData), T2A(strData));
-
-				nNext++;
+			// LYS 2026-09-24 아래 슬롯 번호는 옛 목록 기준이다. PG 10 행 추가·LOAD 19 행 삭제로 LIFT PIN 63~66, PROBE OD 67, SW VER 68 이 됐다(enum 참조).
+			// LYS 2026-09-19 모션 외 SHARE 칸.
+			//   0/1  MCCB TRIP : M4072 / M4073 (1 = TRIP). DlgMainForm 모니터 루프가 SetFdcMccbTrip 으로 넘긴다.
+			//   72~74 LIFT PIN FIRST/SECOND/THIRD : 다단 상승 구간별 소요 시간(초, 소수 3자리).
+			//         DoWork_LPPreMove / DoWork_LPMove 가 그 단계가 실제로 움직였을 때만 SetLiftPinMoveSec(0~2) 로 넘긴다.
+			//   75   LIFT PIN DOWN : 다단 하강(유리 있음) 3 단계 전체 소요 시간(초). DoWork_LPMove 가 SetLiftPinMoveSec(3).
+			//   76   INSPEC PROBE OD : 레시피 m_sContactPos.m_fAddOD (측정·AGING 이 End Contact 에 더하는 OD).
+			//   77   CONTR SW VER : ALPHA 빌드 날짜 yyyymmdd (CAuroraMgr::GetCompiledDate(1), MCC VERSION 과 같은 값).
+			//        FDC 는 szData 를 atof 로 읽으므로 숫자만 들어가는 형식을 쓴다(파일 버전 "1.0.x" 는 1.0 으로 잘린다).
+			{
+				struct { int nSlot; const char* pszName; CStringA strData; } s_Fdc[] = {
+					{ MAIN_WDATA_SHARE_MCCB_TRIP_GPS,   "MAIN_GPS_MCCB_TRIP", "" },
+					{ MAIN_WDATA_SHARE_MCCB_TRIP_UPS,   "MAIN_UPS_MCCB_TRIP", "" },
+					{ MAIN_WDATA_SHARE_LIFT_PIN_FIRST,  "LIFT_PIN_FIRST",     "" },
+					{ MAIN_WDATA_SHARE_LIFT_PIN_SECOND, "LIFT_PIN_SECOND",    "" },
+					{ MAIN_WDATA_SHARE_LIFT_PIN_THIRD,  "LIFT_PIN_THIRD",     "" },
+					{ MAIN_WDATA_SHARE_LIFT_PIN_DOWN,   "LIFT_PIN_DOWN",      "" },
+					{ MAIN_WDATA_SHARE_INSPEC_PROBE_OD, "INSPEC_PROBE_OD",    "" },
+					{ MAIN_WDATA_SHARE_CONTR_SW_VER,    "CONTR_SW_VER",       "" },
+				};
+				s_Fdc[0].strData.Format("%d", m_nFdcMccbTripGps);
+				s_Fdc[1].strData.Format("%d", m_nFdcMccbTripUps);
+				//s_Fdc[2].strData.Format("%u", m_uLiftPinMoveTime[0]);
+				//s_Fdc[3].strData.Format("%u", m_uLiftPinMoveTime[1]);
+				//s_Fdc[4].strData.Format("%u", m_uLiftPinMoveTime[2]);
+				s_Fdc[2].strData.Format("%.3f", m_dLiftPinMoveSec[0]);	// LYS 2026-09-19 초
+				s_Fdc[3].strData.Format("%.3f", m_dLiftPinMoveSec[1]);
+				s_Fdc[4].strData.Format("%.3f", m_dLiftPinMoveSec[2]);
+				s_Fdc[5].strData.Format("%.3f", m_dLiftPinMoveSec[3]);	// DOWN
+				s_Fdc[6].strData.Format("%.3f", m_dFdcProbeOD);
+				s_Fdc[7].strData = CStringA(m_strVersion);
+				for (int i = 0; i < _countof(s_Fdc); i++)
+				{
+					RDATA& r = m_pSharedFDC->FDCValue.stMainWData[s_Fdc[i].nSlot];
+					_snprintf_s(r.szName, sizeof(r.szName), _TRUNCATE, "%s", s_Fdc[i].pszName);
+					_snprintf_s(r.szData, sizeof(r.szData), _TRUNCATE, "%s", (LPCSTR)s_Fdc[i].strData);
+				}
 			}
 		}
-
-	
 
 		// LYS 2026-07-29 ELP ElecBox 모니터 데이터(사양서 2026-07-28) -> MAIN_WDATA_ELP_START+ 고정 슬롯.
 		// FDC_LIST가 SOURCE ADDRESS로 직접 인덱싱하므로 nMainDataCount는 그대로 둔다.
+		// LYS 2026-09-19 ※ 운용 FDC 는 SOURCE ADDRESS 를 보지 않고 SHARE 행을 순서대로 읽으므로 이 400 번대는 읽히지 않는다.
 		{
 			static const char* szElpItem[MAIN_WDATA_ELP_ITEM_CNT] =
 				{ "TEMP", "SMOKE", "VOLT", "HARM_VOLT", "CURR", "HARM_CURR", "LEAK_CURR", "INST_PW", "ACCUM_PW" };
@@ -475,7 +698,8 @@ void CMCCLogMgr::UpdateSensor()
 			}
 		}
 
-		m_pSharedFDC->FDCValue.nMainDataCount = nNext - 20;
+		//m_pSharedFDC->FDCValue.nMainDataCount = nNext - 20;
+		m_pSharedFDC->FDCValue.nMainDataCount = nNext;	// LYS 2026-09-19 SHARE 슬롯 수(운용 FDC 는 이 값을 쓰지 않는다)
 		
 	}
 }
@@ -514,6 +738,14 @@ bool CMCCLogMgr::GetFDCDValue(int iIndex, double* pdValue, double* pdMax, double
 {
 	// TODO: 여기에 구현 코드 추가.
 	bool bRet = true;
+	// LYS 2026-09-19 범위 밖 인덱스를 막는다. 호출부는 반환값을 안 보므로 0 을 채워 준다.
+	if (iIndex < 0 || iIndex >= FDC_WDATA_END)
+	{
+		if (pdValue != nullptr) *pdValue = 0.0;
+		if (pdMax != nullptr) *pdMax = 0.0;
+		if (pdMin != nullptr) *pdMin = 0.0;
+		return false;
+	}
 	if (m_pDFDCData != nullptr)
 	{
 		if(pdValue !=nullptr) * pdValue = m_pDFDCData[iIndex];
@@ -717,6 +949,26 @@ void CMCCLogMgr::SetLiftPinMoveTime(int iStep, int Time)
 void CMCCLogMgr::SetIonizerRun(bool bRun)
 {
 	m_bIonizerRun = bRun;
+}
+
+// LYS 2026-09-19 FDC SHARE 0/1 - MCCB TRIP (DlgMainForm 모니터 루프에서 호출)
+void CMCCLogMgr::SetFdcMccbTrip(int nGps, int nUps)
+{
+	m_nFdcMccbTripGps = nGps;
+	m_nFdcMccbTripUps = nUps;
+}
+
+// LYS 2026-09-19 FDC SHARE 76 - 레시피 OD (DlgMainForm 모니터 루프에서 호출)
+void CMCCLogMgr::SetFdcProbeOD(double dOD)
+{
+	m_dFdcProbeOD = dOD;
+}
+
+// LYS 2026-09-19 FDC SHARE 72~75 - 리프트 핀 다단 동작 소요 시간(초). 0~2 = 상승 1/2/3 단계, 3 = 하강 전체.
+void CMCCLogMgr::SetLiftPinMoveSec(int iStep, double dSec)
+{
+	if (iStep >= 0 && iStep < _countof(m_dLiftPinMoveSec))
+		m_dLiftPinMoveSec[iStep] = dSec;
 }
 
 // LYS 2026-07-29 ELP ElecBox monitor data push (called from PGMon socket receive thread)

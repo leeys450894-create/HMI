@@ -119,7 +119,10 @@ enum enumStepID
 	enumStepID_MANUAL_CMD_11,
 	enumStepID_MANUAL_CMD_12,
 	enumStepID_MANUAL_CMD_13,
-	enumStepID_MANUAL_PLC_RESET
+	enumStepID_MANUAL_PLC_RESET,
+	enumStepID_MANUAL_CMD_ON,
+	enumStepID_MANUAL_CMD_OFF,
+	enumStepID_MANUAL_WAD_RESET,
 };
 
 class CAuroraMgr;
@@ -352,4 +355,7 @@ public:
 	afx_msg void OnBnClickedBtnManualMeasRecipeOpen7();
 	afx_msg void OnBnClickedBtnManualMeasRecipeOpen8();
 	afx_msg void OnBnClickedBtnManualPlcReset();
+	afx_msg void OnBnClickedBtnManualPlcBitOn();
+	afx_msg void OnBnClickedBtnManualPlcBItOff();
+	afx_msg void OnBnClickedBtnManualPlcWadReset();
 };

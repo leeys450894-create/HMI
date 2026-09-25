@@ -155,6 +155,7 @@ CDlgSubMaint::CDlgSubMaint(CAuroraMgr *pAuroraMgr, CWnd* pParent /*=NULL*/)
 	//----------------------------------------------------------------------
 	m_pThread = AfxBeginThread(ThreadRun, this);
 	m_bThreadLive = false;
+	m_lMotionBusy = 0;	// LYS 2026-09-17 motion busy flag (duplicate click guard)
 	m_hStart1Event = CreateEvent(NULL, FALSE, FALSE, NULL);		// auto reset, initial reset
 	m_hStart2Event = CreateEvent(NULL, FALSE, FALSE, NULL);		// auto reset, initial reset
 	m_hStart3Event = CreateEvent(NULL, FALSE, FALSE, NULL);		// auto reset, initial reset
@@ -499,6 +500,13 @@ void CDlgSubMaint::OnGridItemClickList(NMHDR* pNotifyStruct, LRESULT* result)
 
 void CDlgSubMaint::OnGridItemClickList2(NMHDR* pNotifyStruct, LRESULT* result)
 {
+	// LYS 2026-09-17 ignore the click while a motion is running (double click = duplicate move)
+	if (::InterlockedCompareExchange(&m_lMotionBusy, 0, 0) != 0)
+	{
+		*result = 0;
+		return;
+	}
+
 	// TODO: 여기에 컨트롤 알림 처리기 코드를 추가합니다.
 	NM_GRIDVIEW* pNotify = (NM_GRIDVIEW*)pNotifyStruct;
 
@@ -645,6 +653,11 @@ UINT CDlgSubMaint::ThreadRun(LPVOID pParam)
 	{
 		DWORD dw = WaitForMultipleObjects(5, pThis->m_hMultiEvent, FALSE, INFINITE);
 
+		// LYS 2026-09-17 a click landing while a motion runs must not queue a second move.
+		//                the start events are auto reset, so a double click would otherwise
+		//                fire the same ThreadFunc again as soon as the first one returns.
+		::InterlockedExchange(&pThis->m_lMotionBusy, 1);
+
 		if (dw == WAIT_OBJECT_0) // Start Event 1가 set될 때까지 기다린다.
 		{
 			pThis->ThreadFunc1();
@@ -668,6 +681,13 @@ UINT CDlgSubMaint::ThreadRun(LPVOID pParam)
 		else // timeout, error state
 		{
 		}
+
+		// LYS 2026-09-17 drop the clicks that piled up during the motion, then release the flag.
+		ResetEvent(pThis->m_hStart1Event);
+		ResetEvent(pThis->m_hStart2Event);
+		ResetEvent(pThis->m_hStart3Event);
+		ResetEvent(pThis->m_hStart4Event);
+		::InterlockedExchange(&pThis->m_lMotionBusy, 0);
 	}
 
 	pThis->m_bThreadLive = false;
@@ -713,9 +733,15 @@ UINT CDlgSubMaint::ThreadFunc1()
 				{
 					if (pImpl->GetCurPos(AXIS_UNIT_Z, 0, 0) < 0.1)
 					{
-						pImpl->MoveHome(nAxis);
-
-						lRet = pImpl->CheckHomeDone(nAxis, df_MOVINGDONE_TIME);
+						//pImpl->MoveHome(nAxis);
+						//lRet = pImpl->CheckHomeDone(nAxis, df_MOVINGDONE_TIME);
+						// LYS 2026-09-21 원점복귀가 거부되면(인터락 - 알람은 MoveHome 이 이미 냈다) 완료를 기다리지 않는다.
+						//                전에는 반환값을 버리고 CheckHomeDone 으로 최대 대기했다(그동안 화면 워커가 묶인다).
+						long lHome = pImpl->MoveHome(nAxis);
+						if (lHome > 0 && lHome < 1000)
+							lRet = pImpl->CheckHomeDone(nAxis, df_MOVINGDONE_TIME);
+						else
+							lRet = lHome;
 					}
 					else
 					{
@@ -726,9 +752,15 @@ UINT CDlgSubMaint::ThreadFunc1()
 				}
 				else
 				{
-					pImpl->MoveHome(nAxis);
-
-					lRet = pImpl->CheckHomeDone(nAxis, df_MOVINGDONE_TIME);
+					//pImpl->MoveHome(nAxis);
+					//lRet = pImpl->CheckHomeDone(nAxis, df_MOVINGDONE_TIME);
+					// LYS 2026-09-21 원점복귀가 거부되면(인터락 - 알람은 MoveHome 이 이미 냈다) 완료를 기다리지 않는다.
+					//                전에는 반환값을 버리고 CheckHomeDone 으로 최대 대기했다(그동안 화면 워커가 묶인다).
+					long lHome = pImpl->MoveHome(nAxis);
+					if (lHome > 0 && lHome < 1000)
+						lRet = pImpl->CheckHomeDone(nAxis, df_MOVINGDONE_TIME);
+					else
+						lRet = lHome;
 				}
 			}
 		}

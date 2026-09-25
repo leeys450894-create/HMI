@@ -97,6 +97,7 @@ public:
 	bool SetEQSetPrboeData(int iProbeUnit);										// EQ Probe Unloading Data 셋팅
 	bool SetEQGetPrboeData(int iProbeUnit);										// EQ Probe Loading Data 셋팅
 	bool SetEQClearPrboeData(int iProbeUnit);									// EQ Probe Data 초기화
+	bool SetEQManualProbeID(int iProbeUnit, CString strID);				// LYS 2026-09-16 수동 장착 프로브 ID 등록: D2110~D2150 에 10자 기록("" = 공백 = 빈 ID)
 
 	bool SetStatusbusyOn();														// EQ Arm 구동 중
 	bool SetStatusbusyOff();													// EQ Arm 구동 완료

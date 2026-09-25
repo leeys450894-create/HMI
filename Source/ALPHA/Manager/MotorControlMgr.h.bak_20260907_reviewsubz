@@ -1,0 +1,148 @@
+#pragma once
+
+#include "..\AuroraSubMgr.h"
+#include "MotorFunction\MotorFunction.h"
+#include <afxmt.h>
+
+#define df_MOTION_RV_ERROR			    0
+#define df_MOTION_RV_SUCCESSED			1
+
+class CIniHelper;
+class CLogFileAccessor;
+class CMotorFunction;
+class CMotorControlMgr : public CAuroraSubMgr
+{
+    CIniHelper			*m_pIniHelper;
+	CLogFileAccessor	*m_pLogFileAccessor;
+	bool				m_bUse;				// 장치 사용여부, UI상에서도 보이지 않게 처리함. OutOfService와는 다름
+	bool				m_bOutOfService;	// 모듈 사용 여부 0: USE
+	CString				m_strControlType;
+	CMotorFunction		*m_pFunction;
+	bool				m_bIsOCP;			// LYS 2026-06-26 OCP mode flag
+	bool				m_bInitialized;		// 초기화 상태 여부
+	CCriticalSection	m_cs;
+	CCriticalSection	m_cs_Get;
+	CCriticalSection	m_cs_Set;
+	CCriticalSection	m_cs_done;
+	CCriticalSection	m_cs_Stop;
+	double				m_dInterlockPos;
+	double				m_dInterlockGantryGap;
+	double				m_dInterlockHeadGap;
+	double				m_dInterlockHeadGapB;
+	double				m_dInterlockProbeGap;
+	double				m_dInterlockLifePinPos;
+	double				m_dInterlockProbeSizeX;	// LYS 2026-08-25 P5 probe unit width in X
+	double				m_dInterlockProbeZSafety;	// LYS 2026-08-26 P5 유닛을 피하는 BACK Z 안전 높이
+	double				m_dInterlockSubZSafety;	// LYS 2026-09-02 Z3/Z4 Sub Z 안전위치 (SUBZ_SAFETY 미러)
+
+	double				m_dMovePos[100];	// 가상테스트에서 사용
+	double				m_dMoveOffset[100];	// Head Offset
+//	CIOMapControlMgr	*m_pIOMapControlMgr;
+
+	// LYS 2026-08-26 X2가 P5 밴드에 들어가기 전 BACK Z를 안전 높이로 상승시키는 헬퍼
+	long		RetractHeadZForProbeUnit(double dTargetX2, LPCTSTR pszFrom);
+
+	long		SetSpeedDirect_Sub(int iAxis, double dVel, double dAcc, double dDec, int iSpeedMode);
+	long		MoveCmdPosA_Sub(int iAxis, double dPos, bool bBlockMode, int iSpeed, int iLens = -1, int iTube = -1);
+	long		MoveCmdPosA_Move(int iAxis, double dPos, bool bBlockMode, int iSpeed, int iLens = -1, int iTube = -1);
+
+	long		MoveCmdPosR_Sub(int iAxis, double dPos, bool bBlockMode, int iSpeed);
+	long		MoveCmdPosMulti_Sub(stMotorPosition *pPos, int iAxis, int iSpeed, bool bDoneCheck);
+	long		MoveCmdPosMulti_Move(stMotorPosition* pPos, int iAxis, int iSpeed);
+
+public:
+    CString		GetDeviceName();
+    bool		InitDevice();
+	void		SetInitialize(bool value);
+	bool		IsInitialized() const;
+    bool		IsConnected() const;
+	bool		IsUseDevice() const;
+	bool		IsOutOfService() const;
+	void		DisableAxesForOCP();
+	// LYS 2026-08-25 헤드 갠트리가 P5 프로브 유닛 영역 안이면 true
+	// LYS 2026-08-26 시퀀스 계층에서 Z1 하강 전 검사할 수 있게 이동
+	bool		IsProbeUnitOverlapX(double dHeadX);
+	bool		IsOCP() const						{ return m_bIsOCP; }	// LYS 2026-06-26	// LYS 2026-06-26 OCP mode: disable P1-P4 + P5 X/Y axes
+
+
+    long		ResetDevice(int iAxis);
+	long		MoveHome(int iAxis);
+	long		MoveCmdPosAModify(int iAxis, double dPos);
+
+	long		MoveCmdPosA(int iAxis, double dPos, bool bBlockMode, int iSpeed, int iLens = -1, int iTube = -1);
+	long		MoveCmdPosR(int iAxis, double dPos, bool bBlockMode, int iSpeed);
+	long		MoveCmdPosMulti(stMotorPosition *pPos, int iAxis, int iSpeed, bool bDoneCheck = false);
+
+	long		MoveJog(int iAxis, bool bDir);
+	long		WaitMotionEnd(int iAxis, DWORD dwTimeout);
+	bool		CheckMoveDone(int iAxis, DWORD dwTimeout);
+	long		CheckHomeDone(int iAxis, DWORD dwTimeout);
+	long		CheckInterlock(CString strAxis);
+	void		StopHome();
+	long		StopDevice(int iAxis);
+	long		KillDevice(int iAxis);
+	long		RunBuffer(int iAxis);
+	long		StopBuffer(int iAxis);
+
+	long		SetSpeed(int iAxis, int iSpeedType, int iSpeedMode);
+	long		SetSpeedDirect(int iAxis, double dVel, double dAcc, double dDec, int iSpeedMode);
+	void		SetHomeProperty(int iAxis, int iHomeMode, int iHomeClrMode, long lEzCount, int iOrgLogic, int iEzLogic, bool bErcOut, double dEscDist, double dOffsetDist);
+	void		SetAxisMapping(int iAxis, int iAxis_real_hardware);
+	void		SetAxisProperty(int iAxis, axis_data_type *type);
+	long		SetAmpEnable(int iAxis, bool bOn);
+	void		SetAddress(CString strAdress, int iPort);
+	void		SetHomeDone(int iAxis, bool bDone);
+	long		SetWriteBuffer(CString strEQPName, bool bDirectOut, int iValue);
+	void		SetInterlockName(std::map<int, CString> &mapVal);
+	
+	double		GetCurPos(int iAxis, int iLens = -1, int iTube = - 1);
+	double		GetOrgPos(int iAxis);
+
+
+	long		GetMotorStatus(int iAxis, int nStatus);
+	axis_data_type *GetAxisProperty(int iAxis);
+	CAxisType *GetAxisMapProperty(int iAxis);
+	double		GetSpeedVal(int iAxis);
+	double		GetSpeed(int iAxis, long iSpeed);
+	long		GetAmpEnable(int iAxis);
+	long		GetHWLimit(int iAxis, short bDir);
+	double		GetMaxSWLimit(int iAxis);
+	double		GetMinSWLimit(int iAxis);
+	double		GetVelocityHigh(int iAxis);
+	double		GetVelocityMiddle(int iAxis);
+	double		GetVelocityLow(int iAxis);
+	long		GetMoving(int iAxis);
+	bool		GetHomeDone(int iAxis);
+	double		GetMotorRMSValue(int iAxis);
+	CString		GetLastErrorString();
+	double		GetOffset(int iAxis);
+	long		GetInput(int port, int bit);
+	double		GetFollowingErr(int iAxis);
+	double		GetActualVel(int iAxis);
+	void		LinkDatFile(bool bSave = false);
+	void		SetMaxSWLimit(int iAxis, double dLimit);
+	void		SetMinSWLimit(int iAxis, double dLimit);
+	double		GetHomeVel(int iAxis);
+	void		SetHeadOffset(int iAxis, double dOffset = 0.);
+
+	// 관련 함수들
+public:
+	BOOL	DoWork_MotionEnable(int iAxis);
+	int		DoWork_MotionDone(int iAxis);
+//	void    GetInterlockPos(double* dPosGantry, double* dPosHead, double* dPosProbe);
+	void    GetInterlockPos(double* dPosGantry, double* dPosHead, double* dPosProbe, double* dPosHeadB, double* dPosLiftPin);	// 2023.03.08 change
+
+	CLogFileAccessor *GetLogFileAccessorPtr();
+
+//------------------------------------------------------------------
+// 공통 인터페이스 함수
+//------------------------------------------------------------------
+public:
+	virtual bool LinkIniFile(bool bSave) override;
+//private:
+	virtual void Finalize() override;
+public:
+	CMotorControlMgr(CString strAppPath, CString strConfigPath, CString strLogPath);
+	virtual ~CMotorControlMgr();
+};
+

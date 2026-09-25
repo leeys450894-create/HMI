@@ -1,0 +1,501 @@
+// DlgTestMode.cpp
+// LYS 2026-07-02 Test Mode 다이얼로그(GMI IDD_TEST_MODE_DLG 이식).
+// GMI 옵션 기준 - 2갠트리 4헤드, REAR STAGE 전용, 선택 셀 이동.
+
+#include "pch.h"
+#include "ALPHA.h"
+#include "DlgTestMode.h"
+#include "afxdialogex.h"
+
+#include "AuroraMgr.h"
+#include "Manager\MaintControlMgr.h"
+#include "Manager\SystemConfigMgr.h"
+#include "Manager\PositionConfigMgr.h"
+#include "Recipe\RecipeEditMgr.h"
+
+#ifdef _DEBUG
+#define new DEBUG_NEW
+#endif
+
+IMPLEMENT_DYNAMIC(CDlgTestMode, CDialogEx)
+
+BEGIN_MESSAGE_MAP(CDlgTestMode, CDialogEx)
+	ON_BN_CLICKED(IDC_TM_RADIO_REVIEW, &CDlgTestMode::OnSelMode)
+	ON_BN_CLICKED(IDC_TM_RADIO_WAD, &CDlgTestMode::OnSelMode)
+	ON_BN_CLICKED(IDC_TM_RADIO_VISION, &CDlgTestMode::OnSelMode)
+	ON_BN_CLICKED(IDC_TM_RADIO_ANGLE, &CDlgTestMode::OnSelMode)
+	ON_BN_CLICKED(IDC_TM_BTN_MOVE, &CDlgTestMode::OnBtnMove)
+	ON_BN_CLICKED(IDC_TM_BTN_PRE_CONTACT, &CDlgTestMode::OnBtnPreContact)
+	ON_BN_CLICKED(IDC_TM_BTN_CONTACT, &CDlgTestMode::OnBtnContact)
+	ON_BN_CLICKED(IDC_TM_BTN_UNCONTACT, &CDlgTestMode::OnBtnUnContact)
+	ON_BN_CLICKED(IDC_TM_BTN_CLOSE, &CDlgTestMode::OnCancel)
+	ON_NOTIFY(NM_CLICK, IDC_TM_GRID_GLASS, &CDlgTestMode::OnGridClick)
+END_MESSAGE_MAP()
+
+CDlgTestMode::CDlgTestMode(CAuroraMgr* pAuroraMgr, CWnd* pParent)
+	: CDialogEx(IDD_DLG_TEST_MODE, pParent)
+	, m_pAuroraMgr(pAuroraMgr)
+	, m_pMgrPool(nullptr)
+	, m_nTestMode(0)
+	, m_nSelRow(-1), m_nSelCol(-1)
+	, m_crPrevBk(RGB(255, 255, 255))
+	, m_nMaxStick(0), m_nMaxCell(0)
+{
+}
+
+CDlgTestMode::CDlgTestMode(stAuroraMgrPool* pMgrPool, CWnd* pParent)
+	: CDialogEx(IDD_DLG_TEST_MODE, pParent)
+	, m_pAuroraMgr(nullptr)
+	, m_pMgrPool(pMgrPool)
+	, m_nTestMode(0)
+	, m_nSelRow(-1), m_nSelCol(-1)
+	, m_crPrevBk(RGB(255, 255, 255))
+	, m_nMaxStick(0), m_nMaxCell(0)
+{
+}
+
+CDlgTestMode::~CDlgTestMode()
+{
+}
+
+// ============================================================================
+// Internal accessors - work with either constructor
+// ============================================================================
+CMaintControlMgr* CDlgTestMode::GetMaintCtrl()
+{
+	if (m_pAuroraMgr) return m_pAuroraMgr->GetMaintControlMgr();
+	if (m_pMgrPool)   return m_pMgrPool->pMaintControlMgr;
+	return nullptr;
+}
+
+CRecipeEditMgr* CDlgTestMode::GetRecipeEdit()
+{
+	if (m_pAuroraMgr) return m_pAuroraMgr->GetRecipeEditMgrPtr();
+	if (m_pMgrPool)   return m_pMgrPool->pRecipeEditMgr;
+	return nullptr;
+}
+
+CPositionConfigMgr* CDlgTestMode::GetPosConfig()
+{
+	if (m_pAuroraMgr) return m_pAuroraMgr->GetPositionConfigMgrPtr();
+	if (m_pMgrPool)   return m_pMgrPool->pPositionConfigMgr;
+	return nullptr;
+}
+
+void CDlgTestMode::DoDataExchange(CDataExchange* pDX)
+{
+	CDialogEx::DoDataExchange(pDX);
+}
+
+BOOL CDlgTestMode::OnInitDialog()
+{
+	CDialogEx::OnInitDialog();
+
+	CreateControls();
+	PopulateCellGrid();
+
+	return TRUE;
+}
+
+// ============================================================================
+// Create all controls dynamically
+// ============================================================================
+void CDlgTestMode::CreateControls()
+{
+	CFont* pFont = GetFont();
+
+	// --- Stage radio (fixed REAR STAGE) ---
+	m_rdStage.Create(_T("REAR STAGE"), WS_CHILD | WS_VISIBLE | BS_AUTORADIOBUTTON | BS_PUSHLIKE | WS_GROUP,
+		CRect(10, 10, 110, 45), this, IDC_TM_RADIO_REAR_STAGE);
+	m_rdStage.SetFont(pFont);
+	m_rdStage.SetCheck(BST_CHECKED);
+	m_rdStage.EnableWindow(FALSE);
+
+	// --- Mode radio buttons ---
+	const TCHAR* szMode[] = { _T("Review"), _T("WAD"), _T("VISION"), _T("ANGLE") };
+	const UINT nModeID[] = { IDC_TM_RADIO_REVIEW, IDC_TM_RADIO_WAD, IDC_TM_RADIO_VISION, IDC_TM_RADIO_ANGLE };
+	for (int i = 0; i < 4; i++)
+	{
+		DWORD dwStyle = WS_CHILD | WS_VISIBLE | BS_AUTORADIOBUTTON | BS_PUSHLIKE;
+		if (i == 0) dwStyle |= WS_GROUP;
+		m_rdMode[i].Create(szMode[i], dwStyle,
+			CRect(130 + i * 80, 10, 130 + i * 80 + 75, 45), this, nModeID[i]);
+		m_rdMode[i].SetFont(pFont);
+	}
+	m_rdMode[0].SetCheck(BST_CHECKED);
+
+	// --- Action buttons ---
+	m_btnMove.Create(_T("Move"), WS_CHILD | WS_VISIBLE | BS_PUSHBUTTON,
+		CRect(460, 55, 560, 90), this, IDC_TM_BTN_MOVE);
+	m_btnMove.SetFont(pFont);
+
+	m_btnPreContact.Create(_T("Pre-Contact"), WS_CHILD | WS_VISIBLE | BS_PUSHBUTTON | BS_MULTILINE,
+		CRect(460, 100, 560, 135), this, IDC_TM_BTN_PRE_CONTACT);
+	m_btnPreContact.SetFont(pFont);
+
+	m_btnContact.Create(_T("Contact"), WS_CHILD | WS_VISIBLE | BS_PUSHBUTTON | BS_MULTILINE,
+		CRect(565, 100, 665, 135), this, IDC_TM_BTN_CONTACT);
+	m_btnContact.SetFont(pFont);
+
+	m_btnUnContact.Create(_T("UnContact"), WS_CHILD | WS_VISIBLE | BS_PUSHBUTTON | BS_MULTILINE,
+		CRect(670, 100, 770, 135), this, IDC_TM_BTN_UNCONTACT);
+	m_btnUnContact.SetFont(pFont);
+
+	m_btnClose.Create(_T("CLOSE"), WS_CHILD | WS_VISIBLE | BS_PUSHBUTTON,
+		CRect(670, 10, 770, 45), this, IDC_TM_BTN_CLOSE);
+	m_btnClose.SetFont(pFont);
+
+	// --- Status label ---
+	m_stcStatus.Create(_T("Select a cell and click Move"), WS_CHILD | WS_VISIBLE | SS_LEFT,
+		CRect(460, 145, 770, 165), this);
+	m_stcStatus.SetFont(pFont);
+
+	// --- Glass cell grid ---
+	CRect rcGrid(10, 55, 450, 380);
+	m_gridGlass.Create(rcGrid, this, IDC_TM_GRID_GLASS);
+	m_gridGlass.SetEditable(FALSE);
+	m_gridGlass.SetListMode(FALSE);
+	m_gridGlass.EnableSelection(FALSE);
+	m_gridGlass.SetFixedRowCount(0);
+	m_gridGlass.SetFixedColumnCount(0);
+
+	// Resize dialog to fit
+	SetWindowPos(NULL, 0, 0, 790, 420, SWP_NOMOVE | SWP_NOZORDER);
+	CenterWindow();
+}
+
+// ============================================================================
+// Populate cell grid from recipe data
+// ============================================================================
+void CDlgTestMode::PopulateCellGrid()
+{
+	CRecipeEditMgr* pRcpEdit = GetRecipeEdit();
+	if (pRcpEdit == nullptr) return;
+
+	S_RecipeData* pRecipeData = pRcpEdit->GetRecipeData();
+	if (pRecipeData == nullptr) return;
+
+	m_nMaxStick = (int)pRecipeData->m_vecStick.size();
+	if (m_nMaxStick < 1) return;
+
+	m_nMaxCell = 0;
+	for (int s = 0; s < m_nMaxStick; s++)
+	{
+		int nc = (int)pRecipeData->m_vecStick[s].m_vecCell.size();
+		if (nc > m_nMaxCell) m_nMaxCell = nc;
+	}
+	if (m_nMaxCell < 1) return;
+
+	// Grid: rows=cells, cols=sticks
+	m_gridGlass.SetRowCount(m_nMaxCell);
+	m_gridGlass.SetColumnCount(m_nMaxStick);
+
+	int nColW = 400 / m_nMaxStick;
+	if (nColW < 40) nColW = 40;
+	if (nColW > 80) nColW = 80;
+	int nRowH = 300 / m_nMaxCell;
+	if (nRowH < 20) nRowH = 20;
+	if (nRowH > 30) nRowH = 30;
+
+	for (int s = 0; s < m_nMaxStick; s++)
+		m_gridGlass.SetColumnWidth(s, nColW);
+
+	for (int c = 0; c < m_nMaxCell; c++)
+	{
+		m_gridGlass.SetRowHeight(c, nRowH);
+		for (int s = 0; s < m_nMaxStick; s++)
+		{
+			int nCellCount = (int)pRecipeData->m_vecStick[s].m_vecCell.size();
+			GV_ITEM item;
+			item.mask = GVIF_TEXT | GVIF_FORMAT | GVIF_BKCLR;
+			item.row = c;
+			item.col = s;
+			item.nFormat = DT_CENTER | DT_VCENTER | DT_SINGLELINE;
+			if (c < nCellCount)
+			{
+				item.strText.Format(_T("%c%02d"), _T('A') + s, c + 1);
+				item.crBkClr = RGB(255, 255, 255);
+			}
+			else
+			{
+				item.strText = _T("");
+				item.crBkClr = RGB(192, 192, 192);
+			}
+			m_gridGlass.SetItem(&item);
+		}
+	}
+
+	// Default selection
+	m_nSelRow = 0;
+	m_nSelCol = 0;
+	m_crPrevBk = m_gridGlass.GetItemBkColour(0, 0);
+	m_gridGlass.SetItemBkColour(0, 0, RGB(135, 206, 250));
+	m_gridGlass.Invalidate();
+}
+
+// ============================================================================
+// Grid click handler
+// ============================================================================
+void CDlgTestMode::OnGridClick(NMHDR* pNMHDR, LRESULT* pResult)
+{
+	NM_GRIDVIEW* pNMGV = reinterpret_cast<NM_GRIDVIEW*>(pNMHDR);
+	int nRow = pNMGV->iRow;
+	int nCol = pNMGV->iColumn;
+	*pResult = 0;
+
+	if (nRow < 0 || nCol < 0) return;
+	COLORREF crBk = m_gridGlass.GetItemBkColour(nRow, nCol);
+	if (crBk == RGB(192, 192, 192)) return;
+
+	if (m_nSelRow >= 0 && m_nSelCol >= 0)
+		m_gridGlass.SetItemBkColour(m_nSelRow, m_nSelCol, m_crPrevBk);
+
+	m_crPrevBk = crBk;
+	m_nSelRow = nRow;
+	m_nSelCol = nCol;
+	m_gridGlass.SetItemBkColour(nRow, nCol, RGB(135, 206, 250));
+
+	CString strStatus;
+	strStatus.Format(_T("Selected: Stick %d, Cell %d"), m_nSelCol + 1, m_nSelRow + 1);
+	m_stcStatus.SetWindowText(strStatus);
+	m_gridGlass.Invalidate(FALSE);
+}
+
+// ============================================================================
+// Mode radio
+// ============================================================================
+void CDlgTestMode::OnSelMode()
+{
+	if (m_rdMode[0].GetCheck() == BST_CHECKED)      m_nTestMode = 0;
+	else if (m_rdMode[1].GetCheck() == BST_CHECKED)  m_nTestMode = 1;
+	else if (m_rdMode[2].GetCheck() == BST_CHECKED)  m_nTestMode = 2;
+	else if (m_rdMode[3].GetCheck() == BST_CHECKED)  m_nTestMode = 3;
+}
+
+// ============================================================================
+// Move button
+// ============================================================================
+void CDlgTestMode::OnBtnMove()
+{
+	if (m_nSelRow < 0 || m_nSelCol < 0)
+	{
+		AfxMessageBox(_T("Please select a cell first."));
+		return;
+	}
+
+	m_stcStatus.SetWindowText(_T("Moving..."));
+	GetDlgItem(IDC_TM_BTN_MOVE)->EnableWindow(FALSE);
+
+	int nRet = ManualMoveToCell();
+
+	GetDlgItem(IDC_TM_BTN_MOVE)->EnableWindow(TRUE);
+	CString strResult;
+	if (nRet == VTM_RV_SUCCESSED)
+		strResult.Format(_T("Move OK - Stick %d, Cell %d"), m_nSelCol + 1, m_nSelRow + 1);
+	else
+		strResult.Format(_T("Move FAILED (err=%d)"), nRet);
+	m_stcStatus.SetWindowText(strResult);
+}
+
+// ============================================================================
+// ManualMoveToCell
+// ============================================================================
+int CDlgTestMode::ManualMoveToCell()
+{
+	int nRet = VTM_RV_SUCCESSED;
+	int iStick = m_nSelCol;
+	int iCell = m_nSelRow;
+
+	CRecipeEditMgr* pRcpEdit = GetRecipeEdit();
+	CMaintControlMgr* pMaintCtrl = GetMaintCtrl();
+	if (pRcpEdit == nullptr || pMaintCtrl == nullptr) return VTM_RV_FAILED;
+
+	S_RecipeData* pRecipeData = pRcpEdit->GetRecipeData();
+	S_RecipeMap* pRecipeMap = pRcpEdit->GetRecipeMap();
+	S_RecipeInfo* pRecipeInfo = pRcpEdit->GetRecipeInfo();
+	if (!pRecipeData || !pRecipeMap || !pRecipeInfo) return VTM_RV_FAILED;
+	if (iStick >= (int)pRecipeData->m_vecStick.size()) return VTM_RV_FAILED;
+	if (iCell >= (int)pRecipeData->m_vecStick[iStick].m_vecCell.size()) return VTM_RV_FAILED;
+
+	// Step 1: Move Stage
+	nRet = ManualMoveStick(iStick);
+	if (nRet != VTM_RV_SUCCESSED) return nRet;
+
+	// Step 2: Move Head
+	double dGantryGap = 0, dHeadGap = 0;
+	if (m_nTestMode == 2 || m_nTestMode == 3)
+		pMaintCtrl->GetInterlockPos(&dGantryGap, &dHeadGap, nullptr);
+	else
+		pMaintCtrl->GetInterlockPos(&dGantryGap, nullptr, nullptr, &dHeadGap);
+
+	double dHeadGapRcp = pRecipeInfo->m_sOptionItem.m_fBackHeadGap;
+	if (dHeadGapRcp > dHeadGap) dHeadGap = dHeadGapRcp;
+
+	S_CellInfo& cellInfo = pRecipeData->m_vecStick[iStick].m_vecCell[iCell];
+	double dCellX = cellInfo.m_fCellX;
+	double dCellY = cellInfo.m_fCellY;
+	double dGlassContactPos = pRecipeData->m_vecStick[0].m_fStageY + pRecipeInfo->m_sMotionOffsetPos.m_fHeadReviewY;
+	double dHeadX = dCellY + dGlassContactPos;
+	double dOffsetX = pRecipeInfo->m_sMotionOffsetPos.m_fStageY;
+
+	double dLeft = dCellX, dRight = dCellX - dHeadGap;
+	int nCellCount = (int)pRecipeData->m_vecStick[iStick].m_vecCell.size();
+	for (int ic = 0; ic < nCellCount; ic++)
+	{
+		if (ic == iCell) continue;
+		double dOtherX = pRecipeData->m_vecStick[iStick].m_vecCell[ic].m_fCellX;
+		if (fabs(dCellX - dOtherX) > dHeadGap)
+		{
+			if (dCellX > dOtherX) { dLeft = dCellX; dRight = dOtherX; }
+			else { dLeft = dOtherX; dRight = dCellX; }
+			break;
+		}
+	}
+
+	double dSafetyZ1 = 0., dSafetyZ2 = 0.;
+	CPositionConfigMgr* pPosConfig = GetPosConfig();
+	if (pPosConfig)
+		pPosConfig->GetSafetyPosition(nullptr, nullptr, nullptr, nullptr, nullptr, &dSafetyZ1, &dSafetyZ2);
+
+	stMotorPosition stPosition[20];
+	ZeroMemory(&stPosition, sizeof(stPosition));
+	int nAxis = 0;
+
+	switch (m_nTestMode)
+	{
+	case 0: // Review
+		stPosition[0].axis = AXIS_Y1;   nAxis++; stPosition[0].dPosition = dLeft;
+		stPosition[1].axis = AXIS_Y2;   nAxis++; stPosition[1].dPosition = dRight;
+		stPosition[2].axis = AXIS_X2;   nAxis++; stPosition[2].dPosition = dHeadX + dOffsetX;
+		stPosition[3].axis = AXIS_Z3;   nAxis++; stPosition[3].dPosition = 0.0;	// LYS 2026-09-07 Review: Z1(OCP 미사용) -> Sub Z(Z3). 안전높이(0) 유지, 하강 없음
+		stPosition[4].axis = AXIS_Z2;   nAxis++; stPosition[4].dPosition = pRecipeData->m_sHeadZ.m_fReviewZ;
+		nRet = pMaintCtrl->MoveCmdPosReview(iStick, stPosition, nAxis, SPEED_HIGH);
+		break;
+	case 1: // WAD
+		stPosition[0].axis = AXIS_Y1;   nAxis++; stPosition[0].dPosition = dLeft;
+		stPosition[1].axis = AXIS_Y2;   nAxis++; stPosition[1].dPosition = dRight;
+		stPosition[2].axis = AXIS_X2;   nAxis++; stPosition[2].dPosition = dHeadX + dOffsetX;
+		stPosition[3].axis = AXIS_Z3;   nAxis++; stPosition[3].dPosition = 0.0;	// LYS 2026-09-07 WAD: Z1(OCP 미사용) -> Sub Z(Z3). 안전높이(0) 유지, 하강 없음
+		stPosition[4].axis = AXIS_Z2;   nAxis++; stPosition[4].dPosition = pRecipeData->m_sHeadZ.m_fSpecZ;
+		nRet = pMaintCtrl->MoveCmdPosWAD(stPosition, nAxis, SPEED_HIGH);
+		break;
+	case 2: // Vision
+		stPosition[0].axis = AXIS_Y3;   nAxis++; stPosition[0].dPosition = dLeft;
+		stPosition[1].axis = AXIS_Y4;   nAxis++; stPosition[1].dPosition = dRight;
+		stPosition[2].axis = AXIS_X3;   nAxis++; stPosition[2].dPosition = dHeadX + dOffsetX;
+		stPosition[3].axis = AXIS_Z1;   nAxis++; stPosition[3].dPosition = pRecipeData->m_sHeadZ.m_fQualityZ;
+		stPosition[4].axis = AXIS_Z2;   nAxis++; stPosition[4].dPosition = dSafetyZ1;
+		nRet = pMaintCtrl->MoveCmdPosVision(stPosition, nAxis, SPEED_HIGH);
+		break;
+	case 3: // Angle
+		stPosition[0].axis = AXIS_Y1;   nAxis++; stPosition[0].dPosition = dLeft;
+		stPosition[1].axis = AXIS_Y2;   nAxis++; stPosition[1].dPosition = dRight;
+		stPosition[2].axis = AXIS_X2;   nAxis++; stPosition[2].dPosition = dHeadX + dOffsetX;
+		stPosition[3].axis = AXIS_Z1;   nAxis++; stPosition[3].dPosition = dSafetyZ2;
+		stPosition[4].axis = AXIS_Z2;   nAxis++; stPosition[4].dPosition = pRecipeData->m_sHeadZ.m_fAngleZ;
+		nRet = pMaintCtrl->MoveCmdPosAngle(stPosition, nAxis, SPEED_HIGH);
+		break;
+	}
+	return nRet;
+}
+
+// ============================================================================
+// ManualMoveStick
+// ============================================================================
+int CDlgTestMode::ManualMoveStick(int iStick)
+{
+	int nRet = VTM_RV_SUCCESSED;
+	CRecipeEditMgr* pRcpEdit = GetRecipeEdit();
+	CMaintControlMgr* pMaintCtrl = GetMaintCtrl();
+	if (!pRcpEdit || !pMaintCtrl) return VTM_RV_FAILED;
+
+	S_RecipeData* pRecipeData = pRcpEdit->GetRecipeData();
+	S_RecipeMap* pRecipeMap = pRcpEdit->GetRecipeMap();
+	S_RecipeInfo* pRecipeInfo = pRcpEdit->GetRecipeInfo();
+	if (!pRecipeData || (int)pRecipeData->m_vecStick.size() < 1) return VTM_RV_FAILED;
+
+	// Probe UnContact
+	stMotorPosition stPositionZ[5];
+	ZeroMemory(&stPositionZ, sizeof(stPositionZ));
+	stPositionZ[0].axis = AXIS_PROBE_Z1;
+	stPositionZ[1].axis = AXIS_PROBE_Z2;
+	stPositionZ[2].axis = AXIS_PROBE_Z3;
+	stPositionZ[3].axis = AXIS_PROBE_Z4;
+	stPositionZ[4].axis = AXIS_PROBE_Z5;
+	nRet = pMaintCtrl->MoveCmdPosMulti(stPositionZ, 5, SPEED_HIGH, true);
+	Sleep(500);
+	if (nRet != VTM_RV_SUCCESSED) return nRet;
+
+	double dStageY = 0, dStageR = 0;
+	double dOffsetX = pRecipeInfo->m_sMotionOffsetPos.m_fStageY;
+	double dOffsetR = pRecipeInfo->m_sMotionOffsetPos.m_fStageRotate;
+
+	if (iStick > 0)
+		dStageY = pRecipeData->m_vecStick[0].m_fStageY - pRecipeData->m_vecStick[iStick].m_fStageY + dOffsetX;
+	else
+		dStageY = (pRecipeMap->m_fCellDistance.y * iStick) * 1 + dOffsetX;
+
+	dStageR = pRecipeData->m_vecStick[iStick].m_fStageR + dOffsetR;
+
+	nRet = pMaintCtrl->MoveCmdPosA(AXIS_LOADER_R, dStageR, false, SPEED_HIGH);
+	if (nRet == VTM_RV_SUCCESSED)
+		nRet = pMaintCtrl->MoveCmdPosA(AXIS_X, dStageY, false, SPEED_HIGH);
+
+	return nRet;
+}
+
+// ============================================================================
+// Pre-Contact
+// ============================================================================
+void CDlgTestMode::OnBtnPreContact()
+{
+	m_stcStatus.SetWindowText(_T("Pre-Contact..."));
+	CRecipeEditMgr* pRcpEdit = GetRecipeEdit();
+	CMaintControlMgr* pMaintCtrl = GetMaintCtrl();
+	if (!pRcpEdit || !pMaintCtrl) return;
+
+	S_RecipeInfo* pRecipeInfo = pRcpEdit->GetRecipeInfo();
+	if (!pRecipeInfo) return;
+	double dfMove = pRecipeInfo->m_sContactPos.m_fPreContactPos;
+
+	int nRet = pMaintCtrl->MoveCmdPos_ProbeContact(AXIS_PROBE_Z5, dfMove, dfMove, 0);
+	m_stcStatus.SetWindowText(nRet == VTM_RV_SUCCESSED ? _T("Pre-Contact OK") : _T("Pre-Contact FAILED"));
+}
+
+// ============================================================================
+// Contact
+// ============================================================================
+void CDlgTestMode::OnBtnContact()
+{
+	m_stcStatus.SetWindowText(_T("Contact..."));
+	CRecipeEditMgr* pRcpEdit = GetRecipeEdit();
+	CMaintControlMgr* pMaintCtrl = GetMaintCtrl();
+	if (!pRcpEdit || !pMaintCtrl) return;
+
+	S_RecipeInfo* pRecipeInfo = pRcpEdit->GetRecipeInfo();
+	if (!pRecipeInfo) return;
+	double dfMove = pRecipeInfo->m_sContactPos.m_fPreContactPos;
+	double dEMove = pRecipeInfo->m_sContactPos.m_fEndContactPos;
+	double dOD = pRecipeInfo->m_sContactPos.m_fAddOD;
+
+	int nRet = pMaintCtrl->MoveCmdPos_ProbeContact(AXIS_PROBE_Z5, dfMove, dEMove, dOD);
+	m_stcStatus.SetWindowText(nRet == VTM_RV_SUCCESSED ? _T("Contact OK") : _T("Contact FAILED"));
+}
+
+// ============================================================================
+// UnContact
+// ============================================================================
+void CDlgTestMode::OnBtnUnContact()
+{
+	m_stcStatus.SetWindowText(_T("UnContact..."));
+	CRecipeEditMgr* pRcpEdit = GetRecipeEdit();
+	CMaintControlMgr* pMaintCtrl = GetMaintCtrl();
+	if (!pRcpEdit || !pMaintCtrl) return;
+
+	S_RecipeInfo* pRecipeInfo = pRcpEdit->GetRecipeInfo();
+	if (!pRecipeInfo) return;
+	double dMove = pRecipeInfo->m_sContactPos.m_fPreContactPos;
+
+	int nRet = pMaintCtrl->MoveCmdPos_ProbeUnContact(AXIS_PROBE_Z5, dMove);
+	m_stcStatus.SetWindowText(nRet == VTM_RV_SUCCESSED ? _T("UnContact OK") : _T("UnContact FAILED"));
+}

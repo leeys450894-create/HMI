@@ -51,6 +51,16 @@ public:
 	void		SetSys_ProbeChange(int nType);
 	int			GetSys_ProbeChange();
 
+	// LYS 2026-09-25 설비 내 프로브 ID(PLC D2110~D2150 = P1~P5) 접근자. iProbeUnit 은 1..5 (MaintControlMgr.h _PROBE_TYPE_SET, 5 = MEAS/P5).
+	//   m_szPROBEID[5] / stProbeInfo[5] 는 공유메모리 계약이라 배열을 줄이지 않고, 인덱스 계산(unit-1)과 범위 검사를 여기로 모은다.
+	//   OCP 에서는 ProbeACC 스캐너가 P1~P4 슬롯을 비워 두므로 P5 외 요청은 자연히 빈 문자열이 된다.
+	enum { EQ_PROBE_UNIT_MIN = 1, EQ_PROBE_UNIT_MAX = 5, EQ_PROBE_UNIT_MEAS = 5 };
+	CString		GetEqProbeID(int iProbeUnit);					// Trim 된 ID, 범위 밖/미설정이면 ""
+	bool		SetEqProbeID(int iProbeUnit, LPCTSTR pszID);
+	CString		GetEqProbeMountTime(int iProbeUnit);
+	UINT		GetEqProbeUseCnt(int iProbeUnit);
+	CString		GetEqProbeAlignRecipeName(int iProbeUnit);	// PROBE_ALIGNn[_앞2자] / PROBE_MEAS[_앞2자] (구 5벌 switch 와 동일 규칙)
+
 //------------------------------------------------------------------
 // 공통 인터페이스 함수
 //------------------------------------------------------------------

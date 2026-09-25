@@ -73,7 +73,7 @@ UINT CAlarmMonitorToSensorTemperature::ThreadRun(LPVOID p1)
         if (WaitForSingleObject(pThis->m_hStartEvent, 10) == WAIT_OBJECT_0)
         {
             // 설비의 온도가 변화된거는 IO 체크를 천천히 해도 될거 같다.
-            Sleep(1000);
+            Sleep(500);
 
             pThis->ThreadRun();
         }

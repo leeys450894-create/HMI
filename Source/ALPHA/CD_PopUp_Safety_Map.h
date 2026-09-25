@@ -1,0 +1,56 @@
+﻿#pragma once
+#include "common\MFCGridControl\GridCtrl_src\GridCtrl.h"
+
+// LYS 2026-09-24 IDD_POPUP_SAFETY_MAP - EMS(17) / DOOR(4) 상태 지도.
+//   그리드 타일 하나가 PLC M 비트 하나에 대응한다(1 이면 빨강, 0 이면 회색, -1(미매핑/통신 실패) 이면 흰색).
+//   EMS  IDC_GRID_1~17  <- M4010~4019, M4420~4426 (PLC_BIT_EMERGENCY_SWITCH01~17)
+//   DOOR IDC_GRID_18~21 <- 도어 02~05: 열림 M4021~4024(PLC_BIT_DOOR_SENSOR2~5) 또는 키 제거 M4041~4044(PLC_BIT_DOOR_KEY_UNREMOVED_02~05)
+//        열림 1 또는 키 0(M404x 는 1 이 '키 미제거 = 정상') 이면 빨강, 글자에 OPEN / KEY OUT / OPEN+KEY OUT 으로 원인 표시. 도어 1(M4020/M4040)은 설비에서 제거됨.
+//   타일 위치·크기는 .rc 에서 따로 배치한다. 비트가 하나라도 1 이면 AutoPopup() 이 창을 띄운다(DlgMainForm 타이머).
+class CMaintControlMgr;
+
+class CD_PopUp_Safety_Map : public CDialogEx
+{
+	DECLARE_DYNAMIC(CD_PopUp_Safety_Map)
+
+public:
+	enum { EMS_COUNT = 17, DOOR_COUNT = 4 };
+
+private:
+	CMaintControlMgr*	m_pMaintControlMgr;
+	CGridCtrl			m_gridEms[EMS_COUNT];
+	CGridCtrl			m_gridDoor[DOOR_COUNT];
+	CGridCtrl			m_gridShutter;			// LYS 2026-09-25 IDC_GRID_22 셔터 상태 (M4280 CLOSE / M4281 OPEN) - 표시만, 자동 팝업 조건에는 안 넣는다
+	int					m_nEmsState[EMS_COUNT];		// 마지막 표시 값(-1/0/1), 바뀔 때만 다시 칠한다
+	int					m_nDoorState[DOOR_COUNT];
+	int					m_nShutterState;		// 0 CLOSE, 1 OPEN, 2 둘 다 아님(이동 중), 3 둘 다 1(센서 이상), -1 못 읽음	// bit0 = 열림, bit1 = 키 제거(M404x == 0), -1 = 둘 다 못 읽음
+	bool				m_bAutoShown;			// 자동 팝업 래치 - 전부 0 이 될 때까지 다시 띄우지 않는다(사용자가 닫을 수 있게)
+
+	void __InitTile(CGridCtrl& grid, LPCTSTR pszLabel);
+	void __PaintTile(CGridCtrl& grid, int nState, int& nPrev, LPCTSTR pszLabel = nullptr);
+	void __PaintDoorTile(int i);
+	void __PaintShutterTile();		// LYS 2026-09-25		// 열림/키 두 비트를 합쳐 도어 타일 하나를 칠한다
+	int  __ReadBit(int nEnumIndex);
+
+public:
+	CD_PopUp_Safety_Map(CMaintControlMgr* pMaintControlMgr, CWnd* pParent = nullptr);
+	virtual ~CD_PopUp_Safety_Map();
+
+#ifdef AFX_DESIGN_TIME
+	enum { IDD = IDD_POPUP_SAFETY_MAP };
+#endif
+
+	void RefreshState();			// 21 비트를 읽어 타일을 갱신한다 (보일 때 타이머가 부른다)
+	bool IsAnyActive();			// EMS/DOOR 비트 중 하나라도 1 이면 true
+	void AutoPopup();				// IsAnyActive 이고 아직 안 띄웠으면 ShowWindow(SW_SHOW). DlgMainForm 타이머에서 부른다
+
+protected:
+	virtual void DoDataExchange(CDataExchange* pDX);
+	virtual void OnOK();
+	virtual void OnCancel();
+	DECLARE_MESSAGE_MAP()
+public:
+	virtual BOOL OnInitDialog();
+	afx_msg void OnDestroy();
+	afx_msg void OnTimer(UINT_PTR nIDEvent);
+};

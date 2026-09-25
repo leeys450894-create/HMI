@@ -23,6 +23,7 @@ public:
 	long		MoveCmdPosR(int iAxis, double dPos, bool bBlockMode, int iSpeed);
 	long		MoveCmdPosMulti(stMotorPosition *pPos, int iAxis, int iSpeed);
 	long		MoveJog(int iAxis, bool bDir);
+	long		MoveToPos(int iAxis, double dPos, int iSpeed = -1);	// LYS 2026-09-23 MC OFF Probe Z 긴급 후퇴용
 	long		WaitMotionEnd(int iAxis, DWORD dwTimeout);
 	bool		CheckMoveDone(int iAxis, DWORD dwTimeout);
 	bool		CheckHomeDone(int iAxis, DWORD dwTimeout);

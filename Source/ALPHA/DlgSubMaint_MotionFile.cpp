@@ -79,8 +79,8 @@ CDlgSubMaint_MotionFile::CDlgSubMaint_MotionFile(CAuroraMgr* pAuroraMgr, CWnd* p
 	//----------------------------------------------------------------------
 	// Thread 를 미리 생성해 놓고 Event 로 제어 한다.
 	//----------------------------------------------------------------------
-	m_pThread = AfxBeginThread(ThreadRun, this);
 	m_bThreadLive = false;
+	m_lMotionBusy = 0;	// LYS 2026-09-17 motion busy flag (duplicate click guard)
 	m_hStart1Event = CreateEvent(NULL, FALSE, FALSE, NULL);		// auto reset, initial reset
 	m_hStart2Event = CreateEvent(NULL, FALSE, FALSE, NULL);		// auto reset, initial reset
 	m_hStart3Event = CreateEvent(NULL, FALSE, FALSE, NULL);		// auto reset, initial reset
@@ -91,6 +91,17 @@ CDlgSubMaint_MotionFile::CDlgSubMaint_MotionFile(CAuroraMgr* pAuroraMgr, CWnd* p
 	m_hMultiEvent[2] = m_hStart3Event;
 	m_hMultiEvent[3] = m_hStart4Event;
 	m_hMultiEvent[4] = m_hCloseEvent;
+
+	//----------------------------------------------------------------------
+	// LYS 2026-09-19 스레드 생성을 맨 마지막으로 옮겼다.
+	//   전에는 여기(이벤트 생성 전)에서 AfxBeginThread 를 불렀다. 새 스레드가 곧바로
+	//   WaitForMultipleObjects(m_hMultiEvent) 로 들어가는데 그 시점의 m_hMultiEvent 는
+	//   아직 채워지지 않은 쓰레기 값이었다(객체는 new 로 잡히고 이 배열은 Zero 되지 않는다).
+	//   WaitForMultipleObjects 는 핸들 배열을 진입 시점에 한 번만 읽으므로, 나중에 배열을
+	//   제대로 채워도 그 대기는 옛 쓰레기 핸들을 계속 기다린다 -> SetEvent 를 해도 안 깨어난다.
+	//   쓰레기가 Close 슬롯에서 시그널되면 아래 break 로 스레드가 그대로 죽기까지 한다.
+	//----------------------------------------------------------------------
+	m_pThread = AfxBeginThread(ThreadRun, this);
 }
 
 CDlgSubMaint_MotionFile::~CDlgSubMaint_MotionFile()
@@ -181,6 +192,61 @@ BOOL CDlgSubMaint_MotionFile::OnInitDialog()
 	return TRUE;  // return TRUE unless you set the focus to a control
 				  // 예외: OCX 속성 페이지는 FALSE를 반환해야 합니다.
 }
+
+// LYS 2026-09-15 모션 엔코더(Current) 값이 음수이면 그 셀(Current 열)만 빨간색으로 표시한다.
+//   %.4f 표시 기준으로 음수로 보이는 값(-0.00005 미만)만 판정 - 0 부근 노이즈로 깜빡이지 않게.
+// LYS 2026-09-23 배경색 대신 글자색만 빨갛게 바꾼다. 배경은 건드리지 않으므로(프로브 선택 노란색 등 유지)
+//   이전 색을 기억할 필요가 없고, 양수로 돌아오면 글자색을 기본(CLR_DEFAULT)으로 되돌린다.
+//   구 함수(배경색 방식)는 아래 #if 0 에 남겨 두었다.
+static void PaintNegativeEncoderCell(CGridCtrl& grid, int nRow, int nCol, double dPos)
+{
+	const COLORREF clrNeg = RGB(255, 0, 0);
+	const bool bNeg = (dPos < -0.00005);
+
+	if (nRow < grid.GetFixedRowCount() || nRow >= grid.GetRowCount() || nCol < 0 || nCol >= grid.GetColumnCount())
+		return;
+
+	const COLORREF clr = grid.GetItemFgColour(nRow, nCol);
+	if (bNeg)
+	{
+		if (clr != clrNeg)
+			grid.SetItemFgColour(nRow, nCol, clrNeg);
+	}
+	else if (clr == clrNeg)
+	{
+		grid.SetItemFgColour(nRow, nCol, CLR_DEFAULT);
+	}
+}
+
+#if 0	// LYS 2026-09-23 구: 배경색 방식 (원복 시 위 함수를 지우고 이 블록을 살릴 것)
+#include <map>
+static void PaintNegativeEncoderCell_Bk(CGridCtrl& grid, int nRow, int nCol, double dPos)
+{
+	static std::map<std::pair<CGridCtrl*, long>, COLORREF> s_mapPrevBk;	// (grid, row*100+col) -> 칠하기 전 색
+	const COLORREF clrNeg = RGB(255, 0, 0);
+	const bool bNeg = (dPos < -0.00005);
+
+	if (nRow < grid.GetFixedRowCount() || nRow >= grid.GetRowCount() || nCol < 0 || nCol >= grid.GetColumnCount())
+		return;
+
+	const std::pair<CGridCtrl*, long> key(&grid, (long)nRow * 100 + nCol);
+	COLORREF clr = grid.GetItemBkColour(nRow, nCol);
+	if (bNeg)
+	{
+		if (clr != clrNeg)
+		{
+			s_mapPrevBk[key] = clr;
+			grid.SetItemBkColour(nRow, nCol, clrNeg);
+		}
+	}
+	else if (clr == clrNeg)
+	{
+		std::map<std::pair<CGridCtrl*, long>, COLORREF>::iterator it = s_mapPrevBk.find(key);
+		grid.SetItemBkColour(nRow, nCol, (it != s_mapPrevBk.end()) ? it->second : CLR_DEFAULT);
+		if (it != s_mapPrevBk.end()) s_mapPrevBk.erase(it);
+	}
+}
+#endif
 
 void CDlgSubMaint_MotionFile::__RefreshListData()
 {
@@ -341,6 +407,17 @@ void CDlgSubMaint_MotionFile::__RefreshListData1()
 			else
 				pCell->SetCheck(false);
 
+			// LYS 2026-09-02 SW 리밋 초과 시 L+/L- 셀 배경 노란색 (HW 센서 체크박스는 그대로)
+			{
+				CMaintControlMgr* pMaintSw = m_pAuroraMgr->GetMaintControlMgr();
+				if (pMaintSw != nullptr)
+				{
+					double dCurSw = m_stMoterInfo[iAxis].dAxisPos;
+					m_gridList[0].SetItemBkColour(i + 1, enumColumnName_Value5, (dCurSw > pMaintSw->GetMaxSWLimit(iAxis)) ? RGB(255, 255, 0) : RGB(255, 255, 255));
+					m_gridList[0].SetItemBkColour(i + 1, enumColumnName_Value6, (dCurSw < pMaintSw->GetMinSWLimit(iAxis)) ? RGB(255, 255, 0) : RGB(255, 255, 255));
+				}
+			}
+
 			// CheckBox - Home Done
 			m_gridList[0].SetCellType(i + 1, enumColumnName_Value7, RUNTIME_CLASS(CGridCellCheck));
 			m_gridList[0].SetItemState(i + 1, enumColumnName_Value7, GVIS_READONLY);
@@ -389,6 +466,7 @@ void CDlgSubMaint_MotionFile::__RefreshListData1()
 			m_gridList[0].SetItemState(i + 1, enumColumnName_Value14, GVIS_READONLY);
 			m_gridList[0].SetItemText(i + 1, enumColumnName_Value14, _T("+"));
 
+			PaintNegativeEncoderCell(m_gridList[0], i + 1, enumColumnName_Value3, m_stMoterInfo[iAxis].dAxisPos);	// LYS 2026-09-15 엔코더 음수 -> Current 셀만 빨간 배경
 			i++;
 		}
 	}
@@ -521,6 +599,17 @@ void CDlgSubMaint_MotionFile::__RefreshListData2()
 			else
 				pCell->SetCheck(false);
 
+			// LYS 2026-09-02 SW 리밋 초과 시 L+/L- 셀 배경 노란색 (HW 센서 체크박스는 그대로)
+			{
+				CMaintControlMgr* pMaintSw = m_pAuroraMgr->GetMaintControlMgr();
+				if (pMaintSw != nullptr)
+				{
+					double dCurSw = m_stMoterInfo[iAxis].dAxisPos;
+					m_gridList[1].SetItemBkColour(i + 1, enumColumnName_Value5, (dCurSw > pMaintSw->GetMaxSWLimit(iAxis)) ? RGB(255, 255, 0) : RGB(255, 255, 255));
+					m_gridList[1].SetItemBkColour(i + 1, enumColumnName_Value6, (dCurSw < pMaintSw->GetMinSWLimit(iAxis)) ? RGB(255, 255, 0) : RGB(255, 255, 255));
+				}
+			}
+
 			// CheckBox - Home Done
 			m_gridList[1].SetCellType(i + 1, enumColumnName_Value7, RUNTIME_CLASS(CGridCellCheck));
 			m_gridList[1].SetItemState(i + 1, enumColumnName_Value7, GVIS_READONLY);
@@ -571,6 +660,7 @@ void CDlgSubMaint_MotionFile::__RefreshListData2()
 
 			m_gridList[1].SetRowHeight(i + 1, 18);
 
+			PaintNegativeEncoderCell(m_gridList[1], i + 1, enumColumnName_Value3, m_stMoterInfo[iAxis].dAxisPos);	// LYS 2026-09-15 엔코더 음수 -> Current 셀만 빨간 배경
 			i++;
 		}
 	}
@@ -710,6 +800,17 @@ void CDlgSubMaint_MotionFile::__RefreshListData3()
 			else
 				pCell->SetCheck(false);
 
+			// LYS 2026-09-02 SW 리밋 초과 시 L+/L- 셀 배경 노란색 (HW 센서 체크박스는 그대로)
+			{
+				CMaintControlMgr* pMaintSw = m_pAuroraMgr->GetMaintControlMgr();
+				if (pMaintSw != nullptr)
+				{
+					double dCurSw = m_stMoterInfo[iAxis].dAxisPos;
+					m_gridList[2].SetItemBkColour(i + 1, enumColumnName_Value5, (dCurSw > pMaintSw->GetMaxSWLimit(iAxis)) ? RGB(255, 255, 0) : RGB(255, 255, 255));
+					m_gridList[2].SetItemBkColour(i + 1, enumColumnName_Value6, (dCurSw < pMaintSw->GetMinSWLimit(iAxis)) ? RGB(255, 255, 0) : RGB(255, 255, 255));
+				}
+			}
+
 			// CheckBox - Home Done
 			m_gridList[2].SetCellType(i + 1, enumColumnName_Value7, RUNTIME_CLASS(CGridCellCheck));
 			m_gridList[2].SetItemState(i + 1, enumColumnName_Value7, GVIS_READONLY);
@@ -760,6 +861,7 @@ void CDlgSubMaint_MotionFile::__RefreshListData3()
 
 			m_gridList[2].SetRowHeight(i + 1, 18);
 
+			PaintNegativeEncoderCell(m_gridList[2], i + 1, enumColumnName_Value3, m_stMoterInfo[iAxis].dAxisPos);	// LYS 2026-09-15 엔코더 음수 -> Current 셀만 빨간 배경
 			i++;
 		}
 	}
@@ -908,6 +1010,17 @@ void CDlgSubMaint_MotionFile::__RefreshListData4()
 			else
 				pCell->SetCheck(false);
 
+			// LYS 2026-09-02 SW 리밋 초과 시 L+/L- 셀 배경 노란색 (HW 센서 체크박스는 그대로)
+			{
+				CMaintControlMgr* pMaintSw = m_pAuroraMgr->GetMaintControlMgr();
+				if (pMaintSw != nullptr)
+				{
+					double dCurSw = m_stMoterInfo[iAxis].dAxisPos;
+					m_gridList[3].SetItemBkColour(i + 1, enumColumnName_Value5, (dCurSw > pMaintSw->GetMaxSWLimit(iAxis)) ? RGB(255, 255, 0) : RGB(255, 255, 255));
+					m_gridList[3].SetItemBkColour(i + 1, enumColumnName_Value6, (dCurSw < pMaintSw->GetMinSWLimit(iAxis)) ? RGB(255, 255, 0) : RGB(255, 255, 255));
+				}
+			}
+
 			// CheckBox - Home Done
 			m_gridList[3].SetCellType(i + 1, enumColumnName_Value7, RUNTIME_CLASS(CGridCellCheck));
 			m_gridList[3].SetItemState(i + 1, enumColumnName_Value7, GVIS_READONLY);
@@ -956,6 +1069,7 @@ void CDlgSubMaint_MotionFile::__RefreshListData4()
 			m_gridList[3].SetItemState(i + 1, enumColumnName_Value14, GVIS_READONLY);
 			m_gridList[3].SetItemText(i + 1, enumColumnName_Value14, _T("+"));
 
+			PaintNegativeEncoderCell(m_gridList[3], i + 1, enumColumnName_Value3, m_stMoterInfo[iAxis].dAxisPos);	// LYS 2026-09-15 엔코더 음수 -> Current 셀만 빨간 배경
 			i++;
 		}
 	}
@@ -975,6 +1089,13 @@ void CDlgSubMaint_MotionFile::__RefreshListData4()
 
 void CDlgSubMaint_MotionFile::OnGridItemClickList(NMHDR* pNotifyStruct, LRESULT* result)
 {
+	// LYS 2026-09-17 ignore the click while a motion is running (double click = duplicate move)
+	if (::InterlockedCompareExchange(&m_lMotionBusy, 0, 0) != 0)
+	{
+		*result = 0;
+		return;
+	}
+
 	// TODO: 여기에 컨트롤 알림 처리기 코드를 추가합니다.
 	NM_GRIDVIEW* pNotify = (NM_GRIDVIEW*)pNotifyStruct;
 
@@ -1012,6 +1133,13 @@ void CDlgSubMaint_MotionFile::OnGridItemClickList(NMHDR* pNotifyStruct, LRESULT*
 
 void CDlgSubMaint_MotionFile::OnGridItemClickList2(NMHDR* pNotifyStruct, LRESULT* result)
 {
+	// LYS 2026-09-17 ignore the click while a motion is running (double click = duplicate move)
+	if (::InterlockedCompareExchange(&m_lMotionBusy, 0, 0) != 0)
+	{
+		*result = 0;
+		return;
+	}
+
 	// TODO: 여기에 컨트롤 알림 처리기 코드를 추가합니다.
 	NM_GRIDVIEW* pNotify = (NM_GRIDVIEW*)pNotifyStruct;
 
@@ -1049,6 +1177,13 @@ void CDlgSubMaint_MotionFile::OnGridItemClickList2(NMHDR* pNotifyStruct, LRESULT
 
 void CDlgSubMaint_MotionFile::OnGridItemClickList3(NMHDR* pNotifyStruct, LRESULT* result)
 {
+	// LYS 2026-09-17 ignore the click while a motion is running (double click = duplicate move)
+	if (::InterlockedCompareExchange(&m_lMotionBusy, 0, 0) != 0)
+	{
+		*result = 0;
+		return;
+	}
+
 	// TODO: 여기에 컨트롤 알림 처리기 코드를 추가합니다.
 	NM_GRIDVIEW* pNotify = (NM_GRIDVIEW*)pNotifyStruct;
 
@@ -1086,6 +1221,13 @@ void CDlgSubMaint_MotionFile::OnGridItemClickList3(NMHDR* pNotifyStruct, LRESULT
 
 void CDlgSubMaint_MotionFile::OnGridItemClickList4(NMHDR* pNotifyStruct, LRESULT* result)
 {
+	// LYS 2026-09-17 ignore the click while a motion is running (double click = duplicate move)
+	if (::InterlockedCompareExchange(&m_lMotionBusy, 0, 0) != 0)
+	{
+		*result = 0;
+		return;
+	}
+
 	// TODO: 여기에 컨트롤 알림 처리기 코드를 추가합니다.
 	NM_GRIDVIEW* pNotify = (NM_GRIDVIEW*)pNotifyStruct;
 
@@ -1154,6 +1296,11 @@ UINT CDlgSubMaint_MotionFile::ThreadRun(LPVOID pParam)
 	{
 		DWORD dw = WaitForMultipleObjects(5, pThis->m_hMultiEvent, FALSE, INFINITE);
 
+		// LYS 2026-09-17 a click landing while a motion runs must not queue a second move.
+		//                the start events are auto reset, so a double click would otherwise
+		//                fire the same ThreadFunc again as soon as the first one returns.
+		::InterlockedExchange(&pThis->m_lMotionBusy, 1);
+
 		if (dw == WAIT_OBJECT_0) // Start Event 1가 set될 때까지 기다린다.
 		{
 			pThis->ThreadFunc1();
@@ -1172,11 +1319,25 @@ UINT CDlgSubMaint_MotionFile::ThreadRun(LPVOID pParam)
 		}
 		else if (dw == (WAIT_OBJECT_0 + 4)) // Close Event 가 set될 때까지 기다린다.
 		{
+			// LYS 2026-09-19 break 가 아래 해제 코드를 건너뛰어 m_lMotionBusy 가 1 로 latch 됐다.
+			//                그러면 클릭 핸들러의 가드가 영원히 막는다. 빠져나가기 전에 내려 둔다.
+			::InterlockedExchange(&pThis->m_lMotionBusy, 0);
 			break;
 		}
 		else // timeout, error state
 		{
 		}
+
+		//LYS 2026-09-17 drop the clicks that piled up during the motion, then release the flag.
+		// LYS 2026-09-19 ResetEvent 네 줄을 없앴다. ThreadFunc 가 끝난 뒤 아래 해제까지의 틈에
+		//                들어온 '정상' 클릭까지 같이 버려 눌러도 안 움직이는 일이 있었다.
+		//                중복 방지는 클릭 핸들러의 m_lMotionBusy 가드가 맡는다 - 모션 중에는
+		//                SetEvent 자체를 안 하므로 쌓일 것이 없다.
+		//ResetEvent(pThis->m_hStart1Event);
+		//ResetEvent(pThis->m_hStart2Event);
+		//ResetEvent(pThis->m_hStart3Event);
+		//ResetEvent(pThis->m_hStart4Event);
+		::InterlockedExchange(&pThis->m_lMotionBusy, 0);
 	}
 
 	pThis->m_bThreadLive = false;
@@ -1230,9 +1391,15 @@ UINT CDlgSubMaint_MotionFile::ThreadFunc1()
 				{
 					if (pImpl->GetCurPos(AXIS_UNIT_Z, 0, 0) < 0.1)
 					{
-						pImpl->MoveHome(nAxis);
-
-						lRet = pImpl->CheckHomeDone(nAxis, df_HOMINGDONE_TIME);
+						//pImpl->MoveHome(nAxis);
+						//lRet = pImpl->CheckHomeDone(nAxis, df_HOMINGDONE_TIME);
+						// LYS 2026-09-21 원점복귀가 거부되면(인터락 - 알람은 MoveHome 이 이미 냈다) 완료를 기다리지 않는다.
+						//                전에는 반환값을 버리고 CheckHomeDone 으로 최대 대기했다(그동안 화면 워커가 묶인다).
+						long lHome = pImpl->MoveHome(nAxis);
+						if (lHome > 0 && lHome < 1000)
+							lRet = pImpl->CheckHomeDone(nAxis, df_HOMINGDONE_TIME);
+						else
+							lRet = lHome;
 					}
 					else
 					{
@@ -1243,9 +1410,15 @@ UINT CDlgSubMaint_MotionFile::ThreadFunc1()
 				}
 				else
 				{
-					pImpl->MoveHome(nAxis);
-
-					lRet = pImpl->CheckHomeDone(nAxis, df_HOMINGDONE_TIME);
+					//pImpl->MoveHome(nAxis);
+					//lRet = pImpl->CheckHomeDone(nAxis, df_HOMINGDONE_TIME);
+					// LYS 2026-09-21 원점복귀가 거부되면(인터락 - 알람은 MoveHome 이 이미 냈다) 완료를 기다리지 않는다.
+					//                전에는 반환값을 버리고 CheckHomeDone 으로 최대 대기했다(그동안 화면 워커가 묶인다).
+					long lHome = pImpl->MoveHome(nAxis);
+					if (lHome > 0 && lHome < 1000)
+						lRet = pImpl->CheckHomeDone(nAxis, df_HOMINGDONE_TIME);
+					else
+						lRet = lHome;
 				}
 			}
 		}
@@ -1311,9 +1484,16 @@ UINT CDlgSubMaint_MotionFile::ThreadFunc2()
 			pImpl = m_pAuroraMgr->GetMaintControlMgr();
 			if (pImpl != nullptr)
 			{
+				// LYS 2026-09-02 프로브 X 마스터/슬레이브: ABS 이동 시 슬레이브도 마스터 상대변위(dPos-현재)만큼 이동
+				double dMasterCurAbs = pImpl->GetCurPos(nAxis, 0, 0);
 				nRet = pImpl->MoveCmdPosA(nAxis, dPos, false, SPEED_LOW, 0, 0);
 				if (nRet == df_MOTION_RV_SUCCESSED)
 				{
+					if (nAxis == AXIS_PROBE_X1 || nAxis == AXIS_PROBE_X3 || nAxis == AXIS_PROBE_X5 || nAxis == AXIS_PROBE_X7 || nAxis == AXIS_PROBE_X9)
+					{
+						pImpl->MoveCmdPosR(nAxis + 1, dPos - dMasterCurAbs, false, SPEED_LOW);
+						pImpl->DoWork_MotionDone(nAxis + 1);
+					}
 					nRet = pImpl->DoWork_MotionDone(nAxis);
 				}
 				else
@@ -1372,6 +1552,12 @@ UINT CDlgSubMaint_MotionFile::ThreadFunc3()
 
 			if (nRet == df_MOTION_RV_SUCCESSED)
 			{
+				// LYS 2026-09-02 프로브 X 마스터/슬레이브: 슬레이브(nAxis+1)도 동일 값 이동
+				if (nAxis == AXIS_PROBE_X1 || nAxis == AXIS_PROBE_X3 || nAxis == AXIS_PROBE_X5 || nAxis == AXIS_PROBE_X7 || nAxis == AXIS_PROBE_X9)
+				{
+					pImpl->MoveCmdPosR(nAxis + 1, dPos * -1, false, SPEED_LOW);
+					pImpl->DoWork_MotionDone(nAxis + 1);
+				}
 				nRet = pImpl->DoWork_MotionDone(nAxis);
 			}
 			else
@@ -1426,6 +1612,12 @@ UINT CDlgSubMaint_MotionFile::ThreadFunc4()
 		nRet = pImpl->MoveCmdPosR(nAxis, dPos * 1, false, SPEED_LOW);
 		if (nRet == df_MOTION_RV_SUCCESSED)
 		{
+			// LYS 2026-09-02 프로브 X 마스터/슬레이브: 슬레이브(nAxis+1)도 동일 값 이동
+			if (nAxis == AXIS_PROBE_X1 || nAxis == AXIS_PROBE_X3 || nAxis == AXIS_PROBE_X5 || nAxis == AXIS_PROBE_X7 || nAxis == AXIS_PROBE_X9)
+			{
+				pImpl->MoveCmdPosR(nAxis + 1, dPos * 1, false, SPEED_LOW);
+				pImpl->DoWork_MotionDone(nAxis + 1);
+			}
 			nRet = pImpl->DoWork_MotionDone(nAxis);
 		}
 		else

@@ -244,8 +244,16 @@ bool CFrameGrabberFunction::CreateGrabber()
 		m_pCtrlImpl->SetParam_InterfaceName(m_strInterfaceName);
 		m_pCtrlImpl->SetParam_GrabMode(GetImageGrabMode());
 		bRet = m_pCtrlImpl->InitializeGrabber(m_nImageGrabSizeX, m_nImageGrabSizeY, m_dImageFrameRate);
-		m_nImageGrabSizeX = m_pCtrlImpl->GetParam_CameraAcqWidth();
-		m_nImageGrabSizeY = m_pCtrlImpl->GetParam_CameraAcqHeighth();
+		// LYS 2026-09-14 open 실패 시에는 impl 기본값(INT_MONITOR_WND 640x480)이 그랩 크기로 남아, 다음 CreateGrabber(CCD RESET 재접속)에
+		//   FOV 로 되먹임돼 InitResource 가 카메라에서 읽은 실제 크기(1278x958)를 640x480 으로 덮어썼다(20:23 live fit img=640x480).
+		//   성공했을 때만 갱신한다. 원복 시 아래 두 주석 줄을 되살리고 if 블록 제거.
+		//m_nImageGrabSizeX = m_pCtrlImpl->GetParam_CameraAcqWidth();
+		//m_nImageGrabSizeY = m_pCtrlImpl->GetParam_CameraAcqHeighth();
+		if (bRet == true)
+		{
+			m_nImageGrabSizeX = m_pCtrlImpl->GetParam_CameraAcqWidth();
+			m_nImageGrabSizeY = m_pCtrlImpl->GetParam_CameraAcqHeighth();
+		}
 
 		m_nImageFOVSizeX = m_nImageGrabSizeX * 1;
 		m_nImageFOVSizeY = m_nImageGrabSizeY * 1;

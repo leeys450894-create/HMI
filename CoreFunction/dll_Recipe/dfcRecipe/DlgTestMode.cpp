@@ -23,6 +23,9 @@ BEGIN_MESSAGE_MAP(CDlgTestMode, C_BaseDialog)
 	ON_COMMAND(IDC_BUTTON_15, OnBtnContact)
 	ON_COMMAND(IDC_BUTTON_17, OnBtnUnContact)
 	ON_NOTIFY(NM_CLICK, IDC_GRID_1, OnSelItem)
+	ON_COMMAND(IDC_BUTTON_1, OnBtnSaveImage)					// LYS 2026-09-16 Save Image
+	ON_COMMAND_RANGE(IDC_RADIO_5, IDC_RADIO_7, OnSelCam)		// LYS 2026-09-16 CAM_Both/Left/Right
+	ON_NOTIFY(NM_CLICK, IDC_GRID_2, OnSelJogItem)			// LYS 2026-09-16 camera jog grid
 	ON_WM_DESTROY()
 END_MESSAGE_MAP()
 
@@ -33,6 +36,7 @@ CDlgTestMode::CDlgTestMode(CWnd* pParent)
 	, m_nBfRowGlass(0)
 	, m_nBColGlass(0)
 	, m_nBfcrBkColour(COLOR_WHITE)
+	, m_nCamSel(0)	// LYS 2026-09-16
 {
 	m_pRecipeMem = nullptr;
 	m_pRecipeMem = g_pSysMapView;
@@ -56,6 +60,12 @@ void CDlgTestMode::DoDataExchange(CDataExchange* pDX)
 	DDX_Control(pDX, IDC_BUTTON_26, m_btnPreContact);
 	DDX_Control(pDX, IDC_BUTTON_15, m_btnContact);
 	DDX_Control(pDX, IDC_BUTTON_17, m_btnUnContact);
+	// LYS 2026-09-16 Save Image / camera jog
+	DDX_Control(pDX, IDC_BUTTON_1, m_btnSaveImage);
+	DDX_Control(pDX, IDC_RADIO_5, m_rdCam[0]);
+	DDX_Control(pDX, IDC_RADIO_6, m_rdCam[1]);
+	DDX_Control(pDX, IDC_RADIO_7, m_rdCam[2]);
+	DDX_Control(pDX, IDC_GRID_2, m_gridCamJog);
 }
 
 BOOL CDlgTestMode::OnInitDialog()
@@ -69,6 +79,11 @@ BOOL CDlgTestMode::OnInitDialog()
 	// Default mode: Review
 	m_rdMode[0].SetCheck(BST_CHECKED);
 	m_nTestMode = 0;
+
+	// LYS 2026-09-16 camera jog grid + default CAM_Both
+	InitCamJogGrid();
+	m_rdCam[0].SetCheck(BST_CHECKED);
+	m_nCamSel = 0;
 
 	return TRUE;
 }
@@ -264,6 +279,33 @@ void CDlgTestMode::OnBtnMove()
 		m_pRecipeMem->m_sRunState.m_fData[10 + ic] = ci.m_fCellX;
 	}
 
+	// LYS 2026-09-18 Glass Align 의 SUB Z(Z3/Z4) 를 MOVE 와 함께 실어 보낸다.
+	//                앱 쪽 C_OutRecipeFunc 사본은 RECIPE 화면에서 레시피를 열 때 채워지지 않아
+	//                (RecipeMgrDlg 의 pOut->LoadAlignRcpFile 동기화가 주석 처리되어 있다)
+	//                앱이 자기 사본에서 읽으면 항상 0 이 나온다. 다른 TestMode 값들처럼
+	//                DLL 이 읽어서 공유메모리로 넘긴다. fData[10~49] 는 셀 X 이므로 50/51 을 쓴다.
+	m_pRecipeMem->m_sRunState.m_fData[50] = g_inRcpInfo.m_recipeMgr.m_sAlign.m_sGlsAlign.m_fSubZRight;	// AXIS_Z3
+	m_pRecipeMem->m_sRunState.m_fData[51] = g_inRcpInfo.m_recipeMgr.m_sAlign.m_sGlsAlign.m_fSubZLeft;	// AXIS_Z4
+
+	// LYS 2026-09-18 Review 헤드 Y 오프셋(USER OFFSET 의 Contact Review Offset). 이것도 앱 쪽
+	//                GetRecipeInfo() 사본이 RECIPE 화면 경로에서 비어 있어 DLL 이 넘겨야 한다.
+	//                이름과 축이 교차돼 있다(측정 스텝과 동일 규약) - Left -> Y2, Right -> Y1.
+	m_pRecipeMem->m_sRunState.m_fData[52] = g_inRcpInfo.m_recipeMgr.m_sInfo.m_sMotionOffsetPos.m_fHeadReviewLeft;
+	m_pRecipeMem->m_sRunState.m_fData[53] = g_inRcpInfo.m_recipeMgr.m_sInfo.m_sMotionOffsetPos.m_fHeadReviewRight;
+
+	// LYS 2026-09-18 VISION / ANGLE 의 Sub Z(Z5/Z6) 목표. 두 모드가 같은 축을 쓰지만 값은 따로다.
+	//                이것도 앱 쪽 C_OutRecipeFunc 사본이 RECIPE 화면 경로에서 비어 있어(OpenRecipe 는
+	//                측정 경로에서만 불린다) DLL 이 읽어서 넘겨야 한다. fData[50~53] 다음 자리를 쓴다.
+	m_pRecipeMem->m_sRunState.m_fData[54] = g_inRcpInfo.m_recipeMgr.m_sInfo.m_sMotionSubZ.m_fVisionSubzRight;	// AXIS_Z5 (VISION)
+	m_pRecipeMem->m_sRunState.m_fData[55] = g_inRcpInfo.m_recipeMgr.m_sInfo.m_sMotionSubZ.m_fVisionSubzLeft;	// AXIS_Z6 (VISION)
+	m_pRecipeMem->m_sRunState.m_fData[56] = g_inRcpInfo.m_recipeMgr.m_sInfo.m_sMotionSubZ.m_fAngleSubzRight;	// AXIS_Z5 (ANGLE)
+	m_pRecipeMem->m_sRunState.m_fData[57] = g_inRcpInfo.m_recipeMgr.m_sInfo.m_sMotionSubZ.m_fAngleSubzLeft;	// AXIS_Z6 (ANGLE)
+
+	// LYS 2026-09-18 WAD 의 Sub Z(Z3/Z4) 도 같은 이유로 DLL 이 넘긴다. 앱이 GetRecipeInfo() 로
+	//                읽던 값은 RECIPE 화면 경로에서 항상 0 이라 Z3/Z4 가 0 으로 내려가고 있었다.
+	m_pRecipeMem->m_sRunState.m_fData[58] = g_inRcpInfo.m_recipeMgr.m_sInfo.m_sMotionSubZ.m_fWadSubzRight;	// AXIS_Z3 (WAD)
+	m_pRecipeMem->m_sRunState.m_fData[59] = g_inRcpInfo.m_recipeMgr.m_sInfo.m_sMotionSubZ.m_fWadSubzLeft;	// AXIS_Z4 (WAD)
+
 	::PostMessage(m_hWnd->m_hWnd, WM_RECIPE_EVENT, (WPARAM)M_RCP_TEST_MODE, 0);
 }
 
@@ -307,4 +349,101 @@ void CDlgTestMode::OnBtnUnContact()
 	m_pRecipeMem->m_sRunState.m_dwData2 = 3;
 
 	::PostMessage(m_hWnd->m_hWnd, WM_RECIPE_EVENT, (WPARAM)M_RCP_TEST_MODE, 3);
+}
+
+
+// ============================================================================
+// LYS 2026-09-16 Save Image - Review(Align CCD) 카메라 2대 라이브 그랩 저장 요청. 실제 그랩/저장은 앱 RecipeEditMgr(M_CMD_TEST_MODE sub 4)
+// ============================================================================
+void CDlgTestMode::OnBtnSaveImage()
+{
+	if (m_hWnd == nullptr || m_pRecipeMem == nullptr) return;
+
+	m_pRecipeMem->m_sRunState.Clear();
+	m_pRecipeMem->m_sRunState.m_dwData1 = M_CMD_TEST_MODE;
+	m_pRecipeMem->m_sRunState.m_dwData2 = 4;	// SAVE_IMAGE
+
+	::PostMessage(m_hWnd->m_hWnd, WM_RECIPE_EVENT, (WPARAM)M_RCP_TEST_MODE, 4);
+}
+
+// ============================================================================
+// LYS 2026-09-16 카메라 조그 그리드 - 0행 헤더(Move/REL/<</>>), 1행 MOVE / 상대거리(편집 가능) / - / +
+// ============================================================================
+void CDlgTestMode::InitCamJogGrid()
+{
+	CRect rc;
+	m_gridCamJog.GetWindowRect(&rc);
+
+	m_gridCamJog.SetFont(dfcGetFontName(), 12, FW_BOLD);
+	m_gridCamJog.SetRowCount(2);
+	m_gridCamJog.SetColumnCount(4);
+	m_gridCamJog.SetFixedRowCol(1, 0);
+	m_gridCamJog.EnableToolTips(FALSE);
+	m_gridCamJog.EnableTitleTips(FALSE);
+	m_gridCamJog.SetEditable(TRUE);
+	m_gridCamJog.EnableSelection(FALSE);
+
+	int nWidth = (rc.Width() - 4) / 4;
+	for (int j = 0; j < 4; j++) m_gridCamJog.SetColumnWidth(j, nWidth);
+	int nHeight = (rc.Height() - 4) / 2;
+	for (int i = 0; i < 2; i++) m_gridCamJog.SetRowHeight(i, nHeight);
+
+	const TCHAR* szHead[4] = { _T("Move"), _T("REL"), _T("<<"), _T(">>") };
+	const TCHAR* szBody[4] = { _T("MOVE"), _T("1.000"), _T("-"), _T("+") };
+	for (int j = 0; j < 4; j++)
+	{
+		m_gridCamJog.SetItemText(0, j, szHead[j]);
+		m_gridCamJog.SetItemFormat(0, j, DT_SINGLELINE | DT_CENTER | DT_VCENTER);
+		m_gridCamJog.SetItemText(1, j, szBody[j]);
+		m_gridCamJog.SetItemFormat(1, j, DT_SINGLELINE | DT_CENTER | DT_VCENTER);
+		if (j != 1)
+		{
+			// MOVE / - / + 는 버튼 역할(읽기 전용), REL 칸만 편집
+			m_gridCamJog.SetItemState(1, j, m_gridCamJog.GetItemState(1, j) | GVIS_READONLY);
+			m_gridCamJog.SetItemBkColour(1, j, COLOR_GRAY);
+		}
+	}
+	m_gridCamJog.Invalidate(FALSE);
+}
+
+void CDlgTestMode::OnSelCam(UINT nID)
+{
+	switch (nID) {
+	case IDC_RADIO_5: m_nCamSel = 0; break; // CAM_Both
+	case IDC_RADIO_6: m_nCamSel = 1; break; // CAM_Left  (cam0, Y2/Y4)
+	case IDC_RADIO_7: m_nCamSel = 2; break; // CAM_Right (cam1, Y1/Y3)
+	}
+}
+
+// MOVE = REL 값 그대로(부호 포함), '-' = -|REL|, '+' = +|REL|
+void CDlgTestMode::OnSelJogItem(NMHDR* pNMHDR, LRESULT* pResult)
+{
+	NM_GRIDVIEW* pNMLV = reinterpret_cast<NM_GRIDVIEW*>(pNMHDR);
+	int nRow = (int)pNMLV->iRow;
+	int nCol = (int)pNMLV->iColumn;
+	*pResult = 0;
+
+	if (nRow != 1) return;
+	if (nCol == 1) return;	// REL 값 편집 셀
+
+	double dRel = _wtof(m_gridCamJog.GetItemText(1, 1));
+	if (nCol == 2) dRel = -fabs(dRel);
+	else if (nCol == 3) dRel = fabs(dRel);
+
+	SendCamJog(dRel);
+}
+
+void CDlgTestMode::SendCamJog(double dRel)
+{
+	if (m_hWnd == nullptr || m_pRecipeMem == nullptr) return;
+	if (fabs(dRel) < 0.0005) return;
+
+	m_pRecipeMem->m_sRunState.Clear();
+	m_pRecipeMem->m_sRunState.m_dwData1 = M_CMD_TEST_MODE;
+	m_pRecipeMem->m_sRunState.m_dwData2 = 5;	// CAM_JOG
+	m_pRecipeMem->m_sRunState.m_dwData3 = (DWORD)m_nTestMode;	// 0/1(Review/WAD)=Y1,Y2  2/3(VISION/ANGLE)=Y3,Y4
+	m_pRecipeMem->m_sRunState.m_fData[0] = dRel;
+	m_pRecipeMem->m_sRunState.m_nData[0] = m_nCamSel;
+
+	::PostMessage(m_hWnd->m_hWnd, WM_RECIPE_EVENT, (WPARAM)M_RCP_TEST_MODE, 5);
 }

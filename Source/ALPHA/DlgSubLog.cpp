@@ -67,7 +67,7 @@ static CString LogName[] =
 	//_T("TSP / LCR"),
 	_T("AGING"),
 	_T(""),
-	_T(""),
+	_T("PG MON"),	// LYS 2026-09-11 LogName[15] - 공란이던 버튼(IDC_BUTTON_MEAS7 / enumLogItemID_MEAS7)
 	_T(""),
 };
 
@@ -151,6 +151,16 @@ BOOL CDlgSubLog::OnInitDialog()
 		m_pMainLoggingFile[i]->ShowWindow(SW_HIDE);
 	}
 
+	// LYS 2026-09-11 DLOG 창에 모이는 줄을 한 파일(Logs\LogFile\DLOG_yyyymmdd.log)로도 저장한다.
+	//                DLOG 는 초기화/Glass 9단계/EQ State/SACC/CIM 등 accessor 여러 개가 한 화면으로
+	//                모이는 구조라, 각 accessor 의 개별 파일은 있어도 시간순으로 합쳐진 한 벌이 없었다.
+	//                화면 리스트는 100줄이 넘으면 앞에서부터 지워지므로 파일이 있어야 추적이 된다.
+	{
+		CString strDLogFile;
+		strDLogFile.Format(_T("%sLogFile\\DLOG.log"), CSystemParamShare::GetInstance()->GetLoggerFolderPath().GetString());
+		m_pMainLoggingFile[enumLogItemID_DLOG]->EnableFileSave(strDLogFile);
+	}
+
 	// Initialize Step
 	CSystemInitialize *pDoWorkInitialSeq = CSequenceManager::GetInstance()->GetSystemInitialize();
 	if (pDoWorkInitialSeq)
@@ -205,25 +215,38 @@ BOOL CDlgSubLog::OnInitDialog()
 	m_pMainLoggingFile[enumLogItemID_MEAS2]->LinkParam(m_pAuroraMgr->GetCommTcpIpFactoryMgrPtr()->GetLogFileAccessorPtr(3));
 
 	// 시야각
-	m_pMainLoggingFile[enumLogItemID_MEAS3]->LinkParam(m_pAuroraMgr->GetCommTcpIpFactoryMgrPtr()->GetLogFileAccessorPtr(4));
+	// LYS 2026-09-11 PG 버튼(LogName[11] "PG") - PARA_4(WAD)가 함께 걸려 WAD 로그가 섞여 있었다.
+	//                WAD 는 아래 특성 버튼(MEAS4)으로 이관하고 여기는 PARA_5(PG)만 남긴다.
+	//m_pMainLoggingFile[enumLogItemID_MEAS3]->LinkParam(m_pAuroraMgr->GetCommTcpIpFactoryMgrPtr()->GetLogFileAccessorPtr(4));
 	m_pMainLoggingFile[enumLogItemID_MEAS3]->LinkParam(m_pAuroraMgr->GetCommTcpIpFactoryMgrPtr()->GetLogFileAccessorPtr(5));
 
 	// PG
-	m_pMainLoggingFile[enumLogItemID_MEAS5]->LinkParam(m_pAuroraMgr->GetCommTcpIpFactoryMgrPtr()->GetLogFileAccessorPtr(6));
+	// LYS 2026-09-11 AGING - 버튼 라벨은 LogName[13] "AGING" 인데 PARA_6(Network.ini NAME=CIM)에 걸려 있었다.
+	//                AGING 은 PARA_8 이므로 교체. (구 코드: GetLogFileAccessorPtr(6))
+	m_pMainLoggingFile[enumLogItemID_MEAS5]->LinkParam(m_pAuroraMgr->GetCommTcpIpFactoryMgrPtr()->GetLogFileAccessorPtr(8));
 
 	// 특성
-	m_pMainLoggingFile[enumLogItemID_MEAS4]->LinkParam(m_pAuroraMgr->GetCommTcpIpFactoryMgrPtr()->GetLogFileAccessorPtr(7));
+	// LYS 2026-09-11 특성 버튼(LogName[12] "특성") - PARA_7(Network.ini NAME=SYSTIME)에 걸려 있었다.
+	//                이 설비의 특성 측정은 WAD 이므로 PARA_4(WAD)로 교체. (구 코드: GetLogFileAccessorPtr(7))
+	//                SYSTIME(PARA_7)은 대응 버튼이 없어 화면에서 빠진다 - 로그 파일은 D:\HBS\Logs 에 계속 쌓인다.
+	m_pMainLoggingFile[enumLogItemID_MEAS4]->LinkParam(m_pAuroraMgr->GetCommTcpIpFactoryMgrPtr()->GetLogFileAccessorPtr(4));
 
 	//// TSP
 	//m_pMainLoggingFile[enumLogItemID_MEAS6]->LinkParam(m_pAuroraMgr->GetCommTcpIpFactoryMgrPtr()->GetLogFileAccessorPtr(8));
 
 	// LCR
-	m_pMainLoggingFile[enumLogItemID_MEAS6]->LinkParam(m_pAuroraMgr->GetCommTcpIpFactoryMgrPtr()->GetLogFileAccessorPtr(8));
+	// LYS 2026-09-11 PARA_8(AGING)은 위 AGING 버튼(MEAS5)으로 이관. LinkParam 은 accessor 의
+	//                SetLogMsgWindow 를 덮어쓰므로 나중에 실행되는 이 줄을 남기면
+	//                숨김 상태인 MEAS6 이 로그를 가져가 AGING 버튼이 빈다.
+	//m_pMainLoggingFile[enumLogItemID_MEAS6]->LinkParam(m_pAuroraMgr->GetCommTcpIpFactoryMgrPtr()->GetLogFileAccessorPtr(8));
 
-	// AGING
+	// LYS 2026-09-11 PG MON (Network.ini NETWORK_PARA_9 = PG_MON). 기존 주석 'AGING' 은 오기였다 - AGING 은 PARA_8
 	m_pMainLoggingFile[enumLogItemID_MEAS7]->LinkParam(m_pAuroraMgr->GetCommTcpIpFactoryMgrPtr()->GetLogFileAccessorPtr(9));
 
 	// CIM
+	// LYS 2026-09-11 CIM 버튼이 비어 있던 원인 - PARA_10/11 은 Network.ini TCPIP_COUNT(10) 범위 밖이라
+	//                GetParam_MeasType 가 -1 을 돌려 nullptr 였다. 현재 CIM 은 PARA_6.
+	m_pMainLoggingFile[enumLogItemID_CIM]->LinkParam(m_pAuroraMgr->GetCommTcpIpFactoryMgrPtr()->GetLogFileAccessorPtr(6));
 	m_pMainLoggingFile[enumLogItemID_CIM]->LinkParam(m_pAuroraMgr->GetCommTcpIpFactoryMgrPtr()->GetLogFileAccessorPtr(10));
 	m_pMainLoggingFile[enumLogItemID_CIM]->LinkParam(m_pAuroraMgr->GetCommTcpIpFactoryMgrPtr()->GetLogFileAccessorPtr(11));	// jsyoon 2022.09.08 add
 
@@ -261,10 +284,10 @@ BOOL CDlgSubLog::OnInitDialog()
 	bUseBtn[5] = true; // SERIAL
 	bUseBtn[6] = true; // CIM
 	bUseBtn[7] = true; // 화질
-	bUseBtn[8] = false; // 색이상		// LYS 2026-07-02 안쓰는 Mode 삭제
-	bUseBtn[9] = true; // 시야각
+	bUseBtn[8] = true; // 색이상		// LYS 2026-07-02 안쓰는 Mode 삭제	// LYS 2026-09-11 시야각 - 이 슬롯은 MEAS2(LogName[10] "시야각", PARA_2/3) 이다. 숨김 해제
+	bUseBtn[9] = true; // 시야각		// LYS 2026-09-11 실제로는 MEAS3(LogName[11] "PG", PARA_5 PG)
 	bUseBtn[10] = true; // 특성
-	bUseBtn[11] = true; // PG
+	bUseBtn[11] = true; // PG		// LYS 2026-09-11 실제로는 MEAS5(LogName[13] "AGING")
 	bUseBtn[12] = false;  // TSP		// LYS 2026-07-02 안쓰는 Mode 삭제
 	bUseBtn[13] = true;  // AGING
 	bUseBtn[14] = false;

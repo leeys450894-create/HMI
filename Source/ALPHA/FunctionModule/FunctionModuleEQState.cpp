@@ -200,21 +200,37 @@ bool CFunctionModuleEQState::IsGlassSensorOn()
 {
 	bool bRet = false;
 	int nRet = 0;
-	for (int i = 0; i < 4; i++)
-	{
-		int nAddress = PLC_BIT_GLASS_EXIST_01 + i;
+	//for (int i = 0; i < 4; i++)
+	//{
+	//	int nAddress = PLC_BIT_GLASS_EXIST_01 + i;
+	//
+	//	nRet = GetIOMapControlMgrPtr()->GetParam_DIOMapMemoryBitImport(nAddress);
+	//	if (nRet != -1)
+	//	{
+	//		if (nRet == 1)
+	//		{
+	//			bRet |= true;
+	//		}
+	//		else
+	//		{
+	//			bRet |= false;
+	//		}
+	//	}
+	//}
 
-		nRet = GetIOMapControlMgrPtr()->GetParam_DIOMapMemoryBitImport(nAddress);
-		if (nRet != -1)
+	// LYS 2026-09-05 Sample On Glass Check
+	int nAddress = PLC_BIT_GLASS_EXIST_05;
+
+	nRet = GetIOMapControlMgrPtr()->GetParam_DIOMapMemoryBitImport(nAddress);
+	if (nRet != -1)
+	{
+		if (nRet == 1)
 		{
-			if (nRet == 1)
-			{
-				bRet |= true;
-			}
-			else
-			{
-				bRet |= false;
-			}
+			bRet |= true;
+		}
+		else
+		{
+			bRet |= false;
 		}
 	}
 
@@ -664,7 +680,8 @@ bool CFunctionModuleEQState::IsProbeUnContactSensorOn(int iProbeUnit)
 		nProbeUnit = PLC_R_MOTION_PROBE_UNIT04_POS_04;
 		break;
 	case df_PROBE_MEAS:
-		nProbeUnit = PLC_R_MOTION_PROBE_UNIT05_POS_04;
+		//nProbeUnit = PLC_R_MOTION_PROBE_UNIT05_POS_04;
+		nProbeUnit = PLC_R_MOTION_PROBE_UNIT01_POS_01;		// LYS 2026-09-05 Contact sensor 프로브 변경
 		break;
 	default:
 		break;
@@ -682,6 +699,9 @@ bool CFunctionModuleEQState::IsProbeUnContactSensorOn(int iProbeUnit)
 	}
 
 	SetLastCheckAddress(nAddress);
+
+	// LYS 2026-09-09 언컨택 임시 해제
+	bRet = true;
 
 	return bRet;
 }
@@ -737,14 +757,17 @@ bool CFunctionModuleEQState::IsProbeExistSensorOn(int iProbeUnit)
 		SetLastCheckAddress(nAddress);
 	}
 
-	if (bRet == false)
-	{
-		return false;
-	}
-	else
-	{
-		return true;
-	}
+	bRet = true;
+
+	// LYS 2026-09-09 언컨택 신호 임시 해제
+	//if (bRet == false)
+	//{
+	//	return false;
+	//}
+	//else
+	//{
+	//	return true;
+	//}
 }
 
 bool CFunctionModuleEQState::IsProbeExistSensorOff(int iProbeUnit)
@@ -1299,7 +1322,7 @@ bool CFunctionModuleEQState::IsPositionOnAC(int iPos)
 {
 	bool bRet = false;
 
-	int nProbeUnit = PLC_AUTO_CHANGE_X0_POSITION_03;
+	int nProbeUnit = PLC_AUTO_CHANGE_X0_POSITION_04;
 
 	switch (iPos)
 	{
@@ -2346,6 +2369,36 @@ bool CFunctionModuleEQState::SetEQClear(bool bAuto)
 	return bRet;
 }
 
+// LYS 2026-09-16 수동 장착 프로브 ID 등록: SACC 화면 SET ID / CLEAR ID -> 해당 프로브 모듈 워드 블록(D2110~D2150, P5 = D2150)에 10자 기록.
+//                빈 문자열이면 공백 10자(= PLC 의 빈 ID 표현, SetMemoryStr 이 NUL 을 공백으로 보냄). ProbeCard 스캐너가 약 5초 주기로 다시 읽어 m_szPROBEID 에 반영된다.
+//                로딩 시퀀스의 SetEQGetPrboeData 와 같은 쓰기 경로이며, 언로드 시 SACCPutReq 가 이 값을 D2100 에 복사해 PLC 가 로봇 동작에 쓴다.
+bool CFunctionModuleEQState::SetEQManualProbeID(int iProbeUnit, CString strID)
+{
+	CString strLog;
+	if (iProbeUnit < df_PROBE_AGING1 || iProbeUnit > df_PROBE_MEAS)
+	{
+		strLog.Format(_T("SetEQManualProbeID NG - probe %d out of range"), iProbeUnit);
+		// (이 모듈의 로그 accessor 는 Initialize 되지 않으므로 여기서 KMLOG 하지 않는다 - 호출측 CSACCMgr 가 SEQ SACC 로그에 남김)
+		return false;
+	}
+
+	strID.Trim();
+	if (strID.GetLength() > 10)
+		strID = strID.Left(10);
+
+	TCHAR sz[100];
+	ZeroMemory(&sz, sizeof(sz));
+	_tcscpy_s(sz, _countof(sz), strID);
+
+	CString strAddr;
+	strAddr.Format(_T("D%d"), 2100 + 10 * iProbeUnit);	// P1 = D2110 ... P5 = D2150
+	bool bRet = GetIOMapControlMgrPtr()->SetMemoryNStrToDevice(strAddr, sz, 10);
+
+	strLog.Format(_T("SetEQManualProbeID probe=%d %s id=[%s] -> %s"), iProbeUnit, strAddr, strID, bRet ? _T("OK") : _T("NG"));
+	// 로그는 호출측 CSACCMgr 가 SEQ SACC 로그에 남긴다(이 모듈의 accessor 는 미초기화)
+	return bRet;
+}
+
 // loading 시 장비내 Probe ID 기록
 bool CFunctionModuleEQState::SetEQGetPrboeData(int iProbeUnit)
 {
@@ -2420,6 +2473,7 @@ bool CFunctionModuleEQState::SetEQSetPrboeData(int iProbeUnit)
 	TCHAR sz[100];
 	ZeroMemory(&sz, sizeof(sz));
 
+#if 0	// LYS 2026-09-25 5벌 복사 + switch -> 접근자 (iProbeUnit 0 기반 -> 유닛 1..5, 범위 밖이면 빈 문자열로 종전과 동일)
 	CString strUnloadProbeID, strProbeID01, strProbeID02, strProbeID03, strProbeID04, strProbeID05;
 	strProbeID01.Empty();
 	strProbeID02.Empty();
@@ -2466,6 +2520,9 @@ bool CFunctionModuleEQState::SetEQSetPrboeData(int iProbeUnit)
 	}
 	break;
 	}
+#else
+	CString strUnloadProbeID = GetShareMemoryMgrPtr()->GetEqProbeID(iProbeUnit + 1);	// LYS 2026-09-25
+#endif
 
 	_tcscpy_s(sz, _countof(sz), strUnloadProbeID);	bRet &= GetIOMapControlMgrPtr()->SetMemoryNStrToDevice(_T("D2100"), sz, 10);			// EQ Unload Data
 	//_stprintf_s(sz, _countof(sz), _T("%s"), strProbeID01);		bRet &= GetIOMapControlMgrPtr()->SetMemoryNStrToDevice(_T("D2110"), sz, 10);		// Probe Module #1

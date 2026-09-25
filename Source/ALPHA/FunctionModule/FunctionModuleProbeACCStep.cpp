@@ -753,6 +753,19 @@ bool CFunctionModuleProbeACCStep_SACCPutReq::Run()
     }
 
     // Probe Data 셋팅
+    // LYS 2026-09-16 D2100 에 쓸 언로드 ID(m_szPROBEID, D2150 스캔값)가 비어 있으면(수동 장착 후 미등록) PLC 가 빈 ID 로 로봇을 돌리므로 여기서 막는다.
+    //                SACC 화면 SET ID 로 등록(스캐너 재읽기 약 5초)한 뒤 다시 시도할 것.
+    {
+        CString strCurID(m_pShareItem->GetShareMemoryMgrPtr()->GetSharedMemory()->m_szPROBEID[iProbe - df_PROBE_AGING1]);
+        strCurID.Trim();
+        if (strCurID.IsEmpty())
+        {
+            CString strLog;
+            strLog.Format(_T("SACC unload/exchange blocked - EQ probe ID empty for probe %d (D%d). Register the ID first (SACC screen SET ID)."), iProbe, 2100 + 10 * iProbe);
+            m_pShareItem->GetLogFileAccessorPtr()->KMLOG(WARN, strLog);
+            return false;
+        }
+    }
     bRet = CSequenceManager::GetInstance()->GetFunctionModuleEQState()->SetEQSetPrboeData(iProbe - df_PROBE_AGING1);
     if (bRet == true)
     {
@@ -796,6 +809,19 @@ bool CFunctionModuleProbeACCStep_SACCExChangeReq::Run()
     }
 
     // Probe Data 셋팅
+    // LYS 2026-09-16 D2100 에 쓸 언로드 ID(m_szPROBEID, D2150 스캔값)가 비어 있으면(수동 장착 후 미등록) PLC 가 빈 ID 로 로봇을 돌리므로 여기서 막는다.
+    //                SACC 화면 SET ID 로 등록(스캐너 재읽기 약 5초)한 뒤 다시 시도할 것.
+    {
+        CString strCurID(m_pShareItem->GetShareMemoryMgrPtr()->GetSharedMemory()->m_szPROBEID[iProbe - df_PROBE_AGING1]);
+        strCurID.Trim();
+        if (strCurID.IsEmpty())
+        {
+            CString strLog;
+            strLog.Format(_T("SACC unload/exchange blocked - EQ probe ID empty for probe %d (D%d). Register the ID first (SACC screen SET ID)."), iProbe, 2100 + 10 * iProbe);
+            m_pShareItem->GetLogFileAccessorPtr()->KMLOG(WARN, strLog);
+            return false;
+        }
+    }
     bRet = CSequenceManager::GetInstance()->GetFunctionModuleEQState()->SetEQSetPrboeData(iProbe - df_PROBE_AGING1);
     if (bRet == true)
     {
@@ -1041,6 +1067,7 @@ bool CFunctionModuleProbeACCStep_Align::Run()
 		CString strRecipeName;
 		CString strData, strProbeName;
 
+#if 0	// LYS 2026-09-25 P1~P5 5벌 복붙 switch -> CShareMemoryMgr::GetEqProbeAlignRecipeName 으로 통합 (규칙 동일)
 		switch (iProbe)
 		{
 		case df_PROBE_AGING1:
@@ -1108,6 +1135,9 @@ bool CFunctionModuleProbeACCStep_Align::Run()
 			strRecipeName = _T("PROBE_MEAS");
 			break;
 		}
+#else
+		strRecipeName = m_pShareItem->GetShareMemoryMgrPtr()->GetEqProbeAlignRecipeName(iProbe);	// LYS 2026-09-25 PROBE_ALIGNn[_xx] / PROBE_MEAS[_xx]
+#endif
 
 		if (m_pShareItem->GetRecipeEditMgrPtr()->OpenAlignRecipe(strRecipeName) == VTM_RV_SUCCESSED)
 		{

@@ -178,6 +178,9 @@ protected:
 	afx_msg void OnBnClickedBtnSelectProbe5();
 	afx_msg void OnBnClickedBtnAcgantryZup();
 	afx_msg void OnBnClickedBtnAcgantryZdown();
+	afx_msg void OnBnClickedBtnSetProbeID();		// LYS 2026-09-16 manual probe ID -> D2150
+	afx_msg void OnBnClickedBtnClearProbeID();	// LYS 2026-09-16
+	void SendManualProbeID(const CString& strID);	// LYS 2026-09-16 common sender ("" = clear)
 
 	afx_msg LRESULT OnFPSpreadClick_Cassette(WPARAM wParam, LPARAM lParam); //
 

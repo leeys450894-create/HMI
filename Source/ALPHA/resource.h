@@ -74,6 +74,9 @@
 #define IDD_POPUP_SELECT_COLOR          218
 #define IDD_DIALOG1                     220
 #define IDD_DLG_SUB_MANUAL_MULTI_MEAS   220
+#define IDB_BITMAP_ENV_SAFETY           222
+#define IDD_DIALOG2                     223
+#define IDD_POPUP_SAFETY_MAP            223
 #define IDD_DLG_SUB_MANUAL_MEAS         231
 #define IDC_STATIC_MAIN_FORM            1000
 #define IDC_STATIC_TITLE                1001
@@ -87,9 +90,7 @@
 #define IDC_STATIC_CELL_MEASURE         1004
 #define IDC_STATIC_MANUAL_POS           1004
 #define IDC_STC_CCD_POS                 1005
-#define IDC_STATIC_LAMP_TIMER3          1005
 #define IDC_STATIC_MANUAL_TITLE         1005
-#define IDC_STATIC_LAMP_TIMER4          1006
 #define IDC_TITLE_SYSTEM                1007
 #define IDC_CHK_FIXTURE_1               1007
 #define IDC_TITLE_PROGRAM               1008
@@ -185,8 +186,6 @@
 #define IDC_TITLE_STATE_SUB10           1028
 #define IDC_BUTTON_MANUAL_IONIZER       1028
 #define IDC_FS_AUTO_CONTACT             1028
-#define IDC_COMBO_AC_STICK              21001
-#define IDC_STATIC_AC_PROG              21002
 #define IDC_GRID_LIST_MAINT_MOTION4     1028
 #define IDC_BUTTON_SEND_APD_TO_FTP      1028
 #define IDC_BUTTON6                     1028
@@ -271,22 +270,45 @@
 #define IDC_BTN_SELECT_COLOR_VISION     1049
 #define IDC_CHECK_CIM_REPORT            1049
 #define IDC_STATIC_COLOR_ANGLE          1050
+#define IDC_BUTTON7                     1050
 #define IDC_BTN_SELECT_COLOR_ANGLE      1051
+#define IDC_GRID_1                      1051
 #define IDC_STATIC_TITLE_LAMP_TIME      1052
 #define IDC_STATIC_COLOR_COLOR          1052
+#define IDC_GRID_2                      1052
 #define IDC_BUTTON_RESET                1053
 #define IDC_BTN_SELECT_COLOR_COLOR      1053
+#define IDC_GRID_3                      1053
 #define IDC_BUTTON_APPLY                1054
+#define IDC_GRID_4                      1054
 #define IDC_GRID_LIST_LAMP_INFO         1055
+#define IDC_GRID_5                      1055
+#define IDC_GRID_6                      1056
 #define IDC_STC_ROI_TITLE               1057
+#define IDC_GRID_7                      1057
+#define IDC_GRID_8                      1058
 #define IDC_STATIC_LOG_TITLE            1059
+#define IDC_GRID_9                      1059
+#define IDC_GRID_10                     1060
+#define IDC_GRID_11                     1061
+#define IDC_GRID_12                     1062
+#define IDC_GRID_13                     1063
+#define IDC_GRID_14                     1064
+#define IDC_GRID_15                     1065
+#define IDC_GRID_16                     1066
+#define IDC_GRID_17                     1067
 #define IDC_GRID_LIST_MOTION_INFO       1068
+#define IDC_GRID_18                     1068
 #define IDC_GRID_LIST_INFO_IO           1069
+#define IDC_GRID_19                     1069
 #define IDC_GRID_LIST_TACT_TIME_DETAIL  1070
+#define IDC_GRID_20                     1070
 #define IDC_TITLE_RECIPE                1071
 #define IDC_GRID_LIST_TACT_TIME_GLASS   1071
+#define IDC_GRID_21                     1071
 #define IDC_TITLE_GLASSID               1072
 #define IDC_GRID_LIST_MEAS_INFO         1072
+#define IDC_GRID_22                     1072
 #define IDC_TITLE_RECIPE_INFO           1073
 #define IDC_GRID_LIST_CELL_DETAIL       1073
 #define IDC_TITLE_RECIPE_INFO2          1074
@@ -379,8 +401,6 @@
 #define IDC_BTN_MANUAL_MEAS_NEXT_STICK_MOVE2 1175
 #define IDC_BTN_MANUAL_MEAS_NEXT_STICK_MOVE3 1176
 #define IDC_BTN_MANUAL_MEAS_PRE_STICK_MOVE2 1177
-#define IDC_EDIT_MANUAL_CUR_STICK       1230
-#define IDC_EDIT_MANUAL_TOTAL_STICK     1231
 #define IDC_BUTTON_CHANGE_MEAS          1178
 #define IDC_BTN_MANUAL_MEAS_NEXT_CELL_MOVE3 1178
 #define IDC_BTN_MANUAL_MEAS_NEXT_CELL_MOVE4 1179
@@ -433,6 +453,7 @@
 #define IDC_BTN_MANUAL_MEAS_LIFT_DOWN   1200
 #define IDC_BTN_MANUAL_GLASS_ROTATE1    1201
 #define IDC_BTN_MANUAL_GLASS_ROTATE2    1202
+#define IDC_BTN_MANUAL_PLC_RESET3       1202
 #define IDC_BTN_MANUAL_MEAS_VACUUM_MOTION3 1203
 #define IDC_BTN_MANUAL_MEAS_AIR_ON      1203
 #define IDC_BTN_MANUAL_MEAS_VACUUM_MOTION4 1204
@@ -462,6 +483,9 @@
 #define IDC_BTN_MANUAL_MEAS_RECIPE_OPEN6 1227
 #define IDC_BTN_MANUAL_MEAS_RECIPE_OPEN7 1228
 #define IDC_BTN_MANUAL_MEAS_RECIPE_OPEN8 1229
+#define IDC_EDIT_MANUAL_CUR_STICK       1230
+#define IDC_EDIT_MANUAL_TOTAL_STICK     1231
+#define IDC_EDIT_MANUAL_TEST_ADDR       1232
 #define IDC_STATIC_ALIGN                1243
 #define IDC_GLASS_GET                   1245
 #define IDC_BTN_SAVE_IMAGE              1245
@@ -486,7 +510,6 @@
 #define IDC_STATIC_CONFIG_FILE          1392
 #define IDC_FPS_AGING_LIST              3000
 #define IDC_FPSPREAD_AGING_CELL_STATUS  3001
-// LYS 2026-07-23 WAD Multi Meas dialog controls
 #define IDC_FPS_MM_LIST                 3002
 #define IDC_FPS_MM_MODE                 3003
 #define IDC_FPS_MM_CELLSIZE             3004
@@ -544,14 +567,19 @@
 #define IDC_BUTTON_7                    20206
 #define IDC_BUTTON_8                    20207
 #define IDC_COMBO_1                     20300
+#define IDC_COMBO_AC_STICK              21001
+#define IDC_STATIC_AC_PROG              21002
+#define IDC_BTN_MANUAL_PLC_BIT_ON       21003
+#define IDC_BTN_MANUAL_PLC_BIT_OFF      21004
+#define IDC_BTN_CCD_RESET               21005
 
 // Next default values for new objects
 // 
 #ifdef APSTUDIO_INVOKED
 #ifndef APSTUDIO_READONLY_SYMBOLS
-#define _APS_NEXT_RESOURCE_VALUE        222
+#define _APS_NEXT_RESOURCE_VALUE        225
 #define _APS_NEXT_COMMAND_VALUE         32771
-#define _APS_NEXT_CONTROL_VALUE         1050
+#define _APS_NEXT_CONTROL_VALUE         1052
 #define _APS_NEXT_SYMED_VALUE           101
 #endif
 #endif

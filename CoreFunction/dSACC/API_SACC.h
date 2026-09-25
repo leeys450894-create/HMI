@@ -109,6 +109,7 @@ const enum SACC_COMMAND_OPERATION
 	SACC_COMMAND_OPERATION_PLC_BIT_PROBE_UNIT_CLAMP_ON,
 	SACC_COMMAND_OPERATION_PLC_BIT_PROBE_UNIT_CLAMP_OFF,
 
+	SACC_COMMAND_OPERATION_SET_PROBEID,	// LYS 2026-09-16 manual probe ID register -> EQ probe ID word block (P5 = D2150). nWTSequence = probe(1~5), szText = ID ("" = clear)
 	SACC_COMMAND_OPERATION_END,
 };
 
@@ -226,6 +227,7 @@ typedef struct
 	LIGHTDATA stDataL;
 	PLCDATA   stDataP;
 	MSDATA    stDataM[100];		// Motion 
+	TCHAR     szText[32];		// LYS 2026-09-16 text payload (manual probe ID). Passed by pointer in-process (DLL -> app); keep both API_SACC.h copies identical
 
 }RITEMDATA, * PRITEMDATA;
 

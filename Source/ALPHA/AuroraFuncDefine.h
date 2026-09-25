@@ -158,7 +158,9 @@ inline char* CStrToChar(CString& str)
 	USES_CONVERSION;
 
 //	strcpy(szTemp, T2A(str));
-	strcpy_s(szTemp, (size_t)sizeof(szTemp), T2A(str));
+	// LYS 2026-09-16 sizeof(szTemp) 는 포인터 크기(8)라 7자 넘는 문자열에서 strcpy_s 가 버퍼 초과로 중단(Test Mode Save Image 경로 저장 시 발생). 실제 버퍼 길이(len+1) 사용
+	//strcpy_s(szTemp, (size_t)sizeof(szTemp), T2A(str));
+	strcpy_s(szTemp, (size_t)(len + 1), T2A(str));
 
 	return szTemp;
 }

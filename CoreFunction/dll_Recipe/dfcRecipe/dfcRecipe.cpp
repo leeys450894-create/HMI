@@ -46,9 +46,9 @@ CdfcRecipeApp::CdfcRecipeApp()
 	m_strRcpBackup = m_iniFile.GetProfileString (_T("PATH"), _T("BACKUP_FOLDER"), _T("D:\\"));
 	m_strAlignFolder  = m_iniFile.GetProfileString (_T("PATH"), _T("ALIGN_FOLDER"), _T("D:\\")); 
 	m_strRefImgFolder = m_iniFile.GetProfileString (_T("PATH"), _T("REF_IMG_FOLDER"), _T("D:\\")); 
-	m_fContactLimit   = m_iniFile.GetProfileDouble (_T("SETTING"), _T("CONTACT_LIMIT"), 5.00);
+	m_fContactLimit   = m_iniFile.GetProfileDouble (_T("SETTING"), _T("CONTACT_LIMIT"), 20.00);		// LYS 2026-09-18 Contact Limit 5->20 TEMP
 	m_strPPIDPath	  = m_iniFile.GetProfileString (_T("PATH"), _T("PPID_FOLDER"), _T("D:\\"));
-	m_strRcpListPath  = m_iniFile.GetProfileString (_T("PATH"), _T("RECIPE_LIST"), _T("D:\\"));
+	m_strRcpListPath  = m_iniFile.GetProfileString (_T("PATH"), _T("RECIPE_LIST"), _T("D:\\")); 
 
 
 	int nCnt = 0;

@@ -33,8 +33,12 @@ bool CPositionConfigMgr::LinkIniFile(bool bSave)
 	m_pIniHelper->Link(bSave, _T("SAFETY"), _T("SafetyHeadX2"),		&m_stPositionParam.dSafetyHeadX2, -1000.0);
 	m_pIniHelper->Link(bSave, _T("SAFETY"), _T("SafetyHeadY1"),		&m_stPositionParam.dSafetyHeadY1, 1000.0);
 	m_pIniHelper->Link(bSave, _T("SAFETY"), _T("SafetyHeadY2"),		&m_stPositionParam.dSafetyHeadY2, -1000.0);
+	// LYS 2026-09-14 FRONT 헤드(Y3/Y4) Safety 분리. 키가 없는 ini 는 바로 위에서 읽은 SafetyHeadY1/Y2 값을 기본값으로 받아 기존 동작을 유지한다.
+	//   (CIniHelper::Read 는 키가 없을 때 기본값만 돌려주고 파일에 쓰지 않는다.)
+	m_pIniHelper->Link(bSave, _T("SAFETY"), _T("SafetyHeadY3"),		&m_stPositionParam.dSafetyHeadY3, m_stPositionParam.dSafetyHeadY1);
+	m_pIniHelper->Link(bSave, _T("SAFETY"), _T("SafetyHeadY4"),		&m_stPositionParam.dSafetyHeadY4, m_stPositionParam.dSafetyHeadY2);
 	m_pIniHelper->Link(bSave, _T("SAFETY"), _T("SafetyZ"),			&m_stPositionParam.dSafetyZ, 0.0);
-	m_pIniHelper->Link(bSave, _T("SAFETY"), _T("SafetyZ2"),			&m_stPositionParam.dSafetyZ2, -600.0);
+	m_pIniHelper->Link(bSave, _T("SAFETY"), _T("SafetyZ2"),			&m_stPositionParam.dSafetyZ2, -1000.0);
 
 	// LYS 2026-08-28 Sub Z Safety (Z3/Z4/Z5/Z6 park position)
 	m_pIniHelper->Link(bSave, _T("SUBZ_SAFETY"), _T("Safety_SubZ_WAD_RIGHT"),          &m_stPositionParam.dSubZSafety[enumSUBZ_WAD_RIGHT], 0.0);
@@ -225,6 +229,13 @@ void CPositionConfigMgr::GetSafetyPosition(double *dSafetyStageX, double* dSafet
 	if (dSafetyHeadY2 != nullptr) *dSafetyHeadY2 = m_stPositionParam.dSafetyHeadY2;
 	if (dSafetyZ != nullptr)	  *dSafetyZ		 = m_stPositionParam.dSafetyZ;
 	if (dSafetyZ2 != nullptr)	  *dSafetyZ2	 = m_stPositionParam.dSafetyZ2;
+}
+
+// LYS 2026-09-14 FRONT 헤드 Safety (선언부 주석 참조)
+void CPositionConfigMgr::GetFrontHeadSafetyPosition(double* dSafetyHeadY3, double* dSafetyHeadY4) const
+{
+	if (dSafetyHeadY3 != nullptr) *dSafetyHeadY3 = m_stPositionParam.dSafetyHeadY3;
+	if (dSafetyHeadY4 != nullptr) *dSafetyHeadY4 = m_stPositionParam.dSafetyHeadY4;
 }
 
 void CPositionConfigMgr::SetSafetyPosition(double dSafetyStageX, double dSafetyHeadX1, double dSafetyHeadX2, double dSafetyHeadY1, double dSafetyHeadY2, double dSafetyZ, double dSafetyZ2)

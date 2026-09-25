@@ -1907,6 +1907,13 @@ CLogFileAccessor* CCommTcpIpFactoryMgr::GetLogFileAccessorPtr(long nID)
 			pLogFile = GetCommTcpIpObjectVisMotion()->GetLogFileAccessorPtr();
 	}
 	break;
+	// LYS 2026-09-11 PG_MON 누락분 보완 - 이 case 가 없어 LOG 화면이 PGMon 로그를 못 받아왔다(기본 nullptr)
+	case enumTCPIpFactorytID_PG_MON:	// ELP ElecBox 모니터 (Network.ini NETWORK_PARA_9, MEAS_TYPE=19)
+	{
+		if (GetCommTcpIpObjectPGMon() != nullptr)
+			pLogFile = GetCommTcpIpObjectPGMon()->GetLogFileAccessorPtr();
+	}
+	break;
 	default:
 		break;
 	}
@@ -1993,6 +2000,12 @@ bool CCommTcpIpFactoryMgr::IsOutOfService(long nID)
 	{
 		if (GetCommTcpIpObjectCIM() != nullptr)
 			bRet = GetCommTcpIpObjectCIM()->IsOutOfService();
+	}
+	break;
+	case enumTCPIpFactorytID_PG_MON:	// LYS 2026-09-07 ELP ElecBox 모니터 - Network.ini OUT_OF_SERVICE 반영
+	{
+		if (GetCommTcpIpObjectPGMon() != nullptr)
+			bRet = GetCommTcpIpObjectPGMon()->IsOutOfService();
 	}
 	break;
 	default:
@@ -2119,6 +2132,12 @@ bool CCommTcpIpFactoryMgr::IsConnected(long nID)
 	{
 		if (GetCommTcpIpObjectVisMotion() != nullptr)
 			bRet = GetCommTcpIpObjectVisMotion()->IsConnected();
+	}
+	break;
+	case enumTCPIpFactorytID_PG_MON:	// LYS 2026-09-07 ELP ElecBox 모니터 - case 누락으로 default(false)로 떨어져 연결돼도 타이틀 램프가 빨간색이던 문제
+	{
+		if (GetCommTcpIpObjectPGMon() != nullptr)
+			bRet = GetCommTcpIpObjectPGMon()->IsConnected();
 	}
 	break;
 	default:

@@ -1,0 +1,472 @@
+#include "pch.h"
+#include "AlarmMonitorToSensor.h"
+
+//#include "Alarm\AlarmIDList.h"
+//#include "AlarmIDList.h"  // jsyoon 2022.01,.19 change
+#include "AlarmMonitorToSensorTemperature.h"
+#include "AlarmMonitorToSensorFAN.h"
+#include "AlarmMonitorToSensorCurtain.h"
+#include "AlarmMonitorToSensorSmoke.h"
+#include "AlarmMonitorToSensorIsolater.h"
+#include "AlarmMonitorToSensorHandSwitch.h"
+#include "AlarmMonitorToSensorVacSwitch.h"
+#include "AlarmMonitorToSensorPressure.h"
+#include "..\Manager\IOMapAddressDefine.h"
+#include "AlarmMonitorToSensorTemperatureLow.h"
+#include "AlarmMonitorToSafetyPLC.h"
+#include "AlarmMonitorToLampTime.h"
+
+#ifdef _DEBUG
+#define new DEBUG_NEW
+#endif
+
+CAlarmMonitorToSensor::CAlarmMonitorToSensor(stAuroraMgrPool &MgrPool)
+    : CAlarmMonitorImpl(MgrPool)
+{
+	m_pSensorCurtain = new CAlarmMonitorToSensorCurtain(MgrPool.strLogPath, 0, 0, 0, _T(""), 0);
+	m_pSensorCurtain->SetPara(MgrPool.pSystemConfigMgr, MgrPool.pIOMapControlMgr, MgrPool.pCommTcpIPMgr);
+	
+	m_pVaccumSwitch = new CAlarmMonitorToSensorVacSwitch(MgrPool.strLogPath);
+	m_pVaccumSwitch->SetPara(MgrPool.pSystemConfigMgr, MgrPool.pIOMapControlMgr, MgrPool.pCommTcpIPMgr);
+
+	CString strLog;
+	m_vecItem.clear();
+	for (size_t i = 0; i < 4; i++)
+	{
+		strLog.Format(_T("ISOLATOR_SENSOR_%d_OFF"), i+1);
+		m_vecItem.push_back(new CAlarmMonitorToSensorIsolater(MgrPool.strLogPath, PLC_BIT_ISOLATOR_SENSOR_01+i, 0, 0, strLog, PLC_ISOLATOR_SENSOR_01 + i));
+	}
+
+	// SMOKE Sensor 
+	// TODO: mapping required	// jblee 20260804
+	m_vecItemSmoke.clear();
+	static CString strSmokeName[16] = {
+		_T("SMOKE DETECT 01 (FRONT EL.BOX)"),
+		_T("SMOKE DETECT 02 (REAR EL.BOX)"),
+		_T("SMOKE DETECT 03 (PC BOX)"),
+		_T("SMOKE DETECT 04 (PC E - BOX FRONT)"),
+		_T("SMOKE DETECT 05 (PC E - BOX REAR)"),
+		_T("SMOKE DETECT 06 (I / O PANEL)"),
+		_T("SMOKE DETECT 07 (P / N PANEL)"),
+		_T("SMOKE DETECT 08 (PG - BOX_RIGHT)"),
+		_T("SMOKE DETECT 09 (PG - BOX_LEFT)"),
+		_T("SMOKE DETECT 10 (PC_PROFILE RIGHT 1)"),
+		_T("SMOKE DETECT 11 (PC_PROFILE RIGHT 2)"),
+		_T("SMOKE DETECT 12 (PC_PROFILE LEFT 1)"),
+		_T("SMOKE DETECT 13 (PC_PROFILE LEFT 2)"),
+		_T("SMOKE DETECT 14 (FRONT S - BOX)"),
+		_T("SMOKE DETECT 15 (REAR S - BOX)"),
+		_T("SMOKE DETECT 16 (SACC)")
+	};
+	
+	// jblee 20260804 modifed
+	//for (size_t i = 0; i < 16; i++)
+	for (size_t i = 0; i < 10; i++)
+	{
+		strLog.Format(strSmokeName[i]);
+		m_vecItemSmoke.push_back(new CAlarmMonitorToSensorSmoke(MgrPool.strLogPath, PLC_BIT_SMOKE_DETECT_01+i, 0, 0, strLog, PLC_SMOKE_DETECT_ALARM_01+i));
+	}
+
+	// TEMP Sensor 
+	// TODO: mapping required	// jblee 20260804
+	static CString strTempName[20] = {
+		_T("TEMP.INDICATOR 01 OVER(GPS EL.BOX)"),
+		_T("TEMP.INDICATOR 02 OVER(UPS EL.BOX)"),
+		_T("TEMP.INDICATOR 03 OVER(PC BOX)"),
+		_T("TEMP.INDICATOR 04 OVER(PC E - BOX FRONT)"),
+		_T("TEMP.INDICATOR 05 OVER(PC E - BOX REAR)"),
+		_T("TEMP.INDICATOR 06 OVER(I / O PANEL)"),
+		_T("TEMP.INDICATOR 07 OVER(P / N PANEL)"),
+		_T("TEMP.INDICATOR 08 OVER(PG - BOX_RIGHT)"),
+		_T("TEMP.INDICATOR 09 OVER(PG - BOX_LEFT)"),
+		_T("TEMP.INDICATOR 10 OVER(PC_PROFILE RIGHT 1)"),
+		_T("TEMP.INDICATOR 11 OVER(PC_PROFILE RIGHT 2)"),
+		_T("TEMP.INDICATOR 12 OVER(PC_PROFILE LEFT 1)"),
+		_T("TEMP.INDICATOR 13 OVER(PC_PROFILE LEFT 2)"),
+		_T("TEMP.INDICATOR 14 OVER(FRONT S - BOX)"),
+		_T("TEMP.INDICATOR 15 OVER(REAR S - BOX)"),
+		_T("TEMP.INDICATOR 16 OVER(SACC)"),
+		_T(""),
+		_T(""),
+		_T(""),
+		_T("")
+	};
+
+	m_vecItemTemperature.clear();
+	// jblee 20260804 modified
+	//for (size_t i = 0; i < 16; i++)
+	for (size_t i = 0; i < 10; i++)
+	{
+		strLog.Format(strTempName[i]);
+		m_vecItemTemperature.push_back(new CAlarmMonitorToSensorTemperature(MgrPool.strLogPath, PLC_BIT_TEMP_SENSOR_01 + i, 0, 0, strLog, PLC_TEMPERATURE_SENSOR_OVER_01+i));
+	}
+
+	m_vecItemTemperatureLow.clear();
+	// LYS 2026-09-19 이 경고 모니터는 PLC 비트가 아니라 FDC 온도 값으로 돈다(DlgMainForm::GetMonitorIO 가
+	//                stFDCWData[FDC_WDATA_TEMP_1 + i] 의 값/MAX 로 TemperOver(i) 를 세운다). 그래서 i 번째 이름은
+	//                운용 FDC_LIST 의 NUM_FDC_WDATA (i+1) 번 명칭이어야 한다. 위 strTempName 은 PLC 비트로 도는
+	//                과열 모니터(PLC_BIT_TEMP_SENSOR_01 + i)가 같이 쓰므로 건드리지 않고 따로 둔다.
+	//                개수도 FDC 가 보내는 10 개로 맞췄다 - 11 번째는 값이 없어 한 번도 울리지 않았다.
+	static CString strTempNameFDC[] = {
+		_T("TEMP.WARNING OVER(TEMP_SENS_EL_BOX_GPS)"),
+		_T("TEMP.WARNING OVER(TEMP_SENS_EL_BOX_UPS)"),
+		_T("TEMP.WARNING OVER(TEMP_SENS_S_BOX_FRONT)"),
+		_T("TEMP.WARNING OVER(TEMP_SENS_S_BOX_REAR)"),
+		_T("TEMP.WARNING OVER(TEMP_SENS_PC_BOX)"),
+		_T("TEMP.WARNING OVER(TEMP_SENS_PC_BOX_FRONT)"),
+		_T("TEMP.WARNING OVER(TEMP_SENS_PC_BOX_REAR)"),
+		_T("TEMP.WARNING OVER(SACC)"),
+		_T("TEMP.WARNING OVER(IO_PANEL_BOX_LEFT)"),
+		_T("TEMP.WARNING OVER(IO_PANEL_BOX_RIGHT)"),
+	};
+	// jblee 20260804 modified
+	//for (size_t i = 0; i < 16; i++)
+	//for (size_t i = 0; i < 11; i++)
+	for (size_t i = 0; i < _countof(strTempNameFDC); i++)
+	{
+		//strLog.Format(strTempName[i]);
+		strLog.Format(strTempNameFDC[i]);
+		m_vecItemTemperatureLow.push_back(new CAlarmMonitorToSensorTemperatureLow(MgrPool.strLogPath, i, PLC_BIT_TEMP_SENSOR_RESET_SWITCH_01 + i, 0, strLog, PLC_TEMPERATURE_SENSOR_WARRING_01 + i));
+	}
+
+	m_vecItemFan.clear();
+
+#ifdef _USE_IOBOARD
+	strLog.Format(_T("ELECTRIC_BOX_FAN_OFF"));
+	m_vecItemFan.push_back(new CAlarmMonitorToSensorFAN(MgrPool.strLogPath, 0, 0, 0, strLog, PLC_ELECTRIC_BOX_FAN_ERROR_01));
+	strLog.Format(_T("PC_BOX_FAN_OFF"));
+	m_vecItemFan.push_back(new CAlarmMonitorToSensorFAN(MgrPool.strLogPath, 1, 0, 0, strLog, PLC_PC_BOX_FAN_ERROR_01));
+#else
+	// TODO : naming & mapping required	// jblee 20260804
+	static CString strEBOXFANext[10] = {
+		_T("GPS ELECTRONIC BOX FAN(급기) 1~4 ON"),
+		_T("GPS ELECTRONIC BOX FAN(배기) 5~8 ON"),
+		_T("UPS ELECTRONIC BOX FAN(급기) 9~12 ON"),
+		_T("UPS ELECTRONIC BOX FAN(배기) 13~16 ON"),
+		_T("ELECTRONIC S - BOX FAN(급기) 1~4 ON"),
+		_T("ELECTRONIC S - BOX FAN(배기) 5~8 ON"),
+		_T("ELECTRONIC S - BOX FAN(급기) 9~12 ON"),
+		_T("ELECTRONIC S - BOX FAN(배기) 13~16 ON"),
+		_T("ELECTRONIC S - BOX FAN(배기)"),
+		_T("ELECTRONIC S - BOX FAN(배기)"),
+	};
+
+	static CString strPCBOXFANext[16] = {
+		_T("PC - BOX FAN(배기_L) 1~12 ON"),
+		_T("PC - BOX FAN(배기_R) 13~24 ON"),
+		_T("PC E - BOX FAN 01 ON"),
+		_T("PC E - BOX FAN 02 ON"),
+		_T("PC E - BOX FAN 03 ON"),
+		_T("PC E - BOX FAN 04 ON"),
+	};
+
+	// FAN
+	for (size_t i = 0; i < 10; i++)
+	{
+		strLog.Format(strEBOXFANext[i]);
+		m_vecItemFan.push_back(new CAlarmMonitorToSensorFAN(MgrPool.strLogPath, PLC_BIT_EBOX_FAN_01 + i, 0, 0, strLog, PLC_ELECTRIC_BOX_FAN_ERROR_01 + i)); // jsyoon 20211014 change Muting Switch not Use, EMS Op IO 불량
+	}
+
+	// jblee 20260804 modified
+	//for (size_t i = 0; i < 6; i++)
+	for (size_t i = 0; i < 4; i++)
+	{
+		strLog.Format(strPCBOXFANext[i]);
+		m_vecItemFan.push_back(new CAlarmMonitorToSensorFAN(MgrPool.strLogPath, PLC_BIT_PCBOX_FAN_01 + i, 0, 0, strLog, PLC_PC_BOX_FAN_ERROR_01 + i)); // jsyoon 20211014 change Muting Switch not Use, EMS Op IO 불량
+	}
+
+
+	static CString strLampTimeOut[4] = {
+	_T("LAMP TIME OUT1"),
+	_T("LAMP TIME OUT2"),
+	_T("LAMP TIME OUT3"),
+	_T("LAMP TIME OUT4"),
+	};
+
+	// jblee 2026-09-14 distinct alarm ID per lamp (was JOB_LAMP_TIMEOUT for all 4 - dup IDs got silently swallowed by alarm dedup)
+	static const int iLampAlarmID[4] = { JOB_LAMP_TIMEOUT, JOB_LAMP_TIMEOUT_02, JOB_LAMP_TIMEOUT_03, JOB_LAMP_TIMEOUT_04 };
+
+	m_vecItemLampTime.clear();
+	for (size_t i = 0; i < 4; i++)
+	{
+		strLog.Format(strLampTimeOut[i]);
+		m_vecItemLampTime.push_back(new CAlarmMonitorToLampTime(MgrPool.strLogPath, 0 + i, 0, 0, strLog, iLampAlarmID[i]));
+	}
+
+#endif // _USE_IOBOARD
+
+	for (size_t i = 0; i < m_vecItem.size(); ++i)
+	{
+		m_vecItem[i]->SetPara(MgrPool.pSystemConfigMgr, MgrPool.pMaintControlMgr);
+	}
+
+	for (size_t i = 0; i < m_vecItemFan.size(); ++i)
+	{
+		m_vecItemFan[i]->SetPara(MgrPool.pSystemConfigMgr, MgrPool.pMaintControlMgr);
+	}
+
+	for (size_t i = 0; i < m_vecItemSmoke.size(); ++i)
+	{
+		m_vecItemSmoke[i]->SetPara(MgrPool.pSystemConfigMgr, MgrPool.pMaintControlMgr);
+	}
+
+	for (size_t i = 0; i < m_vecItemTemperature.size(); ++i)
+	{
+		m_vecItemTemperature[i]->SetPara(MgrPool.pSystemConfigMgr, MgrPool.pMaintControlMgr);
+	}
+
+	for (size_t i = 0; i < m_vecItemTemperatureLow.size(); ++i)
+	{
+		m_vecItemTemperatureLow[i]->SetPara(MgrPool.pSystemConfigMgr, MgrPool.pMaintControlMgr);
+	}
+
+	for (size_t i = 0; i < m_vecItemLampTime.size(); ++i)
+	{
+		m_vecItemLampTime[i]->SetPara(MgrPool.pSystemConfigMgr, MgrPool.pMaintControlMgr);
+	}
+	
+
+	// jsyoon 20210928 add
+	m_vecItemPressure.clear();
+
+#ifdef _USE_IOBOARD
+	strLog.Format(_T("CDA 01 PRESSURE OFF"));
+	m_vecItemPressure.push_back(new CAlarmMonitorToSensorPressure(MgrPool.strLogPath, IO_BOARD_READ_INPUT_111, strLog, PLC_PRESSURE_CDA_ALARM));
+	strLog.Format(_T("EJECTOR 01 PRESSURE OFF"));
+	m_vecItemPressure.push_back(new CAlarmMonitorToSensorPressure(MgrPool.strLogPath, IO_BOARD_READ_INPUT_112, strLog, PLC_PRESSURE_EJECTOR_ALARM_01));
+	strLog.Format(_T("EJECTOR 02 PRESSURE OFF"));
+	m_vecItemPressure.push_back(new CAlarmMonitorToSensorPressure(MgrPool.strLogPath, IO_BOARD_READ_INPUT_113, strLog, PLC_PRESSURE_EJECTOR_ALARM_02));
+#else
+
+	static CString strPRESSUREText[11] = {
+		_T("VACUUM PRESSURE SWITCH 01"),
+		//_T("VACUUM PRESSURE SWITCH 02"),
+		_T("CDA PRESSURE SWITCH 01"),
+		_T("CDA PRESSURE SWITCH 02"),
+		_T("CDA PRESSURE SWITCH 03"),
+		_T("PRESSURE SWITCH 01_FIXTURE1"),
+		_T("PRESSURE SWITCH 02_FIXTURE2"),
+		_T("PRESSURE SWITCH 03_ISOLATOR 1"),
+		_T("PRESSURE SWITCH 04_ISOLATOR 2"),
+		_T("PRESSURE SWITCH 05_SHUTTER"),
+		_T("PRESSURE SWITCH 06_SACC"),
+		_T("PRESSURE SWITCH 07_PROBE MODULE 1"),
+		//_T("PRESSURE SWITCH 08_PROBE MODULE 2"),
+		//_T("PRESSURE SWITCH 09_PROBE MODULE 3"),
+		//_T("PRESSURE SWITCH 10_PROBE MODULE 4"),
+		//_T("PRESSURE SWITCH 11_PROBE MODULE 5"),
+	};
+
+	// VACUUM
+	//for (size_t i = 0; i < 2; i++)
+	strLog.Format(strPRESSUREText[0]);
+	m_vecItemPressure.push_back(new CAlarmMonitorToSensorPressure(MgrPool.strLogPath, PLC_BIT_VACCUM_PRES_SW01, strLog, PLC_PRESSURE_VACUUM_SWITCH_01)); // jsyoon 20211014 change Muting Switch not Use, EMS Op IO 불량
+
+	// CDA
+	for (size_t i = 0; i < 3; i++)
+	{
+		strLog.Format(strPRESSUREText[1+i]);
+		m_vecItemPressure.push_back(new CAlarmMonitorToSensorPressure(MgrPool.strLogPath, PLC_BIT_AIR_PRESSURE_01 + i, strLog, PLC_PRESSURE_CDA_SWITCH_01 + i));
+	}
+
+	// FIXTURE
+	for (size_t i = 0; i < 2; i++)
+	{
+		strLog.Format(strPRESSUREText[4+i]);
+		// jblee 20260804 modified
+		//m_vecItemPressure.push_back(new CAlarmMonitorToSensorPressure(MgrPool.strLogPath, PLC_BIT_AIR_PRESSURE_20 + i, strLog, PLC_PRESSURE_FIXTURE_SWITCH_01 + i));
+		m_vecItemPressure.push_back(new CAlarmMonitorToSensorPressure(MgrPool.strLogPath, PLC_BIT_AIR_PRESSURE_04 + i, strLog, PLC_PRESSURE_FIXTURE_SWITCH_01 + i));
+	}
+
+	// ISOLATOR
+	for (size_t i = 0; i < 2; i++)
+	{
+		strLog.Format(strPRESSUREText[6 + i]);
+		// jblee 20260804 modified
+		//m_vecItemPressure.push_back(new CAlarmMonitorToSensorPressure(MgrPool.strLogPath, PLC_ISOLATOR_PRESSURE_SENSOR_01 + i, strLog, PLC_PRESSURE_ISOLATOR_01 + i));
+		m_vecItemPressure.push_back(new CAlarmMonitorToSensorPressure(MgrPool.strLogPath, PLC_BIT_AIR_PRESSURE_06 + i, strLog, PLC_PRESSURE_ISOLATOR_01 + i));
+	}
+
+	// shutter
+	strLog.Format(strPRESSUREText[8]);
+	// jblee 20260804 modified
+	//m_vecItemPressure.push_back(new CAlarmMonitorToSensorPressure(MgrPool.strLogPath, PLC_BIT_AIR_PRESSURE_18, strLog, PLC_PRESSURE_SHUTTER_SWITCH));
+	m_vecItemPressure.push_back(new CAlarmMonitorToSensorPressure(MgrPool.strLogPath, PLC_BIT_AIR_PRESSURE_08, strLog, PLC_PRESSURE_SHUTTER_SWITCH));
+
+	// SACC
+	strLog.Format(strPRESSUREText[9]);
+	// jblee 20260804 modified
+	//m_vecItemPressure.push_back(new CAlarmMonitorToSensorPressure(MgrPool.strLogPath, PLC_BIT_AIR_PRESSURE_22, strLog, PLC_PRESSURE_SWITCH_SACC));
+	m_vecItemPressure.push_back(new CAlarmMonitorToSensorPressure(MgrPool.strLogPath, PLC_BIT_AIR_PRESSURE_09, strLog, PLC_PRESSURE_SWITCH_SACC));
+	// 	// 
+
+	// PROBE
+	strLog.Format(strPRESSUREText[10]);
+	// jblee 20260804 modified
+	//m_vecItemPressure.push_back(new CAlarmMonitorToSensorPressure(MgrPool.strLogPath, PLC_BIT_AIR_PRESSURE_23 + i, strLog, PLC_PRESSURE_SWITCH_PROBE_01 + i));
+	m_vecItemPressure.push_back(new CAlarmMonitorToSensorPressure(MgrPool.strLogPath, PLC_BIT_AIR_PRESSURE_10, strLog, PLC_PRESSURE_SWITCH_PROBE_01));
+
+#endif // _USE_IOBOARD
+
+	for (size_t i = 0; i < m_vecItemPressure.size(); ++i)
+	{
+		m_vecItemPressure[i]->SetPara(MgrPool.pSystemConfigMgr, MgrPool.pIOMapControlMgr);
+	}
+
+	// jsyoon 2022.06.21 add
+	m_pSafetyPLC = new CAlarmMonitorToSafetyPLC(MgrPool.strLogPath, 0, _T("SAFETY PLC Connect Error"), SDC_SAFETYPLC_MODULE_CONNECT_ERROR);
+	m_pSafetyPLC->SetPara(MgrPool.pSystemConfigMgr, MgrPool.pIOMapControlMgr, MgrPool.pCommTcpIPMgr);
+}
+
+CAlarmMonitorToSensor::~CAlarmMonitorToSensor()
+{
+    //----------------------------------------------------------------------
+    // 데이터 삭제
+    //----------------------------------------------------------------------
+	if(m_pSensorCurtain)
+	{
+		delete m_pSensorCurtain;
+		m_pSensorCurtain = nullptr;
+	}
+
+	if (m_pVaccumSwitch)
+	{
+		delete m_pVaccumSwitch;
+		m_pVaccumSwitch = nullptr;
+	}
+
+	for (size_t i = 0; i < m_vecItem.size(); ++i)
+	{
+		delete m_vecItem[i];
+		m_vecItem[i] = nullptr;
+	}
+
+	for (size_t i = 0; i < m_vecItemFan.size(); ++i)
+	{
+		delete m_vecItemFan[i];
+		m_vecItemFan[i] = nullptr;
+	}
+
+	for (size_t i = 0; i < m_vecItemPressure.size(); ++i)
+	{
+		delete m_vecItemPressure[i];
+		m_vecItemPressure[i] = nullptr;
+	}
+
+	for (size_t i = 0; i < m_vecItemSmoke.size(); ++i)
+	{
+		delete m_vecItemSmoke[i];
+		m_vecItemSmoke[i] = nullptr;
+	}
+
+	for (size_t i = 0; i < m_vecItemTemperature.size(); ++i)
+	{
+		delete m_vecItemTemperature[i];
+		m_vecItemTemperature[i] = nullptr;
+	}
+
+	for (size_t i = 0; i < m_vecItemTemperatureLow.size(); ++i)
+	{
+		delete m_vecItemTemperatureLow[i];
+		m_vecItemTemperatureLow[i] = nullptr;
+	}
+
+	for (size_t i = 0; i < m_vecItemLampTime.size(); ++i)
+	{
+		delete m_vecItemLampTime[i];
+		m_vecItemLampTime[i] = nullptr;
+	}
+
+	if (m_pSafetyPLC)
+	{
+		delete m_pSafetyPLC;
+		m_pSafetyPLC = nullptr;
+	}
+}
+
+void CAlarmMonitorToSensor::SetStart()
+{
+	m_pSensorCurtain->SetStart();
+	m_pVaccumSwitch->SetStart();
+
+	for (size_t i = 0; i < m_vecItem.size(); ++i)
+	{
+		m_vecItem[i]->SetStart();
+	}
+
+	for (size_t i = 0; i < m_vecItemFan.size(); ++i)
+	{
+		m_vecItemFan[i]->SetStart();
+	}
+
+	for (size_t i = 0; i < m_vecItemPressure.size(); ++i)
+	{
+		m_vecItemPressure[i]->SetStart();
+	}
+
+	for (size_t i = 0; i < m_vecItemSmoke.size(); ++i)
+	{
+		m_vecItemSmoke[i]->SetStart();
+	}
+
+	for (size_t i = 0; i < m_vecItemTemperature.size(); ++i)
+	{
+		m_vecItemTemperature[i]->SetStart();
+	}
+
+	for (size_t i = 0; i < m_vecItemTemperatureLow.size(); ++i)
+	{
+		m_vecItemTemperatureLow[i]->SetStart();
+	}
+
+	for (size_t i = 0; i < m_vecItemLampTime.size(); ++i)
+	{
+		m_vecItemLampTime[i]->SetStart();
+	}
+
+	m_pSafetyPLC->SetStart();
+}
+
+void CAlarmMonitorToSensor::SetStop()
+{
+	m_pSafetyPLC->SetStop();
+	m_pSensorCurtain->SetStop();
+	m_pVaccumSwitch->SetStop();
+
+	for (size_t i = 0; i < m_vecItem.size(); ++i)
+	{
+		m_vecItem[i]->SetStop();
+	}
+
+	for (size_t i = 0; i < m_vecItemFan.size(); ++i)
+	{
+		m_vecItemFan[i]->SetStop();
+	}
+
+	for (size_t i = 0; i < m_vecItemPressure.size(); ++i)
+	{
+		m_vecItemPressure[i]->SetStop();
+	}
+
+	for (size_t i = 0; i < m_vecItemSmoke.size(); ++i)
+	{
+		m_vecItemSmoke[i]->SetStop();
+	}
+
+	for (size_t i = 0; i < m_vecItemTemperature.size(); ++i)
+	{
+		m_vecItemTemperature[i]->SetStop();
+	}
+
+	for (size_t i = 0; i < m_vecItemTemperatureLow.size(); ++i)
+	{
+		m_vecItemTemperatureLow[i]->SetStop();
+	}
+
+	for (size_t i = 0; i < m_vecItemLampTime.size(); ++i)
+	{
+		m_vecItemLampTime[i]->SetStop();
+	}
+
+	
+}

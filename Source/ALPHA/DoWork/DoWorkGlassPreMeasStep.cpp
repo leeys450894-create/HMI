@@ -185,16 +185,22 @@ bool CDoWorkGlassPreMeasStep_Move::Run()
 
 	if (lRet == VTM_RV_SUCCESSED)
 	{
-		for (size_t i = df_PROBE_AGING1; i <= df_PROBE_MEAS; i++)
+		//for (size_t i = df_PROBE_AGING1; i <= df_PROBE_MEAS; i++)
+		//{
+		//	bRet = CSequenceManager::GetInstance()->GetFunctionModuleEQState()->IsProbeUnContactSensorOn(i);
+		//	if (bRet != true)
+		//	{
+		//		lRet = MOTION_INTERLOCK_6;
+		//		break;
+		//	}
+		//}
+		// 
+		bRet = CSequenceManager::GetInstance()->GetFunctionModuleEQState()->IsProbeUnContactSensorOn(df_PROBE_MEAS);
+		if (bRet != true)
 		{
-			bRet = CSequenceManager::GetInstance()->GetFunctionModuleEQState()->IsProbeUnContactSensorOn(i);
-			if (bRet != true)
-			{
-				lRet = MOTION_INTERLOCK_6;
-				break;
-			}
+			lRet = MOTION_INTERLOCK_6;
 		}
-	}
+	}	
 
 	if (lRet == VTM_RV_SUCCESSED)
 	{
@@ -315,10 +321,11 @@ bool CDoWorkGlassPreMeasStep_Move::Run()
 				bool bSetPos[5];
 				ZeroMemory(&bSetPos, sizeof(bSetPos));
 
-				for (int i = 0; i < 5; i++)  // Probe 5개 
+				//for (int i = 0; i < 5; i++)  // Probe 5개	// LYS 2026-09-15 Only P5
 				{
-					if (bSetPos[4 - i] == true)
-						continue;
+					int i = 5;
+					//if (bSetPos[4 - i] == true)
+					//	continue;
 
 					if (i < nStick)
 					{
@@ -467,11 +474,20 @@ bool CDoWorkGlassPreMeasStep_Move::Run()
 			stPosition[2].dPosition = dLeft;
 			stPosition[3].axis = AXIS_Y4;   nAxis++;
 			stPosition[3].dPosition = dRight;
+			// LYS 2026-09-21 PRE_MEAS 이동은 BACK 갠트리(X2) 기준이라 FRONT 헤드 Y3/Y4 는 쉰다 (OCP).
+			//   셀 좌표를 그대로 보내면 Y3(MX 697)/Y4(MX 360) SW 리밋에 걸린다 - 셀 716.397 에서 3901.
+			//   df_HEAD_Y_IDLE_SAFETY 마커를 MoveCmdPosAging 의 ApplyIdleHeadSafetyY 가 Position.ini [SAFETY]
+			//   SafetyHeadY3/Y4 원시좌표로 바꾼다(정렬 오프셋 미가산). X3 는 MoveCmdPosAging 이 SafetyHeadX2 로 보낸다.
+			if (m_pShareItem->GetSystemConfigMgrPtr() && m_pShareItem->GetSystemConfigMgrPtr()->IsOCP())
+			{
+				stPosition[2].dPosition = df_HEAD_Y_IDLE_SAFETY;
+				stPosition[3].dPosition = df_HEAD_Y_IDLE_SAFETY;
+			}
 			stPosition[4].axis = AXIS_X2;   nAxis++;
 			//stPosition[4].dPosition = pRecipeData->m_vecStick[0].m_fStageY + dOffsetX;
 			stPosition[4].dPosition = dOffsetX;		// LYS 2026-06-29
-			stPosition[5].axis = AXIS_Z1;   nAxis++;
-			stPosition[5].dPosition = pRecipeData->m_sHeadZ.m_fQualityZ;
+			//stPosition[5].axis = AXIS_Z1;   nAxis++;
+			//stPosition[5].dPosition = pRecipeData->m_sHeadZ.m_fQualityZ;
 			stPosition[6].axis = AXIS_Z2;   nAxis++;
 			stPosition[6].dPosition = pRecipeData->m_sHeadZ.m_fReviewZ;
 
@@ -794,7 +810,9 @@ bool CDoWorkGlassPreMeasStep_P2P::Run()
 			m_pShareItem->GetShareMemoryMgrPtr()->GetSharedMemory()->m_nAgingStartStick[4] = nStickCnt - 1;
 		///
 
-		if (nCellCnt > 10)
+		// LYS 2026-09-07 OCP PG ages/tests the whole stick in one command - skip the Ensis EVEN round (same gate as AGING)
+		bool bIsOCP = (m_pShareItem->GetSystemConfigMgrPtr() && m_pShareItem->GetSystemConfigMgrPtr()->IsOCP());
+		if (!bIsOCP && nCellCnt > 10)
 		{
 			// P2P
 			lRet = m_pShareItem->GetCommTcpIpFactoryMgr()->DoWorkInspectStart(enumTCPIpFactorytID_PG, enumTCPIpFactoryt_PG_TEST_1);
@@ -1055,6 +1073,14 @@ bool CDoWorkGlassPreMeasStep_Contact::Run()
 
 			if (m_pShareItem->GetSystemConfigMgrPtr() && m_pShareItem->GetSystemConfigMgrPtr()->IsOCP())  // LYS 2026-06-26 OCP: P5 only
 			{
+				// LYS 2026-09-09 PreMeas 컨택은 Stage가 스틱 0(m_vecStick[0]) 위치이므로 스틱 0의 PROBE Z CONTACT OFFSET을 End에 가산
+				double dZOffset = m_pShareItem->GetRecipeEditMgrPtr()->GetStickProbeZOffset(0);
+				dEMove += dZOffset;
+				{
+					CString strLog;
+					strLog.Format(_T("PreMeas Probe Contact stick=1 offset=%.4f -> Z5 target=%.4f"), dZOffset, dEMove + dOD);
+					m_pShareItem->GetLogFileAccessorPtr()->KMLOG(SYST, strLog);
+				}
 				lRet = m_pShareItem->GetMaintControlMgrPtr()->MoveCmdPos_ProbeContact(AXIS_PROBE_Z5, dfMove, dEMove, dOD);
 			}
 			else if (pRecipeInfo->m_sInspectItem.m_bUseAgingTest_2 == true)  //  Use Aging

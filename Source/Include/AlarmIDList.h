@@ -647,6 +647,11 @@ enum enumAlarmID
 	JOB_RECIPE_OPEN_FAIL_ERROR,
 	JOB_RECIPE_AREA_ERROR,
 
+	// LYS 2026-09-14 lamp 2~4 use distinct alarm ID (JOB_LAMP_TIMEOUT was shared by all 4 lamps)
+	JOB_LAMP_TIMEOUT_02 = 1031,
+	JOB_LAMP_TIMEOUT_03,
+	JOB_LAMP_TIMEOUT_04,
+
 	// Job proc
 	JOB_PROC_NO_ERROR = 1100,					// H
 	JOB_PROC_MEAS_STATUS_ERROR,
@@ -701,7 +706,7 @@ enum enumAlarmID
 	//MOTION
 	MEI_NOT_CREATED = 3001,						// H
 	MEI_INIT_MC_FAIL,							// H
-	MOTION_CMDPOS_ERROR = 3012,				// Can not move
+	MOTION_CMDPOS_ERROR = 3012,					// Can not move
 	MOTION_RS_STANDBY_POS_FAIL,					// H
 	MOTION_PB_STANDBY_POS_FAIL,
 	MOTION_LP1_POS_ERROR,
@@ -719,6 +724,9 @@ enum enumAlarmID
 	MOTION_INTERLOCK_7,
 	MOTION_INTERLOCK_8,							// LO
 	MOTION_INTERLOCK_9,							// LO
+	MOTION_INTERLOCK_10,						// LYS 2026-09-16 AutoChange Z Down Alarm
+	MOTION_INTERLOCK_11,						// LYS 2026-09-16 AutoChange X Safety Alarm
+	MOTION_INTERLOCK_12,						// LYS 2026-09-21 Probe Z 컨택(하강) 상태 - STAGE X/ROTATE, PROBE X/Y 이동 금지 (양방향)
 
 	MTOR_DRIVER_ALARM = 3101,
 	MTOR_HOME_FAIL_ALARM = 3201,
@@ -731,6 +739,8 @@ enum enumAlarmID
 	MOTION_OVER_LIMIT_NEG = 3601,
 	MOTION_INTERLOCK_CHECK_ALARM = 3701,
 	MOTION_MOVE_PROBE_CROSS_N_ROTATE_ALARM = 3801,		// Cross & Rotate Alarm (Check Up, Middle, Down sensor)
+	MOTION_SW_OVER_LIMIT_POS = 3901,		// LYS 2026-09-02 SW limit(+) over (separate from HW sensor limit 3501)
+	MOTION_SW_OVER_LIMIT_NEG = 3902,		// LYS 2026-09-02 SW limit(-) over (separate from HW sensor limit 3601)
 
 	MOTION_MOVE_DONE_ALARM = MTOR_MOVE_DONE_TIME_OUT_ALARM,
 	MOTION_MOVE_ALARM = MOTION_INTERLOCK_CHECK_ALARM,
@@ -1375,13 +1385,30 @@ enum enumAlarmID
 	SDC_SEM_CONTROLLER_HW_ERROR = 9998,
 
 	// LYS 2026-07-29 ELP ElecBox 모니터 알람 - 알람ID = ELP_ELECBOX_ALARM_START + 수신 에러코드.
-	// 유효 코드: box1 0~39, box2 100~139, socket 200~207, detail 300~303 / 400~403.
-	// 8550+code -> 8550~8589 / 8650~8689 / 8750~8757 / 8850~8853 / 8950~8953 (8503~8999 빈 대역).
+	// 문서 표: box1 0~39, box2 100~139, socket 200~207, detail 300~303 / 400~403.
+	// LYS 2026-09-21 ELP 가 문서에 없는 코드(40/41/140/141)를 실제로 보내 버려지고 있었다.
+	//   CCommTcpIpObjectPGMon::IsValidAlarmCode 를 블록당 50 으로 넓혔다 ->
+	//   8550~8599 / 8650~8699 / 8750~8799 / 8850~8899 / 8950~8999.
+	//   블록당 50 이 상한인 이유는 아래 static_assert 참조(9001 부터 SDC_PPA_* 가 쓴다).
 	ELP_ELECBOX_ALARM_START = 8550,
-	ELP_ELECBOX_ALARM_END = ELP_ELECBOX_ALARM_START + 403,
+	//ELP_ELECBOX_ALARM_END = ELP_ELECBOX_ALARM_START + 403,
+	ELP_ELECBOX_ALARM_END = ELP_ELECBOX_ALARM_START + 449,
 
 	ID_END = 10000,
 };
+
+// LYS 2026-09-14 guard: AlarmMonitorToMcOFF.cpp loops PLC_MC_OFF_ALARM_101+i for i=0..9,
+// relying on this range being exactly 10 contiguous IDs. If that ever breaks, alarms would
+// silently land on the wrong ID at runtime instead of failing to compile.
+static_assert(PLC_SP_OFF_ALARM_40 - PLC_MC_OFF_ALARM_101 == 9, "PLC_MC_OFF_ALARM_101.. range must stay 10 contiguous IDs (see AlarmMonitorToMcOFF.cpp)");
+
+// LYS 2026-09-21 guard: ELP 알람 ID 는 ELP_ELECBOX_ALARM_START + 수신 에러코드라 위쪽 ID 와 겹칠 수 있다.
+//   IsValidAlarmCode 의 블록 상한을 더 넓히려면 먼저 이 어서션을 보고 빈 대역을 확인할 것.
+static_assert(ELP_ELECBOX_ALARM_END < SDC_PPA_MODULE_FILE_EXIST_ERROR, "ELP alarm ID band must stay below SDC_PPA_MODULE_FILE_EXIST_ERROR (see CommTcpIpObjectPGMon::IsValidAlarmCode)");
+
+// LYS 2026-09-21 guard: MOTION_INTERLOCK_12 는 Alarm.xls 3032 행과 짝이다. 앞 enum 이 바뀌어 번호가 밀리면
+//   알람 문구가 엉뚱한 행으로 붙으므로(MOTION_INTERLOCK_8 이 'Align 동작 전 Position NG' 로 뜨던 것과 같은 사고) 컴파일에서 막는다.
+static_assert(MOTION_INTERLOCK_12 == 3032 && MOTION_INTERLOCK_12 < MTOR_DRIVER_ALARM, "MOTION_INTERLOCK_12 must stay 3032 (Alarm.xls row)");
 
 const enum ALARM_ID_TYPE{
 	ALARM_MODULE_ERROR =20000,

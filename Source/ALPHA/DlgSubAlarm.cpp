@@ -42,6 +42,9 @@ BEGIN_MESSAGE_MAP(CDlgSubAlarm, CMainSubDlgWin)
 	ON_WM_SHOWWINDOW()
 	ON_MESSAGE(WM_ALARM_ACCURED, &CDlgSubAlarm::OnAlarmOccured)
 	ON_MESSAGE(WM_ALARM_CLEARED, &CDlgSubAlarm::OnAlarmCleared)
+	// LYS 2026-09-22 경알람 부저 - WM_WARNING_ACCURED/CLEARED 를 받는 곳이 없던 것을 추가
+	ON_MESSAGE(WM_WARNING_ACCURED, &CDlgSubAlarm::OnWarningOccured)
+	ON_MESSAGE(WM_WARNING_CLEARED, &CDlgSubAlarm::OnWarningCleared)
 	ON_BN_CLICKED(IDC_BUTTON_RELOAD, &CDlgSubAlarm::OnBnClickedButtonReload)
 	ON_BN_CLICKED(IDC_BUTTON_ALARM_SEARCH, &CDlgSubAlarm::OnBnClickedButtonAlarmSearch)
 	ON_BN_CLICKED(IDC_BUTTON_ALARM, &CDlgSubAlarm::OnBnClickedButtonAlarm)
@@ -109,6 +112,10 @@ LRESULT CDlgSubAlarm::OnAlarmOccured(WPARAM wp, LPARAM lp)
 	CString str;
 	CAlarmController::GetInstance()->GetAlarmText(id, str);
 	CLogWrapper::GetInstance()->KMLOG(WARN, _T("***** ALARM OCCURED [ ") + str + _T(" ] *****"));
+
+	// LYS 2026-09-07 알람 발생 시 CCD 라이브 강제 ON - 측정 중(CCD_LIVE_STOP 상태)에 알람이 나면 ALARM 페이지 전환으로 메인폼이 다시 그려져
+	//   CCD 창 자리에 placeholder 텍스트(CCD Position)만 남던 현상 대응. 라이브 OFF는 표시만 멈출 뿐 그랩 스레드는 계속 동작하므로 부작용 없음
+	CWindowEventHandler::GetInstance()->PostMessageToUI(enumWndID_FRAME, WM_MSG_CCD_LIVE, enumSeqItemID_CCD_LIVE_START, NULL);
 
 
 	// LYS 2026-07-20 CIM Alarm not-report: skip SendAlarmCode, do stop+AT0 instead
@@ -186,6 +193,61 @@ LRESULT CDlgSubAlarm::OnAlarmCleared(WPARAM wp, LPARAM lp)
 	CMCCLogMgr::GetInstance()->SetMCC_Alarm(id, FALSE);
 
 //	m_pAuroraMgr->GetIOMapControlMgrPtr()->SetSinalTowerIdle();
+
+	return 0;
+}
+
+//=========================================================================
+// LYS 2026-09-22 경(Light) 알람 부저 on/off.
+//   SetLightAlarm(레벨 L, Alarm.xls 기준 460개 등록)은 WM_WARNING_ACCURED 를 쏘는데 그동안
+//   받는 핸들러가 없어 CDlgWarning 리스트/ReportAlarm 에는 기록되면서도 부저는 안 울렸다.
+//   OnAlarmOccured/Cleared(Heavy)와 같은 부저 비트(PLC_BIT_EQ_BUZZER_01)를 그대로 쓴다.
+//   CIM 리모트일 때 물리 부저를 안 켜는 게이트도 Heavy 와 동일하게 맞췄다.
+//   CIM SendAlarmCode·MCC 로그·CCD 라이브 강제 ON 은 Heavy 전용 처리라 옮기지 않았다(부저만 다룬다).
+//   주의: Warning 창의 'Alarm Clear' 버튼(DlgWarning::OnButtonAlarmClear)은 선택한 항목 하나만
+//   지우고 WM_WARNING_CLEARED 를 쏜다 - 여러 경알람이 동시에 떠 있어도 하나만 지우면 부저가 꺼진다.
+//   Heavy 도 같은 구조(알람별로 독립적으로 SetEvent)라 새로 만든 문제는 아니다.
+//=========================================================================
+LRESULT CDlgSubAlarm::OnWarningOccured(WPARAM wp, LPARAM lp)
+{
+	UINT id = (UINT)wp;
+
+	CString str;
+	CAlarmController::GetInstance()->GetAlarmText(id, str);
+	CLogWrapper::GetInstance()->KMLOG(WARN, _T("***** WARNING OCCURED [ ") + str + _T(" ] *****"));
+
+	if (m_pAuroraMgr->GetShareMemoryMgrPtr()->GetSys_MachineMode() != df_HOST_ONLINE_REMOTE &&
+		m_pAuroraMgr->GetShareMemoryMgrPtr()->GetSys_MachineMode() != df_HOST_ONLINE_LOCAL)
+	{
+		// Buzzer on 시킨다.
+#ifdef _USE_IOBOARD
+		m_pAuroraMgr->GetIOMapControlMgrPtr()->SetMemoryBitToDevice(IO_BOARD_READ_OUTPUT_000, true);
+#else
+		m_pAuroraMgr->GetIOMapControlMgrPtr()->SetMemoryBitToDevice(PLC_BIT_EQ_BUZZER_01, true);
+#endif // _USE_IOBOARD
+	}
+
+	return 0;
+}
+
+LRESULT CDlgSubAlarm::OnWarningCleared(WPARAM wp, LPARAM lp)
+{
+	UINT id = (UINT)wp;
+
+	CString str;
+	CAlarmController::GetInstance()->GetAlarmText(id, str);
+	CLogWrapper::GetInstance()->KMLOG(WARN, _T("***** WARNING CLEARED() [ ") + str + _T(" ] *****"));
+
+	if (m_pAuroraMgr->GetShareMemoryMgrPtr()->GetSys_MachineMode() != df_HOST_ONLINE_REMOTE &&
+		m_pAuroraMgr->GetShareMemoryMgrPtr()->GetSys_MachineMode() != df_HOST_ONLINE_LOCAL)
+	{
+		// Buzzer off 시킨다.
+#ifdef _USE_IOBOARD
+		m_pAuroraMgr->GetIOMapControlMgrPtr()->SetMemoryBitToDevice(IO_BOARD_READ_OUTPUT_000, false);
+#else
+		m_pAuroraMgr->GetIOMapControlMgrPtr()->SetMemoryBitToDevice(PLC_BIT_EQ_BUZZER_01, false);
+#endif // _USE_IOBOARD
+	}
 
 	return 0;
 }

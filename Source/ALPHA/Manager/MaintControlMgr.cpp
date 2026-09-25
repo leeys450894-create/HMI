@@ -1,5 +1,6 @@
 #include "pch.h"
 #include "MaintControlMgr.h"
+#include "CMotionProbeToMcOffMove.h"	// LYS 2026-09-23 MC OFF Probe Z 긴급 후퇴
 
 
 //#include "Alarm\AlarmIDList.h"
@@ -42,8 +43,10 @@ CMaintControlMgr::CMaintControlMgr(CMotorControlMgr* pMotorControlMgr, CIOMapCon
 	m_pShareMemoryMgr = pShareMemoryMgr;
 
 	ZeroMemory(&m_dGlassAlignOffset, sizeof(m_dGlassAlignOffset));
+	m_nLastHomeAlarm = 0;	// LYS 2026-09-18 MoveHome 알람 중복 방지
 	ZeroMemory(&m_dProbeAlignOffset, sizeof(m_dProbeAlignOffset));
 	ZeroMemory(&m_dAlignOffset, sizeof(m_dAlignOffset));
+	m_pMcOffMove = nullptr;	// LYS 2026-09-23
 	
 
 //	m_pIOMapControlMgr = new CIOMapControlMgr(strAppPath, strConfigPath, strLogPath);
@@ -52,6 +55,7 @@ CMaintControlMgr::CMaintControlMgr(CMotorControlMgr* pMotorControlMgr, CIOMapCon
 
 CMaintControlMgr::~CMaintControlMgr()
 {
+	StopMotionProbeToMcOffMove();	// LYS 2026-09-23 모터 Finalize(ACS 종료) 전에 감시 스레드를 먼저 내린다
 	Finalize();
 
 	if (m_pIOMapControlMgr != nullptr)
@@ -69,8 +73,30 @@ CMaintControlMgr::~CMaintControlMgr()
 
 void CMaintControlMgr::Finalize()
 {
+	StopMotionProbeToMcOffMove();	// LYS 2026-09-23
 	if (m_pIOMapControlMgr != nullptr) m_pIOMapControlMgr->Finalize();
 	if (m_pMotorControlMgr != nullptr) m_pMotorControlMgr->Finalize();
+}
+
+// LYS 2026-09-23 MC OFF 시 Probe Z 긴급 후퇴 감시 시작/종료. 원본(IT_8.6G_HBS)은 생성자에서 만들고 타이머 +5 에서 시작했지만
+//   HMI 는 CommTcpIpFactoryMgr 가 MaintControlMgr 보다 늦게 만들어져 알람 모니터 시작 시점(DlgMainForm TIMER+1)에 같이 만든다.
+//   원본은 delete 를 안 했다(누수) - 여기서는 Stop 에서 지운다. 두 번 불려도 안전하다.
+void CMaintControlMgr::StartMotionProbeToMcOffMove(CString strLogPath, CString strConfigPath, CCommTcpIpFactoryMgr* pCommTcpIpFactoryMgr)
+{
+	if (m_pMcOffMove == nullptr)
+		m_pMcOffMove = new CMotionProbeToMcOffMove(strLogPath, strConfigPath, this, pCommTcpIpFactoryMgr);
+
+	m_pMcOffMove->SetStart();
+}
+
+void CMaintControlMgr::StopMotionProbeToMcOffMove()
+{
+	if (m_pMcOffMove != nullptr)
+	{
+		m_pMcOffMove->SetStop();
+		delete m_pMcOffMove;
+		m_pMcOffMove = nullptr;
+	}
 }
 
 bool CMaintControlMgr::LinkIniFile(bool bSave)
@@ -106,6 +132,29 @@ long CMaintControlMgr::SetAmpEnable(int iAxis, bool bOn)
 	return nRet;
 }
 
+bool CMaintControlMgr::GetAmpEnable(int iAxis)
+{
+	// TODO: 여기에 구현 코드 추가.
+	long nRet = df_MOTION_RV_ERROR;
+
+	if (m_pMotorControlMgr != nullptr)
+	{
+		if (m_pMotorControlMgr->GetAxisProperty(iAxis)->bUse)
+		{
+			if (m_pMotorControlMgr != nullptr)
+			{
+				nRet = m_pMotorControlMgr->GetAmpEnable(iAxis);
+			}
+		}
+		else
+		{
+			nRet = df_MOTION_RV_ERROR;
+		}
+	}
+
+	return nRet;
+}
+
 long CMaintControlMgr::MoveHome(int iAxis)
 {
 	// TODO: 여기에 구현 코드 추가.
@@ -118,6 +167,25 @@ long CMaintControlMgr::MoveHome(int iAxis)
 			if (m_pIOMapControlMgr != nullptr)
 			{
 				nRet = m_pIOMapControlMgr->GetMoveInterlock();
+			}
+
+			// LYS 2026-09-21 원점복귀도 Probe Z 컨택 인터락을 본다(STAGE X / STAGE ROTATE / PROBE X·Y).
+			//   원점복귀는 ACS 버퍼로 바로 가서 A/R/Multi_Sub 인터락을 거치지 않는다 -> Maint 화면 Home 버튼으로
+			//   컨택 중인 스테이지가 원점(STAGE X 1064)까지 갈 수 있었고 알람도 없었다.
+			//   Probe Z 자신의 원점복귀는 상승이라 통과한다(목표 0 -> 역방향 판정 대상 아님). 알람은 아래 기존 블록이 낸다.
+			if (nRet == df_MOTION_RV_SUCCESSED)
+			{
+				//nRet = m_pMotorControlMgr->CheckProbeContactInterlock(iAxis, 0.0, _T("MoveHome"));
+				nRet = m_pMotorControlMgr->CheckProbeContactInterlock(iAxis, 0.0, _T("MoveHome"), true);	// LYS 2026-09-21 원점복귀는 목표를 모르므로 항상 '움직인다'
+			}
+
+			// LYS 2026-09-21 BACK GANTRY(X2) 원점복귀 전에 Sub Z(Z3/Z4)가 내려가 있으면 먼저 올린다 (OCP).
+			//   원점복귀는 ACS 버퍼 직행이라 A/R/Multi_Sub 의 X2 분기(RetractHeadZForProbeUnit)를 타지 않는다.
+			//   초기화 시퀀스는 Z3~Z6 원점을 X2 보다 먼저 잡으므로 이미 올라가 있어 그냥 통과한다.
+			//   올리기에 실패하면 원점복귀를 하지 않고 그 코드로 아래 기존 블록이 알람을 낸다.
+			if (nRet == df_MOTION_RV_SUCCESSED && iAxis == AXIS_X2 && m_pMotorControlMgr->IsOCP() == true)
+			{
+				nRet = m_pMotorControlMgr->RetractSubZToSafety(_T("MoveHome"), _T("X2 home"));
 			}
 
 			if (nRet == df_MOTION_RV_SUCCESSED)
@@ -134,7 +202,31 @@ long CMaintControlMgr::MoveHome(int iAxis)
 			strAxis.Format(_T("%s"), m_pMotorControlMgr->GetAxisMapProperty(iAxis)->m_strAxisName);
 
 			strLog.Format(_T("MoveHome Start(AXIS:%s, Ret:%d)"), strAxis, nRet);
-			m_pMotorControlMgr->GetLogFileAccessorPtr()->KMLOG(SYST, strLog, true);
+			//m_pMotorControlMgr->GetLogFileAccessorPtr()->KMLOG(SYST, strLog, true);
+			// LYS 2026-09-18 호밍 거부/실패도 알람을 낸다. 지금까지는 이 줄만 남고 아무 일도 없었다.
+			//                반환 코드가 살아 있는 곳이 여기뿐이다 - 초기화 시퀀스는 nRet &= MoveHome(...) 로
+			//                AND 를 걸어 알람 ID 가 뭉개지고(예: 1 & 4062 = 0), Maint 화면 등 수동 경로는
+			//                반환값을 받는 곳이 아예 없다.
+			//                성공 판정: 인터락은 알람 ID(>=1000), ACS acsc_RunBuffer 는 실패 시 0/-1 이므로
+			//                1~999 만 성공으로 본다(비활성 축은 위에서 성공으로 빠져나간다).
+			bool bHomeNG = (nRet <= 0) || (nRet >= 1000);
+			if (bHomeNG != true)
+			{
+				m_pMotorControlMgr->GetLogFileAccessorPtr()->KMLOG(SYST, strLog, true);
+				m_nLastHomeAlarm = 0;
+			}
+			else
+			{
+				m_pMotorControlMgr->GetLogFileAccessorPtr()->KMLOG(WARN, strLog, true);
+
+				int nHomeAlarm = (nRet >= 1000 && nRet < ID_END) ? (int)nRet : (int)MTOR_HOME_FAIL_ALARM;
+				// 같은 원인이 이어지는 동안은 한 번만 - 초기화 축 루프에서 팝업이 20번 뜨는 것을 막는다.
+				if (nHomeAlarm != m_nLastHomeAlarm)
+				{
+					m_nLastHomeAlarm = nHomeAlarm;
+					CAlarmController::GetInstance()->SetAlarm(nHomeAlarm);
+				}
+			}
 		}
 		else
 		{
@@ -226,14 +318,20 @@ long CMaintControlMgr::MoveCmdPosA(int iAxis, double dPos, bool bBlockMode, int 
 
 						if (nRet == VTM_RV_SUCCESSED)
 						{
-							if (iAxis == AXIS_X || iAxis == AXIS_R)
+							if (iAxis == AXIS_X || iAxis == AXIS_LOADER_R)
 							{
-								nBit = GetIOMapControlMgrPtr()->GetParam_DIOMapMemoryBitImport(PLC_AUTO_CHANGE_X0_POSITION_03);
-								if (nBit != -1)
+								//nBit = GetIOMapControlMgrPtr()->GetParam_DIOMapMemoryBitImport(PLC_AUTO_CHANGE_X0_POSITION_03);
+								// LYS 2026-09-09 Safety Pos or SACC Pos 확인
+								if (GetIOMapControlMgrPtr()->GetParam_DIOMapMemoryBitImport(PLC_AUTO_CHANGE_X0_POSITION_03) || GetIOMapControlMgrPtr()->GetParam_DIOMapMemoryBitImport(PLC_AUTO_CHANGE_X0_POSITION_04))
+									nBit = 1;
+								else
+									nBit = -1;
+
+								if (nBit != 1)
 								{
-									if (nBit != 1)
+									//if (nBit != 1)
 									{
-										nRet = MOTION_INTERLOCK_9;
+										nRet = MOTION_INTERLOCK_11;
 									}
 								}
 							}
@@ -256,7 +354,7 @@ long CMaintControlMgr::MoveCmdPosA(int iAxis, double dPos, bool bBlockMode, int 
 								{
 									if (nBit != 1)
 									{
-										nRet = MOTION_INTERLOCK_9;
+										nRet = MOTION_INTERLOCK_10;
 									}
 								}
 							}
@@ -299,6 +397,14 @@ long CMaintControlMgr::MoveCmdPosA(int iAxis, double dPos, bool bBlockMode, int 
 					CString strLog;
 					strLog.Format(_T("MoveCmdPosA Fail(AXIS:%s, POS:%.3f, RET:%d)"), m_pMotorControlMgr->GetAxisMapProperty(iAxis)->m_strAxisName, dPos, nRet);
 					m_pMotorControlMgr->GetLogFileAccessorPtr()->KMLOG(WARN, strLog, true);
+					// LYS 2026-09-17 this branch rejects the move before it reaches CMotorControlMgr,
+					//                so until now it only wrote the WARN line and no alarm was raised.
+					//                nRet is an AlarmIDList code here (MOTION_INTERLOCK_*, PLC_*);
+					//                the range guard keeps 0 / -1 from popping an UNKNOWN heavy alarm.
+					if (nRet >= 1000 && nRet < ID_END)
+					{
+						CAlarmController::GetInstance()->SetAlarm(nRet);
+					}
 				}
 			}
 		}
@@ -350,14 +456,20 @@ long CMaintControlMgr::MoveCmdPosR(int iAxis, double dPos, bool bBlockMode, int 
 
 							if (nRet == VTM_RV_SUCCESSED)
 							{
-								if (iAxis == AXIS_X || iAxis == AXIS_R)
+								if (iAxis == AXIS_X || iAxis == AXIS_LOADER_R)
 								{
-									nBit = GetIOMapControlMgrPtr()->GetParam_DIOMapMemoryBitImport(PLC_AUTO_CHANGE_X0_POSITION_03);
-									if (nBit != -1)
+									// LYS 2026-09-09 Safety Pos or SACC Pos 확인
+									//nBit = GetIOMapControlMgrPtr()->GetParam_DIOMapMemoryBitImport(PLC_AUTO_CHANGE_X0_POSITION_03);
+									if (GetIOMapControlMgrPtr()->GetParam_DIOMapMemoryBitImport(PLC_AUTO_CHANGE_X0_POSITION_03) || GetIOMapControlMgrPtr()->GetParam_DIOMapMemoryBitImport(PLC_AUTO_CHANGE_X0_POSITION_04))
+										nBit = 1;
+									else
+										nBit = -1;
+
+									if (nBit != 1)
 									{
-										if (nBit != 1)
+										//if (nBit != 1)
 										{
-											nRet = MOTION_INTERLOCK_9;
+											nRet = MOTION_INTERLOCK_11;
 										}
 									}
 								}
@@ -380,7 +492,7 @@ long CMaintControlMgr::MoveCmdPosR(int iAxis, double dPos, bool bBlockMode, int 
 									{
 										if (nBit != 1)
 										{
-											nRet = MOTION_INTERLOCK_9;
+											nRet = MOTION_INTERLOCK_10;
 										}
 									}
 								}
@@ -401,6 +513,14 @@ long CMaintControlMgr::MoveCmdPosR(int iAxis, double dPos, bool bBlockMode, int 
 					CString strLog;
 					strLog.Format(_T("MoveCmdPosR Fail(AXIS:%d, POS:%.3f, RET:%d)"), iAxis, dPos, nRet);
 					m_pMotorControlMgr->GetLogFileAccessorPtr()->KMLOG(WARN, strLog, true);
+					// LYS 2026-09-17 this branch rejects the move before it reaches CMotorControlMgr,
+					//                so until now it only wrote the WARN line and no alarm was raised.
+					//                nRet is an AlarmIDList code here (MOTION_INTERLOCK_*, PLC_*);
+					//                the range guard keeps 0 / -1 from popping an UNKNOWN heavy alarm.
+					if (nRet >= 1000 && nRet < ID_END)
+					{
+						CAlarmController::GetInstance()->SetAlarm(nRet);
+					}
 				}
 			}
 		}
@@ -502,7 +622,7 @@ long CMaintControlMgr::MoveCmdPosMulti(stMotorPosition* pPos, int iAxis, int iSp
 						{
 							if (nBit != 1)
 							{
-								nRet = MOTION_INTERLOCK_9;
+								nRet = MOTION_INTERLOCK_10;
 							}
 						}
 					}
@@ -547,6 +667,14 @@ long CMaintControlMgr::MoveCmdPosMulti(stMotorPosition* pPos, int iAxis, int iSp
 					CString strLog;
 					strLog.Format(_T("MoveCmdPosM Fail(AXIS:%d, POS:%.3f, nAXIS:%d, SPPED:%d, RET:%d)"), pPos[0].axis, pPos[0].dPosition, iAxis, iSpeed, nRet);
 					m_pMotorControlMgr->GetLogFileAccessorPtr()->KMLOG(WARN, strLog, true);
+					// LYS 2026-09-17 this branch rejects the move before it reaches CMotorControlMgr,
+					//                so until now it only wrote the WARN line and no alarm was raised.
+					//                nRet is an AlarmIDList code here (MOTION_INTERLOCK_*, PLC_*);
+					//                the range guard keeps 0 / -1 from popping an UNKNOWN heavy alarm.
+					if (nRet >= 1000 && nRet < ID_END)
+					{
+						CAlarmController::GetInstance()->SetAlarm(nRet);
+					}
 				}
 			}
 		}
@@ -604,7 +732,11 @@ long CMaintControlMgr::CheckHomeDone(int iAxis, DWORD dwTimeout)
 			CString strAxis;
 			strAxis.Format(_T("%s"), m_pMotorControlMgr->GetAxisMapProperty(iAxis)->m_strAxisName);
 
-			strLog.Format(_T("MoveHome CheckHomeDone(AXIS:%s, Ret:%d)"), strAxis, nRet);
+			// LYS 2026-09-17 호밍 완료 로그에 .dat OF(호밍 후 오프셋 이동량)·CLAMP(0이면 오프셋/0점 설정 생략)·완료 직후 위치를 함께 남긴다.
+			//                CheckHomeDoneLoop 는 CLAMP!=0 이면 OF 만큼 절대이동 후 FPOS=0 으로 재설정하므로 정상이면 Pos 는 0 근처(OF 적용 여부는 물리 위치로만 확인 가능).
+			//strLog.Format(_T("MoveHome CheckHomeDone(AXIS:%s, Ret:%d)"), strAxis, nRet);
+			strLog.Format(_T("MoveHome CheckHomeDone(AXIS:%s, Ret:%d, OF:%.4f, CLAMP:%d, Pos:%.4f)"), strAxis, nRet,
+				m_pMotorControlMgr->GetAxisProperty(iAxis)->dOffset, m_pMotorControlMgr->GetAxisProperty(iAxis)->iClamp, m_pMotorControlMgr->GetCurPos(iAxis));
 			m_pMotorControlMgr->GetLogFileAccessorPtr()->KMLOG(SYST, strLog, true);
 		}
 		else
@@ -753,6 +885,17 @@ bool CMaintControlMgr::IsInitializedMC()
 	return bRet;
 }
 
+// LYS 2026-08-31 both-controller ACS connect status for MOTION lamp
+bool CMaintControlMgr::IsConnectedMC()
+{
+	bool bRet = false;
+	if (m_pMotorControlMgr != nullptr)
+	{
+		bRet = (bool)m_pMotorControlMgr->IsConnected();
+	}
+	return bRet;
+}
+
 long CMaintControlMgr::DoWork_LPPreMove()
 {
 	// TODO: 여기에 구현 코드 추가.
@@ -875,10 +1018,14 @@ long CMaintControlMgr::DoWork_LPPreMove()
 				dTactTimeUp = ((DWORD)0xFFFFFFFF) - (dTactStartUp - dTactEndUp);
 			strTactTimeUp.Format(_T("%d"), dTactTimeUp / 1000);
 
-			if (dTactTimeUp > 1000)
-			{
-				CMCCLogMgr::GetInstance()->SetLiftPinMoveTime(0, _ttoi(strTactTimeUp));
-			}
+			//if (dTactTimeUp > 1000)
+			//{
+			//	CMCCLogMgr::GetInstance()->SetLiftPinMoveTime(0, _ttoi(strTactTimeUp));
+			//}
+			// LYS 2026-09-19 FDC LIFT_PIN 소요 시간 - 초(소수 3자리), 이 단계가 실제로 움직였을 때만 갱신.
+			//                예전에는 정수 초라 1 초 미만이 0 이었고 1 초 이하면 갱신도 안 했다.
+			if (nRet == VTM_RV_SUCCESSED && nStep == df_POS_DOWN)
+				CMCCLogMgr::GetInstance()->SetLiftPinMoveSec(0, dTactTimeUp / 1000.0);
 			
 
 			dTactStartUp = dTactEndUp;
@@ -904,10 +1051,14 @@ long CMaintControlMgr::DoWork_LPPreMove()
 				dTactTimeUp = ((DWORD)0xFFFFFFFF) - (dTactStartUp - dTactEndUp);
 			strTactTimeUp.Format(_T("%d"), dTactTimeUp / 1000);
 
-			if (dTactTimeUp > 1000)
-			{
-				CMCCLogMgr::GetInstance()->SetLiftPinMoveTime(1, _ttoi(strTactTimeUp));
-			}
+			//if (dTactTimeUp > 1000)
+			//{
+			//	CMCCLogMgr::GetInstance()->SetLiftPinMoveTime(1, _ttoi(strTactTimeUp));
+			//}
+			// LYS 2026-09-19 FDC LIFT_PIN 소요 시간 - 초(소수 3자리), 이 단계가 실제로 움직였을 때만 갱신.
+			//                예전에는 정수 초라 1 초 미만이 0 이었고 1 초 이하면 갱신도 안 했다.
+			if (nRet == VTM_RV_SUCCESSED && nStep == df_POS_MIDDLE)
+				CMCCLogMgr::GetInstance()->SetLiftPinMoveSec(1, dTactTimeUp / 1000.0);
 			
 
 			////First
@@ -1091,10 +1242,14 @@ long CMaintControlMgr::DoWork_LPMove(bool bUp)
 				dTactTimeUp = ((DWORD)0xFFFFFFFF) - (dTactStartUp - dTactEndUp);
 			strTactTimeUp.Format(_T("%d"), dTactTimeUp / 1000);
 
-			if (dTactTimeUp > 1000)
-			{
-				CMCCLogMgr::GetInstance()->SetLiftPinMoveTime(0, _ttoi(strTactTimeUp));
-			}
+			//if (dTactTimeUp > 1000)
+			//{
+			//	CMCCLogMgr::GetInstance()->SetLiftPinMoveTime(0, _ttoi(strTactTimeUp));
+			//}
+			// LYS 2026-09-19 FDC LIFT_PIN 소요 시간 - 초(소수 3자리), 이 단계가 실제로 움직였을 때만 갱신.
+			//                예전에는 정수 초라 1 초 미만이 0 이었고 1 초 이하면 갱신도 안 했다.
+			if (nRet == VTM_RV_SUCCESSED && nStep == df_POS_DOWN)
+				CMCCLogMgr::GetInstance()->SetLiftPinMoveSec(0, dTactTimeUp / 1000.0);
 			
 			dTactStartUp = dTactEndUp;
 
@@ -1119,10 +1274,14 @@ long CMaintControlMgr::DoWork_LPMove(bool bUp)
 				dTactTimeUp = ((DWORD)0xFFFFFFFF) - (dTactStartUp - dTactEndUp);
 			strTactTimeUp.Format(_T("%d"), dTactTimeUp / 1000);
 
-			if (dTactTimeUp > 1000)
-			{
-				CMCCLogMgr::GetInstance()->SetLiftPinMoveTime(1, _ttoi(strTactTimeUp));
-			}
+			//if (dTactTimeUp > 1000)
+			//{
+			//	CMCCLogMgr::GetInstance()->SetLiftPinMoveTime(1, _ttoi(strTactTimeUp));
+			//}
+			// LYS 2026-09-19 FDC LIFT_PIN 소요 시간 - 초(소수 3자리), 이 단계가 실제로 움직였을 때만 갱신.
+			//                예전에는 정수 초라 1 초 미만이 0 이었고 1 초 이하면 갱신도 안 했다.
+			if (nRet == VTM_RV_SUCCESSED && nStep == df_POS_MIDDLE)
+				CMCCLogMgr::GetInstance()->SetLiftPinMoveSec(1, dTactTimeUp / 1000.0);
 			
 			dTactStartUp = dTactEndUp;
 
@@ -1147,10 +1306,15 @@ long CMaintControlMgr::DoWork_LPMove(bool bUp)
 				dTactTimeUp = ((DWORD)0xFFFFFFFF) - (dTactStartUp - dTactEndUp);
 			strTactTimeUp.Format(_T("%d"), dTactTimeUp / 1000);
 
-			CMCCLogMgr::GetInstance()->SetLiftPinMoveTime(2, _ttoi(strTactTimeUp));
+			//CMCCLogMgr::GetInstance()->SetLiftPinMoveTime(2, _ttoi(strTactTimeUp));
+			// LYS 2026-09-19 3 단계도 같은 규칙(초, 움직였을 때만).
+			if (nRet == VTM_RV_SUCCESSED && nStep == df_POS_UP)
+				CMCCLogMgr::GetInstance()->SetLiftPinMoveSec(2, dTactTimeUp / 1000.0);
 		}
 		else
 		{
+			// LYS 2026-09-19 다단 하강 전체 소요 시간(초) -> FDC LIFT_PIN_DOWN. 아래 3 단계가 끝난 뒤 기록한다.
+			DWORD dTactStartDn = GetTickCount();
 			//First
 			iSpeed = SPEED_HIGH;
 			dPos = dLifePinPos[df_POS_MIDDLE];
@@ -1192,6 +1356,10 @@ long CMaintControlMgr::DoWork_LPMove(bool bUp)
 					nStep = df_POS_DOWN;
 				}
 			}
+
+			// LYS 2026-09-19 한 단계라도 움직였을 때만 갱신(이미 내려가 있으면 직전 값 유지).
+			if (nRet == VTM_RV_SUCCESSED && nStep != -1)
+				CMCCLogMgr::GetInstance()->SetLiftPinMoveSec(3, (DWORD)(GetTickCount() - dTactStartDn) / 1000.0);
 		}
 	}
 	else
@@ -1407,6 +1575,7 @@ int CMaintControlMgr::SetGlassAlignXYR(double dX, double dY, double dR)
 	m_dGlassAlignOffset[0] = dX;
 	m_dGlassAlignOffset[1] = dY;
 	m_dGlassAlignOffset[2] = dR;
+	m_bGlassAlignDone = false;	// LYS 2026-09-15 오프셋이 새로 쓰이면 완료 해제 - 성공 경로(AlignGlass)가 대입 직후 다시 true
 
 	m_dAlignOffset[AXIS_X]		  = m_dGlassAlignOffset[0];
 	m_dAlignOffset[AXIS_Y1]       = m_dGlassAlignOffset[1];
@@ -1437,6 +1606,8 @@ int CMaintControlMgr::SetProbeAlignXYR(double dX, double dY, double dR, int nPro
 	CString strLog;
 	strLog.Format(_T("SetProbeAlignXYR (Probe:%d, XYR:%.4f,%.4f,%.4f)"), nProbe, dX, dY, dR);
 	m_pMotorControlMgr->GetLogFileAccessorPtr()->KMLOG(INSP, strLog, true);
+
+	m_bProbeAlignDone = false;	// LYS 2026-09-15 오프셋이 새로 쓰이면 완료 해제 - 성공 경로(Align_Probe)가 대입 직후 다시 true
 
 	switch (nProbe)
 	{
@@ -1708,7 +1879,9 @@ long CMaintControlMgr::MoveCmdPosAging(stMotorPosition* pPos, int nAxis, int iSp
 			{
 			//	dPos = pPos[i].dPosition;
 				stPositionX[nMoveX].axis = AXIS_X3;
-				stPositionX[nMoveX].dPosition = m_pMotorControlMgr->GetMinSWLimit(AXIS_X2) - (dGantryGap + 50);
+				// LYS 2026-09-09 X2 주동작 시 종속 X3(FRONT GANTRY)는 Gap 계산 위치 대신 Position.ini [SAFETY] SafetyHeadX2 고정 (SafetyHeadX2 fixed). 원복 시 아래 주석 줄을 되살리고 이 블록 제거
+				//stPositionX[nMoveX].dPosition = m_pMotorControlMgr->GetMinSWLimit(AXIS_X2) - (dGantryGap + 50);
+				{ double dSafetyX3 = 0.0; GetPositionConfigMgr()->GetSafetyPosition(nullptr, nullptr, &dSafetyX3, nullptr, nullptr, nullptr, nullptr); stPositionX[nMoveX].dPosition = dSafetyX3; }
 				nMoveX++;
 
 				m_pMotorControlMgr->SetHeadOffset(AXIS_X3, 0);
@@ -1741,6 +1914,12 @@ long CMaintControlMgr::MoveCmdPosAging(stMotorPosition* pPos, int nAxis, int iSp
 		CMCCLogMgr::GetInstance()->SetMCC_Action(MCC_A_PROC_MEAS_CONTACT_MOVE_HEAD_STEP1, true);
 		CMCCLogMgr::GetInstance()->SetMCC_Action(MCC_A_PROC_MEAS_CONTACT_MOVE_HEAD_STEP2, true);
 
+		// LYS 2026-09-21 헤드 이동 6함수 중 MoveCmdPosAging 에만 쉬는 헤드 처리가 없었다
+		//   (Review / WAD / Vision / Color / Angle 은 적용됨). 그래서 PRE_MEAS 가 BACK 갠트리(X2) 기준 이동인데도
+		//   FRONT 헤드 Y3/Y4 를 셀 좌표로 보내 Y3 SW 리밋(MX 697)에 걸렸다 - 셀 716.397 -> 3901
+		//   (2026-09-19 19:06 / 09-21 17:39 모션 로그). 호출자가 df_HEAD_Y_IDLE_SAFETY 로 준 축만 [SAFETY] 로 바꾸므로
+		//   마커를 쓰지 않는 AGING 호출(X3 기준, Y3/Y4 가 실제 측정 헤드)에는 영향이 없다.
+		ApplyIdleHeadSafetyY(pPos, nAxis, stPositionY, nMoveY, _T("MoveCmdPosAging"));
 		nRet = MoveCmdPosMulti(stPositionY, nMoveY, SPEED_HIGH, false, true);
 
 		CMCCLogMgr::GetInstance()->SetMCC_Action(MCC_A_PROC_MEAS_CONTACT_MOVE_HEAD_STEP3, true);
@@ -1789,7 +1968,7 @@ long CMaintControlMgr::MoveCmdPosAging(stMotorPosition* pPos, int nAxis, int iSp
 }
 
 
-long CMaintControlMgr::MoveCmdPosReview(int iStick, stMotorPosition* pPos, int nAxis, int iSpeed, bool bDoneCheck)
+long CMaintControlMgr::MoveCmdPosReview(int iStick, stMotorPosition* pPos, int nAxis, int iSpeed, bool bDoneCheck, bool bSkipSubZRetract)
 {
 	// TODO: 여기에 구현 코드 추가.
 	long nRet = df_MOTION_RV_SUCCESSED;
@@ -1804,33 +1983,27 @@ long CMaintControlMgr::MoveCmdPosReview(int iStick, stMotorPosition* pPos, int n
 	//dOffsetY = dGlassAlignOffset[1];
 	int axis = 0;
 	double dPos = 0.;
-	for (size_t i = 0; i < nAxis; i++)
+	// LYS 2026-09-07 Z1(BACK Z, OCP 미사용) 블록 제거 -> Sub Z(Z3/Z4)로 대체.
+	//   XY 이동 전: Sub Z가 안전높이(INTERLOCKSUBZSAFETY)보다 내려가 있으면 먼저 안전높이로 후퇴 (무조건 후퇴)
+	//   XY 이동 후: pPos의 Z3/Z4 항목(레시피 화상 Sub Z)으로 하강 - 하강 시 P5 유닛 겹침 인터락 (구 Z1 인터락과 동일 판정)
+	// LYS 2026-09-18 bSkipSubZRetract 이면 후퇴를 생략한다. 셀만 바뀌는 이동은 글래스가 제자리이고
+	//                헤드 Y(Cross)만 움직이므로 카메라를 올렸다 내리는 왕복이 불필요하다.
+	//                (MoveCmdPosWAD 는 2026-09-14 에 'X2 가 실제로 움직일 때만' 으로 같은 낭비를 없앴다.
+	//                 Review 는 레시피에 따라 셀 Y 가 전부 같아 X2 가 안 움직이는 경우가 있어 호출자가 정한다.)
+	if (nRet == df_MOTION_RV_SUCCESSED && m_pMotorControlMgr != nullptr && bSkipSubZRetract != true)
 	{
-		axis = pPos[i].axis;
-		if (axis == AXIS_Z1) 
+		double dSubZSafety = m_pMotorControlMgr->GetInterlockSubZSafety();
+		double dCurZ3 = GetOrgPos(AXIS_Z3), dCurZ4 = GetOrgPos(AXIS_Z4);
+		if (dCurZ3 > dSubZSafety + 0.1 || dCurZ4 > dSubZSafety + 0.1)
 		{
-			dPos = pPos[i].dPosition;
-			if (dPos > 1.) // jsyoon 2022.09.30 add
-			{
-				dPos = 0.;
-			}
-
-			// LYS 2026-08-26 WAD와 동일한 시퀀스 계층 Z1 하강 인터락.
-			// X2가 P5 위치 안이면 모션 시작 전에 인터락
-			if (dPos > GetOrgPos(AXIS_Z1) && m_pMotorControlMgr != nullptr
-				&& m_pMotorControlMgr->IsProbeUnitOverlapX(GetOrgPos(AXIS_X2)) == true)
-			{
-				CString strLog;
-				strLog.Format(_T("MoveCmdPosReview Z1 DOWN NG - PROBE UNIT(X9:%.3f) vs BACK GANTRY(X2:%.3f), Z1 %.3f -> %.3f"),
-					GetOrgPos(AXIS_PROBE_X9), GetOrgPos(AXIS_X2), GetOrgPos(AXIS_Z1), dPos);
-				m_pMotorControlMgr->GetLogFileAccessorPtr()->KMLOG(WARN, strLog, true);
-
-				nRet = MOTION_INTERLOCK_CHECK_ALARM + AXIS_PROBE_X9;
-				break;
-			}
-
-			nRet = MoveCmdPosA(axis, dPos, true, SPEED_HIGH);
-			break;
+			stMotorPosition stRetractSubZ[2];
+			ClearMotorPos(stRetractSubZ, 2);
+			stRetractSubZ[0].axis = AXIS_Z3;	stRetractSubZ[0].dPosition = dSubZSafety;
+			stRetractSubZ[1].axis = AXIS_Z4;	stRetractSubZ[1].dPosition = dSubZSafety;
+			CString strLog;
+			strLog.Format(_T("MoveCmdPosReview SubZ retract before XY (Z3:%.3f Z4:%.3f -> %.3f)"), dCurZ3, dCurZ4, dSubZSafety);
+			m_pMotorControlMgr->GetLogFileAccessorPtr()->KMLOG(SYST, strLog, true);
+			nRet = MoveCmdPosMulti(stRetractSubZ, 2, SPEED_HIGH, true, false);
 		}
 	}
 
@@ -1903,7 +2076,9 @@ long CMaintControlMgr::MoveCmdPosReview(int iStick, stMotorPosition* pPos, int n
 			{
 			//	dPos = pPos[i].dPosition;
 				stPositionX[nMoveX].axis = AXIS_X3;
-				stPositionX[nMoveX].dPosition = m_pMotorControlMgr->GetMinSWLimit(AXIS_X2) - (dGantryGap + 50); //dPos + dOffsetX - (dGantryGap + 100);	// jsyoon 2022.05.17 change
+				// LYS 2026-09-09 X2 주동작 시 종속 X3(FRONT GANTRY)는 Gap 계산 위치 대신 Position.ini [SAFETY] SafetyHeadX2 고정 (SafetyHeadX2 fixed). 원복 시 아래 주석 줄을 되살리고 이 블록 제거
+				//stPositionX[nMoveX].dPosition = m_pMotorControlMgr->GetMinSWLimit(AXIS_X2) - (dGantryGap + 50); //dPos + dOffsetX - (dGantryGap + 100);	// jsyoon 2022.05.17 change
+				{ double dSafetyX3 = 0.0; GetPositionConfigMgr()->GetSafetyPosition(nullptr, nullptr, &dSafetyX3, nullptr, nullptr, nullptr, nullptr); stPositionX[nMoveX].dPosition = dSafetyX3; }
 				nMoveX++;
 
 				m_pMotorControlMgr->SetHeadOffset(AXIS_X3, 0);
@@ -1936,6 +2111,11 @@ long CMaintControlMgr::MoveCmdPosReview(int iStick, stMotorPosition* pPos, int n
 		CMCCLogMgr::GetInstance()->SetMCC_Action(MCC_A_STEP_MEAS_N_MOVE_STEP2, true, 0);
 		CMCCLogMgr::GetInstance()->SetMCC_Action(MCC_A_STEP_MEAS_N_MOVE_STEP3, true, 0);
 
+		// LYS 2026-09-18 헤드 이동 5함수 중 MoveCmdPosReview 에만 이 처리가 빠져 있었다
+		//                (WAD / Vision / Color / Angle 은 2026-09-14 부터 적용됨).
+		//                호출자가 목표를 df_HEAD_Y_IDLE_SAFETY 로 준 축만 바꾸므로
+		//                마커를 쓰지 않는 기존 호출부에는 영향이 없다.
+		ApplyIdleHeadSafetyY(pPos, nAxis, stPositionY, nMoveY, _T("MoveCmdPosReview"));
 		nRet = MoveCmdPosMulti(stPositionY, nMoveY, SPEED_HIGH, false, true);
 		
 		if (nRet == df_MOTION_RV_SUCCESSED)
@@ -1963,27 +2143,137 @@ long CMaintControlMgr::MoveCmdPosReview(int iStick, stMotorPosition* pPos, int n
 		CMCCLogMgr::GetInstance()->SetMCC_Action(MCC_A_STEP_MEAS_N_MOVE_STEP3, false, 0);
 	}
 
+	// LYS 2026-09-09 Review 동작 UNIT Z 제거
+	//if (nRet == df_MOTION_RV_SUCCESSED)
+	//{
+	//	for (size_t i = 0; i < nAxis; i++)
+	//	{
+	//		axis = pPos[i].axis;
+	//		if (axis == AXIS_Z2)
+	//		{
+	//			dPos = pPos[i].dPosition;
+	//
+	//			CMCCLogMgr::GetInstance()->SetMCC_Action(MCC_A_STEP_MEAS_N_MOVE_STEP5, true, 0);
+	//
+	//			nRet = MoveCmdPosA(axis, dPos, true, SPEED_HIGH);
+	//
+	//			CMCCLogMgr::GetInstance()->SetMCC_Action(MCC_A_STEP_MEAS_N_MOVE_STEP5, false, 0);
+	//
+	//			break;
+	//		}
+	//	}
+	//}
+
+	// LYS 2026-09-07 Sub Z(Z3/Z4) 하강 - XY/Z2 이동 완료 후, pPos의 Z3/Z4 항목(레시피 화상 Sub Z) 그대로 이동. 하강 시 P5 유닛 겹침 인터락
 	if (nRet == df_MOTION_RV_SUCCESSED)
 	{
-		for (size_t i = 0; i < nAxis; i++)
+		stMotorPosition stPositionSubZ[2];
+		ClearMotorPos(stPositionSubZ, 2);
+		int nMoveSubZ = 0;
+		for (size_t i = 0; i < nAxis && nMoveSubZ < 2; i++)
 		{
-			axis = pPos[i].axis;
-			if (axis == AXIS_Z2)
+			if (pPos[i].axis == AXIS_Z3 || pPos[i].axis == AXIS_Z4)
 			{
 				dPos = pPos[i].dPosition;
-
-				CMCCLogMgr::GetInstance()->SetMCC_Action(MCC_A_STEP_MEAS_N_MOVE_STEP5, true, 0);
-
-				nRet = MoveCmdPosA(axis, dPos, true, SPEED_HIGH);
-
-				CMCCLogMgr::GetInstance()->SetMCC_Action(MCC_A_STEP_MEAS_N_MOVE_STEP5, false, 0);
-
-				break;
+				if (dPos > GetOrgPos(pPos[i].axis) && m_pMotorControlMgr != nullptr
+					&& m_pMotorControlMgr->IsProbeUnitOverlapX(GetOrgPos(AXIS_X2)) == true)
+				{
+					CString strLog;
+					strLog.Format(_T("MoveCmdPosReview SubZ DOWN NG - PROBE UNIT(X9:%.3f) vs BACK GANTRY(X2:%.3f), AXIS %d %.3f -> %.3f"),
+						GetOrgPos(AXIS_PROBE_X9), GetOrgPos(AXIS_X2), pPos[i].axis, GetOrgPos(pPos[i].axis), dPos);
+					m_pMotorControlMgr->GetLogFileAccessorPtr()->KMLOG(WARN, strLog, true);
+					nRet = MOTION_INTERLOCK_CHECK_ALARM + pPos[i].axis;
+					break;
+				}
+				stPositionSubZ[nMoveSubZ].axis = pPos[i].axis;
+				stPositionSubZ[nMoveSubZ].dPosition = dPos;
+				nMoveSubZ++;
 			}
+		}
+		if (nRet == df_MOTION_RV_SUCCESSED && nMoveSubZ > 0)
+		{
+			CMCCLogMgr::GetInstance()->SetMCC_Action(MCC_A_STEP_MEAS_N_MOVE_STEP5, true, 0);
+			nRet = MoveCmdPosMulti(stPositionSubZ, nMoveSubZ, SPEED_HIGH, true, false);
+			CMCCLogMgr::GetInstance()->SetMCC_Action(MCC_A_STEP_MEAS_N_MOVE_STEP5, false, 0);
 		}
 	}
 
 	return nRet;
+}
+
+// LYS 2026-09-14 쉬는 헤드 -> [SAFETY] (선언부 주석 참조).
+//   구 방식은 짝 없는 셀의 반대 헤드를 "셀 X +- 헤드 간격" 가짜 좌표로 보냈다. 헤드 오프셋까지 더해져
+//   단변/장변 가운데 셀(X=0)에서 WAD Y1=895(HW 리밋 ~790 초과), 화질/시야각 Y3-Y4 간격 620(INTERLOCKHEADGAP 720 미달)이 되었다.
+int CMaintControlMgr::ApplyIdleHeadSafetyY(const stMotorPosition* pPos, int nAxis, stMotorPosition* pPosY, int nPosY, LPCTSTR pszWhere)
+{
+	if (pPos == nullptr || pPosY == nullptr || m_pPositionConfigMgr == nullptr || m_pMotorControlMgr == nullptr) return 0;
+	if (pszWhere == nullptr) pszWhere = _T("");
+
+	double dSafetyY1 = 0.0, dSafetyY2 = 0.0;
+	m_pPositionConfigMgr->GetSafetyPosition(nullptr, nullptr, nullptr, &dSafetyY1, &dSafetyY2, nullptr, nullptr);
+	double dSafetyY3 = dSafetyY1, dSafetyY4 = dSafetyY2;	// LYS 2026-09-14 FRONT 헤드 Safety 분리
+	m_pPositionConfigMgr->GetFrontHeadSafetyPosition(&dSafetyY3, &dSafetyY4);
+
+	int nIdle = 0;
+	CString strLog;
+	for (int i = 0; i < nAxis; i++)
+	{
+		int iAxis = pPos[i].axis;
+		if (iAxis != AXIS_Y1 && iAxis != AXIS_Y2 && iAxis != AXIS_Y3 && iAxis != AXIS_Y4)
+			continue;
+		if (IsIdleHeadSafetyPos(pPos[i].dPosition) == false)
+			continue;
+
+		//double dSafety = (iAxis == AXIS_Y1 || iAxis == AXIS_Y3) ? dSafetyY1 : dSafetyY2;
+		double dSafety = dSafetyY1;	// LYS 2026-09-14 Y3/Y4 는 FRONT 키
+		if (iAxis == AXIS_Y2) dSafety = dSafetyY2;
+		else if (iAxis == AXIS_Y3) dSafety = dSafetyY3;
+		else if (iAxis == AXIS_Y4) dSafety = dSafetyY4;
+		for (int k = 0; k < nPosY; k++)
+		{
+			if (pPosY[k].axis != iAxis)
+				continue;
+
+			pPosY[k].dPosition = dSafety - m_dAlignOffset[iAxis];
+			nIdle++;
+
+			strLog.Format(_T("%s idle head Y%d -> SAFETY %.3f"), pszWhere, iAxis - AXIS_Y1 + 1, dSafety);
+			m_pMotorControlMgr->GetLogFileAccessorPtr()->KMLOG(SYST, strLog, true);
+		}
+	}
+
+	// Safety 값이 측정 중인 반대 헤드와 헤드 간격 인터락(모션 계층 MOTION_INTERLOCK_7)을 만족하는지 미리 알린다.
+	//   Safety 는 Position.ini 에서 바뀔 수 있으므로, 거부되면 이 WARN 으로 원인을 바로 알 수 있게 한다.
+	if (nIdle > 0)
+	{
+		double dHeadGap = 0.0, dHeadGapB = 0.0;	// LYS 2026-09-14 FRONT(Y3/Y4)=HEADGAP, BACK(Y1/Y2)=HEADGAPB
+		GetInterlockPos(nullptr, &dHeadGap, nullptr, &dHeadGapB);
+
+		const int nPairAxis[2][2] = { { AXIS_Y1, AXIS_Y2 }, { AXIS_Y3, AXIS_Y4 } };
+		for (int p = 0; p < 2; p++)
+		{
+			int kRight = -1, kLeft = -1;
+			for (int k = 0; k < nPosY; k++)
+			{
+				if (pPosY[k].axis == nPairAxis[p][0]) kRight = k;
+				if (pPosY[k].axis == nPairAxis[p][1]) kLeft = k;
+			}
+			if (kRight < 0 || kLeft < 0)
+				continue;
+
+			double dRight = pPosY[kRight].dPosition + m_dAlignOffset[nPairAxis[p][0]];
+			double dLeft = pPosY[kLeft].dPosition + m_dAlignOffset[nPairAxis[p][1]];
+			double dGapReq = (p == 0) ? dHeadGapB : dHeadGap;	// LYS 2026-09-14 p=0 BACK, p=1 FRONT
+			if (fabs(dRight - dLeft) < dGapReq)
+			{
+				strLog.Format(_T("%s idle head SAFETY gap NG - Y%d %.3f / Y%d %.3f gap %.3f < INTERLOCKHEADGAP%s %.3f, check Position.ini [SAFETY] SafetyHeadY1~Y4"),
+					pszWhere, nPairAxis[p][0] - AXIS_Y1 + 1, dRight, nPairAxis[p][1] - AXIS_Y1 + 1, dLeft, fabs(dRight - dLeft), (p == 0) ? _T("B") : _T(""), dGapReq);
+				m_pMotorControlMgr->GetLogFileAccessorPtr()->KMLOG(WARN, strLog, true);
+			}
+		}
+	}
+
+	return nIdle;
 }
 
 long CMaintControlMgr::MoveCmdPosWAD(stMotorPosition* pPos, int nAxis, int iSpeed, bool bDoneCheck)
@@ -2017,36 +2307,41 @@ long CMaintControlMgr::MoveCmdPosWAD(stMotorPosition* pPos, int nAxis, int iSpee
 	int axis = 0;
 	double dPos = 0.;
 
-	if (nRet == df_MOTION_RV_SUCCESSED)
+	// LYS 2026-09-07 Z1(BACK Z, OCP 미사용) 블록 제거 -> Sub Z(Z3/Z4)로 대체 (Review와 동일 패턴).
+	//   XY 이동 전: Sub Z가 안전높이(INTERLOCKSUBZSAFETY)보다 내려가 있으면 먼저 안전높이로 후퇴. 하강은 말미 Sub Z 블록에서 P5 겹침 인터락과 함께 수행
+	// LYS 2026-09-14 A안: Sub Z 후퇴는 BACK GANTRY(X2)가 실제로 움직이는 이동에서만 수행한다.
+	//   구 코드는 매 그룹 무조건 후퇴했는데 하강(Z3/Z4) 슬롯은 첫 그룹(bMoveFirstDone==false)에만 있어
+	//   2번째 그룹부터 Sub Z 가 0(안전높이)에 머문 채 측정됐다(2026-09-14 모션 로그 14:37:47 'SubZ retract before XY' 이후 하강 없음).
+	//   Y1/Y2 만 움직이는 그룹은 P5 유닛과 겹칠 일이 없으므로 후퇴하지 않는다. X2 가 P5 대역을 지나는 경우는
+	//   모션 계층 RetractHeadZForProbeUnit 이 별도로 보호한다. 원복 시 아래 주석 줄을 되살리고 이 블록 제거.
+	bool bGantryXMove = false;
+	for (size_t i = 0; i < nAxis; i++)
 	{
-		for (size_t i = 0; i < nAxis; i++)
+		if (pPos[i].axis == AXIS_X2)
 		{
-			axis = pPos[i].axis;
-			if (axis == AXIS_Z1)
-			{
-				dPos = pPos[i].dPosition;
-				if (dPos > 1.) // jsyoon 2022.09.30 add
-				{
-					dPos = 0.;
-				}
-
-				// LYS 2026-08-26 시퀀스 계층 Z1 하강 인터락. 안전높이(-600) 대비 하강이므로
-				// X2가 P5 위치 안이면 WAD 모션 시작 전에 인터락
-				if (dPos > GetOrgPos(AXIS_Z1) && m_pMotorControlMgr != nullptr
-					&& m_pMotorControlMgr->IsProbeUnitOverlapX(GetOrgPos(AXIS_X2)) == true)
-				{
-					CString strLog;
-					strLog.Format(_T("MoveCmdPosWAD Z1 DOWN NG - PROBE UNIT(X9:%.3f) vs BACK GANTRY(X2:%.3f), Z1 %.3f -> %.3f"),
-						GetOrgPos(AXIS_PROBE_X9), GetOrgPos(AXIS_X2), GetOrgPos(AXIS_Z1), dPos);
-					m_pMotorControlMgr->GetLogFileAccessorPtr()->KMLOG(WARN, strLog, true);
-
-					nRet = MOTION_INTERLOCK_CHECK_ALARM + AXIS_Z1;
-					break;
-				}
-
-				nRet = MoveCmdPosA(axis, dPos, true, SPEED_HIGH);
-				break;
-			}
+			double dTargetX2 = pPos[i].dPosition + dOffsetX[0] + dGlassOffsetX;
+			if (fabs(dTargetX2 - GetOrgPos(AXIS_X2)) > 0.1) bGantryXMove = true;
+		}
+		else if (pPos[i].axis == AXIS_X3)
+		{
+			bGantryXMove = true;	// HMI 모드(X3 주동작) - 종속 X2 도 함께 이동
+		}
+	}
+	//if (nRet == df_MOTION_RV_SUCCESSED && m_pMotorControlMgr != nullptr)
+	if (nRet == df_MOTION_RV_SUCCESSED && m_pMotorControlMgr != nullptr && bGantryXMove == true)	// LYS 2026-09-14 A안
+	{
+		double dSubZSafety = m_pMotorControlMgr->GetInterlockSubZSafety();
+		double dCurZ3 = GetOrgPos(AXIS_Z3), dCurZ4 = GetOrgPos(AXIS_Z4);
+		if (dCurZ3 > dSubZSafety + 0.1 || dCurZ4 > dSubZSafety + 0.1)
+		{
+			stMotorPosition stRetractSubZ[2];
+			ClearMotorPos(stRetractSubZ, 2);
+			stRetractSubZ[0].axis = AXIS_Z3;	stRetractSubZ[0].dPosition = dSubZSafety;
+			stRetractSubZ[1].axis = AXIS_Z4;	stRetractSubZ[1].dPosition = dSubZSafety;
+			CString strLog;
+			strLog.Format(_T("MoveCmdPosWAD SubZ retract before XY (Z3:%.3f Z4:%.3f -> %.3f)"), dCurZ3, dCurZ4, dSubZSafety);
+			m_pMotorControlMgr->GetLogFileAccessorPtr()->KMLOG(SYST, strLog, true);
+			nRet = MoveCmdPosMulti(stRetractSubZ, 2, SPEED_HIGH, true, false);
 		}
 	}
 
@@ -2104,7 +2399,9 @@ long CMaintControlMgr::MoveCmdPosWAD(stMotorPosition* pPos, int nAxis, int iSpee
 			{
 			//	dPos = pPos[i].dPosition;
 				stPositionX[nMoveX].axis = AXIS_X3;
-				stPositionX[nMoveX].dPosition = m_pMotorControlMgr->GetMinSWLimit(AXIS_X2) - (dGantryGap + 50); //　dPos + dOffsetX[0] - dGantryGap;
+				// LYS 2026-09-09 X2 주동작 시 종속 X3(FRONT GANTRY)는 Gap 계산 위치 대신 Position.ini [SAFETY] SafetyHeadX2 고정 (SafetyHeadX2 fixed). 원복 시 아래 주석 줄을 되살리고 이 블록 제거
+				//stPositionX[nMoveX].dPosition = m_pMotorControlMgr->GetMinSWLimit(AXIS_X2) - (dGantryGap + 50); //　dPos + dOffsetX[0] - dGantryGap;
+				{ double dSafetyX3 = 0.0; GetPositionConfigMgr()->GetSafetyPosition(nullptr, nullptr, &dSafetyX3, nullptr, nullptr, nullptr, nullptr); stPositionX[nMoveX].dPosition = dSafetyX3; }
 				nMoveX++;
 
 				m_pMotorControlMgr->SetHeadOffset(AXIS_X3, dOffsetX[0]);
@@ -2138,14 +2435,15 @@ long CMaintControlMgr::MoveCmdPosWAD(stMotorPosition* pPos, int nAxis, int iSpee
 			}
 		}
 
-		if (bSetMoveAxisX == true)
-		{
-			// LYS 2026-08-25 restored - the OCP gantry X moves now.
-			if (GetCurPos(AXIS_PROBE_X9) > dMoveAxisX - 20)
-			{
-				nRet = MoveCmdPosA(AXIS_Z2, 0, true, SPEED_HIGH, -1, -1);
-			}
-		}
+		// LYS 2026-09-12 FRONT Z(Z2) 를 0(스트로크 최하단)으로 내리던 동작 제거 - 싸이클 중 불필요한 하강.
+		//if (bSetMoveAxisX == true)
+		//{
+		//	// LYS 2026-08-25 restored - the OCP gantry X moves now.
+		//	if (GetCurPos(AXIS_PROBE_X9) > dMoveAxisX - 20)
+		//	{
+		//		nRet = MoveCmdPosA(AXIS_Z2, 0, true, SPEED_HIGH, -1, -1);
+		//	}
+		//}
 
 		if (nRet == df_MOTION_RV_SUCCESSED)
 		{
@@ -2153,8 +2451,9 @@ long CMaintControlMgr::MoveCmdPosWAD(stMotorPosition* pPos, int nAxis, int iSpee
 				nRet = MoveCmdPosMulti(stPositionX, nMoveX, SPEED_HIGH, true, true);
 		}
 
-		if (nRet == df_MOTION_RV_SUCCESSED)
+		if (nRet == df_MOTION_RV_SUCCESSED) 
 		{
+			ApplyIdleHeadSafetyY(pPos, nAxis, stPositionY, nMoveY, _T("MoveCmdPosWAD"));	// LYS 2026-09-14 쉬는 헤드 -> [SAFETY]
 			nRet = MoveCmdPosMulti(stPositionY, nMoveY, SPEED_HIGH, false, true);
 		}	
 
@@ -2175,19 +2474,31 @@ long CMaintControlMgr::MoveCmdPosWAD(stMotorPosition* pPos, int nAxis, int iSpee
 		if (nRet == df_MOTION_RV_SUCCESSED)
 		{
 			// LYS 2026-08-28 Sub Z(Z3/Z4) - WAD(특성) 측정 전용, DoWork에서 넘어온 레시피 값 그대로 이동.
+			// LYS 2026-09-07 하강 시 P5 유닛 겹침 인터락 추가 (구 Z1 인터락과 동일 판정)
 			stMotorPosition stPositionSubZ[2];
-			ZeroMemory(&stPositionSubZ, sizeof(stPositionSubZ));
+			ClearMotorPos(stPositionSubZ, 2);
 			int nMoveSubZ = 0;
-			for (size_t i = 0; i < nAxis; i++)
+			for (size_t i = 0; i < nAxis && nMoveSubZ < 2; i++)
 			{
 				if (pPos[i].axis == AXIS_Z3 || pPos[i].axis == AXIS_Z4)
 				{
+					dPos = pPos[i].dPosition;
+					if (dPos > GetOrgPos(pPos[i].axis) && m_pMotorControlMgr != nullptr
+						&& m_pMotorControlMgr->IsProbeUnitOverlapX(GetOrgPos(AXIS_X2)) == true)
+					{
+						CString strLog;
+						strLog.Format(_T("MoveCmdPosWAD SubZ DOWN NG - PROBE UNIT(X9:%.3f) vs BACK GANTRY(X2:%.3f), AXIS %d %.3f -> %.3f"),
+							GetOrgPos(AXIS_PROBE_X9), GetOrgPos(AXIS_X2), pPos[i].axis, GetOrgPos(pPos[i].axis), dPos);
+						m_pMotorControlMgr->GetLogFileAccessorPtr()->KMLOG(WARN, strLog, true);
+						nRet = MOTION_INTERLOCK_CHECK_ALARM + pPos[i].axis;
+						break;
+					}
 					stPositionSubZ[nMoveSubZ].axis = pPos[i].axis;
-					stPositionSubZ[nMoveSubZ].dPosition = pPos[i].dPosition;
+					stPositionSubZ[nMoveSubZ].dPosition = dPos;
 					nMoveSubZ++;
 				}
 			}
-			if (nMoveSubZ > 0)
+			if (nRet == df_MOTION_RV_SUCCESSED && nMoveSubZ > 0)
 			{
 				nRet = MoveCmdPosMulti(stPositionSubZ, nMoveSubZ, SPEED_HIGH, true, false);
 			}
@@ -2210,7 +2521,6 @@ long CMaintControlMgr::MoveCmdPosWAD(stMotorPosition* pPos, int nAxis, int iSpee
 
 	return nRet;
 }
-
 long CMaintControlMgr::MoveCmdPosVision(stMotorPosition* pPos, int nAxis, int iSpeed, bool bDoneCheck)
 {
 	// TODO: 여기에 구현 코드 추가.
@@ -2412,7 +2722,9 @@ long CMaintControlMgr::MoveCmdPosVision(stMotorPosition* pPos, int nAxis, int iS
 				// LYS 2026-06-30
 				dPos = pPos[i].dPosition;
 				stPositionX[nMoveX].axis = AXIS_X2;
-				stPositionX[nMoveX].dPosition = dPos + dOffsetX[0] + dGantryGap;
+				// LYS 2026-09-09 X3 주동작 시 종속 X2(BACK GANTRY)는 Gap 계산 위치 대신 Position.ini [SAFETY] SafetyHeadX1 고정 (SafetyHeadX1 fixed, SafetyHeadX2 fixed 짝). 원복 시 아래 주석 줄을 되살리고 이 블록 제거
+				//stPositionX[nMoveX].dPosition = dPos + dOffsetX[0] + dGantryGap;
+				{ double dSafetyX2 = 0.0; GetPositionConfigMgr()->GetSafetyPosition(nullptr, &dSafetyX2, nullptr, nullptr, nullptr, nullptr, nullptr); stPositionX[nMoveX].dPosition = dSafetyX2; }
 				nMoveX++;
 				
 				m_pMotorControlMgr->SetHeadOffset(AXIS_X2, dOffsetX[0]);
@@ -2455,6 +2767,7 @@ long CMaintControlMgr::MoveCmdPosVision(stMotorPosition* pPos, int nAxis, int iS
 		// Move Y
 		if (nRet == df_MOTION_RV_SUCCESSED)
 		{
+			ApplyIdleHeadSafetyY(pPos, nAxis, stPositionY, nMoveY, _T("MoveCmdPosVision"));	// LYS 2026-09-14 쉬는 헤드 -> [SAFETY]
 			nRet = MoveCmdPosMulti(stPositionY, nMoveY, SPEED_HIGH, false, true);
 		}
 
@@ -2686,6 +2999,7 @@ long CMaintControlMgr::MoveCmdPosColor(stMotorPosition* pPos, int nAxis, int iSp
 		// Move Y
 		if (nRet == df_MOTION_RV_SUCCESSED)
 		{
+			ApplyIdleHeadSafetyY(pPos, nAxis, stPositionY, nMoveY, _T("MoveCmdPosColor"));	// LYS 2026-09-14 쉬는 헤드 -> [SAFETY]
 			nRet = MoveCmdPosMulti(stPositionY, nMoveY, SPEED_HIGH, false, true);
 		}
 
@@ -2793,6 +3107,16 @@ long CMaintControlMgr::MoveCmdPosAngle(stMotorPosition* pPos, int nAxis, int iSp
 	for (size_t i = 0; i < 2; i++)
 	{
 		m_pPositionConfigMgr->GetHeadOffset(i, 2, &dOffsetX[i + 2], &dOffsetY[i + 2], &dOffsetZ[i + 2]);		// Vision
+	}
+
+	// LYS 2026-09-14 OCP: ANGLE 측정 축은 FRONT 헤드 Y3/Y4 (HMI 시절엔 BACK 갠트리라 Y1/Y2 에 ANGLE 오프셋을 걸었다).
+	//   Y 오프셋만 교차 - Y3/Y4 <- ANGLE(HEAD1/2_ANGLE_Y), Y1/Y2 <- VISION. X 오프셋(dOffsetX[0]) 은 갠트리 지령용이라 그대로 둔다.
+	//   VISION/ANGLE 오프셋이 같은 값(?50)이던 동안은 드러나지 않았고, 2026-09-14 ANGLE ?272 로 갈라지며 필요해졌다.
+	if (m_pMotorControlMgr != nullptr && m_pMotorControlMgr->IsOCP())
+	{
+		double dSwapY = 0.0;
+		dSwapY = dOffsetY[0]; dOffsetY[0] = dOffsetY[2]; dOffsetY[2] = dSwapY;
+		dSwapY = dOffsetY[1]; dOffsetY[1] = dOffsetY[3]; dOffsetY[3] = dSwapY;
 	}
 
 	double dGlassOffsetX = 0., dGlassOffsetY = 0.;
@@ -2912,7 +3236,9 @@ long CMaintControlMgr::MoveCmdPosAngle(stMotorPosition* pPos, int nAxis, int iSp
 			{
 				dPos = pPos[i].dPosition;
 				stPositionX[nMoveX].axis = AXIS_X2;
-				stPositionX[nMoveX].dPosition = dPos + dOffsetX[0] + dGantryGap;
+				// LYS 2026-09-09 X3 주동작 시 종속 X2(BACK GANTRY)는 Gap 계산 위치 대신 Position.ini [SAFETY] SafetyHeadX1 고정 (SafetyHeadX1 fixed, SafetyHeadX2 fixed 짝). 원복 시 아래 주석 줄을 되살리고 이 블록 제거
+				//stPositionX[nMoveX].dPosition = dPos + dOffsetX[0] + dGantryGap;
+				{ double dSafetyX2 = 0.0; GetPositionConfigMgr()->GetSafetyPosition(nullptr, &dSafetyX2, nullptr, nullptr, nullptr, nullptr, nullptr); stPositionX[nMoveX].dPosition = dSafetyX2; }
 				nMoveX++;
 
 				m_pMotorControlMgr->SetHeadOffset(AXIS_X2, dOffsetX[0]);
@@ -2925,14 +3251,14 @@ long CMaintControlMgr::MoveCmdPosAngle(stMotorPosition* pPos, int nAxis, int iSp
 			}
 		}
 
-		if (bSetMoveAxisX == true)
-		{
-			// LYS 2026-08-25 restored - the OCP gantry X moves now.
-			if (GetCurPos(AXIS_PROBE_X9) > dMoveAxisX - 20)
-			{
-				nRet = MoveCmdPosA(AXIS_Z2, 0, true, SPEED_HIGH, -1, -1);
-			}
-		}
+		//if (bSetMoveAxisX == true)
+		//{
+		//	// LYS 2026-08-25 restored - the OCP gantry X moves now.
+		//	if (GetCurPos(AXIS_PROBE_X9) > dMoveAxisX - 20)
+		//	{
+		//		nRet = MoveCmdPosA(AXIS_Z2, 0, true, SPEED_HIGH, -1, -1);
+		//	}
+		//}
 
 		if (nRet == df_MOTION_RV_SUCCESSED)
 		{
@@ -2944,6 +3270,7 @@ long CMaintControlMgr::MoveCmdPosAngle(stMotorPosition* pPos, int nAxis, int iSp
 
 		if (nRet == df_MOTION_RV_SUCCESSED)
 		{
+			ApplyIdleHeadSafetyY(pPos, nAxis, stPositionY, nMoveY, _T("MoveCmdPosAngle"));	// LYS 2026-09-14 쉬는 헤드 -> [SAFETY]
 			nRet = MoveCmdPosMulti(stPositionY, nMoveY, SPEED_HIGH, false, true);
 		}
 
@@ -3443,7 +3770,10 @@ int CMaintControlMgr::WaitForPCB_UNIT_UnlockComplete(int iProbe, UINT nTimeOut)
 
 	ULONGLONG  dwS, dwR, dwT = 0;
 
-	nTimeOut *= 1000;
+	// LYS 2026-09-25 아래 for 조건이 이미 nTimeOut * 1000 을 하므로 여기서 또 곱하면 30 초가 8 시간 20 분이 된다.
+	//   2026-09-23 16:16 SACC CLAMP LOCK 이 공압 저하로 센서를 못 받고 이 대기에 갇혀 SPS_PROCESS 가 풀리지 않아
+	//   수동 버튼이 '프로세스 진행 중' 으로 막혔다(재기동으로 복구). 이제 30 초 뒤 Thread NG -> 알람 -> SPS_IDLE.
+	//nTimeOut *= 1000;
 
 	int nRtn = PLC_COMMAND_TIMEOUT;
 	for (dwS = GetTickCount(); dwT < nTimeOut *1000;)	// jsyoon 2022.08.16 add * 1000
@@ -3484,7 +3814,10 @@ int CMaintControlMgr::WaitForPCB_UNIT_LockComplete(int iProbe, UINT nTimeOut)
 
 	ULONGLONG  dwS, dwR, dwT = 0;
 
-	nTimeOut *= 1000;
+	// LYS 2026-09-25 아래 for 조건이 이미 nTimeOut * 1000 을 하므로 여기서 또 곱하면 30 초가 8 시간 20 분이 된다.
+	//   2026-09-23 16:16 SACC CLAMP LOCK 이 공압 저하로 센서를 못 받고 이 대기에 갇혀 SPS_PROCESS 가 풀리지 않아
+	//   수동 버튼이 '프로세스 진행 중' 으로 막혔다(재기동으로 복구). 이제 30 초 뒤 Thread NG -> 알람 -> SPS_IDLE.
+	//nTimeOut *= 1000;
 
 	int nRtn = PLC_COMMAND_TIMEOUT;
 	for (dwS = GetTickCount(); dwT < nTimeOut * 1000;)	// jsyoon 2022.08.16 add * 1000
@@ -3525,7 +3858,10 @@ int CMaintControlMgr::WaitForPROBE_CLAM_UnlockComplete(int iProbe, UINT nTimeOut
 
 	ULONGLONG  dwS, dwR, dwT = 0;
 
-	nTimeOut *= 1000;
+	// LYS 2026-09-25 아래 for 조건이 이미 nTimeOut * 1000 을 하므로 여기서 또 곱하면 30 초가 8 시간 20 분이 된다.
+	//   2026-09-23 16:16 SACC CLAMP LOCK 이 공압 저하로 센서를 못 받고 이 대기에 갇혀 SPS_PROCESS 가 풀리지 않아
+	//   수동 버튼이 '프로세스 진행 중' 으로 막혔다(재기동으로 복구). 이제 30 초 뒤 Thread NG -> 알람 -> SPS_IDLE.
+	//nTimeOut *= 1000;
 
 	int nRtn = PLC_COMMAND_TIMEOUT;
 	for (dwS = GetTickCount(); dwT < nTimeOut * 1000;)	// jsyoon 2022.08.16 add * 1000
@@ -3566,7 +3902,10 @@ int CMaintControlMgr::WaitForPROBE_CLAM_LockComplete(int iProbe, UINT nTimeOut)
 
 	ULONGLONG dwS, dwR, dwT = 0;
 
-	nTimeOut *= 1000;
+	// LYS 2026-09-25 아래 for 조건이 이미 nTimeOut * 1000 을 하므로 여기서 또 곱하면 30 초가 8 시간 20 분이 된다.
+	//   2026-09-23 16:16 SACC CLAMP LOCK 이 공압 저하로 센서를 못 받고 이 대기에 갇혀 SPS_PROCESS 가 풀리지 않아
+	//   수동 버튼이 '프로세스 진행 중' 으로 막혔다(재기동으로 복구). 이제 30 초 뒤 Thread NG -> 알람 -> SPS_IDLE.
+	//nTimeOut *= 1000;
 
 	int nRtn = PLC_COMMAND_TIMEOUT;
 	for (dwS = GetTickCount(); dwT < nTimeOut * 1000;)	// jsyoon 2022.08.16 add * 1000
@@ -3607,7 +3946,10 @@ int CMaintControlMgr::WaitForPROBE_Zero_Position_UnlockComplete(int iProbe, UINT
 
 	ULONGLONG  dwS, dwR, dwT = 0;
 
-	nTimeOut *= 1000;
+	// LYS 2026-09-25 아래 for 조건이 이미 nTimeOut * 1000 을 하므로 여기서 또 곱하면 30 초가 8 시간 20 분이 된다.
+	//   2026-09-23 16:16 SACC CLAMP LOCK 이 공압 저하로 센서를 못 받고 이 대기에 갇혀 SPS_PROCESS 가 풀리지 않아
+	//   수동 버튼이 '프로세스 진행 중' 으로 막혔다(재기동으로 복구). 이제 30 초 뒤 Thread NG -> 알람 -> SPS_IDLE.
+	//nTimeOut *= 1000;
 
 	int nRtn = PLC_COMMAND_TIMEOUT;
 	for (dwS = GetTickCount(); dwT < nTimeOut * 1000;)	// jsyoon 2022.08.16 add * 1000
@@ -3648,7 +3990,10 @@ int CMaintControlMgr::WaitForPROBE_Zero_Position_LockComplete(int iProbe, UINT n
 
 	ULONGLONG dwS, dwR, dwT = 0;
 
-	nTimeOut *= 1000;
+	// LYS 2026-09-25 아래 for 조건이 이미 nTimeOut * 1000 을 하므로 여기서 또 곱하면 30 초가 8 시간 20 분이 된다.
+	//   2026-09-23 16:16 SACC CLAMP LOCK 이 공압 저하로 센서를 못 받고 이 대기에 갇혀 SPS_PROCESS 가 풀리지 않아
+	//   수동 버튼이 '프로세스 진행 중' 으로 막혔다(재기동으로 복구). 이제 30 초 뒤 Thread NG -> 알람 -> SPS_IDLE.
+	//nTimeOut *= 1000;
 
 	int nRtn = PLC_COMMAND_TIMEOUT;
 	for (dwS = GetTickCount(); dwT < nTimeOut * 1000;)	// jsyoon 2022.08.16 add * 1000
@@ -5491,6 +5836,7 @@ long CMaintControlMgr::MoveCmdAlignPos_Glass(double* pPos)
 	dPosY2 = pPos[3];
 	dPosY1 = pPos[4];
 	dPosZ  = pPos[5];
+	double dPosZL = pPos[6];	// LYS 2026-09-04 SUB Z LEFT(Z4)
 
 	double dGantryGap = 0, dProbeGap = 0;
 	GetInterlockPos(&dGantryGap, nullptr, &dProbeGap);
@@ -5537,9 +5883,9 @@ long CMaintControlMgr::MoveCmdAlignPos_Glass(double* pPos)
 				stMotorPosition stPosition[2];
 				ZeroMemory(&stPosition, sizeof(stPosition));
 				stPosition[0].axis = AXIS_Y1;
-				stPosition[0].dPosition = dPosY1;
+				stPosition[0].dPosition = dPosY2;
 				stPosition[1].axis = AXIS_Y2;
-				stPosition[1].dPosition = dPosY2;
+				stPosition[1].dPosition = dPosY1;
 
 				nRet = MoveCmdPosMulti(stPosition, 2, SPEED_HIGH);
 			}
@@ -5568,7 +5914,8 @@ long CMaintControlMgr::MoveCmdAlignPos_Glass(double* pPos)
 
 			if (nRet == df_MOTION_RV_SUCCESSED)
 			{
-				nRet = MoveCmdPosA(AXIS_Z1, dPosZ, false, SPEED_HIGH, -1, -1);
+				nRet = MoveCmdPosA(AXIS_Z3, dPosZ, false, SPEED_HIGH, -1, -1); // LYS 2026-09-04 SUB Z RIGHT
+				if (nRet == df_MOTION_RV_SUCCESSED) nRet = MoveCmdPosA(AXIS_Z4, dPosZL, false, SPEED_HIGH, -1, -1); // LYS 2026-09-04 SUB Z LEFT
 			}
 		}
 		else
@@ -5609,7 +5956,8 @@ long CMaintControlMgr::MoveCmdAlignPos_Glass(double* pPos)
 
 			if (nRet == df_MOTION_RV_SUCCESSED)
 			{
-				nRet = MoveCmdPosA(AXIS_Z1, dPosZ, false, SPEED_HIGH, -1, -1);
+				nRet = MoveCmdPosA(AXIS_Z3, dPosZ, false, SPEED_HIGH, -1, -1); // LYS 2026-09-04 SUB Z RIGHT
+				if (nRet == df_MOTION_RV_SUCCESSED) nRet = MoveCmdPosA(AXIS_Z4, dPosZL, false, SPEED_HIGH, -1, -1); // LYS 2026-09-04 SUB Z LEFT
 			}
 		}
 
@@ -5661,12 +6009,32 @@ long CMaintControlMgr::MoveCmdAlignPos_Probe(double* pPos)
 	dPosY2 = pPos[3];
 	dPosY1 = pPos[4];
 	dPosZ  = pPos[5];
-	dPosX  = pPos[6];
+	double dPosZL = pPos[6];	// LYS 2026-09-04 SUB Z LEFT(Z4)
+	dPosX  = pPos[7];	// LYS 2026-09-04 STAGE Y (reindex 6->7)
 
 
 	int iProbe = CSequenceManager::GetInstance()->GetFunctionModuleProbeACC()->GetProbe();
+
+	// LYS 2026-09-12 PROBE ALIGN MOVE 가 조용히 아무것도 안 하는 경우를 추적하기 위한 진입 로그.
+	//                iProbe 는 얼라인 화면 프로브 콤보(기본 index 4 -> P5)에서 오고, df_PROBE_AGING1 미만이면
+	//                아래에서 로그 없이 return 해 '버튼을 눌러도 아무 일도 안 남'으로 보였다.
+	if (m_pMotorControlMgr != nullptr && m_pMotorControlMgr->GetLogFileAccessorPtr() != nullptr)
+	{
+		CString strEnter;
+		strEnter.Format(_T("MoveCmdAlignPos_Probe ENTER iProbe=%d ProbeX9=%.3f ProbeY5=%.3f X2=%.3f Y1=%.3f Y2=%.3f Z3=%.3f Z4=%.3f StageX=%.3f"),
+			iProbe, dProbeX, dProbeY, dPosX2, dPosY2, dPosY1, dPosZ, dPosZL, dPosX);
+		m_pMotorControlMgr->GetLogFileAccessorPtr()->KMLOG(SYST, strEnter, true);
+	}
+
 	if (iProbe < df_PROBE_AGING1)
 	{
+		// LYS 2026-09-12 게이트에 걸려 아무 축도 안 움직인다는 것을 남긴다.
+		if (m_pMotorControlMgr != nullptr && m_pMotorControlMgr->GetLogFileAccessorPtr() != nullptr)
+		{
+			CString strNG;
+			strNG.Format(_T("MoveCmdAlignPos_Probe SKIP - iProbe(%d) < df_PROBE_AGING1(%d), no axis moves"), iProbe, (int)df_PROBE_AGING1);
+			m_pMotorControlMgr->GetLogFileAccessorPtr()->KMLOG(WARN, strNG, true);
+		}
 		nRet = false;
 	}
 	else
@@ -5711,11 +6079,12 @@ long CMaintControlMgr::MoveCmdAlignPos_Probe(double* pPos)
 					stMotorPosition stPosition[2];
 					ZeroMemory(&stPosition, sizeof(stPosition));
 					stPosition[0].axis = AXIS_Y1;
-					stPosition[0].dPosition = dPosY1;
+					stPosition[0].dPosition = dPosY2;
 					stPosition[1].axis = AXIS_Y2;
-					stPosition[1].dPosition = dPosY2;
+					stPosition[1].dPosition = dPosY1;
 
-					nRet = MoveCmdPosMulti(stPosition, 2, SPEED_HIGH);
+					//nRet = MoveCmdPosMulti(stPosition, 2, SPEED_HIGH);
+					nRet = MoveOrgPosMulti(stPosition, 2, SPEED_HIGH);	// LYS 2026-09-17 Probe Align MOVE: 헤드 Y1/Y2 는 레시피 값(엔코더)으로 그대로 이동 - Glass Align Y 보상(m_dAlignOffset[Y1/Y2]) 미적용
 				}*/
 
 				if (nRet == df_MOTION_RV_SUCCESSED)
@@ -5731,8 +6100,11 @@ long CMaintControlMgr::MoveCmdAlignPos_Probe(double* pPos)
 							dMoveProbeX[i] = dProbeX - (i * dProbeGap);
 						}
 						
-						stMotorPosition stPositionProbeX[5];
-						ZeroMemory(stPositionProbeX, sizeof(stPositionProbeX));
+						//stMotorPosition stPositionProbeX[5];
+						//ZeroMemory(stPositionProbeX, sizeof(stPositionProbeX));
+						// LYS 2026-09-21 X-2(AXIS_PROBE_X10) 슬롯을 하나 더 쓴다([5]). ZeroMemory 는 빈 슬롯을 AXIS_X(0) 지령으로 만들므로 ClearMotorPos.
+						stMotorPosition stPositionProbeX[6];
+						ClearMotorPos(stPositionProbeX, 6);
 						
 						stPositionProbeX[4].axis = AXIS_PROBE_X1;
 						stPositionProbeX[4].dPosition = dMoveProbeX[4];
@@ -5754,7 +6126,31 @@ long CMaintControlMgr::MoveCmdAlignPos_Probe(double* pPos)
 						stPositionProbeX[0].axis = AXIS_PROBE_X9;
 						stPositionProbeX[0].dPosition = dMoveProbeX[0];
 						
-						nRet = MoveCmdPosMulti(stPositionProbeX, 5, SPEED_HIGH, true);
+						// LYS 2026-09-21 PROBE GANTRY X-2(AXIS_PROBE_X10, 슬레이브)를 X-1(X9)과 같은 지령에 묶어 함께 보낸다 (OCP).
+						//   X9/X10 은 컨트롤러 커플링이 없어 X9 만 보내면 갠트리 한쪽만 움직였다
+						//   (2026-09-21 16:21 모션 로그 'MoveCmdPosM Move(AXIS:PROBE GANTRY X-1, POS:-0.240, nAXIS:1 ...)').
+						//   X-2 는 X-1 과 '같은 이동량' 으로 보낸다 - 같은 절대값으로 보내면 Probe TZero 가 만든 X9/X10 스큐(θ 보정)가 지워진다.
+						//   X-2 목표는 엔코더 원값 기준으로 계산한다: MoveCmdPosMulti 는 X-2 에 m_dAlignOffset[X10] 만 더하고
+						//   m_dProbeAlignOffset[0] 은 마스터(X1/3/5/7/9)에만 더하는데, GetCurPos 는 X-2 에서도 그 값을 빼서 두 쪽 좌표계가 어긋난다.
+						//   한 배열이라 두 축이 동시에 출발한다. MoveCmdPosMulti_Sub 에는 M/S 5mm 갭 인터락(A/R_Sub 전용)이 없어 걸리지 않는다.
+						//   HMI 모드는 동작을 바꾸지 않는다.
+						int nProbeXCount = 5;
+						if (m_pMotorControlMgr != nullptr && m_pMotorControlMgr->IsOCP() == true)
+						{
+							double dLinkDelta = dMoveProbeX[0] - GetCurPos(AXIS_PROBE_X9);	// X-1 의 실제 이동량 (GetCurPos/MoveCmdPosMulti 는 X9 에서 짝이 맞다)
+							double dRawX10    = m_pMotorControlMgr->GetCurPos(AXIS_PROBE_X10);	// X-2 엔코더 원값
+							stPositionProbeX[5].axis = AXIS_PROBE_X10;
+							stPositionProbeX[5].dPosition = dRawX10 + dLinkDelta - m_dAlignOffset[AXIS_PROBE_X10];	// MoveCmdPosMulti 가 m_dAlignOffset[X10] 을 다시 더한다
+							nProbeXCount = 6;
+						
+							CString strLink; 
+							strLink.Format(_T("MoveCmdAlignPos_Probe X-1/X-2 link : X9 -> %.3f (delta %.3f), X10 raw %.3f -> %.3f"),
+								dMoveProbeX[0], dLinkDelta, dRawX10, dRawX10 + dLinkDelta);
+							m_pMotorControlMgr->GetLogFileAccessorPtr()->KMLOG(SYST, strLink, true);
+						}
+						
+						//nRet = MoveCmdPosMulti(stPositionProbeX, 5, SPEED_HIGH, true);
+						nRet = MoveCmdPosMulti(stPositionProbeX, nProbeXCount, SPEED_HIGH, true);
 					}
 
 				}
@@ -5762,6 +6158,7 @@ long CMaintControlMgr::MoveCmdAlignPos_Probe(double* pPos)
 				if (nRet == df_MOTION_RV_SUCCESSED)
 				{ 
 					stMotorPosition stPositionProbeY[5];
+					ClearMotorPos(stPositionProbeY, 5);	// LYS 2026-09-12 미초기화 슬롯(iLens/iTube 등)이 남던 것을 정리 - 형제 배열들과 동일하게
 					stPositionProbeY[0].axis = AXIS_PROBE_Y1;
 					stPositionProbeY[0].dPosition = dProbeY;
 					stPositionProbeY[1].axis = AXIS_PROBE_Y2;
@@ -5773,20 +6170,22 @@ long CMaintControlMgr::MoveCmdAlignPos_Probe(double* pPos)
 					stPositionProbeY[4].axis = AXIS_PROBE_Y5;
 					stPositionProbeY[4].dPosition = dProbeY;
 
-					nRet = MoveCmdPosMulti(stPositionProbeY, 5, SPEED_HIGH, true);
+					//nRet = MoveCmdPosMulti(stPositionProbeY, 5, SPEED_HIGH, true);
+					nRet = MoveOrgPosMulti(stPositionProbeY, 5, SPEED_HIGH, true);	// LYS 2026-09-17 Probe Y(CROSS) 도 레시피 값 그대로 - (Glass-Probe) Y 보상 미적용
 
 				}
 
 				if (nRet == df_MOTION_RV_SUCCESSED)
 				{
-					stMotorPosition stPosition[2];
+					stMotorPosition stPosition[2]; 
 					ZeroMemory(&stPosition, sizeof(stPosition));
 					stPosition[0].axis = AXIS_Y1;
-					stPosition[0].dPosition = dPosY1;
+					stPosition[0].dPosition = dPosY2;
 					stPosition[1].axis = AXIS_Y2;
-					stPosition[1].dPosition = dPosY2;
+					stPosition[1].dPosition = dPosY1;
 
-					nRet = MoveCmdPosMulti(stPosition, 2, SPEED_HIGH);
+					//nRet = MoveCmdPosMulti(stPosition, 2, SPEED_HIGH);
+					nRet = MoveOrgPosMulti(stPosition, 2, SPEED_HIGH);	// LYS 2026-09-17 Probe Align MOVE: 헤드 Y1/Y2 는 레시피 값(엔코더)으로 그대로 이동 - Glass Align Y 보상(m_dAlignOffset[Y1/Y2]) 미적용
 				}
 
 				if (nRet == df_MOTION_RV_SUCCESSED)
@@ -5813,7 +6212,8 @@ long CMaintControlMgr::MoveCmdAlignPos_Probe(double* pPos)
 
 				if (nRet == df_MOTION_RV_SUCCESSED)
 				{
-					nRet = MoveCmdPosA(AXIS_Z2, dPosZ, false, SPEED_HIGH, -1, -1);
+					nRet = MoveCmdPosA(AXIS_Z3, dPosZ, false, SPEED_HIGH, -1, -1); // LYS 2026-09-04 SUB Z RIGHT
+					if (nRet == df_MOTION_RV_SUCCESSED) nRet = MoveCmdPosA(AXIS_Z4, dPosZL, false, SPEED_HIGH, -1, -1); // LYS 2026-09-04 SUB Z LEFT
 				}
 			}
 			else
@@ -5832,6 +6232,7 @@ long CMaintControlMgr::MoveCmdAlignPos_Probe(double* pPos)
 				if (nRet == df_MOTION_RV_SUCCESSED)
 				{
 					stMotorPosition stPositionProbeY[5];
+					ClearMotorPos(stPositionProbeY, 5);	// LYS 2026-09-12 미초기화 슬롯(iLens/iTube 등)이 남던 것을 정리 - 형제 배열들과 동일하게
 					stPositionProbeY[0].axis = AXIS_PROBE_Y1;
 					stPositionProbeY[0].dPosition = dProbeY;
 					stPositionProbeY[1].axis = AXIS_PROBE_Y2;
@@ -5843,7 +6244,8 @@ long CMaintControlMgr::MoveCmdAlignPos_Probe(double* pPos)
 					stPositionProbeY[4].axis = AXIS_PROBE_Y5;
 					stPositionProbeY[4].dPosition = dProbeY;
 
-					nRet = MoveCmdPosMulti(stPositionProbeY, 5, SPEED_HIGH, true);
+					//nRet = MoveCmdPosMulti(stPositionProbeY, 5, SPEED_HIGH, true);
+					nRet = MoveOrgPosMulti(stPositionProbeY, 5, SPEED_HIGH, true);	// LYS 2026-09-17 Probe Y(CROSS) 도 레시피 값 그대로 - (Glass-Probe) Y 보상 미적용
 				}
 
 				if (nRet == df_MOTION_RV_SUCCESSED)
@@ -5882,7 +6284,8 @@ long CMaintControlMgr::MoveCmdAlignPos_Probe(double* pPos)
 
 				if (nRet == df_MOTION_RV_SUCCESSED)
 				{
-					nRet = MoveCmdPosA(AXIS_Z1, dPosZ, false, SPEED_HIGH, -1, -1);
+					nRet = MoveCmdPosA(AXIS_Z3, dPosZ, false, SPEED_HIGH, -1, -1); // LYS 2026-09-04 SUB Z RIGHT
+					if (nRet == df_MOTION_RV_SUCCESSED) nRet = MoveCmdPosA(AXIS_Z4, dPosZL, false, SPEED_HIGH, -1, -1); // LYS 2026-09-04 SUB Z LEFT
 				}
 			}
 
@@ -6303,11 +6706,7 @@ long CMaintControlMgr::MoveCmdPos_Head(double* pPos, int nType, int nSelect)
 		stPosition[nAxis].axis = AXIS_Z2;
 		stPosition[nAxis].dPosition = dPos[3];	 nAxis++;
 
-		if (GetCurPos(AXIS_Z1) > -100)
-		{
-			stPosition[nAxis].axis = AXIS_Z1;
-			stPosition[nAxis].dPosition = -100.;		nAxis++;
-		}
+		// LYS 2026-09-07 Z1(-100 후퇴) 항목 제거 - Z1은 OCP 미사용, Sub Z 후퇴는 MoveCmdPosWAD 내부에서 수행
 
 		nRet = MoveCmdPosWAD(stPosition, nAxis, SPEED_HIGH);
 	}
@@ -6880,14 +7279,20 @@ long CMaintControlMgr::MoveOrgPosA(int iAxis, double dPos, bool bBlockMode, int 
 
 						if (nRet == VTM_RV_SUCCESSED)
 						{
-							if (iAxis == AXIS_X || iAxis == AXIS_R)
+							if (iAxis == AXIS_X || iAxis == AXIS_LOADER_R)
 							{
-								nBit = GetIOMapControlMgrPtr()->GetParam_DIOMapMemoryBitImport(PLC_AUTO_CHANGE_X0_POSITION_03);
-								if (nBit != -1)
+								//nBit = GetIOMapControlMgrPtr()->GetParam_DIOMapMemoryBitImport(PLC_AUTO_CHANGE_X0_POSITION_03);
+								// LYS 2026-09-09 Safety Pos or SACC Pos 확인
+								if(GetIOMapControlMgrPtr()->GetParam_DIOMapMemoryBitImport(PLC_AUTO_CHANGE_X0_POSITION_03) || GetIOMapControlMgrPtr()->GetParam_DIOMapMemoryBitImport(PLC_AUTO_CHANGE_X0_POSITION_04))
+									nBit = 1;
+								else
+									nBit = -1;
+
+								if (nBit != 1)
 								{
-									if (nBit != 1)
+									//if (nBit != 1)
 									{
-										nRet = MOTION_INTERLOCK_9;
+										nRet = MOTION_INTERLOCK_11;
 									}
 								}
 							}
@@ -6910,7 +7315,7 @@ long CMaintControlMgr::MoveOrgPosA(int iAxis, double dPos, bool bBlockMode, int 
 								{
 									if (nBit != 1)
 									{
-										nRet = MOTION_INTERLOCK_9;
+										nRet = MOTION_INTERLOCK_10;
 									}
 								}
 							}
@@ -6947,6 +7352,14 @@ long CMaintControlMgr::MoveOrgPosA(int iAxis, double dPos, bool bBlockMode, int 
 					CString strLog;
 					strLog.Format(_T("MoveOrgPosA Fail(AXIS:%d, POS:%.3f, RET:%d)"), iAxis, dPos, nRet);
 					m_pMotorControlMgr->GetLogFileAccessorPtr()->KMLOG(WARN, strLog, true);
+					// LYS 2026-09-17 this branch rejects the move before it reaches CMotorControlMgr,
+					//                so until now it only wrote the WARN line and no alarm was raised.
+					//                nRet is an AlarmIDList code here (MOTION_INTERLOCK_*, PLC_*);
+					//                the range guard keeps 0 / -1 from popping an UNKNOWN heavy alarm.
+					if (nRet >= 1000 && nRet < ID_END)
+					{
+						CAlarmController::GetInstance()->SetAlarm(nRet);
+					}
 				}
 			}
 		}
@@ -7000,12 +7413,12 @@ long CMaintControlMgr::MoveOrgPosR(int iAxis, double dPos, bool bBlockMode, int 
 							{
 								if (iAxis == AXIS_X || iAxis == AXIS_R)
 								{
-									nBit = GetIOMapControlMgrPtr()->GetParam_DIOMapMemoryBitImport(PLC_AUTO_CHANGE_X0_POSITION_03);
+									nBit = GetIOMapControlMgrPtr()->GetParam_DIOMapMemoryBitImport(PLC_AUTO_CHANGE_X0_POSITION_04);
 									if (nBit != -1)
 									{
 										if (nBit != 1)
 										{
-											nRet = MOTION_INTERLOCK_9;
+											nRet = MOTION_INTERLOCK_11;
 										}
 									}
 								}
@@ -7028,7 +7441,7 @@ long CMaintControlMgr::MoveOrgPosR(int iAxis, double dPos, bool bBlockMode, int 
 									{
 										if (nBit != 1)
 										{
-											nRet = MOTION_INTERLOCK_9;
+											nRet = MOTION_INTERLOCK_10;
 										}
 									}
 								}
@@ -7050,6 +7463,14 @@ long CMaintControlMgr::MoveOrgPosR(int iAxis, double dPos, bool bBlockMode, int 
 					CString strLog;
 					strLog.Format(_T("MoveOrgPosR Fail(AXIS:%d, POS:%.3f, RET:%d)"), iAxis, dPos, nRet);
 					m_pMotorControlMgr->GetLogFileAccessorPtr()->KMLOG(WARN, strLog, true);
+					// LYS 2026-09-17 this branch rejects the move before it reaches CMotorControlMgr,
+					//                so until now it only wrote the WARN line and no alarm was raised.
+					//                nRet is an AlarmIDList code here (MOTION_INTERLOCK_*, PLC_*);
+					//                the range guard keeps 0 / -1 from popping an UNKNOWN heavy alarm.
+					if (nRet >= 1000 && nRet < ID_END)
+					{
+						CAlarmController::GetInstance()->SetAlarm(nRet);
+					}
 				}
 			}
 		}
@@ -7108,7 +7529,7 @@ long CMaintControlMgr::MoveOrgPosMulti(stMotorPosition* pPos, int iAxis, int iSp
 						{
 							if (nBit != 1)
 							{
-								nRet = MOTION_INTERLOCK_9;
+								nRet = MOTION_INTERLOCK_10;
 							}
 						}
 					}
@@ -7147,6 +7568,14 @@ long CMaintControlMgr::MoveOrgPosMulti(stMotorPosition* pPos, int iAxis, int iSp
 					CString strLog;
 					strLog.Format(_T("MoveOrgPosMulti Fail(AXIS:%d, POS:%.3f, nAXIS:%d, SPPED:%d, RET:%d)"), pPos[0].axis, pPos[0].dPosition, iAxis, iSpeed, nRet);
 					m_pMotorControlMgr->GetLogFileAccessorPtr()->KMLOG(WARN, strLog, true);
+					// LYS 2026-09-17 this branch rejects the move before it reaches CMotorControlMgr,
+					//                so until now it only wrote the WARN line and no alarm was raised.
+					//                nRet is an AlarmIDList code here (MOTION_INTERLOCK_*, PLC_*);
+					//                the range guard keeps 0 / -1 from popping an UNKNOWN heavy alarm.
+					if (nRet >= 1000 && nRet < ID_END)
+					{
+						CAlarmController::GetInstance()->SetAlarm(nRet);
+					}
 				}
 			}
 		}
@@ -7178,48 +7607,19 @@ long CMaintControlMgr::MoveCmd_SafetyAll(bool bInit)
 			CMCCLogMgr::GetInstance()->SetMCC_Action(MCC_A_MOT_SAFETY_PROBE_Z, false);
 		}
 
-		if (nRet == VTM_RV_SUCCESSED)
-		{
-			for (size_t i = (m_pMotorControlMgr->IsOCP() ? df_PROBE_MEAS : df_PROBE_AGING1); i <= df_PROBE_MEAS; i++)  // LYS 2026-06-26 OCP
-			{
-				bRet = CSequenceManager::GetInstance()->GetFunctionModuleEQState()->IsProbeUnContactSensorOn(i); 
-				if (bRet != true)
-				{
-					nRet = MOTION_INTERLOCK_6;
-					break;
-				}
-			}
-		}
-
-		// Auto Change Move
-		if (nRet == df_MOTION_RV_SUCCESSED)
-		{
-			double dACXPos[3];
-			ZeroMemory(&dACXPos, sizeof(dACXPos));
-
-			GetPositionConfigMgr()->GetACPosition(&dACXPos[0], &dACXPos[1], &dACXPos[2]);
-
-			if (nRet == df_MOTION_RV_SUCCESSED)
-			{
-				CMCCLogMgr::GetInstance()->SetMCC_Action(MCC_A_MOT_SAFETY_AC_Z, true);
-
-				nRet = MoveOrgPosA(AXIS_Z9, 0, true, SPEED_HIGH, 0, 0);
-
-				CMCCLogMgr::GetInstance()->SetMCC_Action(MCC_A_MOT_SAFETY_AC_Z, false);
-			}
-
-			if (nRet == df_MOTION_RV_SUCCESSED)
-			{
-				CMCCLogMgr::GetInstance()->SetMCC_Action(MCC_A_MOT_SAFETY_AC_X, true);
-
-				nRet = MoveOrgPosA(AXIS_X4, dACXPos[1], true, SPEED_HIGH, 0, 0);
-
-				if(GetIOMapControlMgrPtr()->IsOutOfService() == true)  // jsyoon 2022.07.06 add
-					GetIOMapControlMgrPtr()->SetMemoryBitToDevice(PLC_AUTO_CHANGE_X0_POSITION_03, true);
-
-				CMCCLogMgr::GetInstance()->SetMCC_Action(MCC_A_MOT_SAFETY_AC_X, false);
-			}
-		}
+		// LYS 2026-09-02 Skip TEMP
+		//if (nRet == VTM_RV_SUCCESSED)
+		//{
+		//	for (size_t i = (m_pMotorControlMgr->IsOCP() ? df_PROBE_MEAS : df_PROBE_AGING1); i <= df_PROBE_MEAS; i++)  // LYS 2026-06-26 OCP
+		//	{
+		//		bRet = CSequenceManager::GetInstance()->GetFunctionModuleEQState()->IsProbeUnContactSensorOn(i); 
+		//		if (bRet != true)
+		//		{
+		//			nRet = MOTION_INTERLOCK_6;
+		//			break;
+		//		}
+		//	}
+		//}
 
 		// Probe X
 		if (nRet == df_MOTION_RV_SUCCESSED)
@@ -7254,16 +7654,18 @@ long CMaintControlMgr::MoveCmd_SafetyAll(bool bInit)
 		double dSafetyHeadY2 = 0.0;
 		double dSafetyZ = 0.0;
 		double dSafetyZ2 = 0.0;
-		GetPositionConfigMgr()->GetSafetyPosition(&dSafetyStageX, &dSafetyHeadX1, &dSafetyHeadX2, &dSafetyHeadY1, &dSafetyHeadY2, &dSafetyZ, &dSafetyZ2);
+		GetPositionConfigMgr()->GetSafetyPosition(&dSafetyStageX, &dSafetyHeadX1, &dSafetyHeadX2, &dSafetyHeadY1, &dSafetyHeadY2, nullptr, &dSafetyZ2);
+		double dSafetyHeadY3 = dSafetyHeadY1, dSafetyHeadY4 = dSafetyHeadY2;	// LYS 2026-09-14 FRONT 헤드(Y3/Y4) Safety 분리
+		GetPositionConfigMgr()->GetFrontHeadSafetyPosition(&dSafetyHeadY3, &dSafetyHeadY4);
 
 		if (nRet == df_MOTION_RV_SUCCESSED)
 		{
 			stMotorPosition stPositionZ[2];
 			ZeroMemory(&stPositionZ, sizeof(stPositionZ));
 			stPositionZ[0].axis = AXIS_Z1;
-			stPositionZ[0].dPosition = dSafetyZ2;
+			stPositionZ[0].dPosition = dSafetyZ;
 			stPositionZ[1].axis = AXIS_Z2;
-			stPositionZ[1].dPosition = dSafetyZ;
+			stPositionZ[1].dPosition = dSafetyZ2;
 
 			CMCCLogMgr::GetInstance()->SetMCC_Action(MCC_A_MOT_SAFETY_HEAD_Z, true);
 
@@ -7292,6 +7694,10 @@ long CMaintControlMgr::MoveCmd_SafetyAll(bool bInit)
 
 			nRet = MoveOrgPosMulti(stPositionSubZ, 4, SPEED_HIGH, true);
 		}
+
+
+
+
 
 		if (nRet == df_MOTION_RV_SUCCESSED)
 		{
@@ -7340,9 +7746,11 @@ long CMaintControlMgr::MoveCmd_SafetyAll(bool bInit)
 				stPositionCross[1].axis = AXIS_Y2;
 				stPositionCross[1].dPosition = dSafetyHeadY2;
 				stPositionCross[2].axis = AXIS_Y3;
-				stPositionCross[2].dPosition = dSafetyHeadY1;
+				//stPositionCross[2].dPosition = dSafetyHeadY1;
+				stPositionCross[2].dPosition = dSafetyHeadY3;	// LYS 2026-09-14 FRONT 헤드 Safety 분리
 				stPositionCross[3].axis = AXIS_Y4;
-				stPositionCross[3].dPosition = dSafetyHeadY2;
+				//stPositionCross[3].dPosition = dSafetyHeadY2;
+				stPositionCross[3].dPosition = dSafetyHeadY4;	// LYS 2026-09-14 FRONT 헤드 Safety 분리
 
 				CMCCLogMgr::GetInstance()->SetMCC_Action(MCC_A_MOT_SAFETY_HEAD_Y_FRONT_LEFT, true);
 				CMCCLogMgr::GetInstance()->SetMCC_Action(MCC_A_MOT_SAFETY_HEAD_Y_FRONT_RIGHT, true);
@@ -7464,6 +7872,37 @@ long CMaintControlMgr::MoveCmd_SafetyAll(bool bInit)
 				{
 					break;
 				}
+			}
+		}
+
+		// LYS 2026-09-09 ACX Move
+		// Auto Change Move
+		if (nRet == df_MOTION_RV_SUCCESSED)
+		{
+			double dACXPos[3];
+			ZeroMemory(&dACXPos, sizeof(dACXPos));
+
+			GetPositionConfigMgr()->GetACPosition(&dACXPos[0], &dACXPos[1], &dACXPos[2]);
+
+			if (nRet == df_MOTION_RV_SUCCESSED)
+			{
+				CMCCLogMgr::GetInstance()->SetMCC_Action(MCC_A_MOT_SAFETY_AC_Z, true);
+
+				nRet = MoveOrgPosA(AXIS_Z9, 0, true, SPEED_HIGH, 0, 0);
+
+				CMCCLogMgr::GetInstance()->SetMCC_Action(MCC_A_MOT_SAFETY_AC_Z, false);
+			}
+
+			if (nRet == df_MOTION_RV_SUCCESSED)
+			{
+				CMCCLogMgr::GetInstance()->SetMCC_Action(MCC_A_MOT_SAFETY_AC_X, true);
+
+				nRet = MoveOrgPosA(AXIS_X4, dACXPos[1], true, SPEED_HIGH, 0, 0);		// LYS 2026-09-08 Safety Pos
+
+				if (GetIOMapControlMgrPtr()->IsOutOfService() == true)  // jsyoon 2022.07.06 add
+					GetIOMapControlMgrPtr()->SetMemoryBitToDevice(PLC_AUTO_CHANGE_X0_POSITION_04, true);
+
+				CMCCLogMgr::GetInstance()->SetMCC_Action(MCC_A_MOT_SAFETY_AC_X, false);
 			}
 		}
 
@@ -7622,16 +8061,18 @@ long CMaintControlMgr::MoveCmd_SafetyAll(bool bInit)
 			double dSafetyHeadY2 = 0.0;
 			double dSafetyZ = 0.0;
 			double dSafetyZ2 = 0.0;
-			GetPositionConfigMgr()->GetSafetyPosition(&dSafetyStageX, &dSafetyHeadX1, &dSafetyHeadX2, &dSafetyHeadY1, &dSafetyHeadY2, &dSafetyZ, &dSafetyZ2);
+			GetPositionConfigMgr()->GetSafetyPosition(&dSafetyStageX, &dSafetyHeadX1, &dSafetyHeadX2, &dSafetyHeadY1, &dSafetyHeadY2, nullptr, &dSafetyZ2);
+			double dSafetyHeadY3 = dSafetyHeadY1, dSafetyHeadY4 = dSafetyHeadY2;	// LYS 2026-09-14 FRONT 헤드(Y3/Y4) Safety 분리
+			GetPositionConfigMgr()->GetFrontHeadSafetyPosition(&dSafetyHeadY3, &dSafetyHeadY4);
 
 			if (nRet == df_MOTION_RV_SUCCESSED)
 			{
 				stMotorPosition stPositionZ[2];
 				ZeroMemory(&stPositionZ, sizeof(stPositionZ));
 				stPositionZ[0].axis = AXIS_Z1;
-				stPositionZ[0].dPosition = dSafetyZ2;
+				stPositionZ[0].dPosition = dSafetyZ;
 				stPositionZ[1].axis = AXIS_Z2;
-				stPositionZ[1].dPosition = dSafetyZ;
+				stPositionZ[1].dPosition = dSafetyZ2;
 
 				nRet = MoveOrgPosMulti(stPositionZ, 2, SPEED_HIGH, true);
 			}
@@ -7702,9 +8143,11 @@ long CMaintControlMgr::MoveCmd_SafetyAll(bool bInit)
 					stPositionCross[1].axis = AXIS_Y2;
 					stPositionCross[1].dPosition = dSafetyHeadY2;
 					stPositionCross[2].axis = AXIS_Y3;
-					stPositionCross[2].dPosition = dSafetyHeadY1;
+					//stPositionCross[2].dPosition = dSafetyHeadY1;
+					stPositionCross[2].dPosition = dSafetyHeadY3;	// LYS 2026-09-14 FRONT 헤드 Safety 분리
 					stPositionCross[3].axis = AXIS_Y4;
-					stPositionCross[3].dPosition = dSafetyHeadY2;
+					//stPositionCross[3].dPosition = dSafetyHeadY2;
+					stPositionCross[3].dPosition = dSafetyHeadY4;	// LYS 2026-09-14 FRONT 헤드 Safety 분리
 
 					nRet = MoveOrgPosMulti(stPositionCross, 4, SPEED_HIGH);
 				}
@@ -7870,6 +8313,35 @@ long CMaintControlMgr::MoveCmd_SafetyAll(bool bInit)
 				CMCCLogMgr::GetInstance()->SetMCC_Action(MCC_A_SAFETY_MOVE_STEP4, false);
 			}
 
+			// LYS 2026-09-09 Safety Pos to ACX
+			if (nRet == df_MOTION_RV_SUCCESSED)
+			{
+				double dACXPos[3];
+				ZeroMemory(&dACXPos, sizeof(dACXPos));
+
+				GetPositionConfigMgr()->GetACPosition(&dACXPos[0], &dACXPos[1], &dACXPos[2]);
+
+				if (nRet == df_MOTION_RV_SUCCESSED)
+				{
+					CMCCLogMgr::GetInstance()->SetMCC_Action(MCC_A_MOT_SAFETY_AC_Z, true);
+
+					nRet = MoveOrgPosA(AXIS_Z9, 0, true, SPEED_HIGH, 0, 0);
+
+					CMCCLogMgr::GetInstance()->SetMCC_Action(MCC_A_MOT_SAFETY_AC_Z, false);
+				}
+
+				if (nRet == df_MOTION_RV_SUCCESSED)
+				{
+					CMCCLogMgr::GetInstance()->SetMCC_Action(MCC_A_MOT_SAFETY_AC_X, true);
+
+					nRet = MoveOrgPosA(AXIS_X4, dACXPos[1], true, SPEED_HIGH, 0, 0);		// LYS 2026-09-08 Safety Pos
+
+					if (GetIOMapControlMgrPtr()->IsOutOfService() == true)  // jsyoon 2022.07.06 add
+						GetIOMapControlMgrPtr()->SetMemoryBitToDevice(PLC_AUTO_CHANGE_X0_POSITION_04, true);
+
+					CMCCLogMgr::GetInstance()->SetMCC_Action(MCC_A_MOT_SAFETY_AC_X, false);
+				}
+			}
 
 			if (nRet == df_MOTION_RV_SUCCESSED)
 			{

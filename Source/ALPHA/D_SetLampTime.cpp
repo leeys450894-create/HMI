@@ -18,7 +18,10 @@
 #define INT_LAMP_LIMIT_MAX			30000
 
 
-#define df_MAX_LIGHT				4
+#define df_MAX_LIGHT				2	// LYS 2026-09-25 4 -> 2 : ALIGN CCD1/2 = SPO ch 3/2 (DlgSubOperate 램프 타이머와 동일)
+//#define df_MAX_LIGHT				4
+static const int    s_nLampChannel[df_MAX_LIGHT] = { 3, 2 };	// 행 -> SPO 채널(레지스트리 키 번호)
+static const TCHAR* s_szLampName[df_MAX_LIGHT]   = { _T("ALIGN CCD1 (CH4)"), _T("ALIGN CCD2 (CH3)") };
 
 #define _df_MAX_ROW		df_MAX_LIGHT + 1
 
@@ -158,15 +161,15 @@ void CD_SetLampTime::OnBnClickedButtonApply()
 		CTimeSpan spanUsed = CTimeSpan(0, _tstoi(strHour), _tstoi(strMin), _tstoi(strSec));
 		LONGLONG Time = 0;
 		Time = spanUsed.GetTotalSeconds();
-		strUse.Format(_T("%s%02d"), REG_LAMP_USED, iLamp);
+		strUse.Format(_T("%s%02d"), REG_LAMP_USED, s_nLampChannel[iLamp]);
 		m_pRegistry->WriteDWord(REG_SETTINGS, strUse, Time);
 
 		Time = _tstoi(strWarring);
-		strUse.Format(_T("%s%02d"), REG_LAMP_WARRING, iLamp);
+		strUse.Format(_T("%s%02d"), REG_LAMP_WARRING, s_nLampChannel[iLamp]);
 		m_pRegistry->WriteDWord(REG_SETTINGS, strUse, Time);
 
 		Time = _tstoi(strLimit);
-		strUse.Format(_T("%s%02d"), REG_LAMP_LIMIT, iLamp);
+		strUse.Format(_T("%s%02d"), REG_LAMP_LIMIT, s_nLampChannel[iLamp]);
 		m_pRegistry->WriteDWord(REG_SETTINGS, strUse, Time);
 	}
 }
@@ -277,13 +280,13 @@ void CD_SetLampTime::__RefreshListData()
 
 	for (long iLamp = 0; iLamp < df_MAX_LIGHT; iLamp++)
 	{
-		strUse.Format(_T("%s%02d"), REG_LAMP_USED, iLamp);
+		strUse.Format(_T("%s%02d"), REG_LAMP_USED, s_nLampChannel[iLamp]);
 		m_pRegistry->ReadDWord(REG_SETTINGS, strUse, dwUsed[iLamp], 0);
 
-		strUse.Format(_T("%s%02d"), REG_LAMP_WARRING, iLamp);
+		strUse.Format(_T("%s%02d"), REG_LAMP_WARRING, s_nLampChannel[iLamp]);
 		m_pRegistry->ReadDWord(REG_SETTINGS, strUse, dwWarring[iLamp], INT_LED_LAMP_LIMIT_MAX);
 
-		strUse.Format(_T("%s%02d"), REG_LAMP_LIMIT, iLamp);
+		strUse.Format(_T("%s%02d"), REG_LAMP_LIMIT, s_nLampChannel[iLamp]);
 		m_pRegistry->ReadDWord(REG_SETTINGS, strUse, dwLimit[iLamp], INT_LED_LAMP_LIMIT_MAX);
 
 		CTimeSpan spanUsed = dwUsed[iLamp];
@@ -299,7 +302,8 @@ void CD_SetLampTime::__RefreshListData()
 			m_gridList.SetItemText(nSetRow, enumColumnName_NO, str);
 
 			// NAME
-			str.Format(_T("CH%d"), iLamp + 1);
+			str.Format(_T("%s"), s_szLampName[iLamp]);	// LYS 2026-09-25
+			//str.Format(_T("CH%d"), iLamp + 1);
 			m_gridList.GetCell(nSetRow, enumColumnName_Value1)->SetFormat(DT_CENTER | DT_VCENTER | DT_SINGLELINE);
 			m_gridList.SetItemState(nSetRow, enumColumnName_Value1, GVIS_READONLY);
 			m_gridList.SetItemText(nSetRow, enumColumnName_Value1, str);

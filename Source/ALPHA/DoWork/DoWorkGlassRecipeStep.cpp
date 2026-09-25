@@ -535,6 +535,50 @@ bool CDoWorkGlassRecipeStep_ProbeCheck::Run()
 	}
 	else
 	{
+		// LYS 2026-09-08 ProbeCheck 후 ACX SACC에 꽂기
+		int nBit = 0;
+		if (nBit = m_pShareItem->GetMaintControlMgrPtr()->GetIOMapControlMgrPtr()->GetParam_DIOMapMemoryBitImport(PLC_AUTO_CHANGE_X0_POSITION_03))		// Safety 위치
+		{
+			double dACXPos[3];
+			ZeroMemory(&dACXPos, sizeof(dACXPos));
+
+			m_pShareItem->GetMaintControlMgrPtr()->GetPositionConfigMgr()->GetACPosition(&dACXPos[0], &dACXPos[1], &dACXPos[2]);
+
+			CMCCLogMgr::GetInstance()->SetMCC_Action(MCC_A_MOT_SAFETY_AC_X, true);
+
+			nRet = m_pShareItem->GetMaintControlMgrPtr()->MoveOrgPosA(AXIS_X4, dACXPos[2], true, SPEED_HIGH, 0, 0);
+
+			//if (m_pShareItem->GetMaintControlMgrPtr()->GetIOMapControlMgrPtr()->IsOutOfService() == true)
+				m_pShareItem->GetMaintControlMgrPtr()->GetIOMapControlMgrPtr()->SetMemoryBitToDevice(PLC_AUTO_CHANGE_X0_POSITION_04, true);		// SACC 위치
+
+			if (nRet == true)
+			{
+				
+				CMCCLogMgr::GetInstance()->SetMCC_Action(MCC_A_MOT_SAFETY_AC_X, false);
+
+				double CurrAC_X = m_pShareItem->GetMaintControlMgrPtr()->GetCurPos(AXIS_X4);
+
+				double AbsPos;
+				AbsPos = CurrAC_X - dACXPos[2];
+
+				if (abs(AbsPos) < 0.1) m_pShareItem->GetMaintControlMgrPtr()->GetIOMapControlMgrPtr()->SetMemoryBitToDevice(PLC_AUTO_CHANGE_X0_POSITION_04, true);		// SACC Position OK -> Set bit on
+
+				bRet = true;
+			}
+			else
+			{
+				m_pShareItem->GetLogFileAccessorPtr()->KMLOG(SYST, _T("CDoWorkGlassRecipeStep_ProbeCheck Fail : ACX Move to SACC Fail."));
+				bRet = false;
+			}
+		}
+		else
+		{
+			m_pShareItem->GetLogFileAccessorPtr()->KMLOG(SYST, _T("CDoWorkGlassRecipeStep_ProbeCheck Fail : ACX Position is not Safety."));
+			nRet = MOTION_INTERLOCK_11;
+			m_pShareItem->SetFail(true, nRet);
+			bRet = false;
+		}
+
 		m_pShareItem->GetLogFileAccessorPtr()->KMLOG(SYST, _T("CDoWorkGlassRecipeStep_ProbeCheck End."));
 	}
 

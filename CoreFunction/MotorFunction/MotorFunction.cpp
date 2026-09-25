@@ -105,6 +105,12 @@ long CMotorFunction::MoveJog(int iAxis, bool bDir)
 	return m_pCtrlImpl->MoveJog(iAxis, bDir);
 }
 
+// LYS 2026-09-23 MC OFF Probe Z ±ä±Þ ÈÄÅð¿ë
+long CMotorFunction::MoveToPos(int iAxis, double dPos, int iSpeed)
+{
+	return m_pCtrlImpl->MoveToPos(iAxis, dPos, iSpeed);
+}
+
 long CMotorFunction::WaitMotionEnd(int iAxis, DWORD dwTimeout)
 {
 	return m_pCtrlImpl->WaitMotionEnd(iAxis, dwTimeout);

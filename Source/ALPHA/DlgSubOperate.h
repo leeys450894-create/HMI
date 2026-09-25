@@ -22,7 +22,8 @@ protected:
 	}
 };
 
-#define df_MAX_USE_LAMP				4  	// MAX LAMP
+#define df_MAX_USE_LAMP				2  	// MAX LAMP - LYS 2026-09-25 4 -> 2 : Align CCD1/CCD2 (SPO ch 3/2) 만 표시. ch 0/1 은 OUT_OF_SERVICE 프로브 교체 카메라용
+//#define df_MAX_USE_LAMP				4  	// MAX LAMP
 #define MAIN_STATE_TIMER_ID		1001
 #define MAIN_LAMP_OVER_TIMER_ID		1011
 #define PROBE_CONTACT_TIMER_ID		1021	// LYS 2026-07-01 Probe Contact blink timer
@@ -109,6 +110,7 @@ public:
 	virtual BOOL OnInitDialog();
 	void UpdateInitialState(BOOL bEnable);
 	void SetLampUse(int iLamp, bool bUse);
+	int  LampChannelToSlot(int nChannel);	// LYS 2026-09-25 SPO 채널 -> 타이머 슬롯(없으면 -1)
 	void __InitListControl();	// Tact Time
 	void __InitialListData();
 	void __RefreshListData();
@@ -118,6 +120,7 @@ public:
 	void __InitListControl3();	// Probe Info
 	void __InitialListData3();
 	void __RefreshListData3();
+	int  __MeasInfoRowCount();	// LYS 2026-09-25 PROBE INFO 그리드 행 수 (OCP 4 / HMI 5)
 	void __InitListControl4();	// Cell Info
 	void __InitialListData4();
 	void __RefreshListData4();

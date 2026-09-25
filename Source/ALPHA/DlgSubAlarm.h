@@ -32,6 +32,10 @@ public:
 	afx_msg void OnShowWindow(BOOL bShow, UINT nStatus);
 	LRESULT	OnAlarmOccured(WPARAM wp, LPARAM lp);
 	LRESULT	OnAlarmCleared(WPARAM wp, LPARAM lp);
+	// LYS 2026-09-22 경(Light) 알람 - SetLightAlarm 은 WM_WARNING_ACCURED/CLEARED 를 쓰는데
+	//                받는 핸들러가 없어 부저가 안 울렸다(Heavy 만 WM_ALARM_ACCURED 로 부저를 켠다).
+	LRESULT	OnWarningOccured(WPARAM wp, LPARAM lp);
+	LRESULT	OnWarningCleared(WPARAM wp, LPARAM lp);
 	afx_msg void OnBnClickedButtonReload();
 	afx_msg void OnBnClickedButtonAlarmSearch();
 	afx_msg void OnBnClickedButtonAlarm();

@@ -48,17 +48,18 @@ bool CFrameGrabber_BS4M::InitializeGrab(long nFovSizeX, long nFovSizeY, double d
     if(!InitInterface())
         return false;
 
+	// LYS 2026-09-07 open 이후 단계 실패 시 세션을 닫지 않으면 IMAQdx 세션이 누수돼 이후 모든 open이 실패(카메라 고착)한다 - 실패 시 반드시 close
 	// open camera serial
 	if(!InitCamSerial())
-		return false;
+	{ IMAQdxCloseCamera(m_uiSessionId); m_uiSessionId = 0; return false; }
 
     // ready to Grabber
     if(!InitGrabSetup())
-        return false;
+	{ IMAQdxCloseCamera(m_uiSessionId); m_uiSessionId = 0; return false; }
 
 	// Image buffer
     if(!InitResource(nFovSizeX, nFovSizeY))
-        return false;
+	{ IMAQdxCloseCamera(m_uiSessionId); m_uiSessionId = 0; return false; }
 
     m_bFGOpen = true;
 
@@ -72,6 +73,16 @@ bool CFrameGrabber_BS4M::InitInterface()
 	IMAQdxError imaqErr = IMAQdxOpenCamera((char *)CT2A(LPCTSTR(m_strIntfName)), IMAQdxCameraControlModeController, &m_uiSessionId);
 	if (imaqErr != IMAQdxErrorSuccess)
 	{
+		// LYS 2026-09-07 open 실패 원인 로그 - 객체당 1회(성공하면 다시 1회 허용). 리뷰 카메라(img0) 등 미장착 카메라도 기동 시 1회만 찍힌다
+		if (m_bOpenErrLogged == false)
+		{
+			m_bOpenErrLogged = true;
+			char szErr[256] = { 0 };
+			IMAQdxGetErrorString(imaqErr, szErr, sizeof(szErr));
+			CString strLog;
+			strLog.Format(_T("[Camera %s] IMAQdxOpenCamera NG err=0x%08X (%S)"), m_strIntfName, (unsigned)imaqErr, szErr);
+			CLogWrapper::GetInstance()->KMLOG(WARN, strLog);
+		}
 		//IMAQdxGetErrorString(imaqErr, errStr, 255);
 		//CString cStr;
 		//cStr.Format(_T("Frame grabber session NOT opened.\n%s"), errStr);
@@ -79,6 +90,7 @@ bool CFrameGrabber_BS4M::InitInterface()
 		return false;
 	}
 
+	m_bOpenErrLogged = false;	// LYS 2026-09-07 open 성공
 	int w, h, res;
 	res = IMAQdxGetAttribute(m_uiSessionId, IMAQdxAttributeWidth, IMAQdxValueTypeU32, &w);
 	if (res == IMAQdxErrorSuccess)
@@ -150,6 +162,15 @@ bool CFrameGrabber_BS4M::InitResource(long nFovSizeX, long nFovSizeY)
 		res = IMAQdxSetAttribute(m_uiSessionId, IMAQdxAttributeHeight, IMAQdxValueTypeU32, INT_MONITOR_WND_HEIGHT);
 	}
 
+	// LYS 2026-09-14 위 Set 은 호출부 FOV(nFovSize)와 카메라 값이 다를 때 매크로 640x480 을 카메라에 쓰려는 구코드로,
+	//   Acquisition 이 이미 시작된 뒤라 실패하고 m_uiAcqWinWidth/Height 만 호출부 값으로 남는다. 보고 크기와 실제 프레임 크기가
+	//   어긋나면 Live 표시 배율이 틀어지므로(CCD RESET 후 FOV 좌상단만 보임), 마지막에 카메라의 실제 Width/Height 를 다시 읽어 저장한다.
+	w = 0; h = 0;
+	res = IMAQdxGetAttribute(m_uiSessionId, IMAQdxAttributeWidth, IMAQdxValueTypeU32, &w);
+	if (res == IMAQdxErrorSuccess && w > 0)	m_uiAcqWinWidth = w;
+	res = IMAQdxGetAttribute(m_uiSessionId, IMAQdxAttributeHeight, IMAQdxValueTypeU32, &h);
+	if (res == IMAQdxErrorSuccess && h > 0)	m_uiAcqWinHeight = h;
+
 	res = IMAQdxGetAttribute(m_uiSessionId, IMAQdxAttributePixelFormat, IMAQdxValueTypeString, &strPixelFormat);
 	
 	if ((res == IMAQdxErrorSuccess) && (strcmp((char*)strPixelFormat, (char*)"YUV 422 Packed") != 0))
@@ -169,19 +190,21 @@ bool CFrameGrabber_BS4M::ResetGrabber()
 {
 	IMAQdxStopAcquisition(m_uiSessionId);
 	IMAQdxCloseCamera(m_uiSessionId);
+	m_bFGOpen = false;	// LYS 2026-09-07 재오픈 전까지 미연결로 표시
 	Sleep(1000);
 
 	// Interface
 	if (!InitInterface())
 		return false;
 
+	// LYS 2026-09-07 open 이후 단계 실패 시 세션 close (누수 방지)
 	// open camera serial
 	if (!InitCamSerial())
-		return false;
+	{ IMAQdxCloseCamera(m_uiSessionId); m_uiSessionId = 0; return false; }
 
 	// ready to Grabber
 	if (!InitGrabSetup())
-		return false;
+	{ IMAQdxCloseCamera(m_uiSessionId); m_uiSessionId = 0; return false; }
 
 	m_bFGOpen = true;
 

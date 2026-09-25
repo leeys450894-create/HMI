@@ -14,6 +14,7 @@
 CMcCaddressScanner::CMcCaddressScanner(CString strLoggerFolderPath, CString strDefaultFilePath)
 	: CMcAddressScannerImpl(strDefaultFilePath)
 	, m_nReadType(0)
+	, m_bDisconnectCleared(false)	// LYS 2026-09-16
 {
 	m_strAddressName = _T("ProbeCard");
 
@@ -34,13 +35,16 @@ CMcCaddressScanner::CMcCaddressScanner(CString strLoggerFolderPath, CString strD
 	ZeroMemory(&m_szUnloadProbeCardID, sizeof(m_szUnloadProbeCardID));
 
 
-	_tcscpy_s(m_szUnloadProbeCardID[1], _countof(m_szUnloadProbeCardID[1]), _T("TEST1"));
-	_tcscpy_s(m_szUnloadProbeCardID[2], _countof(m_szUnloadProbeCardID[2]), _T("TEST2"));
-	_tcscpy_s(m_szUnloadProbeCardID[3], _countof(m_szUnloadProbeCardID[3]), _T("TEST3"));
-	_tcscpy_s(m_szUnloadProbeCardID[4], _countof(m_szUnloadProbeCardID[4]), _T("TEST4"));
-	_tcscpy_s(m_szUnloadProbeCardID[5], _countof(m_szUnloadProbeCardID[5]), _T("TEST5"));
+	// LYS 2026-09-16 구 테스트용 더미 ID(TEST1~5) 제거. 첫 D2100 응답(약 5초) 전까지 P1~P5 모듈에 프로브가 있는 것처럼 보였다.
+	//                현 설비(OCP)는 P5 1개뿐이고 [1..4]는 존재하지 않으므로 첫 읽기 전에는 전부 빈 문자열로 둔다.
+	//_tcscpy_s(m_szUnloadProbeCardID[1], _countof(m_szUnloadProbeCardID[1]), _T("TEST1"));
+	//_tcscpy_s(m_szUnloadProbeCardID[2], _countof(m_szUnloadProbeCardID[2]), _T("TEST2"));
+	//_tcscpy_s(m_szUnloadProbeCardID[3], _countof(m_szUnloadProbeCardID[3]), _T("TEST3"));
+	//_tcscpy_s(m_szUnloadProbeCardID[4], _countof(m_szUnloadProbeCardID[4]), _T("TEST4"));
+	//_tcscpy_s(m_szUnloadProbeCardID[5], _countof(m_szUnloadProbeCardID[5]), _T("TEST5"));
 
-	_tcscpy_s(m_szProbeCardBF[0], _countof(m_szProbeCardBF[0]), _T("21ABCDEDFH"));
+	// LYS 2026-09-16 구 테스트용 더미 버퍼 ID(21ABCDEDFH) 제거: 첫 D2210 응답 전까지 버퍼 1 에 프로브가 있는 것처럼 보였다(m_szBufferPROBEID[0] 로 전달됨).
+	//	_tcscpy_s(m_szProbeCardBF[0], _countof(m_szProbeCardBF[0]), _T("21ABCDEDFH"));
 
 
 	memset(m_lMcProtocolReadData, 0, sizeof(long) * dfPROBEADDRESS_TOTAL_COUNT);
@@ -59,6 +63,9 @@ CMcCaddressScanner::~CMcCaddressScanner()
 
 #define PLC_D_READ_STARY_BIT					2400
 #define	dfMAX_PLC_IN_CNTD						10*6 // EQ Load / Unload Data, Slot 1~ 5
+#define	dfMAX_PLC_IN_CNTD_LOAD					10*8 // LYS 2026-09-16 Load(D2400) 읽기: EQ Load Data + CST Slot 1~7 (D2400~D2479). Unload(D2100) 쪽은 6블록 유지
+#define	dfPROBE_LOAD_BLOCK_CNT					8    // LYS 2026-09-16 위 80워드 = 10워드 블록 8개
+#define	dfPROBE_UNLOAD_BLOCK_CNT				6    // LYS 2026-09-16 Unload(D2100) 60워드 = [0] EQ Unload Data + [1..5] Probe Module #1~#5. 현 설비(OCP)는 [5](D2150, P5)만 유효
 
 #define PLC_D_READ_PROBE_BUFFER					2210
 #define	dfMAX_READ_PROBE_BUFFER					10*2	// 2
@@ -67,10 +74,13 @@ bool CMcCaddressScanner::ReadProbeLoadData()
 {
 	bool bRet = false;
 	m_nReadType = 0;
-	bRet = ReadCommand(PLC_D_READ_STARY_BIT, dfMAX_PLC_IN_CNTD);
+	//bRet = ReadCommand(PLC_D_READ_STARY_BIT, dfMAX_PLC_IN_CNTD);
+	bRet = ReadCommand(PLC_D_READ_STARY_BIT, dfMAX_PLC_IN_CNTD_LOAD);	// LYS 2026-09-16 Cassette 5->7 슬롯
 
 	CString strLog;
-	strLog.Format(_T("ReadProbeLoadData(%d) : %s, %s, %s, %s, %s, %s"), bRet, m_szLoadProbeCardID[0], m_szLoadProbeCardID[1], m_szLoadProbeCardID[2], m_szLoadProbeCardID[3], m_szLoadProbeCardID[4], m_szLoadProbeCardID[5]);
+	//strLog.Format(_T("ReadProbeLoadData(%d) : %s, %s, %s, %s, %s, %s"), bRet, m_szLoadProbeCardID[0], m_szLoadProbeCardID[1], m_szLoadProbeCardID[2], m_szLoadProbeCardID[3], m_szLoadProbeCardID[4], m_szLoadProbeCardID[5]);
+	//	strLog.Format(_T("ReadProbeLoadData(%d) : %s, %s, %s, %s, %s, %s, %s, %s"), bRet, m_szLoadProbeCardID[0], m_szLoadProbeCardID[1], m_szLoadProbeCardID[2], m_szLoadProbeCardID[3], m_szLoadProbeCardID[4], m_szLoadProbeCardID[5], m_szLoadProbeCardID[6], m_szLoadProbeCardID[7]);	// LYS 2026-09-16 slot 6,7
+	strLog.Format(_T("ReadProbeLoadData send(%d) D%d x%d words"), bRet, PLC_D_READ_STARY_BIT, dfMAX_PLC_IN_CNTD_LOAD);	// LYS 2026-09-16 값은 파싱 후 LogProbeIDValues 가 기록
 	m_pLogFileAccessor->KMLOG(OPER, strLog);
 
 	return bRet;
@@ -83,7 +93,8 @@ bool CMcCaddressScanner::ReadProbeBufferData()
 	bRet = ReadCommand(PLC_D_READ_PROBE_BUFFER, dfMAX_READ_PROBE_BUFFER);
 
 	CString strLog;
-	strLog.Format(_T("ReadProbeBufferData(%d) : %s, %s"), bRet, m_szProbeCardBF[0], m_szProbeCardBF[1]);
+	//	strLog.Format(_T("ReadProbeBufferData(%d) : %s, %s"), bRet, m_szProbeCardBF[0], m_szProbeCardBF[1]);
+	strLog.Format(_T("ReadProbeBufferData send(%d) D%d x%d words"), bRet, PLC_D_READ_PROBE_BUFFER, dfMAX_READ_PROBE_BUFFER);	// LYS 2026-09-16 값은 파싱 후 LogProbeIDValues 가 기록
 	m_pLogFileAccessor->KMLOG(OPER, strLog);
 
 	return bRet;
@@ -96,7 +107,8 @@ bool CMcCaddressScanner::ReadProbeUnloadData()
 	bRet = ReadCommand(PLC_D_READ_UNLOAD_BIT, dfMAX_PLC_IN_CNTD);
 
 	CString strLog;
-	strLog.Format(_T("ReadProbeUnloadData(%d) : %s, %s, %s, %s, %s, %s"), bRet, m_szUnloadProbeCardID[0], m_szUnloadProbeCardID[1], m_szUnloadProbeCardID[2], m_szUnloadProbeCardID[3], m_szUnloadProbeCardID[4], m_szUnloadProbeCardID[5]);
+	//	strLog.Format(_T("ReadProbeUnloadData(%d) : %s, %s, %s, %s, %s, %s"), bRet, m_szUnloadProbeCardID[0], m_szUnloadProbeCardID[1], m_szUnloadProbeCardID[2], m_szUnloadProbeCardID[3], m_szUnloadProbeCardID[4], m_szUnloadProbeCardID[5]);
+	strLog.Format(_T("ReadProbeUnloadData send(%d) D%d x%d words"), bRet, PLC_D_READ_UNLOAD_BIT, dfMAX_PLC_IN_CNTD);	// LYS 2026-09-16 값은 파싱 후 LogProbeIDValues 가 기록
 	m_pLogFileAccessor->KMLOG(OPER, strLog);
 
 	return bRet;
@@ -361,12 +373,26 @@ void CMcCaddressScanner::ThreadRun()
 		////m_pMcProtocolCtrl->GetMemoryBitBlock(_T("D2200"), m_iDataLast, m_lMcProtocolReadData);
 
 		//memcpy(m_lMcProtocolReadData_clone, m_lMcProtocolReadData, sizeof(long) * dfPROBEADDRESS_TOTAL_COUNT);
+		m_bDisconnectCleared = false;	// LYS 2026-09-16
 	}
 	//else
 	//{
 	//	ZeroMemory(&m_szLoadProbeCardID, sizeof(m_szLoadProbeCardID));
 	//	ZeroMemory(&m_szProbeCardBF, sizeof(m_szProbeCardBF));
 	//}
+	else
+	{
+		// LYS 2026-09-16 연결이 끊기면 옛 ID 가 그대로 남아 SACC 화면이 끊긴 줄 모른 채 옛 값을 보여 줬다. 끊김 시 1회만 세 배열을 비우고 WARN 을 남긴다.
+		//                (재연결되면 다음 주기 응답으로 다시 채워진다. 이 함수는 끊긴 동안 약 10ms 마다 호출되므로 플래그로 1회만 처리)
+		if (m_bDisconnectCleared == false)
+		{
+			ZeroMemory(&m_szLoadProbeCardID, sizeof(m_szLoadProbeCardID));
+			ZeroMemory(&m_szProbeCardBF, sizeof(m_szProbeCardBF));
+			ZeroMemory(&m_szUnloadProbeCardID, sizeof(m_szUnloadProbeCardID));
+			m_pLogFileAccessor->KMLOG(WARN, _T("ProbeCard scanner disconnected - Load/Buffer/Unload probe IDs cleared until reconnect"));
+			m_bDisconnectCleared = true;
+		}
+	}
 }
 
 bool CMcCaddressScanner::ReadFileCSV(CString strFileName)
@@ -799,8 +825,10 @@ void CMcCaddressScanner::UpdateProbeID(CString strCommand, int iType)
 	switch (iType)
 	{
 	case 0:
-		nCount = dfMAX_PLC_IN_CNTD;
-		nCnt = 6;
+		//nCount = dfMAX_PLC_IN_CNTD;
+		//nCnt = 6;
+		nCount = dfMAX_PLC_IN_CNTD_LOAD;	// LYS 2026-09-16 Load 응답 헤더 길이 = 블록 8개 기준
+		nCnt = dfPROBE_LOAD_BLOCK_CNT;
 			break;
 	case 1:
 		nCount = dfMAX_PLC_IN_CNTD;
@@ -808,7 +836,8 @@ void CMcCaddressScanner::UpdateProbeID(CString strCommand, int iType)
 		break;
 	case 2:
 		nCount = dfMAX_PLC_IN_CNTD;
-		nCnt = 6;
+		//nCnt = 6;
+		nCnt = dfPROBE_UNLOAD_BLOCK_CNT;	// LYS 2026-09-16
 		break;
 	default:
 		break;
@@ -836,8 +865,25 @@ void CMcCaddressScanner::UpdateProbeID(CString strCommand, int iType)
 
 	if (nHeaderPos < 0)
 	{
+		// LYS 2026-09-16 헤더(기대 길이가 박힌 문자열)가 안 맞으면 조용히 옛 값을 유지하던 것을 WARN 으로 드러낸다.
+		//                PLC 가 D 범위 오류 등으로 종료 코드 != 0000 을 돌려주거나 블록 수(기대 길이)가 PLC 설정과 다를 때 여기로 온다. 같은 내용은 1회만 기록.
+		CString strRecvLen, strEndCode;
+		if (strCommand.GetLength() >= 22 && strCommand.Left(12) == _T("D00000FF03FF"))
+		{
+			strRecvLen = strCommand.Mid(12, 6);
+			strEndCode = strCommand.Mid(18, 4);
+		}
+		CString strWarn;
+		strWarn.Format(_T("UpdateProbeID(type %d) header mismatch - expected len %06X (%d blocks), recv len [%s] end code [%s] : %s"),
+			iType, nReciveSize, nCnt, strRecvLen, strEndCode, strCommand.Left(40));
+		if (strWarn != m_strLastParseWarn)
+		{
+			m_pLogFileAccessor->KMLOG(WARN, strWarn);
+			m_strLastParseWarn = strWarn;
+		}
 		return;
 	}
+	m_strLastParseWarn.Empty();	// LYS 2026-09-16 header OK again -> next mismatch is logged
 
 	char* StopStr;
 	CString strProbeID, strTempH, strTempL, strTemp;
@@ -889,7 +935,13 @@ void CMcCaddressScanner::UpdateProbeID(CString strCommand, int iType)
 
 		strProbeID.TrimRight();
 
-		_tcscpy_s(szProbeCardBF[i], _countof(szProbeCardBF[i]), strProbeID.Mid(0, 10));
+		// LYS 2026-09-16 빈 ID 정규화: PLC 는 빈 ID 를 공백 10자(0x2020 x5 워드)로 두는데 뒤 5워드가 0x0000 -> '0' 로 바뀌어 TrimRight 가 공백을 못 지웠다.
+		//                결과 "          "(공백 10자) 가 m_szUnloadProbeCardID -> m_szPROBEID[4] 로 흘러 IsEmpty()/_tcslen() 판정이 항상 '프로브 있음' 이 되고,
+		//                Probe Align 레시피명이 "PROBE_MEAS_  " 가 됐다. 10자 잘라낸 뒤 앞뒤 공백을 지워 빈 ID 는 "" 로 저장한다(Load 쪽 "0000000000" 은 그대로).
+		//_tcscpy_s(szProbeCardBF[i], _countof(szProbeCardBF[i]), strProbeID.Mid(0, 10));
+		CString strProbeID10 = strProbeID.Mid(0, 10);
+		strProbeID10.Trim();
+		_tcscpy_s(szProbeCardBF[i], _countof(szProbeCardBF[i]), strProbeID10);
 
 		//strLog.Format("[RCVE] BUFFER(%d) : %s ", i + 1, strRFID.Mid(0, 9));
 		//EventLog(strLog); //lhj 160902 add
@@ -900,7 +952,8 @@ void CMcCaddressScanner::UpdateProbeID(CString strCommand, int iType)
 	{
 	case 0:
 	{
-		for (size_t i = 0; i < 6; i++)
+		//for (size_t i = 0; i < 6; i++)
+		for (size_t i = 0; i < dfPROBE_LOAD_BLOCK_CNT; i++)	// LYS 2026-09-16 [0]=EQ Load, [1..7]=CST Slot 1~7
 		{
 			_tcscpy_s(m_szLoadProbeCardID[i], _countof(m_szLoadProbeCardID[i]), szProbeCardBF[i]);
 		}
@@ -913,7 +966,8 @@ void CMcCaddressScanner::UpdateProbeID(CString strCommand, int iType)
 		}
 		break;
 	case 2:
-		for (size_t i = 0; i < 6; i++)
+		//for (size_t i = 0; i < 6; i++)
+		for (size_t i = 0; i < dfPROBE_UNLOAD_BLOCK_CNT; i++)	// LYS 2026-09-16 [0]=EQ Unload, [1..5]=Probe Module 1~5 (OCP: [5]=P5 만 사용)
 		{
 			_tcscpy_s(m_szUnloadProbeCardID[i], _countof(m_szUnloadProbeCardID[i]), szProbeCardBF[i]);
 		}
@@ -921,5 +975,30 @@ void CMcCaddressScanner::UpdateProbeID(CString strCommand, int iType)
 	default:
 		break;
 	}
+
+	LogProbeIDValues(iType);	// LYS 2026-09-16 파싱 직후 값 기록(응답 전에 찍던 OPER 로그 대체)
+}
+
+// LYS 2026-09-16 읽기 명령 직후 찍던 OPER 로그는 항상 직전 주기 값이었다(응답은 비동기). 파싱이 끝난 뒤 실제 수신 값을 남긴다.
+void CMcCaddressScanner::LogProbeIDValues(int iType)
+{
+	CString strLog, strTmp;
+	switch (iType)
+	{
+	case 0:
+		strLog = _T("RECV ProbeLoadData(D2400 EQ Load, CST1~7) :");
+		for (int i = 0; i < dfPROBE_LOAD_BLOCK_CNT; i++) { strTmp.Format(_T("%s[%s]"), (i == 0) ? _T(" ") : _T(", "), m_szLoadProbeCardID[i]); strLog += strTmp; }
+		break;
+	case 1:
+		strLog.Format(_T("RECV ProbeBufferData(D2210 BUF1, BUF2) : [%s], [%s]"), m_szProbeCardBF[0], m_szProbeCardBF[1]);
+		break;
+	case 2:
+		strLog = _T("RECV ProbeUnloadData(D2100 EQ Unload, P1~P5) :");
+		for (int i = 0; i < dfPROBE_UNLOAD_BLOCK_CNT; i++) { strTmp.Format(_T("%s[%s]"), (i == 0) ? _T(" ") : _T(", "), m_szUnloadProbeCardID[i]); strLog += strTmp; }
+		break;
+	default:
+		return;
+	}
+	m_pLogFileAccessor->KMLOG(OPER, strLog);
 }
 
