@@ -34,6 +34,7 @@ CMeasureSequenceItemEngine::CMeasureSequenceItemEngine(stAuroraMgrPool &MgrPool)
     , m_nMeasureArea(0)
 	, m_bAgingCycleActive(false)	// LYS 2026-08-06 AgingCycle E3
 	, m_nAgingCurItem(-1)			// LYS 2026-08-06 AgingCycle E3
+	, m_bEfaCycle(false)				// LYS 2026-09-28 EFA
 {
 	ZeroMemory(m_nAgingRepeat, sizeof(m_nAgingRepeat));	// LYS 2026-08-12 AgingCycle R1
 
@@ -784,14 +785,36 @@ int CMeasureSequenceItemEngine::GetMeasureArea()
 //=========================================================================
 // LYS 2026-08-06 AgingCycle E3: 에이징 리스트 사이클 컨텍스트(OCP DoWorkStartMeasOCP_A)
 //=========================================================================
-bool CMeasureSequenceItemEngine::AgingCycleBegin()
+bool CMeasureSequenceItemEngine::AgingCycleBegin(int nEfaPass)	// LYS 2026-09-28 EFA: nEfaPass >= 0 -> fixed item
 {
 	m_bAgingCycleActive = false;
 	m_nAgingCurItem = -1;
+	m_bEfaCycle = false;	// LYS 2026-09-28 EFA
 	ZeroMemory(m_nAgingRepeat, sizeof(m_nAgingRepeat));	// LYS 2026-08-12 AgingCycle R1
 
 	if (m_MgrPool_link.pSystemConfigMgr == nullptr || m_MgrPool_link.pSystemConfigMgr->IsOCP() == false)
 		return false;
+
+	// LYS 2026-09-28 EFA: fixed-item pass. OCP DoWorkStartMeasICP_EFA runs the item(pass) loop OUTSIDE the stick loop,
+	// so one stick sees exactly one item and there is no per-stick loop-back (AgingCycleNextItem -> false).
+	if (nEfaPass >= 0)
+	{
+		if (m_AgingCycleInfo.Load(GetRecipeEditMgrPtr()->GetRecipeID(), true) == false)
+		{
+			m_pLogFileAccessor->KMLOG(WARN, _T("EFA: efa rcp not found - run standard sequence"));
+			return false;
+		}
+		if (nEfaPass >= m_AgingCycleInfo.GetItemCount()) return false;
+
+		m_nAgingCurItem = nEfaPass;
+		m_bEfaCycle = true;
+		m_bAgingCycleActive = true;
+
+		CString strEfaLog;
+		strEfaLog.Format(_T("EFA: begin pass %d/%d"), nEfaPass + 1, m_AgingCycleInfo.GetItemCount());
+		m_pLogFileAccessor->KMLOG(OPER, strEfaLog);
+		return true;
+	}
 
 	S_RecipeInfo* pRecipeInfo = GetRecipeEditMgrPtr()->GetRecipeInfo();
 	// LYS 2026-08-12 게이트는 전용 레시피 플래그 m_bUseAging_Test를 쓴다.
@@ -814,8 +837,38 @@ bool CMeasureSequenceItemEngine::AgingCycleBegin()
 	return m_bAgingCycleActive;
 }
 
+// LYS 2026-09-28 EFA: pass count for CDoWorkGlassMeasure::ThreadRun. 0 = not EFA (standard single pass).
+// Gate = OCP + (shared m_bNewAgingMode set by EFA START / CIM 'B'  OR  recipe m_bUseEFA) + efa rcp with items.
+int CMeasureSequenceItemEngine::GetEfaPassCount()
+{
+	if (m_MgrPool_link.pSystemConfigMgr == nullptr || m_MgrPool_link.pSystemConfigMgr->IsOCP() == false) return 0;
+
+	bool bFlag = false;
+	if (m_MgrPool_link.pShareMemoryMgr != nullptr) bFlag = m_MgrPool_link.pShareMemoryMgr->GetSys_NewAgingMode();
+
+	S_RecipeInfo* pRecipeInfo = GetRecipeEditMgrPtr()->GetRecipeInfo();
+	bool bRecipe = (pRecipeInfo != nullptr && pRecipeInfo->m_sInspectItem.m_bUseEFA != FALSE);
+
+	if (bFlag == false && bRecipe == false) return 0;
+
+	CAgingCycleInfo info;
+	if (info.Load(GetRecipeEditMgrPtr()->GetRecipeID(), true) == false || info.GetItemCount() < 1)
+	{
+		m_pLogFileAccessor->KMLOG(WARN, _T("EFA: mode requested but efa rcp missing/empty - run standard sequence"));
+		return 0;
+	}
+
+	CString strLog;
+	strLog.Format(_T("EFA: mode on (flag %d, recipe %d), passes %d"), (int)bFlag, (int)bRecipe, info.GetItemCount());
+	m_pLogFileAccessor->KMLOG(OPER, strLog);
+
+	return info.GetItemCount();
+}
+
 bool CMeasureSequenceItemEngine::AgingCycleNextItem()
 {
+	if (m_bEfaCycle) return false;	// LYS 2026-09-28 EFA: one fixed item per pass, no loop-back
+
 	for (int i = m_nAgingCurItem + 1; i < m_AgingCycleInfo.GetItemCount(); i++)
 	{
 		const S_AgingTest* pItem = m_AgingCycleInfo.GetItem(i);
@@ -869,6 +922,7 @@ void CMeasureSequenceItemEngine::AgingCycleEnd()
 	m_bAgingCycleActive = false;
 	m_nAgingCurItem = -1;
 	ZeroMemory(m_nAgingRepeat, sizeof(m_nAgingRepeat));	// LYS 2026-08-12 AgingCycle R1
+	m_bEfaCycle = false;	// LYS 2026-09-28 EFA
 
 	if (m_MgrPool_link.pShareMemoryMgr != nullptr && m_MgrPool_link.pShareMemoryMgr->GetSharedMemory() != nullptr)
 	{

@@ -99,11 +99,15 @@ public:
 // CDoWorkGlassMeasure::ThreadRun이 측정 스레드에서 구동한다(단일 스레드 사용).
 //=========================================================================
 public:
-	bool				AgingCycleBegin();		// gate(bIsOCP + recipe m_bUseAging_Test) + aging rcp load
+	bool				AgingCycleBegin(int nEfaPass = -1);	// gate(bIsOCP + recipe m_bUseAging_Test) + aging rcp load. nEfaPass>=0: EFA fixed item (// LYS 2026-09-28 EFA)
 	void				AgingCycleEnd();
 	bool				AgingCycleNextItem();	// advance to next USE_AGING item. FALSE = exhausted
 	bool				IsAgingCycleActive() const	{ return m_bAgingCycleActive; }
 	int					GetAgingCurItem() const		{ return m_nAgingCurItem; }
+
+	// LYS 2026-09-28 EFA: 2-pass EFA test (OCP DoWorkStartMeasICP_EFA). Pass = list item, item loop OUTSIDE the stick loop.
+	int					GetEfaPassCount();				// 0 = not EFA (standard single pass). Loads {EFA_RCP}\{rcp}.rcp
+	bool				IsEfaCycle() const			{ return m_bEfaCycle; }
 
 	// LYS 2026-08-12 AgingCycle R1: 결과 행 블록용 조밀 종류별 반복 인덱스.
 	// 스텝 진입 시 캡처해 nAreaNum에 쓰고, 해당 종류를 실제 측정한 뒤 1회 증가.
@@ -116,6 +120,7 @@ private:
 	bool				m_bAgingCycleActive;
 	int					m_nAgingCurItem;
 	int					m_nAgingRepeat[enumAgingMeasKind_MAX];	// LYS 2026-08-12 AgingCycle R1
+	bool				m_bEfaCycle;						// LYS 2026-09-28 EFA
 
 public:
 	CMeasureSequenceItemEngine(stAuroraMgrPool &MgrPool);

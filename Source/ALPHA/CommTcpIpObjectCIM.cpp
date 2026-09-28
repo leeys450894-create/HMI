@@ -17,6 +17,7 @@
 #include "Manager/CommTcpIpFactoryMgr.h"
 #include "Manager/CCommTcpIpObjectSysTime.h"
 #include "Recipe/RecipeEditMgr.h"
+#include "DoWork\AgingCycleInfo.h"	// LYS 2026-09-28 EFA: PPID 'B' -> EFA rcp check
 
 
 #ifdef _DEBUG
@@ -32,6 +33,7 @@ CCommTcpIpObjectCIM::CCommTcpIpObjectCIM(int iSeqItemIndex, stAuroraMgrPool& Mgr
 	, m_bOutOfService(false)
 	, m_bUserBypassGlass(false)
 	, m_nUserSelectMode(0)
+	, m_bRecvEFA0(false)	// LYS 2026-09-28 EFA
 	, m_bProcessHandOn(false)
 	, m_MgrPool_link(&MgrPool)
 {
@@ -215,7 +217,23 @@ void CCommTcpIpObjectCIM::xNetCallbackRecieveData(LPVOID ud)
 			{
 				const CString strRcv = vecPacketCommandPool[i];
 
-				if (strRcv.Find(dfSTS_01_04_OK) >= 0)
+				// LYS 2026-09-28 EFA: EFA^0_OK$ / EFA^1_OK$ (OCP parses Mid(3,1), which is '^' for EFA^n - read the digit after '^')
+				if (strRcv.Left(3) == _T("EFA"))
+				{
+					int iDigit = 3;
+					if (strRcv.GetLength() > iDigit && strRcv.GetAt(iDigit) == _T('^')) iDigit++;
+					TCHAR cPass = (strRcv.GetLength() > iDigit) ? strRcv.GetAt(iDigit) : _T('?');
+					if (cPass == _T('0'))
+					{
+						m_bRecvEFA0 = true;
+						m_pLogFileAccessor->KMLOG(OPER, _T("[CIM] EFA^0_OK received"));
+					}
+					else if (cPass == _T('1'))
+					{
+						m_pLogFileAccessor->KMLOG(OPER, _T("[CIM] EFA^1_OK received"));
+					}
+				}
+				else 				if (strRcv.Find(dfSTS_01_04_OK) >= 0)
 				{
 					SetEvent(m_hRecvDEvent[TO_CIM_STS0104]);
 				}
@@ -1398,6 +1416,7 @@ int CCommTcpIpObjectCIM::Process_PPID(CString strMsg)
 	nRtn = GetRecipeEditMgrPtr()->OpenRecipe(strPPID);
 
 	m_pShareMemory->SetSys_AutoAgingMode(false);
+	m_pShareMemory->SetSys_NewAgingMode(false);	// LYS 2026-09-28 EFA: OCP resets both aging flags at every PPID
 
 	if (nRtn == VTM_RV_SUCCESSED && strAging == 'J') { //20210518 modify by Hee (경시변환 측정 모드 J 플래그로 변경 요청)
 		//Aging 측정 리스트 없으면 알람									//PPID 와 Aging 플래그 없을시 *알람명은 바꿔야 할수도
@@ -1411,6 +1430,44 @@ int CCommTcpIpObjectCIM::Process_PPID(CString strMsg)
 		//	m_pSystem->nJobCount = 1;
 		//	m_pSystem->m_nAgingListRow = 0;
 		//	m_pSystem->m_nAgingListCol = 0;
+		}
+	}
+
+	// LYS 2026-09-28 EFA: OCP_EFA PPID 2nd field = 4-char WorkState, char [1] = 'A' aging / 'B' EFA (DlgNaviMaintCIM.cpp:647-724).
+	// A 1-char field is read as-is. 'J' above is kept for older hosts.
+	TCHAR cWork = 0;
+	if (strArrPPID.GetSize() == 2)
+	{
+		if (strAging.GetLength() >= 2)		cWork = strAging.GetAt(1);
+		else if (strAging.GetLength() == 1)	cWork = strAging.GetAt(0);
+	}
+
+	if (nRtn == VTM_RV_SUCCESSED && cWork == _T('A'))
+	{
+		m_pShareMemory->SetSys_AutoAgingMode(true);
+		m_pLogFileAccessor->KMLOG(OPER, _T("[CIM] PPID WorkState 'A' - aging mode"));
+	}
+	else if (nRtn == VTM_RV_SUCCESSED && cWork == _T('B'))
+	{
+		CAgingCycleInfo efaInfo;
+		if (efaInfo.Load(strPPID, true) == false || efaInfo.GetItemCount() < 1)
+		{
+			// OCP: PPIDREQ_NG + JOB_RECIPE_NOT_EXIST. nRet (not nRtn) is what the caller turns into PPID OK/NG.
+			nRet = JOB_RECIPE_NOT_EXIST;
+			CString strEfaLog;
+			strEfaLog.Format(_T("[CIM] PPID WorkState 'B' but EFA rcp missing/empty: %s%s.rcp"), (LPCTSTR)CAgingCycleInfo::GetEfaRcpPath(), (LPCTSTR)strPPID);
+			m_pLogFileAccessor->KMLOG(WARN, strEfaLog);
+		}
+		else
+		{
+			m_pShareMemory->SetSys_NewAgingMode(true);
+			if (m_pShareMemory->GetSharedMemory() != NULL)
+			{
+				m_pShareMemory->GetSharedMemory()->nJobCount = 1;
+				m_pShareMemory->GetSharedMemory()->m_nAgingListRow = 0;
+				m_pShareMemory->GetSharedMemory()->m_nAgingListCol = 0;
+			}
+			m_pLogFileAccessor->KMLOG(OPER, _T("[CIM] PPID WorkState 'B' - EFA mode"));
 		}
 	}
 
@@ -1920,6 +1977,35 @@ int CCommTcpIpObjectCIM::Cmd_Send_AT0()
 	m_bProcessHandOn = false;	// jsyoon 2022.07.22 add
 
 	return nRet;
+}
+
+// LYS 2026-09-28 EFA: EFA 2-pass handshake (OCP_EFA DlgNaviMaintCIM.cpp:3022-3060)
+int CCommTcpIpObjectCIM::Cmd_Send_EFA0()
+{
+	m_bRecvEFA0 = false;
+	return Cmd_Send(dfEFA_T0);
+}
+
+int CCommTcpIpObjectCIM::Cmd_Send_EFA1()
+{
+	return Cmd_Send(dfEFA_T1);
+}
+
+// OCP isEFA0RecvCheck: 100 ms x 50 poll. Caller continues on timeout (user decision 2026-09-28: OCP behaviour).
+bool CCommTcpIpObjectCIM::WaitEFA0Ack(DWORD dwTimeOutMs)
+{
+	DWORD dwStart = GetTickCount();
+	while (m_bRecvEFA0 == false)
+	{
+		if (GetTickCount() - dwStart >= dwTimeOutMs) break;
+		Sleep(100);
+	}
+
+	CString strLog;
+	strLog.Format(_T("[CIM] EFA^0_OK %s (%lu ms)"), m_bRecvEFA0 ? _T("OK") : _T("TIMEOUT - continue"), GetTickCount() - dwStart);
+	m_pLogFileAccessor->KMLOG(m_bRecvEFA0 ? OPER : WARN, strLog);
+
+	return m_bRecvEFA0;
 }
 
 int CCommTcpIpObjectCIM::Cmd_Send_STS0104()

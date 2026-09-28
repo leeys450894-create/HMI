@@ -537,7 +537,12 @@ bool CDoWorkGlassRecipeStep_ProbeCheck::Run()
 	{
 		// LYS 2026-09-08 ProbeCheck 후 ACX SACC에 꽂기
 		int nBit = 0;
-		if (nBit = m_pShareItem->GetMaintControlMgrPtr()->GetIOMapControlMgrPtr()->GetParam_DIOMapMemoryBitImport(PLC_AUTO_CHANGE_X0_POSITION_03))		// Safety 위치
+
+		// LYS 2026-09-28 OOS: motion OOS skips AutoChange X safety bit (MOTION_INTERLOCK_11)
+		bool bMotionOOS = (m_pShareItem->GetMaintControlMgrPtr()->IsOutOfServiceMC() == true);
+		if (bMotionOOS) m_pShareItem->GetLogFileAccessorPtr()->KMLOG(SYST, _T("CDoWorkGlassRecipeStep_ProbeCheck : motion OOS - skip ACX safety bit check"));
+
+		if (bMotionOOS || (nBit = m_pShareItem->GetMaintControlMgrPtr()->GetIOMapControlMgrPtr()->GetParam_DIOMapMemoryBitImport(PLC_AUTO_CHANGE_X0_POSITION_03)))		// Safety 위치
 		{
 			double dACXPos[3];
 			ZeroMemory(&dACXPos, sizeof(dACXPos));

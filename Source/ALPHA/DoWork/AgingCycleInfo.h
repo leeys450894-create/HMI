@@ -27,9 +27,10 @@ public:
 	~CAgingCycleInfo();
 
 	static CString	GetAgingRcpPath();
+	static CString	GetEfaRcpPath();		// LYS 2026-09-28 EFA: registry DIR\EFA_RCP (EFA 2-pass rcp folder)
 
 	// Loads item list + [MASECELL] cell map for the recipe. FALSE if file/list missing.
-	bool	Load(CString strRcpName);
+	bool	Load(CString strRcpName, bool bEfa = false);	// LYS 2026-09-28 EFA: bEfa -> {EFA_RCP}\{rcp}.rcp
 	void	Clear();
 
 	int		GetItemCount() const					{ return (int)m_vecItem.size(); }

@@ -44,6 +44,8 @@ public:
     bool		GetSys_GlassJudge();
     void		SetSys_AutoAgingMode(bool bOn);
     bool		GetSys_AutoAgingMode();
+    void		SetSys_NewAgingMode(bool bOn);	// LYS 2026-09-28 EFA
+    bool		GetSys_NewAgingMode();
 	void		SetSys_LampTimeOver(int index, bool bOn);
 	bool		GetSys_LampTimeOver(int index);
 	void		SetSys_TemperOver(int index, bool bOn);

@@ -17,6 +17,12 @@
 #define dfAT_0				_T("AT0$")
 #define dfAT_0_OK			_T("AT0_OK$")
 
+// LYS 2026-09-28 EFA: EFA 2-pass test handshake (OCP_EFA Include/DefinesCIM.h:132-136)
+#define dfEFA_T0			_T("EFA^0$")		// T0 (before aging) done, APD uploaded
+#define dfEFA_T1			_T("EFA^1$")		// T1 (after aging) done
+#define dfEFA_T0_OK			_T("EFA^0_OK$")
+#define dfEFA_T1_OK			_T("EFA^1_OK$")
+
 #define dfGLSSTART			_T("GLSSTART$")
 #define dfGLSSTART_OK		_T("GLSSTART_OK$")
 #define dfEQPSTART			_T("EQPSTART$")

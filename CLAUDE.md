@@ -327,7 +327,7 @@ Allows resuming an interrupted Glass inspection from where it stopped (e.g., aft
 | MotorControlMgr.cpp | `Source/ALPHA/Manager/` | ~3,300 |
 | SystemInitializeStep.cpp | `Source/ALPHA/DoWork/` | ~2,300 |
 | DlgMainForm.cpp | `Source/ALPHA/` | ~2,350 |
-| ShareMem.h | `Source/Include/` | ~2,000 |
+| ShareMem.h | **`CoreFunction/ShareMemFunction/`** | ~2,400 — 실제 컴파일되는 `VTM_SYSTEM`(`ShareMemoryMgr.h`→`ShareMemFunction.h`→같은 폴더). `Source/Include/ShareMem.h`(~2,000)는 어떤 TU에도 include되지 않는 사장 사본이며 내용도 갈렸다(2026-09-28 확인) — 필드 추가는 CoreFunction 사본 끝에만 |
 | DefinesPLC.h | `Source/Include/` | 1,000+ |
 | preDefine.h | `Source/Include/` + `CoreFunction/dll_Recipe/dfcRecipe/` | ~830 (dual copy, kept in sync) |
 | CDlgSACC.cpp | `CoreFunction/dSACC/` | ~5,200 (SACC 화면 전체 + 도달 불가한 구 시퀀스 약 2,000줄) |

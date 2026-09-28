@@ -26,6 +26,7 @@ class CCommTcpIpObjectCIM :public CCommEthFunction
 	HANDLE					m_hRecvDEvent[CIM_CMD_SERVER_TO_CIM_END];
 	bool					m_bOutOfService;
 	int						m_nUserSelectMode;
+	volatile bool			m_bRecvEFA0;			// LYS 2026-09-28 EFA: set by EFA^0_OK$ receive
 
 	// FTP 
 	CWinThread* m_pThread;
@@ -89,6 +90,11 @@ public:
 	int WaitForCIMResponse_Action(CString strCmd, UINT nAction, UINT nTimeOut = 10);
 
 	int Cmd_Send_AT0();
+
+	// LYS 2026-09-28 EFA: EFA 2-pass handshake (OCP_EFA CDlgNaviMaintCIM::Cmd_Send_EFA0/EFA1/isEFA0RecvCheck)
+	int  Cmd_Send_EFA0();
+	int  Cmd_Send_EFA1();
+	bool WaitEFA0Ack(DWORD dwTimeOutMs = 5000);	// true = EFA^0_OK$ received
 	int Cmd_Send_STS0104();
 	int Cmd_Send_STS0204();
 	int Cmd_Send_STS0304();

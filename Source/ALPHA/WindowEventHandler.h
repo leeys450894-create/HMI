@@ -133,6 +133,7 @@ enum enumManualTemID
 	enumManualTemID_AGINGTEST,
 	enumManualTemID_AGINGSET,
 	enumManualTemID_WADMULTI,	// LYS 2026-07-23 WAD Multi Meas
+	enumManualTemID_AGINGNEW,	// LYS 2026-09-28 EFA
 	enumManualTemIDCount,
 };
 

@@ -13,6 +13,8 @@
 #include "FunctionModule/FunctionModuleEQStateChange.h"
 #include "D_SelectMeasOrUnload.h"
 #include "Alarm/AlarmController.h"
+#include "Recipe/RecipeEditMgr.h"	// LYS 2026-09-28 EFA
+#include "DoWork/AgingCycleInfo.h"	// LYS 2026-09-28 EFA
 
 #ifdef _DEBUG
 #define new DEBUG_NEW
@@ -768,6 +770,31 @@ bool CDoWorkSequenceCIMStep_MeasDone::Run()
 
 	int nRet = VTM_RV_FAILED;
 	
+	// LYS 2026-09-28 EFA: EFA glass -> EFA^1$ (T1 done) before STS1106 (OCP JOB_Proc.cpp:311: EFA1 -> 500 ms -> WORKSTATE_CHANGE -> STS1106).
+	// Same gate as CMeasureSequenceItemEngine::GetEfaPassCount: OCP + (EFA flag or recipe EFA) + EFA rcp with items.
+	// WORKSTATE_CHANGE^_CAA$ is deferred (OCP sends it with a missing Format argument - D-3).
+	{
+		bool bEfaGlass = false;
+		if (m_pShareItem->GetSystemConfigMgrPtr() != nullptr && m_pShareItem->GetSystemConfigMgrPtr()->IsOCP())
+		{
+			bool bFlag = m_pShareItem->GetShareMemoryMgrPtr()->GetSys_NewAgingMode();
+			S_RecipeInfo* pEfaRcp = m_pShareItem->GetRecipeEditMgrPtr()->GetRecipeInfo();
+			bool bRecipe = (pEfaRcp != nullptr && pEfaRcp->m_sInspectItem.m_bUseEFA != FALSE);
+			if (bFlag || bRecipe)
+			{
+				CAgingCycleInfo efaInfo;
+				bEfaGlass = (efaInfo.Load(m_pShareItem->GetRecipeEditMgrPtr()->GetRecipeID(), true) && efaInfo.GetItemCount() > 0);
+			}
+		}
+
+		if (bEfaGlass)
+		{
+			m_pShareItem->GetLogFileAccessorPtr()->KMLOG(SYST, _T("CDoWorkSequenceCIMStep_MeasDone : EFA glass - send EFA^1$"));
+			m_pShareItem->GetCommTcpIpFactoryMgr()->GetCommTcpIpObjectCIM()->Cmd_Send_EFA1();
+			Sleep(500);
+		}
+	}
+
 	// Mdasure End
 	nRet = m_pShareItem->GetCommTcpIpFactoryMgr()->GetCommTcpIpObjectCIM()->Cmd_Send_STS1106();
 	

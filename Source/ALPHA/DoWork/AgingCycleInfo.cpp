@@ -24,20 +24,29 @@ CString CAgingCycleInfo::GetAgingRcpPath()
 		_T("D:\\HBS\\PARAM_OCP\\PARAM\\AgingRcp\\"));
 }
 
+// LYS 2026-09-28 EFA: EFA rcp folder - separate registry key (OCP_EFA reuses DIR\AGING_RCP, which collides)
+CString CAgingCycleInfo::GetEfaRcpPath()
+{
+	CString strPath = AfxGetApp()->GetProfileString(_T("DIR"), _T("EFA_RCP"),
+		_T("D:\\HBS\\PARAM_OCP\\PARAM\\EFARcp\\"));
+	if (strPath.IsEmpty() == FALSE && strPath.Right(1) != _T("\\")) strPath += _T("\\");
+	return strPath;
+}
+
 void CAgingCycleInfo::Clear()
 {
 	m_vecItem.clear();
 	m_vecCellMask.clear();
 }
 
-bool CAgingCycleInfo::Load(CString strRcpName)
+bool CAgingCycleInfo::Load(CString strRcpName, bool bEfa)	// LYS 2026-09-28 EFA
 {
 	Clear();
 
 	if (strRcpName.IsEmpty() || strRcpName == _T("UNKNOWN")) return false;
 
 	CString strPath;
-	strPath.Format(_T("%s%s.rcp"), (LPCTSTR)GetAgingRcpPath(), (LPCTSTR)strRcpName);
+	strPath.Format(_T("%s%s.rcp"), (LPCTSTR)(bEfa ? GetEfaRcpPath() : GetAgingRcpPath()), (LPCTSTR)strRcpName);	// LYS 2026-09-28 EFA
 
 	TCHAR cValue[1024];
 	ZeroMemory(cValue, sizeof(cValue));

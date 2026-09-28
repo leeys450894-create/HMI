@@ -1050,6 +1050,9 @@
     <ClInclude Include="DlgSubManual_AgingTest.h">
       <Filter>헤더 파일\DIALOG\HMI</Filter>
     </ClInclude>
+    <ClInclude Include="DlgSubManual_AgingNew.h">
+      <Filter>헤더 파일\DIALOG\HMI</Filter>
+    </ClInclude>
     <ClInclude Include="DlgSubManual_AutoContact.h">
       <Filter>헤더 파일\DIALOG\HMI</Filter>
     </ClInclude>
@@ -1911,6 +1914,9 @@
       <Filter>소스 파일\DIALOG\HMI</Filter>
     </ClCompile>
     <ClCompile Include="DlgSubManual_AgingTest.cpp">
+      <Filter>소스 파일\DIALOG\HMI</Filter>
+    </ClCompile>
+    <ClCompile Include="DlgSubManual_AgingNew.cpp">
       <Filter>소스 파일\DIALOG\HMI</Filter>
     </ClCompile>
     <ClCompile Include="DlgSubManual_AutoContact.cpp">

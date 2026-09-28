@@ -453,6 +453,7 @@ void CDlgSubManual_AgingTest::OnAgingProcStrart()
 	if (m_pAuroraMgr->GetShareMemoryMgrPtr()->GetSharedMemory() != NULL)
 	{
 		m_pAuroraMgr->GetShareMemoryMgrPtr()->GetSharedMemory()->m_bAutoAgingMode = TRUE;
+		m_pAuroraMgr->GetShareMemoryMgrPtr()->SetSys_NewAgingMode(false);	// LYS 2026-09-28 EFA: mutually exclusive with EFA mode
 		m_pAuroraMgr->GetShareMemoryMgrPtr()->GetSharedMemory()->m_nAgingListRow = 0;
 		m_pAuroraMgr->GetShareMemoryMgrPtr()->GetSharedMemory()->m_nAgingListCol = 0;
 		m_pAuroraMgr->GetShareMemoryMgrPtr()->GetSharedMemory()->nJobCount = nCycleCount;

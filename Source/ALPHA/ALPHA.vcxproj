@@ -472,6 +472,7 @@ copy $(OutDir)$(TargetName).pdb "$(ProjectDir)..\Bin\"
     <ClInclude Include="DlgSMarkUI.h" />
     <ClInclude Include="DlgSubMeasure_Progress.h" />
     <ClInclude Include="DlgSubManual_AgingTest.h" />
+    <ClInclude Include="DlgSubManual_AgingNew.h" />
     <ClInclude Include="DlgSubManual_AutoContact.h" />
     <ClInclude Include="DlgAlignCCD.h" />
     <ClInclude Include="DlgALPHA.h" />
@@ -728,6 +729,7 @@ copy $(OutDir)$(TargetName).pdb "$(ProjectDir)..\Bin\"
     <ClCompile Include="DlgSMarkUI.cpp" />
     <ClCompile Include="DlgSubMeasure_Progress.cpp" />
     <ClCompile Include="DlgSubManual_AgingTest.cpp" />
+    <ClCompile Include="DlgSubManual_AgingNew.cpp" />
     <ClCompile Include="DlgSubManual_AutoContact.cpp" />
     <ClCompile Include="DlgAlignCCD.cpp" />
     <ClCompile Include="DlgALPHA.cpp" />

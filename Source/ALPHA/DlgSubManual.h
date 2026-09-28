@@ -12,6 +12,7 @@ class CDlgSubManual_AgingTest;
 class CDlgSubManual_AgingSet;
 class CDlgSubManual_AutoContact;
 class CDlgSubManual_MultiMeas;	// LYS 2026-07-23 WAD Multi Meas
+class CDlgSubManual_AgingNew;	// LYS 2026-09-28 EFA
 class CDlgSubManual : public CMainSubDlgWin
 {
 	DECLARE_DYNAMIC(CDlgSubManual)
@@ -26,6 +27,7 @@ private:
 	CDlgSubManual_AgingSet*		 m_pDlgSub_AgingSet;
 	CDlgSubManual_AutoContact*	 m_pDlgSub_AutoContact;
 	CDlgSubManual_MultiMeas*	 m_pDlgSub_MultiMeas;	// LYS 2026-07-23 WAD Multi Meas
+	CDlgSubManual_AgingNew*		 m_pDlgSub_AgingNew;	// LYS 2026-09-28 EFA
 
 public:
 	CDlgSubManual(CAuroraMgr* pAuroraMgr, CWnd* pParent = nullptr);   // 표준 생성자입니다.
@@ -51,6 +53,7 @@ public:
 	afx_msg void OnBnClickedButtonManual5();
 	afx_msg void OnBnClickedButtonManualAgingSet();
 	afx_msg void OnBnClickedButtonManualWadMulti();	// LYS 2026-07-23 WAD Multi Meas
+	afx_msg void OnBnClickedButtonManualAgingNew();	// LYS 2026-09-28 EFA
 protected:
 	afx_msg LRESULT OnContrilMsgEvent(WPARAM wParam, LPARAM lParam);
 };

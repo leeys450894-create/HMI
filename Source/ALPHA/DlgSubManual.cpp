@@ -16,6 +16,7 @@
 #include "DlgSubManual_AgingTest.h"
 #include "DlgSubManual_AgingSet.h"
 #include "DlgSubManual_MultiMeas.h"	// LYS 2026-07-23 WAD Multi Meas
+#include "DlgSubManual_AgingNew.h"	// LYS 2026-09-28 EFA
 #include "Manager/SequenceManager.h"
 #include ".\FunctionModule\FunctionModuleEQState.h"
 
@@ -30,6 +31,7 @@ CDlgSubManual::CDlgSubManual(CAuroraMgr* pAuroraMgr, CWnd* pParent /*=nullptr*/)
 	, m_pAuroraMgr(pAuroraMgr)
 	, m_iCurFileView(0)
 	, m_pDlgSub_MultiMeas(nullptr)	// LYS 2026-07-23
+	, m_pDlgSub_AgingNew(nullptr)	// LYS 2026-09-28 EFA
 {
 
 }
@@ -42,6 +44,14 @@ CDlgSubManual::~CDlgSubManual()
 		m_pDlgSub_MultiMeas->DestroyWindow();
 		delete m_pDlgSub_MultiMeas;
 		m_pDlgSub_MultiMeas = nullptr;
+	}
+
+	// LYS 2026-09-28 EFA cleanup
+	if (m_pDlgSub_AgingNew)
+	{
+		m_pDlgSub_AgingNew->DestroyWindow();
+		delete m_pDlgSub_AgingNew;
+		m_pDlgSub_AgingNew = nullptr;
 	}
 
 	if (m_pDlgSub_Step)
@@ -66,6 +76,7 @@ BEGIN_MESSAGE_MAP(CDlgSubManual, CMainSubDlgWin)
 	ON_BN_CLICKED(IDC_BUTTON_MANUAL_5, &CDlgSubManual::OnBnClickedButtonManual5)
 	ON_BN_CLICKED(IDC_BUTTON_MANUAL_AGING_SET, &CDlgSubManual::OnBnClickedButtonManualAgingSet)
 	ON_BN_CLICKED(IDC_BUTTON_MANUAL_WAD_MULTI, &CDlgSubManual::OnBnClickedButtonManualWadMulti)	// LYS 2026-07-23
+	ON_BN_CLICKED(IDC_BUTTON_MANUAL_AGING_NEW, &CDlgSubManual::OnBnClickedButtonManualAgingNew)	// LYS 2026-09-28 EFA
 	ON_MESSAGE(WM_CONTRIL_DOWN_EVENT, &CDlgSubManual::OnContrilMsgEvent)
 END_MESSAGE_MAP()
 
@@ -166,6 +177,15 @@ BOOL CDlgSubManual::OnInitDialog()
 	m_pDlgSub_MultiMeas->MoveWindow(rtROI.left + 2, rtROI.top, r.Width(), r.Height());
 	m_pDlgSub_MultiMeas->ShowWindow(SW_HIDE);
 
+	//--------------------------------------------------------------------
+	//8. EFA TEST create  // LYS 2026-09-28 EFA (OCP_EFA IDD_DLG_NAVI_MANUAL_AGING_NEW)
+	//--------------------------------------------------------------------
+	m_pDlgSub_AgingNew = new CDlgSubManual_AgingNew(m_pAuroraMgr);
+	m_pDlgSub_AgingNew->Create(IDD_DLG_SUB_MANUAL_AGING_NEW, this);
+	m_pDlgSub_AgingNew->GetWindowRect(r);
+	m_pDlgSub_AgingNew->MoveWindow(rtROI.left + 2, rtROI.top, r.Width(), r.Height());
+	m_pDlgSub_AgingNew->ShowWindow(SW_HIDE);
+
 	m_iCurFileView = enumManualTemID_MEAS;
 	RefreshFileView(TRUE);
 
@@ -184,6 +204,7 @@ void CDlgSubManual::RefreshFileView(BOOL bShow)
 	m_pDlgSub_AutoContact->ShowWindow(SW_HIDE);
 	m_pDlgSub_Step->ShowWindow(SW_HIDE);
 	m_pDlgSub_MultiMeas->ShowWindow(SW_HIDE);	// LYS 2026-07-23
+	m_pDlgSub_AgingNew->ShowWindow(SW_HIDE);	// LYS 2026-09-28 EFA
 
 	if(CSACCMgr::GetInstance()->GetReportmWnd() != nullptr)
 		CSACCMgr::GetInstance()->GetReportmWnd()->ShowWindow(SW_HIDE);
@@ -193,6 +214,7 @@ void CDlgSubManual::RefreshFileView(BOOL bShow)
 	GetDlgItem(IDC_BUTTON_MANUAL_AGING_TEST)->ShowWindow(SW_SHOW);
 	GetDlgItem(IDC_BUTTON_MANUAL_5)->ShowWindow(SW_SHOW);
 	GetDlgItem(IDC_BUTTON_MANUAL_AGING_SET)->ShowWindow(SW_SHOW);
+	GetDlgItem(IDC_BUTTON_MANUAL_AGING_NEW)->ShowWindow(SW_SHOW);	// LYS 2026-09-28 EFA
 	///
 
 	if (bShow == TRUE)
@@ -216,6 +238,9 @@ void CDlgSubManual::RefreshFileView(BOOL bShow)
 				break;
 			case enumManualTemID_WADMULTI:	// LYS 2026-07-23 WAD Multi Meas
 				m_pDlgSub_MultiMeas->ShowWindow(SW_SHOW);
+				break;
+			case enumManualTemID_AGINGNEW:	// LYS 2026-09-28 EFA
+				m_pDlgSub_AgingNew->ShowWindow(SW_SHOW);
 				break;
 			case enumManualTemID_SACC:
 				m_pDlgSub_Step->ShowWindow(SW_SHOW);
@@ -295,6 +320,16 @@ void CDlgSubManual::OnBnClickedButtonManualWadMulti()
 	CLogWrapper::GetInstance()->KMLOG(OPER, _T("CDlgSubManual::OnBnClickedButtonManualWadMulti"));
 
 	m_iCurFileView = enumManualTemID_WADMULTI;
+	RefreshFileView(TRUE);
+}
+
+
+// LYS 2026-09-28 EFA test view (OCP_EFA CDlgNaviManual::OnBnClickedBtnManualAgingNew)
+void CDlgSubManual::OnBnClickedButtonManualAgingNew()
+{
+	CLogWrapper::GetInstance()->KMLOG(OPER, _T("CDlgSubManual::OnBnClickedButtonManualAgingNew"));
+
+	m_iCurFileView = enumManualTemID_AGINGNEW;
 	RefreshFileView(TRUE);
 }
 

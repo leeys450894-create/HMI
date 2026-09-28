@@ -6461,6 +6461,18 @@ bool CDoWorkGlassMeasureStep_AGING::Run()
 	
 	 m_pShareItem->GetLogFileAccessorPtr()->KMLOG(SYST, _T("CDoWorkGlassMeasureStep_AGING Start."));
 
+	// LYS 2026-09-28 EFA: EFA item without USE_AGING (the T1 row) skips the PG aging itself
+	// (OCP _EFA: bUseAging = sAgingTest.m_bUseAging). AgingTest cycle is untouched (its NextItem only picks USE_AGING items).
+	if (m_pMeasSeqItemEngine != NULL && m_pMeasSeqItemEngine->IsEfaCycle())
+	{
+		const S_AgingTest* pEfaItem = m_pMeasSeqItemEngine->GetAgingCycleInfo()->GetItem(m_pMeasSeqItemEngine->GetAgingCurItem());
+		if (pEfaItem != NULL && pEfaItem->m_bUseAging == FALSE)
+		{
+			m_pShareItem->GetLogFileAccessorPtr()->KMLOG(SYST, _T("CDoWorkGlassMeasureStep_AGING End. (EFA item USE_AGING=0 - skip)"));
+			return true;
+		}
+	}
+
 	// LYS 2026-08-06 AgingCycle E4: progress marker (col 1 = Aging)
 	if (m_pMeasSeqItemEngine != NULL && m_pMeasSeqItemEngine->IsAgingCycleActive()
 		&& m_pShareItem->GetShareMemoryMgrPtr()->GetSharedMemory() != NULL)
@@ -6711,6 +6723,17 @@ bool CDoWorkGlassMeasureStep_AGING::Run()
 					stPosition[0].dPosition = dLeft;
 					stPosition[1].axis = AXIS_Y4;   nAxis++;
 					stPosition[1].dPosition = dRight;
+					// LYS 2026-09-28 OCP: review snap heads are Y1/Y2 (BACK, cameras 0/1) and they already sit at dLeft/dRight
+					// from MoveMeasureArea. Y3/Y4 (FRONT, SW limit +697) must go to Position.ini [SAFETY] instead -
+					// df_HEAD_Y_IDLE_SAFETY marker, resolved by MoveCmdPosAging/ApplyIdleHeadSafetyY (same as PreMeas).
+					// 2026-09-28 OOS run: 'HEAD FRONT RIGHT target 720.158 > MX 697.000' came from here.
+					if (bIsOCP)
+					{
+						stPosition[0].axis = AXIS_Y1;	stPosition[0].dPosition = dLeft;
+						stPosition[1].axis = AXIS_Y2;	stPosition[1].dPosition = dRight;
+						stPosition[2].axis = AXIS_Y3;	stPosition[2].dPosition = df_HEAD_Y_IDLE_SAFETY;	nAxis++;
+						stPosition[3].axis = AXIS_Y4;	stPosition[3].dPosition = df_HEAD_Y_IDLE_SAFETY;	nAxis++;
+					}
 					//stPosition[2].axis = AXIS_X3;   nAxis++;
 					//stPosition[2].dPosition = dStageY;
 					//stPosition[3].axis = AXIS_Z1;   nAxis++;
@@ -6731,7 +6754,7 @@ bool CDoWorkGlassMeasureStep_AGING::Run()
 				{
 					// Review Snap
 					Sleep(1000);
-					for (size_t j = 2; j < 4; j++)	// 2 Head
+					for (size_t j = (bIsOCP ? 0 : 2); j < (bIsOCP ? 2 : 4); j++)	// 2 Head (// LYS 2026-09-28 OCP: BACK cameras 0/1)
 					{
 						m_pShareItem->GetAlignCameraMgr(j)->SaveCurImage(4 + iProbe);
 					}
@@ -6759,6 +6782,12 @@ bool CDoWorkGlassMeasureStep_AGING::Run()
 				stPosition[2].dPosition = dLeft;
 				stPosition[3].axis = AXIS_Y4;   nAxis++;
 				stPosition[3].dPosition = dRight;
+				// LYS 2026-09-28 OCP: Y3/Y4 (FRONT) to [SAFETY] - review position 720 exceeds their SW limit 697
+				if (bIsOCP)
+				{
+					stPosition[2].dPosition = df_HEAD_Y_IDLE_SAFETY;
+					stPosition[3].dPosition = df_HEAD_Y_IDLE_SAFETY;
+				}
 				//stPosition[4].axis = AXIS_X2;   nAxis++;
 				//stPosition[4].dPosition = dCurPos; // pRecipeData->m_vecStick[0].m_fStageY + dOffsetX;
 				//stPosition[5].axis = AXIS_Z1;   nAxis++;

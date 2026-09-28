@@ -241,6 +241,21 @@ bool CShareMemoryMgr::GetSys_AutoAgingMode()
     return m_pFunction->GetSharedMemory()->m_bAutoAgingMode;
 }
 
+// LYS 2026-09-28 EFA: EFA 2-pass test mode flag (OCP_EFA m_bNewAgingMode)
+void CShareMemoryMgr::SetSys_NewAgingMode(bool bOn)
+{
+    CCriticalSectionSync single(&m_cs_get, TRUE);
+
+    m_pFunction->GetSharedMemory()->m_bNewAgingMode = bOn;
+}
+
+bool CShareMemoryMgr::GetSys_NewAgingMode()
+{
+    CCriticalSectionSync single(&m_cs_get, TRUE);
+
+    return m_pFunction->GetSharedMemory()->m_bNewAgingMode;
+}
+
 void CShareMemoryMgr::SetSys_LampTimeOver(int index, bool bOn)
 {
 	CCriticalSectionSync single(&m_cs_get, TRUE);
