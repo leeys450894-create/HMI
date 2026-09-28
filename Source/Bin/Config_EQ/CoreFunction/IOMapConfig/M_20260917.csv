@@ -1,0 +1,565 @@
+Address,M Address State Description
+M4000,EQ      Ready   State   To EQ
+M4001,EQ      Load    State   To EQ
+M4002,EQ      Measure State   To EQ
+M4005,PLC     Initial Comp.
+M4008,PLC     Alarm   To EQ
+M4009,PLC     Warning To EQ
+M4010,EMS     Switch  01
+M4011,EMS     Switch  02
+M4012,EMS     Switch  03
+M4013,EMS     Switch  04
+M4014,EMS     Switch  05
+M4015,EMS     Switch  06
+M4016,EMS     Switch  07
+M4017,EMS     Switch  08
+M4018,EMS     Switch  09
+M4019,EMS     Switch  10
+M4020,Door    Sensor  01
+M4021,Door    Sensor  02
+M4022,Door    Sensor  03
+M4023,Door    Sensor  04
+M4024,Door    Sensor  05
+M4025,Door    Sensor  06
+M4026,Door    Sensor  07
+M4027,Door    Sensor  08
+M4028,Door    Sensor  09
+M4029,Door    Sensor  10
+M4030,Door    Unlock  01
+M4031,Door    Unlock  02
+M4032,Door    Unlock  03
+M4033,Door    Unlock  04
+M4034,Door    Unlock  05
+M4035,Door    Unlock  06
+M4036,Door    Unlock  07
+M4037,Door    Unlock  08
+M4038,Door    Unlock  09
+M4039,Door    Unlock  10
+M4040,Door    Key     Unremove01
+M4041,Door    Key     Unremove02
+M4042,Door    Key     Unremove03
+M4043,Door    Key     Unremove04
+M4044,Door    Key     Unremove05
+M4045,Door    Key     Unremove06
+M4046,Door    Key     Unremove07
+M4047,Door    Key     Unremove08
+M4048,Door    Key     Unremove09
+M4049,Door    Key     Unremove10
+M4050,UZ0     Pre_ACG Contact Position
+M4051,UZ0     ACG     Contact Position
+M4052,UZ0     Pre_GLS Contact Position
+M4053,UZ0     Glass   Contact Position
+M4054,UZ2     Pre_ACG Contact Position
+M4055,UZ2     ACG     Contact Position
+M4056,UZ2     Pre_GLS Contact Position
+M4057,UZ2     Glass   Contact Position
+M4058,UZ4     Pre_ACG Contact Position
+M4059,UZ4     ACG     Contact Position
+M4060,UZ4     Pre_GLS Contact Position
+M4061,UZ4     Glass   Contact Position
+M4062,UZ6     Pre_ACG Contact Position
+M4063,UZ6     ACG     Contact Position
+M4064,UZ6     Pre_GLS Contact Position
+M4065,UZ6     Glass   Contact Position
+M4066,UZ8     Pre_ACG Contact Position
+M4067,UZ8     ACG     Contact Position
+M4068,UZ8     Pre_GLS Contact Position
+M4069,UZ8     Glass   Contact Position
+M4070,Main    GPS     Breaker On
+M4071,Main    UPS     Breaker On
+M4072,Main    GPS     Breaker Trip
+M4073,Main    UPS     Breaker Trip
+M4074,1 sec   Drop    Timer   Normal
+M4075,Safety  PLC     CP      On
+M4076,MC      CP      On
+M4077,SMPS1   CP      On
+M4078,SMPS1.1 CP      On
+M4080,MC      01      On
+M4081,MC      02      On
+M4082,MC      03      On
+M4083,MC      04      On
+M4084,MC      05      On
+M4085,MC      06      On
+M4086,MC      07      On
+M4087,EQ      MC      Power   On
+M4088,PACC    MC      Power   On
+M4089,X-Ray   MC      Power   On
+M4090,Lift    Glass   Check   01
+M4091,Lift    Glass   Check   02
+M4092,Lift    Glass   Check   03
+M4093,Lift    Glass   Check   04
+M4095,Sample  Chuck   Glass   Check 01
+M4096,Sample  Chuck   Glass   Check 02
+M4097,Sample  Chuck   Glass   Check 03
+M4098,Sample  Chuck   Glass   Check 04
+M4100,E-BOX FRONT DOOR OPEN
+M4101,E-BOX REAR DOOR OPEN
+M4102,S-BOX FRONT DOOR OPEN
+M4103,S-BOX REAR DOOR OPEN
+M4104,PC-BOX FRONT DOOR OPEN
+M4105,PC-BOX REAR DOOR OPEN
+M4106,S-BOX GPS CIRCUIT BREAKER ON 
+M4107,S-BOX UPS CIRCUIT BREAKER ON 
+M4108,S-BOX GPS CIRCUIT BREAKER TRIP
+M4109,S-BOX UPS CIRCUIT BREAKER TRIP 
+M4110,X-Ray Ionizer Remote On 01
+M4111,X-Ray Ionizer Interlock On 01
+M4112,X-Ray Ionizer Power On 01
+M4113,X-Ray Ionizer OverTime 01
+M4114,X-Ray Ionizer Abnormal 01
+M4115,X-Ray Ionizer Remote On 02
+M4116,X-Ray Ionizer Interlock On 02
+M4117,X-Ray Ionizer Power On 02
+M4118,X-Ray Ionizer OverTime 02
+M4119,X-Ray Ionizer Abnormal 02
+M4120,CDA     Pressure01
+M4121,CDA     Pressure02
+M4122,CDA     Pressure03
+M4123,CDA     Pressure04
+M4124,CDA     Pressure05
+M4125,CDA     Pressure06
+M4126,CDA     Pressure07
+M4127,CDA     Pressure08
+M4128,CDA     Pressure09
+M4129,CDA     Pressure10
+M4130,N2 Pressure 01
+M4131,N2 Pressure 02
+M4132,N2 Pressure 03
+M4133,N2 Pressure 04
+M4134,N2 Pressure 05
+M4135,N2 Pressure 06
+M4136,N2 Pressure 07
+M4137,N2 Pressure 08
+M4138,N2 Pressure 09
+M4139,N2 Pressure 10
+M4140,Vacuum Pressure 01
+M4141,Vacuum Pressure 02
+M4142,Vacuum Pressure 03
+M4143,Vacuum Pressure 04
+M4144,Vacuum Pressure 05
+M4145,Vacuum Pressure 06
+M4146,Vacuum Pressure 07
+M4147,Vacuum Pressure 08
+M4148,Vacuum Pressure 09
+M4149,Vacuum Pressure 10
+M4150,Sample  Plate   Vacuum  01
+M4151,Sample  Plate   Vacuum  02
+M4152,Sample  Plate   Vacuum  03
+M4153,Sample  Plate   Vacuum  04
+M4160,Lift Pin Up
+M4161,Lift Pin Down
+M4162,Lift Pin Up 02
+M4163,Lift Pin Down 02
+M4165,Lift Pin Up Position Check 01
+M4166,Lift Pin Up Position Check 02
+M4167,Lift Pin Up Position Check 03
+M4168,Lift Pin Up Position Check 04
+M4170,X0 Unload Position
+M4171,X2 Unload Position
+M4172,Y0 Unload Position
+M4173,Y1 Unload Position
+M4174,Y2 Unload Position
+M4175,Y3 Unload Position
+M4176,Y4 Unload Position
+M4177,Y5 Unload Position
+M4178,Y6 Unload Position
+M4179,Y7 Unload Position
+M4180,Loader  Arm     Detect  01
+M4182,Light   Curtain Muting  Status
+M4183,Muting S.R51 On
+M4185,Interlock S.R On 01 (Abnormal Arm Detect)
+M4186,Interlock S.R On 02 (Loader EMO Push)
+M4187,Interlock S.R On 03 (Loader EMO Line Forced Off By EQ)
+M4190,Run     Teach   Switch  01 (EQ)
+M4191,Run     Teach   Switch  02(PACC)
+M4193,Sound   OFF     Switch
+M4195,Inner   Mode    Key 01  (Auto)
+M4196,Inner   Mode    Key 02  (Auto)
+M4197,Inner   Mode    Key 03  (Auto)
+M4198,Inner   Mode    Key 04  (Auto)
+M4199,Inner   Mode    Key 05  (Auto)
+M4200,EFU     Alarm   01
+M4201,EFU     Alarm   02
+M4205,ESD     Alarm   01
+M4206,ESD     Alarm   02
+M4210,Temp.   Sensor  01
+M4211,Temp.   Sensor  02
+M4212,Temp.   Sensor  03
+M4213,Temp.   Sensor  04
+M4214,Temp.   Sensor  05
+M4215,Temp.   Sensor  06
+M4216,Temp.   Sensor  07
+M4217,Temp.   Sensor  08
+M4218,Temp.   Sensor  09
+M4219,Temp.   Sensor  10
+M4220,Smoke   Sensor  01
+M4221,Smoke   Sensor  02
+M4222,Smoke   Sensor  03
+M4223,Smoke   Sensor  04
+M4224,Smoke   Sensor  05
+M4225,Smoke   Sensor  06
+M4226,Smoke   Sensor  07
+M4227,Smoke   Sensor  08
+M4228,Smoke   Sensor  09
+M4229,Smoke   Sensor  10
+M4230,E-Box   Fan     01
+M4231,E-Box   Fan     02
+M4232,E-Box   Fan     03
+M4233,E-Box   Fan     04
+M4234,E-Box   Fan     05
+M4235,E-Box   Fan     06
+M4236,E-Box   Fan     07
+M4237,E-Box   Fan     08
+M4238,E-Box   Fan     09
+M4239,E-Box   Fan     10
+M4240,E-Box   Fan     11
+M4241,E-Box   Fan     12
+M4242,E-Box   Fan     13
+M4243,E-Box   Fan     14
+M4244,E-Box   Fan     15
+M4245,E-Box   Fan     16
+M4246,PC      E-Box   Fan     01
+M4247,PC      E-Box   Fan     02
+M4248,PC      E-Box   Fan     03
+M4249,PC      E-Box   Fan     04
+M4250,IsolatorPositionSensor  01
+M4251,IsolatorPositionSensor  02
+M4252,IsolatorPositionSensor  03
+M4253,IsolatorPositionSensor  04
+M4255,Temp.   Sensor  Reset 11
+M4256,Temperature Alarm Reset Switch 11
+M4259,Smoke Sensor 11
+M4260,Temp.   Sensor  Reset 01
+M4261,Temp.   Sensor  Reset 02
+M4262,Temp.   Sensor  Reset 03
+M4263,Temp.   Sensor  Reset 04
+M4264,Temp.   Sensor  Reset 05
+M4265,Temp.   Sensor  Reset 06
+M4266,Temp.   Sensor  Reset 07
+M4267,Temp.   Sensor  Reset 08
+M4268,Temp.   Sensor  Reset 09
+M4269,Temp.   Sensor  Reset 10
+M4270,TM      Alive
+M4271,TM      EMS
+M4272,TM      Net     Ready
+M4273,TM      Reserved
+M4274,TM      Interact#1
+M4275,TM      Interact#2
+M4276,TM      Interact#3
+M4277,TM      Sub-EMO
+M4278,Loader  EMO     01
+M4279,Loader  EMO     02
+M4280,Shutter Close
+M4281,Shutter Open
+M4282,Shutter Close_Non Contact Switch
+M4285,Enable  GRIP    Switch  01
+M4290,UZ0 PROBE CARD CHECK 01 (LEFT)
+M4291,UZ0 PROBE CARD CHECK 02 (LEFT)
+M4292,UZ0 PROBE CARD CHECK 03 (RIGHT)
+M4293,UZ0 PROBE CARD CHECK 04 (RIGHT)
+M4294,UZ2 PROBE CARD CHECK 01 (LEFT)
+M4295,UZ2 PROBE CARD CHECK 02 (LEFT)
+M4296,UZ2 PROBE CARD CHECK 03 (RIGHT)
+M4297,UZ2 PROBE CARD CHECK 04 (RIGHT)
+M4298,UZ4 PROBE CARD CHECK 01 (LEFT) 
+M4299,UZ4 PROBE CARD CHECK 02 (LEFT)
+M4300,UZ4 PROBE CARD CHECK 03 (RIGHT)
+M4301,UZ4 PROBE CARD CHECK 04 (RIGHT)
+M4302,UZ6 PROBE CARD CHECK 01 (LEFT)
+M4303,UZ6 PROBE CARD CHECK 02 (LEFT)
+M4304,UZ6 PROBE CARD CHECK 03 (RIGHT) 
+M4305,UZ6 PROBE CARD CHECK 04 (RIGHT)
+M4306,UZ8 PROBE CARD CHECK 01 (LEFT)
+M4307,UZ8 PROBE CARD CHECK 02 (LEFT)
+M4308,UZ8 PROBE CARD CHECK 03 (RIGHT)
+M4309,UZ8 PROBE CARD CHECK 04 (RIGHT)
+M4310,Main Gate Valve Close 01
+M4311,Main Gate Valve Open 01
+M4312,Main Gate Valve Close 02
+M4313,Main Gate Valve Open 02
+M4314,Main Gate Valve Push
+M4315,Main Gate Valve Pull
+M4316,Main Gate Valve Lock 01
+M4317,Main Gate Valve Unlock01
+M4318,Main Gate Valve Lock 02
+M4319,Main Gate Valve Unlock02
+M4320,Main Gate Valve Lock 03
+M4321,Main Gate Valve Unlock03
+M4322,Main Gate Valve Lock 04
+M4323,Main Gate Valve Unlock04
+M4330,Probe Card Zero Position Unlock 01
+M4331,Probe Card Zero Position Unlock 02
+M4332,Probe Card Zero Position Unlock 03
+M4333,Probe Card Zero Position Unlock 04
+M4334,Probe Card Zero Position Unlock 05
+M4335,Probe Card Zero Position Unlock 06
+M4336,Probe Card Zero Position Unlock 07
+M4337,Probe Card Zero Position Unlock 08
+M4338,Probe Card Zero Position Unlock 09
+M4339,Probe Card Zero Position Unlock 10
+M4340,X3 Up Position
+M4341,X3 Down Position
+M4342,X3 Put/Get Pos.(From/To UNIT Z)
+M4343,X3 Put/Get Pos.(From/To PACC)
+M4344,
+M4345,X4 Up Position
+M4346,X4 Down Position
+M4347,X4 Put/Get Pos.(From/To UNIT Z)
+M4348,X4 Put/Get Pos.(From/To PACC)
+M4350,PROBE GANTRY 1 PROBE CARD PCB LOCK 01 CHECK (LEFT)
+M4351,PROBE GANTRY 1 PROBE CARD PCB UNLOCK 01 CHECK (LEFT)
+M4352,PROBE GANTRY 1 PROBE CARD PCB LOCK 02 CHECK (RIGHT)
+M4353,PROBE GANTRY 1 PROBE CARD PCB UNLOCK 02 CHECK (RIGHT)
+M4354,PROBE GANTRY 2 PROBE CARD PCB LOCK 01 CHECK (LEFT)
+M4355,PROBE GANTRY 2 PROBE CARD PCB UNLOCK 01 CHECK (LEFT)
+M4356,PROBE GANTRY 2 PROBE CARD PCB LOCK 02 CHECK (RIGHT)
+M4357,PROBE GANTRY 2 PROBE CARD PCB UNLOCK 02 CHECK (RIGHT)
+M4358,PROBE GANTRY 3 PROBE CARD PCB LOCK 01 CHECK (LEFT)
+M4359,PROBE GANTRY 3 PROBE CARD PCB UNLOCK 01 CHECK (LEFT)
+M4360,PROBE GANTRY 3 PROBE CARD PCB LOCK 02 CHECK (RIGHT)
+M4361,PROBE GANTRY 3 PROBE CARD PCB UNLOCK 02 CHECK (RIGHT)
+M4362,PROBE GANTRY 4 PROBE CARD PCB LOCK 01 CHECK (LEFT)
+M4363,PROBE GANTRY 4 PROBE CARD PCB UNLOCK 01 CHECK (LEFT)
+M4364,PROBE GANTRY 4 PROBE CARD PCB LOCK 02 CHECK (RIGHT)
+M4365,PROBE GANTRY 4 PROBE CARD PCB UNLOCK 02 CHECK (RIGHT)
+M4366,PROBE GANTRY 5 PROBE CARD PCB LOCK 01 CHECK (LEFT)
+M4367,PROBE GANTRY 5 PROBE CARD PCB UNLOCK 01 CHECK (LEFT)
+M4368,PROBE GANTRY 5 PROBE CARD PCB LOCK 02 CHECK (RIGHT)
+M4369,PROBE GANTRY 5 PROBE CARD PCB UNLOCK 02 CHECK (RIGHT)
+M4370,X3      TransferPb.Card Check 01
+M4371,X3      TransferPb.Card Check 02
+M4372,X4      TransferPb.Card Check 01
+M4373,X4      TransferPb.Card Check 02
+M4376,Probe   Buffer  Slot#1  Left
+M4377,Probe   Buffer  Slot#2  Left
+M4378,Probe   Buffer  Slot#1  Right
+M4379,Probe   Buffer  Slot#2  Right
+M4380,PROBE GANTRY 1 PROBE CARD SAFETY CLAMP ON 01 (LEFT)
+M4381,PROBE GANTRY 1 PROBE CARD SAFETY CLAMP OFF 01 (LEFT) 
+M4382,PROBE GANTRY 1 PROBE CARD SAFETY CLAMP ON 02 (RIGHT)
+M4383,PROBE GANTRY 1 PROBE CARD SAFETY CLAMP OFF 02 (RIGHT)
+M4384,PROBE GANTRY 2 PROBE CARD SAFETY CLAMP ON 01 (LEFT)
+M4385,PROBE GANTRY 2 PROBE CARD SAFETY CLAMP OFF 01 (LEFT)
+M4386,PROBE GANTRY 2 PROBE CARD SAFETY CLAMP ON 02 (RIGHT)
+M4387,PROBE GANTRY 2 PROBE CARD SAFETY CLAMP OFF 02 (RIGHT)
+M4388,PROBE GANTRY 3 PROBE CARD SAFETY CLAMP ON 01 (LEFT)
+M4389,PROBE GANTRY 3 PROBE CARD SAFETY CLAMP OFF 01 (LEFT)
+M4390,PROBE GANTRY 3 PROBE CARD SAFETY CLAMP ON 02 (RIGHT)
+M4391,PROBE GANTRY 3 PROBE CARD SAFETY CLAMP OFF 02 (RIGHT)
+M4392,PROBE GANTRY 4 PROBE CARD SAFETY CLAMP ON 01 (LEFT)
+M4393,PROBE GANTRY 4 PROBE CARD SAFETY CLAMP OFF 01 (LEFT)
+M4394,PROBE GANTRY 4 PROBE CARD SAFETY CLAMP ON 02 (RIGHT)
+M4395,PROBE GANTRY 4 PROBE CARD SAFETY CLAMP OFF 02 (RIGHT) 
+M4396,PROBE GANTRY 5 PROBE CARD SAFETY CLAMP ON 01 (LEFT) 
+M4397,PROBE GANTRY 5 PROBE CARD SAFETY CLAMP OFF 01 (LEFT)
+M4398,PROBE GANTRY 5 PROBE CARD SAFETY CLAMP ON 02 (RIGHT)
+M4399,PROBE GANTRY 5 PROBE CARD SAFETY CLAMP OFF 02 (RIGHT)
+M4400,R0 0    degree  Pos.    Int.Lock
+M4401,R0 90   degree  Pos.    Int.Lock
+M4402,R0 180  degree  Pos.    Int.Lock
+M4403,R0 270  degree  Pos.    Int.Lock
+M4404,Reserved
+M4405,R1 0    degree  Pos.    Int.Lock
+M4406,R1 90   degree  Pos.    Int.Lock
+M4407,R1 180  degree  Pos.    Int.Lock
+M4408,R1 270  degree  Pos.    Int.Lock
+M4409,Reserved
+M4410,PACC    BF#01   Up      Pos. 01
+M4411,PACC    BF#01   Down    Pos. 01
+M4412,PACC    BF#02   Up      Pos. 01
+M4413,PACC    BF#02   Down    Pos. 01
+M4414,PACC    BF#01   Up      Pos. 02
+M4415,PACC    BF#01   Down    Pos. 02
+M4416,PACC    BF#02   Up      Pos. 02
+M4417,PACC    BF#02   Down    Pos. 02
+M4420,EMS     11
+M4421,EMS     12
+M4422,EMS     13
+M4423,EMS     14
+M4424,EMS     15
+M4425,EMS     16
+M4430,Fixture Sensor Front FWD 01
+M4431,Fixture Sensor Front RWD 01
+M4432,Fixture Sensor Front FWD 02
+M4433,Fixture Sensor Front REV 02
+M4434,Fixture Sensor Right FWD 01
+M4435,Fixture Sensor Right REV 01
+M4436,Fixture Sensor Right FWD 02
+M4437,Fixture Sensor Right REV 02
+M4438,Fixture Sensor Back FWD 01
+M4439,Fixture Sensor Back REV 01
+M4440,Fixture Sensor Back FWD 02
+M4441,Fixture Sensor Back REV 02
+M4442,Fixture Sensor Left FWD 01
+M4443,Fixture Sensor Left REV 01
+M4444,Fixture Sensor Left FWD 02
+M4445,Fixture Sensor Left REV 02
+M4450,Fixture Sensor Front Up 01
+M4451,Fixture Sensor Front Down 01
+M4452,Fixture Sensor Front Up 02
+M4453,Fixture Sensor Front Down 02
+M4454,Fixture Sensor Right Up 01
+M4455,Fixture Sensor Right Down 01
+M4456,Fixture Sensor Right Up 02
+M4457,Fixture Sensor Right Down 02
+M4458,Fixture Sensor Back Up 01
+M4459,Fixture Sensor Back Down 01
+M4460,Fixture Sensor Back Up 02
+M4461,Fixture Sensor Back Down 02
+M4462,Fixture Sensor Left Up 01
+M4463,Fixture Sensor Left Down 01
+M4464,Fixture Sensor Left Up 02
+M4465,Fixture Sensor Left Down 02
+M4470,Probe   Cassette1-1
+M4471,Probe   Cassette2-1
+M4472,Probe   Cassette3-1
+M4473,Probe   Cassette4-1
+M4474,Probe   Cassette5-1
+M4475,Probe   Cassette6-1
+M4476,Probe   Cassette7-1
+M4480,Probe   Cassette1-2
+M4481,Probe   Cassette2-2
+M4482,Probe   Cassette3-2
+M4483,Probe   Cassette4-2
+M4484,Probe   Cassette5-2
+M4485,Probe   Cassette6-2
+M4486,Probe   Cassette7-2
+M4490,X4-UNLOADING POSITION (PROBE GANTRY 1)
+M4491,X6-UNLOADING POSITION (PROBE GANTRY 2)
+M4492,X8-UNLOADING POSITION (PROBE GANTRY 3)
+M4493,X10-UNLOADING POSITION (PROBE GANTRY 4)
+M4494,X12-UNLOADING POSITION (PROBE GANTRY 5)
+M4500,PLC     Initial Fr.EQ
+M4501,Auto    R2L     Start   CMD
+M4502,Auto    L2M     Start   CMD
+M4503,Auto    M2R     Start   CMD
+M4504,Auto    R2M     Start   CMD
+M4505,Auto    M2L     Start   CMD
+M4506,Auto    L2R     Start   CMD
+M4509,Alarm   Reset   Fr.EQ
+M4510,EQ      Door    Unlock
+M4511,PACC    Door    Unlock
+M4520,X-Ray   Ionizer REMSte  On 01
+M4521,X-Ray   Ionizer REMSte  Off 01
+M4522,X-Ray   Ionizer Int.LockOn 01
+M4524,X-Ray Ionizer LED On
+M4525,X-Ray   Ionizer REMSte  On 02
+M4526,X-Ray   Ionizer REMSte  Off 02
+M4527,X-Ray   Ionizer Int.LockOn 02
+M4530,Lift Pin Up
+M4531,Lift Pin Down
+M4540,Shutter Close
+M4541,Shutter Open
+M4560,MULTI   Power   Off     01
+M4561,MULTI   Power   Off     02
+M4562,MULTI   Power   Off     03
+M4563,MULTI   Power   Off     04
+M4570,AF      Ctrl.   On      01
+M4571,AF      Ctrl.   On      02
+M4572,AF      Ctrl.   On      03
+M4573,AF      Ctrl.   On      04
+M4580,Maint.  LED     Off
+M4585,Glass   Sensor  Power   Off
+M4590,Select  Key     Lock
+M4595,Select Switch Teach Mode Interlock
+M4610,Main Lamp Shutter Close 01
+M4611,Main Lamp Shutter Close 02
+M4620,Focus   Lamp    On      01
+M4621,Focus   Lamp    On      02
+M4630,CCD     Power   Off     01
+M4631,CCD     Power   Off     02
+M4632,CCD     Power   Off     03
+M4633,CCD     Power   Off     04
+M4710,EQ H2O Alarm Skip
+M4720,Repeater Off 01
+M4721,Repeater Off 02
+M4790,All     Fixture FWD
+M4791,Front   Fixture
+M4792,Right   Fixture
+M4793,Back    Fixture
+M4794,Left    Fixture
+M4795,All     Fixture Up
+M4796,Front   Fixture Up/Down
+M4797,Right   Fixture Up/Down
+M4798,Back    Fixture Up/Down
+M4799,Left    Fixture Up/Down
+M4810,Sample  Plate   Air     Blow 01
+M4811,Sample  Plate   Air     Blow 02
+M4830,Sample  Plate   Vacuum  01 On
+M4831,Sample  Plate   Vacuum  01 Off
+M4832,Sample  Plate   Vacuum  02 On
+M4833,Sample  Plate   Vacuum  02 Off
+M4834,Sample  Plate   Vacuum  03 On
+M4835,Sample  Plate   Vacuum  03 Off
+M4836,Sample  Plate   Vacuum  04 On
+M4837,Sample  Plate   Vacuum  04 Off
+M4840,Chuck   Vacuum  01
+M4841,Chuck   Vacuum  02
+M4842,Chuck   Vacuum  03
+M4843,Chuck   Vacuum  04
+M4850,Chuck   Fwd/Rev 01
+M4851,Chuck   Fwd/Rev 02
+M4852,Chuck   Fwd/Rev 03
+M4853,Chuck   Fwd/Rev 04
+M4855,Chuck   Up/Down 01
+M4856,Chuck   Up/Down 02
+M4857,Chuck   Up/Down 03
+M4858,Chuck   Up/Down 04
+M4890,Probe   Card    Clamp   01
+M4891,Probe   Card    Unclamp 01
+M4892,Probe   Card    Clamp   02
+M4893,Probe   Card    Unclamp 02
+M4894,Probe   Card    Clamp   03
+M4895,Probe   Card    Unclamp 03
+M4896,Probe   Card    Clamp   04
+M4897,Probe   Card    Unclamp 04
+M4898,Probe   Card    Clamp   05
+M4899,Probe   Card    Unclamp 05
+M4907,LCR     Meter   Power   Off 01
+M4908,LCR     Meter   Power   Off 02
+M4910,Voice   Buzzer  CH1     On
+M4911,Voice   Buzzer  CH2     On
+M4912,Voice   Buzzer  CH3     On
+M4913,Voice   Buzzer  CH4     On
+M4920,Buzzer  01
+M4921,Buzzer  02
+M4925,Signal  Tower   Melody  01
+M4926,Signal  Tower   Melody  02
+M4930,Signal  Tower   RED
+M4931,Signal  Tower   YELLOW
+M4932,Signal  Tower   GREEN
+M4933,Signal  Tower   BLUE
+M4934,Signal  Tower   RED_    Blink
+M4935,Signal  Tower   YELLOW_ Blink
+M4936,Signal  Tower   GREEN_  Blink
+M4937,Signal  Tower   BLUE_   Blink
+M4940,Probe   Jig     Up      01
+M4941,Probe   Jig     Down    01
+M4942,Probe   Jig     Up      02
+M4943,Probe   Jig     Down    02
+M4950,Probe   Card    PCB     Lock 01
+M4951,Probe   Card    PCB     Unlock01
+M4952,Probe   Card    PCB     Lock 02
+M4953,Probe   Card    PCB     Unlock02
+M4954,Probe   Card    PCB     Lock 03
+M4955,Probe   Card    PCB     Unlock03
+M4956,Probe   Card    PCB     Lock 04
+M4957,Probe   Card    PCB     Unlock04
+M4958,Probe   Card    PCB     Lock 05
+M4959,Probe   Card    PCB     Unlock05
+M4960,Probe   Card    ZeroPos.Unlock01
+M4961,Probe   Card    ZeroPos.Unlock02
+M4962,Probe   Card    ZeroPos.Unlock03
+M4963,Probe   Card    ZeroPos.Unlock04
+M4964,Probe   Card    ZeroPos.Unlock05
+M4980,Muting  On
+M4981,AC X    Safety  Pos
+M4982,EQ      Busy
+M4990,EQ Side PIO#1   Fr.CIM
+M4991,EQ Side PIO#2   Fr.CIM
+M4992,EQ Side PIO#3   Fr.CIM
+M4993,EQ Side PIO#4   Fr.CIM
+M4994,EQ Side PIO#5   Fr.CIM
+M4995,EQ Side PIO#6   Fr.CIM
+M4996,EQ Side PIO#7   Fr.CIM
+M4997,EQ Side PIO#8   Fr.CIM
