@@ -85,6 +85,9 @@
     <LinkIncremental>true</LinkIncremental>
     <IncludePath>$(SolutionDir)..\..\CoreFunction\common\NI\x64\Include;$(IncludePath)</IncludePath>
     <LibraryPath>$(SolutionDir)..\..\CoreFunction\common\NI\x64\Lib;$(LibraryPath)</LibraryPath>
+    <!-- LYS 2026-09-29 F5 runs Source\Bin\ALPHA.exe (third-party DLLs live there; .vcxproj.user is gitignored) -->
+    <LocalDebuggerCommand>$(ProjectDir)..\Bin\$(ProjectName).exe</LocalDebuggerCommand>
+    <DebuggerFlavor>WindowsLocalDebugger</DebuggerFlavor>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)'=='Release|Win32'">
     <LinkIncremental>false</LinkIncremental>
@@ -93,6 +96,9 @@
     <LinkIncremental>false</LinkIncremental>
     <IncludePath>$(SolutionDir)..\..\CoreFunction\common\NI\x64\Include;$(IncludePath)</IncludePath>
     <LibraryPath>$(SolutionDir)..\..\CoreFunction\common\NI\x64\Lib;$(LibraryPath)</LibraryPath>
+    <!-- LYS 2026-09-29 F5 runs Source\Bin\ALPHA.exe (third-party DLLs live there; .vcxproj.user is gitignored) -->
+    <LocalDebuggerCommand>$(ProjectDir)..\Bin\$(ProjectName).exe</LocalDebuggerCommand>
+    <DebuggerFlavor>WindowsLocalDebugger</DebuggerFlavor>
   </PropertyGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Debug|Win32'">
     <ClCompile>
