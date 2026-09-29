@@ -79,6 +79,13 @@ void C_RecipeMgrDlg::DoDataExchange (CDataExchange* pDX)
 	DDX_Control(pDX, IDC_GRID_ANGLE_DATA1, m_gridAxisAngleData1);
 	DDX_Control(pDX, IDC_GRID_ANGLE_HEAD2, m_gridAxisAngleHead2);
 	DDX_Control(pDX, IDC_GRID_ANGLE_DATA2, m_gridAxisAngleData2);
+
+	// LYS 2026-09-29 Hybrid Phase 2
+	DDX_Control (pDX, IDC_COMBO_1,       m_cmbSegment);
+	DDX_Control (pDX, IDC_BUTTON_12,     m_btnSeg[0]);
+	DDX_Control (pDX, IDC_BUTTON_13,     m_btnSeg[1]);
+	DDX_Control (pDX, IDC_GRID_SEG_HEAD, m_gridSegHead);
+	DDX_Control (pDX, IDC_GRID_SEG_DATA, m_gridSegData);
 }
 
 BEGIN_MESSAGE_MAP (C_RecipeMgrDlg, CDialogEx)
@@ -103,10 +110,15 @@ BEGIN_MESSAGE_MAP (C_RecipeMgrDlg, CDialogEx)
 	ON_NOTIFY (NM_CLICK, IDC_GRID_9, OnSetCcdLamp)
 	ON_NOTIFY (NM_CLICK, IDC_GRID_11, OnSetContactPos)
 	ON_NOTIFY (NM_CLICK, IDC_GRID_17, OnSetStage)
+	ON_NOTIFY (GVN_ENDLABELEDIT, IDC_GRID_5, OnInspectOptionEndEdit)	// LYS 2026-09-29
 	ON_NOTIFY (NM_CLICK, IDC_GRID_19, OnSetHead)
 	ON_NOTIFY (NM_CLICK, IDC_GRID_22, OnSetSRMLamp)
 	ON_NOTIFY (NM_CLICK, IDC_GRID_25, OnSetColorPos)
 	//ON_NOTIFY (TVN_SELCHANGING, IDC_GRID_25, OnSetColorItem)
+
+	ON_CBN_SELCHANGE (IDC_COMBO_1, OnSegmentSelChange)	// LYS 2026-09-29 Hybrid Phase 2
+	ON_COMMAND (IDC_BUTTON_12, OnSegmentPrev)
+	ON_COMMAND (IDC_BUTTON_13, OnSegmentNext)
 
 	ON_COMMAND(IDC_BUTTON_TEST_MODE, OnBtnTestMode)	// LYS 2026-07-02
 END_MESSAGE_MAP ()
@@ -167,6 +179,9 @@ BOOL C_RecipeMgrDlg::OnInitDialog ()
 	InitSubZ();		// LYS 2026-07-07 Add Sub Z Offset
 
 	InitAngleAxis();	// LYS 2026-08-19 Add Angle Axis
+
+	for (int i = 0; i < 2; i++) InitButtons (m_btnSeg[i]);	// LYS 2026-09-29 Hybrid Phase 2
+	InitSegmentInfo ();
 
 	MakeRcpList ();
 
@@ -352,7 +367,7 @@ void	C_RecipeMgrDlg::OnRecipeSave ()
 	dfcCreateDirectory (strNewPath);
 	CopyFile (strOldPath, strNewPath, FALSE);
 
-	SaveFile (strRcpName);
+	if (!SaveFile (strRcpName)) return;	// LYS 2026-09-29 Hybrid Phase 1 검사 실패/파일 오류면 PPID 갱신 안 함
 	WritePPIDFile (strRcpName);
 	MakeRcpList ();
 }
@@ -401,7 +416,7 @@ void	C_RecipeMgrDlg::OnRecipeSaveAs ()
 			CopyFile (strOldPath, strNewPath, FALSE);
 			//
 
-			SaveFile (strName);
+			if (!SaveFile (strName)) return;	// LYS 2026-09-29 Hybrid Phase 1
 			WritePPIDFile (strName);
 			MakeRcpList ();
 			SetRecipeName (strName);
@@ -415,6 +430,13 @@ void	C_RecipeMgrDlg::OnRecipeSaveAs ()
 
 BOOL	C_RecipeMgrDlg::SaveFile (CString strRcpName)
 {
+	// LYS 2026-09-29 Hybrid Phase 1 세그먼트 검사(D-7 Probe ID 동일, 이름 중복, 스틱 합계) - 파일을 열기 전에 거부
+	CString strErr = g_inRcpInfo.ValidateSegments ();
+	if (!strErr.IsEmpty ()) {
+		AfxMessageBox (_T("레시피 저장 불가 (하이브리드 세그먼트 검사)\n\n") + strErr, MB_ICONWARNING);
+		return FALSE;
+	}
+
 	CString strPath;
 	strPath = theApp.m_strRcpFolder + strRcpName + _T(".rcp");
 
@@ -423,258 +445,13 @@ BOOL	C_RecipeMgrDlg::SaveFile (CString strRcpName)
 	CStdioFile File;
 	if(!File.Open (strPath, CFile::modeCreate | CFile::modeWrite)) return FALSE; // file 생성 오류
 
-	CString str, strTemp, strTemp2, strTemp3, strTemp4;
-	int nTemp = 0;
-
 	//Version Header
 	WriteString (&File, _T("_VERSION_"));
 	//Version Data
 	WriteInt (&File, RECIPE_FILE_END);
 
-	//CellInfo Header
-	WriteString (&File, _T("_CELL_INFO_"));
-	//CellInfo Data
-	WriteString (&File, g_inRcpInfo.GetModelInfoName ());
-	WriteDouble (&File, g_inRcpInfo.m_recipeMgr.m_sMap.m_fCellSize.x);
-	WriteDouble (&File, g_inRcpInfo.m_recipeMgr.m_sMap.m_fCellSize.y);
-	WriteDouble (&File, g_inRcpInfo.m_recipeMgr.m_sMap.m_fCellDistance.x);
-	WriteDouble (&File, g_inRcpInfo.m_recipeMgr.m_sMap.m_fCellDistance.y);
-	WriteInt	(&File, (int)g_inRcpInfo.m_recipeMgr.m_sMap.m_fCellCount.x);
-	WriteInt	(&File, (int)g_inRcpInfo.m_recipeMgr.m_sMap.m_fCellCount.y);
-	WriteDouble (&File, g_inRcpInfo.m_recipeMgr.m_sMap.m_fContactOffset);
-
-	//Option Header
-	WriteString (&File, _T("_OPTION_INFO_"));
-	//Option Data
-	WriteInt	(&File, (int)g_inRcpInfo.m_recipeMgr.m_sInfo.m_sOptionItem.m_bUseRtestNgPass);
-	WriteInt	(&File, (int)g_inRcpInfo.m_recipeMgr.m_sInfo.m_sOptionItem.m_bUseSampling);
-	WriteInt	(&File, (int)g_inRcpInfo.m_recipeMgr.m_sInfo.m_sOptionItem.m_bUseAlign);
-	WriteInt	(&File, (int)g_inRcpInfo.m_recipeMgr.m_sInfo.m_sOptionItem.m_bUseReviewSnap);
-	WriteInt	(&File, (int)g_inRcpInfo.m_recipeMgr.m_sInfo.m_sOptionItem.m_nGlsRotate);
-	WriteDouble (&File, g_inRcpInfo.m_recipeMgr.m_sInfo.m_sOptionItem.m_fFrontHeadGap);
-	WriteDouble (&File, g_inRcpInfo.m_recipeMgr.m_sInfo.m_sOptionItem.m_fBackHeadGap);
-	WriteString (&File, g_inRcpInfo.m_recipeMgr.m_sInfo.m_sOptionItem.m_chAlignName);
-
-	//InspectionItem Header
-	WriteString (&File, _T("_INSPECTION_ITEM_"));
-	//InspectionInfo Data
-	WriteInt (&File, (int)g_inRcpInfo.m_recipeMgr.m_sInfo.m_sInspectItem.m_bUsePre_0);
-	WriteInt (&File, (int)g_inRcpInfo.m_recipeMgr.m_sInfo.m_sInspectItem.m_bUseElect_1);
-	WriteInt (&File, (int)g_inRcpInfo.m_recipeMgr.m_sInfo.m_sInspectItem.m_bUseAgingTest_2);
-	WriteInt (&File, (int)g_inRcpInfo.m_recipeMgr.m_sInfo.m_sInspectItem.m_bUseSpec_3);
-	WriteInt (&File, (int)g_inRcpInfo.m_recipeMgr.m_sInfo.m_sInspectItem.m_bUseQuality_4);
-	WriteInt (&File, (int)g_inRcpInfo.m_recipeMgr.m_sInfo.m_sInspectItem.m_bUseColor_5);
-	WriteInt (&File, (int)g_inRcpInfo.m_recipeMgr.m_sInfo.m_sInspectItem.m_bUseAngle_6);
-	WriteInt (&File, (int)g_inRcpInfo.m_recipeMgr.m_sInfo.m_sInspectItem.m_bUseEFA);
-	WriteInt (&File, (int)g_inRcpInfo.m_recipeMgr.m_sInfo.m_sInspectItem.m_bUseSpec_Multi);
-	WriteInt (&File, (int)g_inRcpInfo.m_recipeMgr.m_sInfo.m_sInspectItem.m_bUseAging_Test);
-
-	for (int i = 0; i < M_RCP_INS_ITEM; i++) {
-		str.Format (_T("%d,"), g_inRcpInfo.m_recipeMgr.m_sInfo.m_sInspectItem.m_nTimeOut[i]);
-		strTemp += str;
-	}
-	WriteString (&File, strTemp);
-
-	//ProbeID Header
-	WriteString (&File, _T("_PROBE_ID_"));
-	//ProbeID Data
-	strTemp = _T(""), strTemp2 = _T("");
-	// LYS 2026-07-15 Probe ID 기록
-	for (int i = 0; i < M_RCP_PROBE_MAX; i++) {
-		str.Format (_T("%s,"), g_inRcpInfo.m_recipeMgr.m_sInfo.m_sProbeInfo.m_chProbeFirst[i]);
-		strTemp += str;
-		str.Format (_T("%s,"), g_inRcpInfo.m_recipeMgr.m_sInfo.m_sProbeInfo.m_chProbeSecond[i]);
-		strTemp2 += str;
-	}
-	WriteString (&File, strTemp);
-	WriteString (&File, strTemp2);
-	WriteInt (&File, g_inRcpInfo.m_recipeMgr.m_sInfo.m_sProbeInfo.m_nProbePriority);
-
-	//ContactPos Header
-	WriteString (&File, _T("_CONTACT_POS_"));
-	//ContactPos Data
-	WriteDouble (&File, g_inRcpInfo.m_recipeMgr.m_sInfo.m_sContactPos.m_fReadyPos);
-	WriteDouble (&File, g_inRcpInfo.m_recipeMgr.m_sInfo.m_sContactPos.m_fPreContactPos);
-	WriteDouble (&File, g_inRcpInfo.m_recipeMgr.m_sInfo.m_sContactPos.m_fEndContactPos);
-	WriteDouble (&File, g_inRcpInfo.m_recipeMgr.m_sInfo.m_sContactPos.m_fAddOD);
-
-	//Lamp Header
-	WriteString (&File, _T("_LAMP_"));
-	//Lamp Data
-	WriteInt (&File, g_inRcpInfo.m_recipeMgr.m_sInfo.m_sLampItem.m_nFrontLeft);
-	WriteInt (&File, g_inRcpInfo.m_recipeMgr.m_sInfo.m_sLampItem.m_nFrontRight);
-	WriteInt (&File, g_inRcpInfo.m_recipeMgr.m_sInfo.m_sLampItem.m_nBackLeft);
-	WriteInt (&File, g_inRcpInfo.m_recipeMgr.m_sInfo.m_sLampItem.m_nBackRight);
-
-	//HeadOffset Header
-	WriteString (&File, _T("_HEAD_OFFSET_"));
-	//HeadOffset Data
-	WriteDouble (&File, g_inRcpInfo.m_recipeMgr.m_sInfo.m_sMotionOffsetPos.m_fStageY);
-	WriteDouble (&File, g_inRcpInfo.m_recipeMgr.m_sInfo.m_sMotionOffsetPos.m_fStageRotate);
-	WriteDouble (&File, g_inRcpInfo.m_recipeMgr.m_sInfo.m_sMotionOffsetPos.m_fHeadReviewY);
-	WriteDouble (&File, g_inRcpInfo.m_recipeMgr.m_sInfo.m_sMotionOffsetPos.m_fHeadReviewLeft);
-	WriteDouble (&File, g_inRcpInfo.m_recipeMgr.m_sInfo.m_sMotionOffsetPos.m_fHeadReviewRight);
-	WriteInt	(&File, g_inRcpInfo.m_recipeMgr.m_sInfo.m_sMotionOffsetPos.m_nQualityRotate);
-	WriteDouble (&File, g_inRcpInfo.m_recipeMgr.m_sInfo.m_sMotionOffsetPos.m_fQualityLeftRot);
-	WriteDouble (&File, g_inRcpInfo.m_recipeMgr.m_sInfo.m_sMotionOffsetPos.m_fQualityRightRot);
-	WriteDouble(&File, g_inRcpInfo.m_recipeMgr.m_sInfo.m_sMotionOffsetPos.m_fProbeShift);	// jsyoon 2022.05.13 add
-
-	//Stage Header
-	WriteString (&File, _T("_STAGE_"));
-	//Stage Data
-	strTemp = _T(""), strTemp2 = _T(""), strTemp3 = _T("");
-	nTemp = g_inRcpInfo.GetStickCount ();
-
-	S_StickInfo sStick;
-	for (int i = 0; i < nTemp; i++) {
-		sStick = g_inRcpInfo.GetStickItem (i);
-		str.Format (_T("%d,"), sStick.m_nStickNum);
-		strTemp += str;
-
-		str.Format (_T("%.4lf,"), sStick.m_fStageY);
-		strTemp2 += str;
-
-		str.Format (_T("%.4lf,"), sStick.m_fStageR);
-		strTemp3 += str;
-	}
-	WriteInt (&File, nTemp);
-	WriteString (&File, strTemp);
-	WriteString (&File, strTemp2);
-	WriteString (&File, strTemp3);
-
-	//HeadZ Header
-	WriteString (&File, _T("_HEAD_Z_"));
-	//HeadZ Data
-	WriteDouble (&File, g_inRcpInfo.m_recipeMgr.m_sData.m_sHeadZ.m_fReviewZ);
-	WriteDouble (&File, g_inRcpInfo.m_recipeMgr.m_sData.m_sHeadZ.m_fSpecZ);
-	WriteDouble (&File, g_inRcpInfo.m_recipeMgr.m_sData.m_sHeadZ.m_fQualityZ);
-	WriteDouble (&File, g_inRcpInfo.m_recipeMgr.m_sData.m_sHeadZ.m_fColorZ);
-	WriteDouble (&File, g_inRcpInfo.m_recipeMgr.m_sData.m_sHeadZ.m_fAngleZ);
-	WriteDouble (&File, g_inRcpInfo.m_recipeMgr.m_sData.m_sHeadZ.m_fZoom);
-	WriteDouble (&File, g_inRcpInfo.m_recipeMgr.m_sData.m_sHeadZ.m_fFocus);
-
-	//Head Header
-	WriteString (&File, _T("_CELL_"));
-	//Head Data
-	nTemp = g_inRcpInfo.GetCellCount (0);
-	WriteInt    (&File, nTemp);
-
-	S_CellInfo sCell;
-	for (int i = 0; i < g_inRcpInfo.GetStickCount (); i++) {
-		strTemp = _T(""), strTemp2 = _T(""), strTemp3 = _T(""), strTemp4 = _T("");
-		for (int j = 0; j < nTemp; j++) {
-			sCell = g_inRcpInfo.GetCellItem (i, j);
-
-			str.Format (_T("%s,"), sCell.m_chCellID);
-			strTemp += str;
-
-			str.Format (_T("%.4lf,"), sCell.m_fCellY);
-			strTemp2 += str;
-
-			str.Format (_T("%.4lf,"), sCell.m_fCellX);
-			strTemp3 += str;
-
-			str.Format (_T("%d,"), sCell.m_nArea);
-			strTemp4 += str;
-		}
-		WriteString (&File, strTemp);
-		WriteString (&File, strTemp2);
-		WriteString (&File, strTemp3);
-		WriteString (&File, strTemp4);
-	}
-
-	//Cell Select Header
-	WriteString (&File, _T("_CELL_SELECT_"));
-	//Cell Select Data
-	for (int i = 0; i < g_inRcpInfo.GetStickCount (); i++) {
-		strTemp = _T(""), strTemp2 = _T(""), strTemp3 = _T(""), strTemp4 = _T("");
-		for (int j = 0; j < nTemp; j++) {
-			sCell = g_inRcpInfo.GetCellItem (i, j);
-
-			str.Format (_T("%d,"), sCell.m_nSelectCell[M_SPEC]);
-			strTemp += str;
-
-			str.Format (_T("%d,"), sCell.m_nSelectCell[M_QUALITY]);
-			strTemp2 += str;
-
-			str.Format (_T("%d,"), sCell.m_nSelectCell[M_COLOR]);
-			strTemp3 += str;
-
-			str.Format (_T("%d,"), sCell.m_nSelectCell[M_ANGLE]);
-			strTemp4 += str;
-		}
-		WriteString (&File, strTemp);
-		WriteString (&File, strTemp2);
-		WriteString (&File, strTemp3);
-		WriteString (&File, strTemp4);
-	}
-
-	//CAD Info Header
-	WriteString (&File, _T("_CAD_INFO_"));
-	//CAD Info Data
-	strTemp = _T(""), strTemp2 = _T("");
-	for (int i = 0; i < CAD_ROW_P1_1; i++) {//CAD_ROW_A ~ CAD_ROW_X7
-		str.Format (_T("%.4lf,"), g_inRcpInfo.m_recipeMgr.m_sMap.m_fCadData[i]);
-		strTemp += str;
-	}
-	for (int i = 0; i < CAD_ROW_END - CAD_ROW_P1_1; i++) {//CAD_ROW_P1_1 ~ CAD_ROW_P5_2
-		str.Format (_T("%s,"), g_inRcpInfo.m_recipeMgr.m_sMap.m_chCadData[i]);
-		strTemp2 += str;
-	}
-	WriteString (&File, strTemp);
-	WriteString (&File, strTemp2);
-
-	//Cell Map 용 추가 저장
-	WriteDouble (&File, g_inRcpInfo.m_recipeMgr.m_sMap.m_fGlobalMark.x);
-	WriteDouble (&File, g_inRcpInfo.m_recipeMgr.m_sMap.m_fGlobalMark.y);
-	WriteDouble (&File, g_inRcpInfo.m_recipeMgr.m_sMap.m_fCellCenter.x);
-	WriteDouble (&File, g_inRcpInfo.m_recipeMgr.m_sMap.m_fCellCenter.y);
-
-	strTemp.Format (_T("%s"), g_inRcpInfo.m_recipeMgr.m_sMap.m_chCellCount);
-	WriteString (&File, strTemp);
-	strTemp.Format (_T("%s"), g_inRcpInfo.m_recipeMgr.m_sMap.m_chCellDistance);
-	WriteString (&File, strTemp);
-
-
-	// LYS 2026-07-08 Sub Z Save (appended at end for V1005+ compatibility)
-	WriteString(&File, _T("_HEAD_SUBZ_"));
-	WriteDouble(&File, g_inRcpInfo.m_recipeMgr.m_sInfo.m_sMotionSubZ.m_fWadSubzRight);
-	WriteDouble(&File, g_inRcpInfo.m_recipeMgr.m_sInfo.m_sMotionSubZ.m_fWadSubzLeft);
-	WriteDouble(&File, g_inRcpInfo.m_recipeMgr.m_sInfo.m_sMotionSubZ.m_fVisionSubzRight);
-	WriteDouble(&File, g_inRcpInfo.m_recipeMgr.m_sInfo.m_sMotionSubZ.m_fVisionSubzLeft);
-	// LYS 2026-09-18 ANGLE Sub Z 는 여기서 되살리지 않는다 - 이 블록 중간에 값을 끼우면
-	//                V1005~V1009 로 저장된 레시피의 뒤쪽 항목이 전부 밀려 깨진다.
-	//                아래 _ANGLE_SUBZ_ 꼬리 블록(V1010)에서 저장한다.
-	//WriteDouble(&File, g_inRcpInfo.m_recipeMgr.m_sInfo.m_sMotionSubZ.m_fAngleSubzRight);
-	//WriteDouble(&File, g_inRcpInfo.m_recipeMgr.m_sInfo.m_sMotionSubZ.m_fAngleSubzLeft);
-
-	// LYS 2026-08-19 Angle Axis Save (appended at end for V1007+ compatibility)
-	WriteString(&File, _T("_ANGLE_AXIS_"));
-	WriteDouble(&File, g_inRcpInfo.m_recipeMgr.m_sInfo.m_sMotionAngle.m_fAngleScheimpflug1);
-	WriteDouble(&File, g_inRcpInfo.m_recipeMgr.m_sInfo.m_sMotionAngle.m_fAngleRotate1);
-	WriteDouble(&File, g_inRcpInfo.m_recipeMgr.m_sInfo.m_sMotionAngle.m_fAngleZoom1);
-	WriteDouble(&File, g_inRcpInfo.m_recipeMgr.m_sInfo.m_sMotionAngle.m_fAngleTilt1);
-	WriteDouble(&File, g_inRcpInfo.m_recipeMgr.m_sInfo.m_sMotionAngle.m_fAngleAzimuth1);
-	WriteDouble(&File, g_inRcpInfo.m_recipeMgr.m_sInfo.m_sMotionAngle.m_fAngleScheimpflug2);
-	WriteDouble(&File, g_inRcpInfo.m_recipeMgr.m_sInfo.m_sMotionAngle.m_fAngleRotate2);
-	WriteDouble(&File, g_inRcpInfo.m_recipeMgr.m_sInfo.m_sMotionAngle.m_fAngleZoom2);
-	WriteDouble(&File, g_inRcpInfo.m_recipeMgr.m_sInfo.m_sMotionAngle.m_fAngleTilt2);
-	WriteDouble(&File, g_inRcpInfo.m_recipeMgr.m_sInfo.m_sMotionAngle.m_fAngleAzimuth2);
-
-	// LYS 2026-09-09 Stick별 PROBE Z CONTACT OFFSET 저장 (V1009+, 꼬리 블록 - _STAGE_ 블록 안에 넣으면 구파일 파싱이 깨짐)
-	WriteString(&File, _T("_STICK_CONTACT_OFFSET_"));
-	strTemp = _T("");
-	nTemp = g_inRcpInfo.GetStickCount ();
-	for (int i = 0; i < nTemp; i++) {
-		str.Format (_T("%.4lf,"), g_inRcpInfo.GetStickItem (i).m_fProbeZOffset);
-		strTemp += str;
-	}
-	WriteString(&File, strTemp);
-
-	// LYS 2026-09-18 ANGLE Sub Z 저장 (V1010+, 꼬리 블록)
-	WriteString(&File, _T("_ANGLE_SUBZ_"));
-	WriteDouble(&File, g_inRcpInfo.m_recipeMgr.m_sInfo.m_sMotionSubZ.m_fAngleSubzRight);
-	WriteDouble(&File, g_inRcpInfo.m_recipeMgr.m_sInfo.m_sMotionSubZ.m_fAngleSubzLeft);
+	// LYS 2026-09-29 Hybrid Phase 1 본문 섹션은 C_InRecipeFunc::SaveRcpSections로 이동 - 세그먼트 0 본문 + V1011 꼬리 블록
+	g_inRcpInfo.SaveRcpSegments (&File);
 
 	File.Close ();
 
@@ -1655,6 +1432,45 @@ void	C_RecipeMgrDlg::InitStageMove (int nStick)
 	}
 }
 
+// LYS 2026-09-29 GLASS ROTATE(옵션 4행)가 바뀌면 전 스틱 STAGE ROTATE를 rotate*90으로 맞출지 묻는다.
+// 측정 각도는 스틱 m_fStageR에서 온다(2026-08-07 체계). 기준 레시피: 장변 rotate 1/R 90, 단변 rotate 2/R 180.
+// MakeCell OnRecipeUpdate와 같은 규칙. 저장 시 GetStageMoveData()가 이 그리드를 읽고, MOVE도 이 값을 바로 쓴다.
+void	C_RecipeMgrDlg::OnInspectOptionEndEdit (NMHDR *pNMHDR, LRESULT *pResult)
+{
+	NM_GRIDVIEW* pItem = reinterpret_cast<NM_GRIDVIEW*>(pNMHDR);
+	*pResult = 0;
+	if (pItem->iRow != 4 || pItem->iColumn != 1) return;
+
+	int nGlsRotate = m_gridInspectOptionData.GetItemCurSel (4, 1);
+	if (nGlsRotate < 0) return;
+
+	SyncStickRotateByGlsRotate (nGlsRotate);
+}
+
+void	C_RecipeMgrDlg::SyncStickRotateByGlsRotate (int nGlsRotate)
+{
+	int nCnt = m_gridStageMoveData.GetColumnCount ();
+	if (nCnt <= 0) return;
+
+	double fStageR = nGlsRotate * 90.0;
+
+	// 티칭으로 미세 조정한 값(예: 90.05)이 있을 수 있어 실제로 다를 때만 묻는다
+	BOOL bDiff = FALSE;
+	for (int i = 0; i < nCnt; i++) {
+		if (fabs (_wtof (m_gridStageMoveData.GetItemText (4, i)) - fStageR) > 0.0001) { bDiff = TRUE; break; }
+	}
+	if (!bDiff) return;
+
+	CString strMsg;
+	strMsg.Format (_T("GLASS ROTATE를 %d˚로 변경했습니다.\n모든 Stick의 STAGE ROTATE를 %.0lf로 맞출까요?"), nGlsRotate * 90, fStageR);
+	if (AfxMessageBox (strMsg, MB_YESNO | MB_ICONQUESTION) != IDYES) return;
+
+	for (int i = 0; i < nCnt; i++) {
+		m_gridStageMoveData.SetItemText (4, i, dfcStr (fStageR));
+	}
+	m_gridStageMoveData.Invalidate (FALSE);
+}
+
 void	C_RecipeMgrDlg::SetStageMoveData ()
 {
 	int nCnt = g_inRcpInfo.GetStickCount ();
@@ -2066,6 +1882,7 @@ void	C_RecipeMgrDlg::SetRecipeView ()
 	SetHeadMoveData ();		//Head Pos
 	SetSubZ();				//Sub Z
 	SetAngleAxis();			//Angle Axis
+	SetSegmentView ();		// LYS 2026-09-29 Hybrid Phase 2 세그먼트 선택기/정보
 	Invalidate (FALSE);
 }
 
@@ -2084,6 +1901,7 @@ BOOL	C_RecipeMgrDlg::GetRecipeView ()
 	if (!GetHeadMoveData ())	  return FALSE;	//Head Pos
 	if (!GetSubZ())				  return FALSE;	//Sub Z
 	if (!GetAngleAxis())		  return FALSE;	//Angle Axis
+	if (!GetSegmentView ())	  return FALSE;	// LYS 2026-09-29 Hybrid Phase 2 세그먼트 이름/PG/WAD
 
 	return TRUE;
 }
@@ -2415,6 +2233,10 @@ void	C_RecipeMgrDlg::AlignRcpEventProc (int nItem, int nItem2)
 
 void	C_RecipeMgrDlg::WritePPIDFile (CString strModel)
 {
+	// LYS 2026-09-29 Hybrid Phase 2 PPID 정보는 세그먼트 0 기준 (CIM에는 하이브리드 파일 1개로 보인다)
+	int nActiveSeg = g_inRcpInfo.GetActiveSegmentIndex ();
+	g_inRcpInfo.SetActiveSegment (0);
+
 	m_iniPPID.WriteProfileInt (strModel, _T("m_nCellWidthNum"), g_inRcpInfo.GetCellCount (0));
 	m_iniPPID.WriteProfileInt (strModel, _T("m_nCellHeightNum"), g_inRcpInfo.GetStickCount ());
 
@@ -2435,6 +2257,8 @@ void	C_RecipeMgrDlg::WritePPIDFile (CString strModel)
 	for (int i = 0; i < CAD_ROW_END - CAD_ROW_P1_1; i++) {//CAD_ROW_P1_1 ~ CAD_ROW_P5_2
 		m_iniPPID.WriteProfileString (strModel, dfcStr (_T("m_szMachingProbeRFID[%d]"), i), g_inRcpInfo.m_recipeMgr.m_sMap.m_chCadData[i]);
 	}
+
+	g_inRcpInfo.SetActiveSegment (nActiveSeg);	// LYS 2026-09-29 Hybrid Phase 2
 }
 
 void C_RecipeMgrDlg::MakeRcpList ()
@@ -2503,4 +2327,112 @@ void C_RecipeMgrDlg::OnBtnTestMode()
 	if (m_pTestModeDlg && !m_pTestModeDlg->IsWindowVisible()) {
 		m_pTestModeDlg->ShowWindow(SW_SHOW);
 	}
+}
+
+// LYS 2026-09-29 Hybrid Phase 2 세그먼트 선택기 + 세그먼트 정보 그리드 (docs/HybridGlass_Porting_Plan.md 5.10)
+//   화면의 모든 그리드는 활성 세그먼트(g_inRcpInfo.m_recipeMgr)를 보여준다. 전환 = 화면값 flush -> SetActiveSegment -> 다시 그리기.
+void	C_RecipeMgrDlg::InitSegmentInfo ()
+{
+	InitGridUI (m_gridSegHead, IDC_GRID_SEG_HEAD, 1, 1, TRUE);
+	m_gridSegHead.SetItemText (0, 0, _T("SEGMENT INFO."));
+	m_gridSegHead.EnableWindow (FALSE);
+
+	InitGridUI (m_gridSegData, IDC_GRID_SEG_DATA, 4, 2, TRUE);
+	m_gridSegData.SetItemText (0, 0, _T("SEGMENT"));
+	m_gridSegData.SetItemText (1, 0, _T("SEGMENT NAME"));
+	m_gridSegData.SetItemText (2, 0, _T("PG RECIPE"));
+	m_gridSegData.SetItemText (3, 0, _T("WAD RECIPE"));
+
+	m_gridSegData.SetItemState	  (0, 1, m_gridSegData.GetItemState (0, 1) | GVIS_READONLY);
+	m_gridSegData.SetItemFgColour (0, 1, COLOR_GRAY);
+
+	SetSegmentView ();
+}
+
+// PG/WAD 레시피명 공란 = RecipeID(지금 동작 그대로)
+void	C_RecipeMgrDlg::SetSegmentView ()
+{
+	int nSeg	= g_inRcpInfo.GetSegmentLoopCount ();
+	int nActive = g_inRcpInfo.GetActiveSegmentIndex ();
+
+	m_cmbSegment.ResetContent ();
+	for (int k = 0; k < nSeg; k++) {
+		CString strName = g_inRcpInfo.GetSegmentName (k);
+		if (strName.IsEmpty ()) strName.Format (_T("Segment#%d"), k + 1);
+		m_cmbSegment.AddString (dfcStr (_T("%d. %s"), k + 1, strName.GetString ()));
+	}
+	m_cmbSegment.SetCurSel (nActive);
+
+	S_SegmentHeader sHdr = g_inRcpInfo.GetSegmentHeader (nActive);
+	CString strName = sHdr.m_chName;
+	if (strName.IsEmpty ()) strName.Format (_T("Segment#%d"), nActive + 1);
+
+	m_gridSegData.SetItemText (0, 1, dfcStr (_T("%d / %d"), nActive + 1, nSeg));
+	m_gridSegData.SetItemText (1, 1, strName);
+	m_gridSegData.SetItemText (2, 1, CString (sHdr.m_chPGName));
+	m_gridSegData.SetItemText (3, 1, CString (sHdr.m_chWADName));
+	Invalidate (FALSE);
+}
+
+// 이름 유일성은 저장 시 ValidateSegments가 검사한다
+BOOL	C_RecipeMgrDlg::GetSegmentView ()
+{
+	int nActive = g_inRcpInfo.GetActiveSegmentIndex ();
+	S_SegmentHeader sHdr = g_inRcpInfo.GetSegmentHeader (nActive);
+
+	CString strName = m_gridSegData.GetItemText (1, 1);
+	CString strPG	= m_gridSegData.GetItemText (2, 1);
+	CString strWAD	= m_gridSegData.GetItemText (3, 1);
+	strName.Trim ();
+	strPG.Trim ();
+	strWAD.Trim ();
+	if (strName.IsEmpty ()) strName.Format (_T("Segment#%d"), nActive + 1);
+
+	wcsncpy_s (sHdr.m_chName,	 strName, _TRUNCATE);
+	wcsncpy_s (sHdr.m_chPGName,	 strPG,	  _TRUNCATE);
+	wcsncpy_s (sHdr.m_chWADName, strWAD,  _TRUNCATE);
+	g_inRcpInfo.SetSegmentHeader (nActive, sHdr);
+	return TRUE;
+}
+
+void	C_RecipeMgrDlg::SwitchSegment (int nSeg)
+{
+	int nCount	= g_inRcpInfo.GetSegmentCount ();
+	int nActive = g_inRcpInfo.GetActiveSegmentIndex ();
+	if (nSeg < 0 || nSeg >= nCount || nSeg == nActive) {
+		SetSegmentView ();
+		return;
+	}
+
+	// 화면 값을 지금 세그먼트에 먼저 반영 - 입력값 검사(램프/컨택 범위 등)에 걸리면 전환하지 않는다
+	if (!GetRecipeView ()) {
+		SetSegmentView ();
+		return;
+	}
+
+	// 세그먼트 기준으로 그려진 팝업은 닫는다 (ICP 결함: 전환 후에도 이전 세그먼트 내용을 보여줬다)
+	if (m_pMakeCellDlg)	  m_pMakeCellDlg->ShowWindow (SW_HIDE);
+	if (m_pSelectCellDlg) m_pSelectCellDlg->ShowWindow (SW_HIDE);
+	if (m_pAlignRcpDlg)	  m_pAlignRcpDlg->ShowWindow (SW_HIDE);
+
+	g_inRcpInfo.SetActiveSegment (nSeg);
+
+	// .alg 도 세그먼트마다 다르다
+	if (!g_inRcpInfo.GetAlignRecipeName ().IsEmpty ()) m_pAlignRcpDlg->LoadAlignRecipe (g_inRcpInfo.GetAlignRecipeName ());
+	SetRecipeView ();
+}
+
+void	C_RecipeMgrDlg::OnSegmentSelChange ()
+{
+	SwitchSegment (m_cmbSegment.GetCurSel ());
+}
+
+void	C_RecipeMgrDlg::OnSegmentPrev ()
+{
+	SwitchSegment (g_inRcpInfo.GetActiveSegmentIndex () - 1);
+}
+
+void	C_RecipeMgrDlg::OnSegmentNext ()
+{
+	SwitchSegment (g_inRcpInfo.GetActiveSegmentIndex () + 1);
 }

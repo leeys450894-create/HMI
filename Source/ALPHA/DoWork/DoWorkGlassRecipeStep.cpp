@@ -538,7 +538,7 @@ bool CDoWorkGlassRecipeStep_ProbeCheck::Run()
 		// LYS 2026-09-08 ProbeCheck 후 ACX SACC에 꽂기
 		int nBit = 0;
 
-		// LYS 2026-09-28 OOS: motion OOS skips AutoChange X safety bit (MOTION_INTERLOCK_11)
+		// LYS 2026-09-28 OOS: 모션 OOS면 AutoChange X 안전 비트(MOTION_INTERLOCK_11)를 보지 않는다
 		bool bMotionOOS = (m_pShareItem->GetMaintControlMgrPtr()->IsOutOfServiceMC() == true);
 		if (bMotionOOS) m_pShareItem->GetLogFileAccessorPtr()->KMLOG(SYST, _T("CDoWorkGlassRecipeStep_ProbeCheck : motion OOS - skip ACX safety bit check"));
 

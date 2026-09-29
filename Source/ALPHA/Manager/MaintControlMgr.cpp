@@ -327,7 +327,7 @@ long CMaintControlMgr::MoveCmdPosA(int iAxis, double dPos, bool bBlockMode, int 
 								else
 									nBit = -1;
 
-								if (nBit != 1 && IsOutOfServiceMC() != true)	// LYS 2026-09-28 OOS: motion OOS skips AutoChange X safety bit (MOTION_INTERLOCK_11)
+								if (nBit != 1 && IsOutOfServiceMC() != true)	// LYS 2026-09-28 OOS: 모션 OOS면 AutoChange X 안전 비트(MOTION_INTERLOCK_11)를 보지 않는다
 								{
 									//if (nBit != 1)
 									{
@@ -465,7 +465,7 @@ long CMaintControlMgr::MoveCmdPosR(int iAxis, double dPos, bool bBlockMode, int 
 									else
 										nBit = -1;
 
-									if (nBit != 1 && IsOutOfServiceMC() != true)	// LYS 2026-09-28 OOS: motion OOS skips AutoChange X safety bit (MOTION_INTERLOCK_11)
+									if (nBit != 1 && IsOutOfServiceMC() != true)	// LYS 2026-09-28 OOS: 모션 OOS면 AutoChange X 안전 비트(MOTION_INTERLOCK_11)를 보지 않는다
 									{
 										//if (nBit != 1)
 										{
@@ -7288,7 +7288,7 @@ long CMaintControlMgr::MoveOrgPosA(int iAxis, double dPos, bool bBlockMode, int 
 								else
 									nBit = -1;
 
-								if (nBit != 1 && IsOutOfServiceMC() != true)	// LYS 2026-09-28 OOS: motion OOS skips AutoChange X safety bit (MOTION_INTERLOCK_11)
+								if (nBit != 1 && IsOutOfServiceMC() != true)	// LYS 2026-09-28 OOS: 모션 OOS면 AutoChange X 안전 비트(MOTION_INTERLOCK_11)를 보지 않는다
 								{
 									//if (nBit != 1)
 									{
@@ -7416,7 +7416,7 @@ long CMaintControlMgr::MoveOrgPosR(int iAxis, double dPos, bool bBlockMode, int 
 									nBit = GetIOMapControlMgrPtr()->GetParam_DIOMapMemoryBitImport(PLC_AUTO_CHANGE_X0_POSITION_04);
 									if (nBit != -1)
 									{
-										if (nBit != 1 && IsOutOfServiceMC() != true)	// LYS 2026-09-28 OOS: motion OOS skips AutoChange X safety bit (MOTION_INTERLOCK_11)
+										if (nBit != 1 && IsOutOfServiceMC() != true)	// LYS 2026-09-28 OOS: 모션 OOS면 AutoChange X 안전 비트(MOTION_INTERLOCK_11)를 보지 않는다
 										{
 											nRet = MOTION_INTERLOCK_11;
 										}

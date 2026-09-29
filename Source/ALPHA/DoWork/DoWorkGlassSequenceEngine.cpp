@@ -661,7 +661,10 @@ void CDoWorkGlassSequenceEngine::ThreadRun()
     CMCCLogMgr::GetInstance()->SetMCC_Action(MCC_A_AUTO_CYCLE, true);
 
 	// LYS 2026-07-03 Resume Save: inspection start
-	if (m_MgrPool_link.pResumeInfoMgr && m_MgrPool_link.pSystemConfigMgr->IsUseResumeInspection())
+	// LYS 2026-09-29 P0-1 재개 모드에서는 저장하지 않는다 - 여기서 LastStick=-1로 덮으면 Recipe 아이템의 결과 재적재가 0건이 되고,
+	//                  재개 도중 중단 시 진행 위치도 사라진다 (Hybrid 플랜 3.6)
+	if (m_MgrPool_link.pResumeInfoMgr && m_MgrPool_link.pSystemConfigMgr->IsUseResumeInspection()
+		&& CSystemParamShare::GetInstance()->IsResumeMode() != true)
 	{
 		S_RecipeData* pRD = GetRecipeEditMgrPtr()->GetRecipeData();
 		int nStickTotal = pRD ? (int)pRD->m_vecStick.size() : 0;
@@ -921,9 +924,7 @@ bool CDoWorkGlassSequenceEngine::ThreadRu_nSequence(int cycle_index, bool bFirst
 					continue;
 				}
 			}
-			m_vecItems[i]->Start();			
-			GetSeqTactTimeMgrPtr()->SetCycleIndex(cycle_index);
-
+            // LYS 2026-09-29 P0-2 스틱 수를 Start() 전에 넣는다 - Start 후에 넣으면 아이템 스레드가 이전 값(첫 글라스는 0)을 읽을 수 있다
             // 측정 Skip 개수 셋팅(측정 동작 반복하기 위해서)
             S_RecipeData* pRecipeData;
             pRecipeData = GetRecipeEditMgrPtr()->GetRecipeData();
@@ -931,6 +932,9 @@ bool CDoWorkGlassSequenceEngine::ThreadRu_nSequence(int cycle_index, bool bFirst
             nStick = pRecipeData->m_vecStick.size();
             m_vecItems[i]->SetLoopStepIndex(nStick);
             ///
+			m_vecItems[i]->Start();			
+			GetSeqTactTimeMgrPtr()->SetCycleIndex(cycle_index);
+
 
 			strLog.Format(_T("Cycle Seq Item : %s - Start"), m_vecItems[i]->GetName().GetString());
 			m_pLogFileAccessor->KMLOG(OPER, strLog);

@@ -785,7 +785,7 @@ int CMeasureSequenceItemEngine::GetMeasureArea()
 //=========================================================================
 // LYS 2026-08-06 AgingCycle E3: 에이징 리스트 사이클 컨텍스트(OCP DoWorkStartMeasOCP_A)
 //=========================================================================
-bool CMeasureSequenceItemEngine::AgingCycleBegin(int nEfaPass)	// LYS 2026-09-28 EFA: nEfaPass >= 0 -> fixed item
+bool CMeasureSequenceItemEngine::AgingCycleBegin(int nEfaPass)	// LYS 2026-09-28 EFA: nEfaPass >= 0이면 고정 항목
 {
 	m_bAgingCycleActive = false;
 	m_nAgingCurItem = -1;
@@ -795,8 +795,8 @@ bool CMeasureSequenceItemEngine::AgingCycleBegin(int nEfaPass)	// LYS 2026-09-28
 	if (m_MgrPool_link.pSystemConfigMgr == nullptr || m_MgrPool_link.pSystemConfigMgr->IsOCP() == false)
 		return false;
 
-	// LYS 2026-09-28 EFA: fixed-item pass. OCP DoWorkStartMeasICP_EFA runs the item(pass) loop OUTSIDE the stick loop,
-	// so one stick sees exactly one item and there is no per-stick loop-back (AgingCycleNextItem -> false).
+	// LYS 2026-09-28 EFA: 고정 항목 pass. OCP DoWorkStartMeasICP_EFA는 항목(pass) 루프를 스틱 루프 바깥에서 돌리므로
+	// 한 스틱은 항목 하나만 보고 스틱 안 루프백이 없다(AgingCycleNextItem -> false).
 	if (nEfaPass >= 0)
 	{
 		if (m_AgingCycleInfo.Load(GetRecipeEditMgrPtr()->GetRecipeID(), true) == false)
@@ -837,8 +837,8 @@ bool CMeasureSequenceItemEngine::AgingCycleBegin(int nEfaPass)	// LYS 2026-09-28
 	return m_bAgingCycleActive;
 }
 
-// LYS 2026-09-28 EFA: pass count for CDoWorkGlassMeasure::ThreadRun. 0 = not EFA (standard single pass).
-// Gate = OCP + (shared m_bNewAgingMode set by EFA START / CIM 'B'  OR  recipe m_bUseEFA) + efa rcp with items.
+// LYS 2026-09-28 EFA: CDoWorkGlassMeasure::ThreadRun이 쓰는 pass 수. 0 = EFA 아님(일반 단일 pass).
+// 게이트 = OCP + (EFA START / CIM 'B'가 켜는 공유 m_bNewAgingMode 또는 레시피 m_bUseEFA) + 항목이 있는 EFA rcp.
 int CMeasureSequenceItemEngine::GetEfaPassCount()
 {
 	if (m_MgrPool_link.pSystemConfigMgr == nullptr || m_MgrPool_link.pSystemConfigMgr->IsOCP() == false) return 0;
@@ -867,7 +867,7 @@ int CMeasureSequenceItemEngine::GetEfaPassCount()
 
 bool CMeasureSequenceItemEngine::AgingCycleNextItem()
 {
-	if (m_bEfaCycle) return false;	// LYS 2026-09-28 EFA: one fixed item per pass, no loop-back
+	if (m_bEfaCycle) return false;	// LYS 2026-09-28 EFA: pass당 고정 항목 하나, 루프백 없음
 
 	for (int i = m_nAgingCurItem + 1; i < m_AgingCycleInfo.GetItemCount(); i++)
 	{

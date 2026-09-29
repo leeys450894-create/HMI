@@ -189,12 +189,30 @@ class C_RecipeMgrDlg : public C_BaseDialog
 		afx_msg void	OnSetCcdLamp (NMHDR *pNMHDR, LRESULT *pResult);
 		afx_msg void	OnSetContactPos (NMHDR *pNMHDR, LRESULT *pResult);
 		afx_msg void	OnSetStage (NMHDR *pNMHDR, LRESULT *pResult);
+		afx_msg void	OnInspectOptionEndEdit (NMHDR *pNMHDR, LRESULT *pResult);	// LYS 2026-09-29 GLASS ROTATE -> 스틱 R
+		void			SyncStickRotateByGlsRotate (int nGlsRotate);
 		afx_msg void	OnSetHead (NMHDR *pNMHDR, LRESULT *pResult);
 		afx_msg void	OnSetSRMLamp(NMHDR* pNMHDR, LRESULT* pResult);
 		afx_msg void	OnSetColorPos(NMHDR* pNMHDR, LRESULT* pResult);
 		//afx_msg void	OnSetColorItem(NMHDR* pNMHDR, LRESULT* pResult);
 
 	afx_msg void OnBtnTestMode();	// LYS 2026-07-02 TestMode dialog
+
+	// LYS 2026-09-29 Hybrid Phase 2 세그먼트 선택기 + 세그먼트 정보(이름/PG/WAD)
+	protected:
+		CComboBox	m_cmbSegment;
+		C_ButtonEx	m_btnSeg[2];
+		C_GridCtrl	m_gridSegHead;
+		C_GridCtrl	m_gridSegData;
+	public:
+		void InitSegmentInfo ();
+		void SetSegmentView ();
+		BOOL GetSegmentView ();
+		void SwitchSegment (int nSeg);
+	protected:
+		afx_msg void OnSegmentSelChange ();
+		afx_msg void OnSegmentPrev ();
+		afx_msg void OnSegmentNext ();
 
 	DECLARE_MESSAGE_MAP()
 };

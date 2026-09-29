@@ -8,8 +8,8 @@ class CDoWorkGlassMeasure : public CDoWorkGlassSequenceImpl
 {
 	std::vector<CDoWorkGlassMeasureStep*> m_vecSeqStep;
 	CDoWorkGlassMeasureStep* GetSeqItemStep();
-	bool EfaPassBoundary(int nPass);			// LYS 2026-09-28 EFA: T0->T1 boundary (result flush + CIM handshake)
-	bool IsEfaSkipStep(const CString& strName);	// LYS 2026-09-28 EFA: steps not repeated on T1+
+	bool EfaPassBoundary(int nPass);			// LYS 2026-09-28 EFA: T0->T1 경계 (결과 저장 + CIM 핸드셰이크)
+	bool IsEfaSkipStep(const CString& strName);	// LYS 2026-09-28 EFA: T1 이후 반복하지 않는 스텝
 	CMeasureSequenceItemEngine *m_pMeasSeqItemEngine;
 	CBaseSequenceImpl *m_pShareItem;
 

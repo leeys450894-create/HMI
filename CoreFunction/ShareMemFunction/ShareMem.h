@@ -2338,8 +2338,8 @@ typedef struct _stVTM_SYSTEM
 	int						m_nProbeChange;		// jsyoon 2022.05.19 add
 	int						m_nAgingStartStick[5];  // 0~3 : Aging, 4 Meas
 
-	// LYS 2026-09-28 EFA: EFA 2-pass test mode (OCP_EFA m_bNewAgingMode). Mutually exclusive with m_bAutoAgingMode.
-	// Added at the struct END on purpose - VTM_SYSTEM is a shared-memory contract.
+	// LYS 2026-09-28 EFA: EFA 2-pass 검사 모드(OCP_EFA m_bNewAgingMode). m_bAutoAgingMode와 동시에 켜지지 않는다.
+	// VTM_SYSTEM은 공유 메모리 계약이라 일부러 구조체 끝에 추가했다.
 	BOOL					m_bNewAgingMode;
 
 }VTM_SYSTEM, *PVTM_SYSTEM;

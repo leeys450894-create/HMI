@@ -203,7 +203,7 @@ int CDoWorkProbeSWAlignStep::Align_MovePosition(int nHead, int nIndex)
 
 				if (pImpl->GetIOMapControlMgrPtr()->GetParam_DIOMapMemoryBitImport(PLC_AUTO_CHANGE_X0_POSITION_03) || pImpl->GetIOMapControlMgrPtr()->GetParam_DIOMapMemoryBitImport(PLC_AUTO_CHANGE_X0_POSITION_04))
 					bRet = true;
-				if (bRet != true && pImpl->IsOutOfServiceMC() != true)	// LYS 2026-09-28 OOS: motion OOS skips AutoChange X safety bit (MOTION_INTERLOCK_11)
+				if (bRet != true && pImpl->IsOutOfServiceMC() != true)	// LYS 2026-09-28 OOS: 모션 OOS면 AutoChange X 안전 비트(MOTION_INTERLOCK_11)를 보지 않는다
 				{
 					nRet = MOTION_INTERLOCK_11;
 				}

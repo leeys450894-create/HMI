@@ -173,9 +173,9 @@ void CDoWorkGlassMeasure::ThreadRun()
 		if (m_vecSeqStep[k]->GetName() == _T("VISION")) nStepIdxVision = (long)k;
 	}
 
-	// LYS 2026-09-28 EFA: 2-pass loop (OCP DoWorkStartMeasICP_EFA: item(pass) loop OUTSIDE the stick loop).
-	// nPassCount = EFA rcp item count (normally 2: T0 before aging / T1 after aging), 1 = standard run.
-	// Resume start stick applies to pass 0 only; T1+ always restarts from stick 0.
+	// LYS 2026-09-28 EFA: 2-pass 루프 (OCP DoWorkStartMeasICP_EFA: 항목(pass) 루프가 스틱 루프 바깥에 있다).
+	// nPassCount = EFA rcp 항목 수(보통 2: T0 에이징 전 / T1 에이징 후), 1 = 일반 측정.
+	// Resume 시작 스틱은 pass 0에만 적용하고, T1 이후는 항상 스틱 0부터 다시 돈다.
 	int  nPassCount = 1;
 	bool bEfaMode = false;
 	if (m_pMeasSeqItemEngine != NULL && nStepIdxAging >= 0 && nStepIdxVision >= 0)
@@ -200,7 +200,7 @@ void CDoWorkGlassMeasure::ThreadRun()
 			}
 		}
 
-		for (size_t i = ((nPass == 0) ? nStartStick : 0); i < (size_t)nStepIndex; i++)		// N Stick (// LYS 2026-09-28 EFA: pass-aware start)
+		for (size_t i = ((nPass == 0) ? nStartStick : 0); i < (size_t)nStepIndex; i++)		// N Stick (// LYS 2026-09-28 EFA: pass별 시작 스틱)
 		{
 			CMCCLogMgr::GetInstance()->SetMCC_Action(MCC_A_STEP_MEAS_N, true, 0);
 			
@@ -216,7 +216,7 @@ void CDoWorkGlassMeasure::ThreadRun()
 				CDoWorkGlassMeasureStep* pSeqItem = GetSeqItemStep();
 				if (pSeqItem)
 				{
-					// LYS 2026-09-28 EFA: T1+ pass skips pre-inspection steps (OCP _EFA bInspCheck). Set = Pattern Search / OSTest / R-Test.
+					// LYS 2026-09-28 EFA: T1 이후 pass는 사전검사 스텝을 건너뛴다(OCP _EFA bInspCheck). 대상 = Pattern Search / OSTest / R-Test.
 					if (bEfaMode && nPass >= 1 && IsEfaSkipStep(pSeqItem->GetName()))
 					{
 						CString strSkip;
@@ -237,8 +237,8 @@ void CDoWorkGlassMeasure::ThreadRun()
 
 					m_pShareItem->GetSeqTactTimeMgrPtr()->SetSeqItemTimeST(1, strName, GetCurStep());	// Start Time
 
-					// LYS 2026-09-28 EFA: the exit/Idle step (SetComplete + complete event) may run only on the FINAL pass.
-					// On T0 the last stick ends like any other stick (break at Exit-1) so RESULT/UNLOAD cannot start while T1 runs.
+					// LYS 2026-09-28 EFA: 종료/Idle 스텝(SetComplete + 완료 이벤트)은 마지막 pass에서만 실행한다.
+					// T0에서는 마지막 스틱도 다른 스틱처럼 Exit-1에서 끝내야 T1 도중에 RESULT/UNLOAD가 시작되지 않는다.
 					if (i + 1 == GetLoopStepIndex() && nPass == nPassCount - 1)	// Last Stick
 					{
 						if (pSeqItem->Run() == true) // 동작
@@ -367,38 +367,38 @@ void CDoWorkGlassMeasure::ThreadRun()
 				break;
 			}
 		}
-		if (bExis == true) break;	// LYS 2026-09-28 EFA: stop remaining passes
+		if (bExis == true) break;	// LYS 2026-09-28 EFA: 남은 pass도 중단
 	}
 }
 
-// LYS 2026-09-28 EFA: steps not repeated on T1+ (OCP _EFA bInspCheck skips ReviewSearch / pre-inspection).
-// Fixed per user decision 2026-09-28: Pattern Search, OST, R-Test. Contact and the measurements repeat every pass.
+// LYS 2026-09-28 EFA: T1 이후 반복하지 않는 스텝 (OCP _EFA bInspCheck가 ReviewSearch / 사전검사를 건너뛴다).
+// 2026-09-28 사용자 결정으로 Pattern Search, OST, R-Test 고정. Contact와 측정 스텝은 pass마다 반복한다.
 bool CDoWorkGlassMeasure::IsEfaSkipStep(const CString& strName)
 {
 	return (strName == _T("Pattern Search") || strName == _T("OSTest") || strName == _T("R-Test"));
 }
 
-// LYS 2026-09-28 EFA: T0 -> T1 boundary (OCP _EFA AgingCnt==1 block: result save + APD FTP + EFA^0$ / EFA^0_OK$ handshake).
-// 1) T0 result flush: same call as CDoWorkGlassResultStep_CompleteCheck (XLS + APD.txt). dResult does NOT clear
-//    its grid, so T1 simply overwrites the same rows and the final Result step writes the T1 file (OCP behaviour).
-//    SaveResult starts an async export thread -> wait for SaveResultDone before T1 writes into the grid.
-// 2) ONLINE REMOTE only: APD FTP upload -> 500 ms -> EFA^0$ -> wait EFA^0_OK$ 5 s, continue on timeout (D-2).
-// false = user stop (abort the glass). Save/CIM failures are logged and the glass continues, as in OCP.
+// LYS 2026-09-28 EFA: T0 -> T1 경계 (OCP _EFA AgingCnt==1 블록: 결과 저장 + APD FTP + EFA^0$ / EFA^0_OK$ 핸드셰이크).
+// 1) T0 결과 저장: CDoWorkGlassResultStep_CompleteCheck와 같은 호출(XLS + APD.txt). dResult는 그리드를 지우지 않으므로
+//    T1이 같은 행을 그대로 덮어쓰고, 마지막 Result 스텝이 T1 파일을 쓴다(OCP 동작).
+//    SaveResult는 비동기 내보내기 스레드를 시작하므로 T1이 그리드에 쓰기 전에 SaveResultDone을 기다린다.
+// 2) ONLINE REMOTE일 때만: APD FTP 업로드 -> 500 ms -> EFA^0$ -> EFA^0_OK$ 5초 대기, 타임아웃이어도 진행(D-2).
+// false = 사용자 정지(글라스 중단). 저장/CIM 실패는 로그만 남기고 OCP처럼 계속 진행한다.
 bool CDoWorkGlassMeasure::EfaPassBoundary(int nPass)
 {
 	CString strLog;
 	strLog.Format(_T("EFA: pass boundary before pass %d (T0 done) - result flush + CIM handshake"), nPass + 1);
 	m_pLogFileAccessor->KMLOG(OPER, strLog);
 
-	if (m_pShareItem->IfPauseEvt_WaitResumeEvt() != true) return false;	// user stop between passes
+	if (m_pShareItem->IfPauseEvt_WaitResumeEvt() != true) return false;	// pass 사이 사용자 정지
 
-	// ---- 1) T0 result flush ----
+	// ---- 1) T0 결과 저장 ----
 	CString strStart;
 	strStart.Format(_T("%s"), m_pShareItem->GetSeqTactTimeMgrPtr()->GetStartTime2());
 	bool bSave = CResultMgr::GetInstance()->SaveResult(true, true, strStart);
 	if (bSave)
 	{
-		// the export thread flips SaveResultDone false -> true; give it up to 1 s to start, then 30 s to finish
+		// 내보내기 스레드가 SaveResultDone을 false -> true로 바꾼다. 시작까지 최대 1초, 완료까지 30초 대기
 		DWORD dwS = GetTickCount();
 		while (CResultMgr::GetInstance()->SaveResultDone() == true && GetTickCount() - dwS < 1000) Sleep(20);
 		while (CResultMgr::GetInstance()->SaveResultDone() == false && GetTickCount() - dwS < 30000) Sleep(100);
@@ -407,7 +407,7 @@ bool CDoWorkGlassMeasure::EfaPassBoundary(int nPass)
 	strLog.Format(_T("EFA: T0 result flush %s"), bSave ? _T("OK") : _T("NG (UploadDataDone/export timeout) - continue"));
 	m_pLogFileAccessor->KMLOG(bSave ? OPER : WARN, strLog);
 
-	// ---- 2) CIM handshake (ONLINE REMOTE only, like OCP) ----
+	// ---- 2) CIM 핸드셰이크 (OCP처럼 ONLINE REMOTE일 때만) ----
 	if (m_pShareItem->GetShareMemoryMgrPtr()->GetSys_MachineMode() != df_HOST_ONLINE_REMOTE)
 	{
 		m_pLogFileAccessor->KMLOG(OPER, _T("EFA: not ONLINE REMOTE - skip APD upload / EFA^0$"));
@@ -419,7 +419,7 @@ bool CDoWorkGlassMeasure::EfaPassBoundary(int nPass)
 
 	if (bSave && pCIM->SendAPDFileToFTP())
 	{
-		// same completion wait as CDoWorkSequenceCIMStep_GDTReq (transfer thread alive -> done)
+		// CDoWorkSequenceCIMStep_GDTReq와 같은 완료 대기 (전송 스레드 살아 있음 -> 완료)
 		Sleep(500);
 		int nLoop = 0;
 		while (pCIM->GetThreadLive() == true && nLoop < 1000) { Sleep(100); nLoop++; }
@@ -432,7 +432,7 @@ bool CDoWorkGlassMeasure::EfaPassBoundary(int nPass)
 
 	Sleep(500);
 	pCIM->Cmd_Send_EFA0();
-	pCIM->WaitEFA0Ack(5000);	// logs OK / TIMEOUT; T1 continues either way (OCP)
+	pCIM->WaitEFA0Ack(5000);	// OK / TIMEOUT 로그를 남긴다. 어느 쪽이든 T1은 계속 진행 (OCP)
 
 	return (m_pShareItem->IfPauseEvt_WaitResumeEvt() == true);
 }

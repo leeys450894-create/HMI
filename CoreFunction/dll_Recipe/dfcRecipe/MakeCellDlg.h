@@ -21,6 +21,7 @@ const enum CELL_ROW {
 
 #include "BaseDialog.h"
 #include "IniFile.h"
+#include <vector>	// LYS 2026-09-29 Hybrid Phase 2 - RecipeManager.cpp includes this header without pch
 
 
 class C_MakeCellDlg : public C_BaseDialog
@@ -61,6 +62,41 @@ class C_MakeCellDlg : public C_BaseDialog
 		afx_msg void OnRecipeUpdate ();
 		afx_msg void OnCalcUpdate ();
 
+
+	// LYS 2026-09-29 Hybrid Phase 2 하이브리드 UI - 세그먼트마다 MakeCell 입력 슬롯을 두고 RECIPE APPLY에서 한 번에 커밋
+	protected:
+		struct S_MakeSegInput {
+			BOOL				 bOpened;		// OPEN 한 슬롯만 RECIPE APPLY에서 재생성, 나머지 세그먼트는 그대로
+			CString				 strCellInfo;	// 셀 정보(GlassInfo.ini 섹션) 이름
+			int					 nAngle;		// m_cmbAngle
+			int					 nRotateSel;		// 좌표 그리드 GLASS ROTATE
+			std::vector<CString> vecOpenData;	// m_strArrCoordData (OPEN 원본, CAD APPLY가 쓴다)
+			std::vector<CString> vecCoord;		// 좌표 그리드 DATA 열
+			std::vector<CString> vecCoordDesc;	// 좌표 그리드 DESCRIPTION 열
+			std::vector<CString> vecCad;		// CAD 그리드 값 열
+			S_MakeSegInput () : bOpened (FALSE), nAngle (0), nRotateSel (0) {}
+		};
+		CButton		m_chkHybrid;
+		CComboBox	m_cmbSegCount;
+		std::vector<S_MakeSegInput> m_vecSegInput;
+		int			m_nSegView;			// 지금 그리드에 보이는 슬롯
+		int			m_nSingleSrcSeg;	// 하이브리드 해제 후 RECIPE APPLY의 기준 세그먼트
+
+		void InitHybridUI ();
+		void SyncHybridFromRecipe ();
+		void UpdateHybridUI ();
+		BOOL IsHybridEdit ();
+		void SaveSegInput (int nSeg);
+		void LoadSegInput (int nSeg);
+		void MoveSegView (int nSeg);
+		void BuildRecipeFromGrid (CString strRcpName);
+		void ApplyHybridRecipe ();
+		afx_msg void OnHybridCheck ();
+		afx_msg void OnSegCountApply ();
+		afx_msg void OnSegPrev ();
+		afx_msg void OnSegNext ();
+	public:
+		BOOL ShowWindow (int nCmdShow);	// SW_SHOW 때 레시피 세그먼트 수로 동기화 (SelectCellDlg와 같은 방식)
 
 	DECLARE_MESSAGE_MAP()
 };

@@ -146,7 +146,7 @@ void	C_SelectCellDlg::SetViewSelectCell (/*m_nMode*/)
 		double fRatio0 = min(550.0 / RCP_GLASS_SIZE_X, 380.0 / RCP_GLASS_SIZE_Y);
 		m_gridSelSpec.MoveWindow (30, 20, (int)(RCP_GLASS_SIZE_Y * fRatio0), (int)(RCP_GLASS_SIZE_X * fRatio0));
 	}
-	else if (g_inRcpInfo.GetGlsRotate () == RCP_CELL_ANG_90) {
+	else if (g_inRcpInfo.GetGlsRotate () == RCP_CELL_ANG_90 || g_inRcpInfo.GetGlsRotate () == RCP_CELL_ANG_270) {	// LYS 2026-09-29 Hybrid Phase 2 270은 90 배치 공유(세그먼트 전환 시 빈 창 방지)
 		m_gridSelSpec.MoveWindow (180, 100, (int)(RCP_GLASS_SIZE_X * fRatio), (int)(RCP_GLASS_SIZE_Y * fRatio));
 	}
 

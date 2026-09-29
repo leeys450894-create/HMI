@@ -6461,8 +6461,8 @@ bool CDoWorkGlassMeasureStep_AGING::Run()
 	
 	 m_pShareItem->GetLogFileAccessorPtr()->KMLOG(SYST, _T("CDoWorkGlassMeasureStep_AGING Start."));
 
-	// LYS 2026-09-28 EFA: EFA item without USE_AGING (the T1 row) skips the PG aging itself
-	// (OCP _EFA: bUseAging = sAgingTest.m_bUseAging). AgingTest cycle is untouched (its NextItem only picks USE_AGING items).
+	// LYS 2026-09-28 EFA: USE_AGING이 없는 EFA 항목(T1 행)은 PG 에이징 자체를 건너뛴다
+	// (OCP _EFA: bUseAging = sAgingTest.m_bUseAging). AgingTest 사이클은 영향 없음(NextItem이 USE_AGING 항목만 고른다).
 	if (m_pMeasSeqItemEngine != NULL && m_pMeasSeqItemEngine->IsEfaCycle())
 	{
 		const S_AgingTest* pEfaItem = m_pMeasSeqItemEngine->GetAgingCycleInfo()->GetItem(m_pMeasSeqItemEngine->GetAgingCurItem());
@@ -6723,10 +6723,10 @@ bool CDoWorkGlassMeasureStep_AGING::Run()
 					stPosition[0].dPosition = dLeft;
 					stPosition[1].axis = AXIS_Y4;   nAxis++;
 					stPosition[1].dPosition = dRight;
-					// LYS 2026-09-28 OCP: review snap heads are Y1/Y2 (BACK, cameras 0/1) and they already sit at dLeft/dRight
-					// from MoveMeasureArea. Y3/Y4 (FRONT, SW limit +697) must go to Position.ini [SAFETY] instead -
-					// df_HEAD_Y_IDLE_SAFETY marker, resolved by MoveCmdPosAging/ApplyIdleHeadSafetyY (same as PreMeas).
-					// 2026-09-28 OOS run: 'HEAD FRONT RIGHT target 720.158 > MX 697.000' came from here.
+					// LYS 2026-09-28 OCP: 리뷰 스냅 헤드는 Y1/Y2(BACK, 카메라 0/1)이고 MoveMeasureArea에서 이미 dLeft/dRight에 있다.
+					// Y3/Y4(FRONT, SW 리밋 +697)는 대신 Position.ini [SAFETY]로 보내야 한다 -
+					// df_HEAD_Y_IDLE_SAFETY 표식을 MoveCmdPosAging/ApplyIdleHeadSafetyY가 치환한다(PreMeas와 동일).
+					// 2026-09-28 OOS 런의 'HEAD FRONT RIGHT target 720.158 > MX 697.000'이 여기서 발생했다.
 					if (bIsOCP)
 					{
 						stPosition[0].axis = AXIS_Y1;	stPosition[0].dPosition = dLeft;
@@ -6754,7 +6754,7 @@ bool CDoWorkGlassMeasureStep_AGING::Run()
 				{
 					// Review Snap
 					Sleep(1000);
-					for (size_t j = (bIsOCP ? 0 : 2); j < (bIsOCP ? 2 : 4); j++)	// 2 Head (// LYS 2026-09-28 OCP: BACK cameras 0/1)
+					for (size_t j = (bIsOCP ? 0 : 2); j < (bIsOCP ? 2 : 4); j++)	// 2 Head (// LYS 2026-09-28 OCP: BACK 카메라 0/1)
 					{
 						m_pShareItem->GetAlignCameraMgr(j)->SaveCurImage(4 + iProbe);
 					}
@@ -6782,7 +6782,7 @@ bool CDoWorkGlassMeasureStep_AGING::Run()
 				stPosition[2].dPosition = dLeft;
 				stPosition[3].axis = AXIS_Y4;   nAxis++;
 				stPosition[3].dPosition = dRight;
-				// LYS 2026-09-28 OCP: Y3/Y4 (FRONT) to [SAFETY] - review position 720 exceeds their SW limit 697
+				// LYS 2026-09-28 OCP: Y3/Y4(FRONT)는 [SAFETY]로 - 리뷰 위치 720이 SW 리밋 697을 넘는다
 				if (bIsOCP)
 				{
 					stPosition[2].dPosition = df_HEAD_Y_IDLE_SAFETY;

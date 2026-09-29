@@ -99,14 +99,14 @@ public:
 // CDoWorkGlassMeasure::ThreadRun이 측정 스레드에서 구동한다(단일 스레드 사용).
 //=========================================================================
 public:
-	bool				AgingCycleBegin(int nEfaPass = -1);	// gate(bIsOCP + recipe m_bUseAging_Test) + aging rcp load. nEfaPass>=0: EFA fixed item (// LYS 2026-09-28 EFA)
+	bool				AgingCycleBegin(int nEfaPass = -1);	// 게이트(bIsOCP + 레시피 m_bUseAging_Test) + 에이징 rcp 로드. nEfaPass>=0: EFA 고정 항목 (// LYS 2026-09-28 EFA)
 	void				AgingCycleEnd();
 	bool				AgingCycleNextItem();	// advance to next USE_AGING item. FALSE = exhausted
 	bool				IsAgingCycleActive() const	{ return m_bAgingCycleActive; }
 	int					GetAgingCurItem() const		{ return m_nAgingCurItem; }
 
-	// LYS 2026-09-28 EFA: 2-pass EFA test (OCP DoWorkStartMeasICP_EFA). Pass = list item, item loop OUTSIDE the stick loop.
-	int					GetEfaPassCount();				// 0 = not EFA (standard single pass). Loads {EFA_RCP}\{rcp}.rcp
+	// LYS 2026-09-28 EFA: 2-pass EFA 검사(OCP DoWorkStartMeasICP_EFA). Pass = 리스트 항목, 항목 루프는 스틱 루프 바깥.
+	int					GetEfaPassCount();				// 0 = EFA 아님(일반 단일 pass). {EFA_RCP}\{rcp}.rcp를 읽는다
 	bool				IsEfaCycle() const			{ return m_bEfaCycle; }
 
 	// LYS 2026-08-12 AgingCycle R1: 결과 행 블록용 조밀 종류별 반복 인덱스.

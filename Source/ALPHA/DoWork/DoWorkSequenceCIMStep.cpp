@@ -770,9 +770,9 @@ bool CDoWorkSequenceCIMStep_MeasDone::Run()
 
 	int nRet = VTM_RV_FAILED;
 	
-	// LYS 2026-09-28 EFA: EFA glass -> EFA^1$ (T1 done) before STS1106 (OCP JOB_Proc.cpp:311: EFA1 -> 500 ms -> WORKSTATE_CHANGE -> STS1106).
-	// Same gate as CMeasureSequenceItemEngine::GetEfaPassCount: OCP + (EFA flag or recipe EFA) + EFA rcp with items.
-	// WORKSTATE_CHANGE^_CAA$ is deferred (OCP sends it with a missing Format argument - D-3).
+	// LYS 2026-09-28 EFA: EFA 글라스는 STS1106 전에 EFA^1$(T1 완료)를 보낸다 (OCP JOB_Proc.cpp:311: EFA1 -> 500 ms -> WORKSTATE_CHANGE -> STS1106).
+	// CMeasureSequenceItemEngine::GetEfaPassCount와 같은 게이트: OCP + (EFA 플래그 또는 레시피 EFA) + 항목이 있는 EFA rcp.
+	// WORKSTATE_CHANGE^_CAA$는 보류 (OCP는 Format 인자가 빠진 채 보낸다 - D-3).
 	{
 		bool bEfaGlass = false;
 		if (m_pShareItem->GetSystemConfigMgrPtr() != nullptr && m_pShareItem->GetSystemConfigMgrPtr()->IsOCP())

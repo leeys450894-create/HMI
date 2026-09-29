@@ -138,6 +138,28 @@ int CRecipeEditMgr::RecipeChange(CString strRecipeID)
 		return  JOB_RECIPE_NOT_EXIST;
 	}
 
+	// LYS 2026-09-29 Hybrid Phase 1 세그먼트별 .alg 로드 + 구성 로그. 1세그먼트 레시피는 위 로드로 끝(동작 불변).
+	//                여기서는 막지 않는다 - .alg 누락 시 자동 시작 거부는 Phase 3 (docs/HybridGlass_Porting_Plan.md 5.3)
+	if (m_pRecipeFunc->GetSegmentCount() > 1)
+	{
+		int nSeg = m_pRecipeFunc->GetSegmentCount();
+		int nAlignFail = m_pRecipeFunc->LoadSegmentAlignRcpFiles();
+		CString strLog;
+		strLog.Format(_T("[HYBRID] Recipe %s : %d segments, align load fail %d"), strRecipeID.GetString(), nSeg, nAlignFail);
+		CLogWrapper::GetInstance()->KMLOG(nAlignFail > 0 ? WARN : OPER, strLog);
+		for (int k = 0; k < nSeg; k++)
+		{
+			S_RecipeMgr* pSeg = m_pRecipeFunc->GetSegmentMgr(k);
+			S_SegmentHeader sHdr = m_pRecipeFunc->GetSegmentHeader(k);
+			double dR0 = (pSeg && !pSeg->m_sData.m_vecStick.empty()) ? pSeg->m_sData.m_vecStick[0].m_fStageR : 0.0;
+			strLog.Format(_T("[HYBRID]   Segment %d/%d [%s] rot=%d stick=%d cell=%d R0=%.1f align=%s(%s) PG=[%s] WAD=[%s]"),
+				k + 1, nSeg, sHdr.m_chName, m_pRecipeFunc->GetSegmentRotate(k), m_pRecipeFunc->GetSegmentStickCount(k),
+				m_pRecipeFunc->GetSegmentCellCount(k), dR0, m_pRecipeFunc->GetSegmentAlignName(k).GetString(),
+				m_pRecipeFunc->IsSegmentAlignLoaded(k) ? _T("OK") : _T("FAIL"), sHdr.m_chPGName, sHdr.m_chWADName);
+			CLogWrapper::GetInstance()->KMLOG(OPER, strLog);
+		}
+	}
+
 	// for Test 
 	m_strRecipeID = strRecipeID;
 

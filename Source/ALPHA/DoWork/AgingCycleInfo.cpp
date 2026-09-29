@@ -24,7 +24,7 @@ CString CAgingCycleInfo::GetAgingRcpPath()
 		_T("D:\\HBS\\PARAM_OCP\\PARAM\\AgingRcp\\"));
 }
 
-// LYS 2026-09-28 EFA: EFA rcp folder - separate registry key (OCP_EFA reuses DIR\AGING_RCP, which collides)
+// LYS 2026-09-28 EFA: EFA rcp 폴더 - 별도 레지스트리 키 (OCP_EFA는 DIR\AGING_RCP를 같이 써서 파일이 충돌한다)
 CString CAgingCycleInfo::GetEfaRcpPath()
 {
 	CString strPath = AfxGetApp()->GetProfileString(_T("DIR"), _T("EFA_RCP"),

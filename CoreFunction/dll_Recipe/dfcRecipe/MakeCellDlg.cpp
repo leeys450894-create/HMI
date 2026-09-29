@@ -27,6 +27,8 @@ void C_MakeCellDlg::DoDataExchange (CDataExchange* pDX)
 	DDX_Control (pDX, IDC_GRID_1,   m_gridCoordHead);
 	DDX_Control (pDX, IDC_GRID_2,   m_gridCoordData);
 	DDX_Control (pDX, IDC_GRID_3,   m_gridCADData);
+	DDX_Control (pDX, IDC_CHECK_1,  m_chkHybrid);	// LYS 2026-09-29 Hybrid Phase 2
+	DDX_Control (pDX, IDC_COMBO_3,  m_cmbSegCount);
 
 }
 
@@ -39,6 +41,10 @@ BEGIN_MESSAGE_MAP (C_MakeCellDlg, CDialogEx)
 	ON_COMMAND (IDC_BUTTON_3, OnCellMapUpdate)
 	ON_COMMAND (IDC_BUTTON_4, OnRecipeUpdate)
 	ON_COMMAND (IDC_BUTTON_5, OnCalcUpdate)
+	ON_BN_CLICKED (IDC_CHECK_1, OnHybridCheck)	// LYS 2026-09-29 Hybrid Phase 2
+	ON_COMMAND (IDC_BUTTON_6, OnSegCountApply)
+	ON_COMMAND (IDC_BUTTON_7, OnSegPrev)
+	ON_COMMAND (IDC_BUTTON_8, OnSegNext)
 
 END_MESSAGE_MAP ()
 
@@ -51,12 +57,16 @@ BOOL C_MakeCellDlg::OnInitDialog ()
 {
 	CDialogEx::OnInitDialog ();
 
+	// LYS 2026-09-29 콤보 인덱스 == m_nGlsRotate (0/90/180/270), RecipeMgrDlg GLASS ROTATE와 같은 선택지
 	m_cmbAngle.AddString (_T("0˚"));
 	m_cmbAngle.AddString (_T("90˚"));
+	m_cmbAngle.AddString (_T("180˚"));
+	m_cmbAngle.AddString (_T("270˚"));
 	m_cmbAngle.SetCurSel (0);
 
 	InitCoordInfo ();
 	InitCADInfo ();
+	InitHybridUI ();	// LYS 2026-09-29 Hybrid Phase 2
 
 	return TRUE;
 }
@@ -94,6 +104,8 @@ void	C_MakeCellDlg::InitCoordInfo ()
 	CStringArray ang;
 	ang.Add (_T("0˚"));
 	ang.Add (_T("90˚"));
+	ang.Add (_T("180˚"));	// LYS 2026-09-29 m_nGlsRotate=2
+	ang.Add (_T("270˚"));	// LYS 2026-09-29 m_nGlsRotate=3
 
 	CGridCellCombo* pCell = NULL;
 	pCell = (CGridCellCombo*)m_gridCoordData.GetCell (0, 1);
@@ -264,9 +276,15 @@ void	C_MakeCellDlg::OnCellInfoOpen ()
 	}
 
 
+	// LYS 2026-09-29 CALC 각도 콤보를 불러온 ROTATE에 맞춘다 (OnCalcUpdate는 그리드가 아니라 콤보를 읽는다)
+	{
+		int nRot = _wtoi (m_strArrCoordData.GetAt (CELL_ROW_00));
+		if (nRot >= 0 && nRot < m_cmbAngle.GetCount ()) m_cmbAngle.SetCurSel (nRot);
+	}
+
 	// 2022.12.20 add
 	CString strTemp;
-	if (_wtoi(m_strArrCoordData.GetAt(CELL_ROW_00)) == 0)
+	if ((_wtoi(m_strArrCoordData.GetAt(CELL_ROW_00)) % 2) == 0)	// LYS 2026-09-29 0/180은 0도 기준을 공유
 	{
 		m_gridCoordData.SetItemText(CELL_ROW_03, 2, _T("X6"));
 		m_gridCoordData.SetItemText(CELL_ROW_04, 2, _T("X7"));
@@ -301,6 +319,10 @@ void	C_MakeCellDlg::OnCellInfoOpen ()
 		m_gridCoordData.SetItemText(CELL_ROW_12, 2, _T("T"));
 		m_gridCoordData.SetItemText(CELL_ROW_13, 2, _T("S"));
 	}
+
+	// LYS 2026-09-29 Hybrid Phase 2 OPEN 한 슬롯만 하이브리드 RECIPE APPLY에서 재생성된다
+	if (m_nSegView >= 0 && m_nSegView < (int)m_vecSegInput.size ()) m_vecSegInput[m_nSegView].bOpened = TRUE;
+	UpdateHybridUI ();
 
 	Invalidate (FALSE);
 }
@@ -374,6 +396,12 @@ void	C_MakeCellDlg::OnCellMapUpdate ()
 
 void	C_MakeCellDlg::OnRecipeUpdate ()
 {
+	// LYS 2026-09-29 Hybrid Phase 2 하이브리드 모드는 세그먼트별 입력으로 레시피 전체를 만든다
+	if (IsHybridEdit ()) {
+		ApplyHybridRecipe ();
+		return;
+	}
+
 	if (AfxMessageBox (_T("현재 정보로 레시피를 생성 합니다.\n 계속 하시겠습니까?"), MB_YESNO|MB_ICONQUESTION) != IDYES) return;
 
 	CString strRcpName;
@@ -384,6 +412,232 @@ void	C_MakeCellDlg::OnRecipeUpdate ()
 		return;
 	}
 
+	// LYS 2026-09-29 Hybrid Phase 2 하이브리드 해제 후 적용: 해제할 때 보고 있던 세그먼트를 기준으로 1세그먼트 레시피를 만든다
+	BOOL bCollapse = (g_inRcpInfo.GetSegmentCount () > 1);
+	if (bCollapse) g_inRcpInfo.SetActiveSegment (m_nSingleSrcSeg);
+
+	BuildRecipeFromGrid (strRcpName);
+
+	if (bCollapse) g_inRcpInfo.CollapseToActiveSegment ();
+
+	::SendMessage (m_hWnd->m_hWnd, WM_RECIPE_EVENT, (WPARAM)M_MAKE_CELL_SET, NULL);
+
+	ShowWindow (SW_HIDE);
+}
+
+void	C_MakeCellDlg::OnCalcUpdate ()
+{
+	if (AfxMessageBox (_T("CAD 설계값을 계산 하여 업데이트 합니다.\n 계속 하시겠습니까?"), MB_YESNO|MB_ICONQUESTION) != IDYES) return;
+
+	CString strTemp;
+	double fTemp1 = 0.0, fTemp2 = 0.0;
+	int nAngle = 0;
+
+	nAngle = m_cmbAngle.GetCurSel ();
+	if (nAngle < 0) {	// LYS 2026-09-29 CBS_DROPDOWN은 직접 입력이 가능 -> 선택 없음 처리
+		AfxMessageBox (_T("GLASS ROTATE 각도를 선택하세요."));
+		return;
+	}
+
+	// LYS 2026-09-29 Hybrid Phase 2 OPEN 없이 CAD APPLY 하면 m_strArrCoordData가 비어 GetAt 예외 - 새 세그먼트 슬롯에서 쉽게 밟는다
+	if (m_strArrCoordData.GetSize () < CELL_ROW_END) {
+		AfxMessageBox (_T("먼저 셀 정보를 OPEN 하세요."));
+		return;
+	}
+
+	m_gridCoordData.SetItemCurSel (CELL_ROW_00, 1, nAngle);
+
+
+	m_gridCoordData.SetItemText (CELL_ROW_05,  1, _T(""));
+	m_gridCoordData.SetItemText (CELL_ROW_06,  1, _T(""));
+	m_gridCoordData.SetItemText (CELL_ROW_07,  1, _T(""));
+
+	// LYS 2026-08-18 rotate 180 shares the 0-degree basis (same physical aspect)
+	if (nAngle == RCP_CELL_ANG_0 || nAngle == RCP_CELL_ANG_180) {
+
+		strTemp.Format(_T("%.4lf"), RCP_GLASS_SIZE_Y); 
+		m_gridCoordData.SetItemText(CELL_ROW_01, 1, strTemp);
+		strTemp.Format(_T("%.4lf"), RCP_GLASS_SIZE_X);
+		m_gridCoordData.SetItemText(CELL_ROW_02, 1, strTemp);
+
+	//	fTemp1 = _wtof(m_gridCADData.GetItemText(CAD_ROW_F, 1));
+		fTemp1 = _wtof(m_gridCADData.GetItemText(CAD_ROW_E, 1));
+		strTemp.Format(_T("%.4lf"), -((RCP_GLASS_SIZE_Y / 2.0) - fTemp1));
+		m_gridCoordData.SetItemText(CELL_ROW_08, 1, strTemp);
+
+		strTemp.Format(_T("-(%.4lf / 2 - E)"), RCP_GLASS_SIZE_Y);
+		m_gridCoordData.SetItemText(CELL_ROW_08, 2, strTemp);
+
+
+	//	fTemp1 = _wtof(m_gridCADData.GetItemText(CAD_ROW_E, 1));
+		fTemp1 = _wtof(m_gridCADData.GetItemText(CAD_ROW_F, 1));
+		strTemp.Format(_T("%.4lf"), -((RCP_GLASS_SIZE_X / 2.0) - fTemp1));
+		m_gridCoordData.SetItemText(CELL_ROW_09, 1, strTemp);
+
+		strTemp.Format(_T("-(%.4lf / 2 - F)"), RCP_GLASS_SIZE_X);
+		m_gridCoordData.SetItemText(CELL_ROW_09, 2, strTemp);
+
+		m_gridCoordData.SetItemText(CELL_ROW_03, 1, m_gridCADData.GetItemText(CAD_ROW_X6, 1));	m_gridCoordData.SetItemText(CELL_ROW_03, 2, _T("X6"));
+		m_gridCoordData.SetItemText(CELL_ROW_04, 1, m_gridCADData.GetItemText(CAD_ROW_X7, 1));  m_gridCoordData.SetItemText(CELL_ROW_04, 2, _T("X7"));
+		/*m_gridCoordData.SetItemText (CELL_ROW_03,  1, m_gridCADData.GetItemText (CAD_ROW_Q, 1));
+		m_gridCoordData.SetItemText (CELL_ROW_04,  1, m_gridCADData.GetItemText (CAD_ROW_R, 1));*/
+
+		//
+		if ((_wtoi(m_strArrCoordData.GetAt(CELL_ROW_00)) % 2) != (nAngle % 2))	// LYS 2026-09-29 종횡비가 바뀔 때만 스틱/셀을 맞바꾼다
+		{
+			m_gridCoordData.SetItemText(CELL_ROW_05, 1, m_strArrCoordData.GetAt(CELL_ROW_06));
+			m_gridCoordData.SetItemText(CELL_ROW_06, 1, m_strArrCoordData.GetAt(CELL_ROW_05));
+			m_gridCoordData.SetItemText(CELL_ROW_07, 1, m_strArrCoordData.GetAt(CELL_ROW_07));
+		}
+		else
+		{
+			m_gridCoordData.SetItemText(CELL_ROW_05, 1, m_strArrCoordData.GetAt(CELL_ROW_05));
+			m_gridCoordData.SetItemText(CELL_ROW_06, 1, m_strArrCoordData.GetAt(CELL_ROW_06));
+			m_gridCoordData.SetItemText(CELL_ROW_07, 1, m_strArrCoordData.GetAt(CELL_ROW_07));
+		}
+		//
+
+	/*	fTemp1 = _wtof(m_gridCADData.GetItemText(CAD_ROW_X2, 1));
+		fTemp2 = _wtof(m_gridCADData.GetItemText(CAD_ROW_F, 1));
+		strTemp.Format(_T("%.4lf"), fTemp1 - fTemp2);
+		m_gridCoordData.SetItemText(CELL_ROW_10, 1, strTemp);
+		m_gridCoordData.SetItemText(CELL_ROW_10, 2, _T("X2-F"));
+
+		fTemp1 = _wtof (m_gridCADData.GetItemText (CAD_ROW_X1, 1));
+		fTemp2 = _wtof (m_gridCADData.GetItemText (CAD_ROW_E, 1));
+		strTemp.Format (_T("%.4lf"), fTemp1 - fTemp2);
+		m_gridCoordData.SetItemText (CELL_ROW_11,  1, strTemp);
+		m_gridCoordData.SetItemText(CELL_ROW_11, 2, _T("X1-E"));*
+		
+		m_gridCoordData.SetItemText (CELL_ROW_12,  1, m_gridCADData.GetItemText (CAD_ROW_T, 1));  
+		m_gridCoordData.SetItemText(CELL_ROW_12, 2, _T("T"));
+
+		m_gridCoordData.SetItemText (CELL_ROW_13,  1, m_gridCADData.GetItemText (CAD_ROW_S, 1));
+		m_gridCoordData.SetItemText(CELL_ROW_13, 2, _T("S")); */
+
+		// 2023.02.03 change
+		fTemp1 = _wtof(m_gridCADData.GetItemText(CAD_ROW_X2, 1));
+		fTemp2 = _wtof(m_gridCADData.GetItemText(CAD_ROW_F, 1));
+		strTemp.Format(_T("%.4lf"), fTemp1 - fTemp2);
+		m_gridCoordData.SetItemText(CELL_ROW_11, 1, strTemp);
+		m_gridCoordData.SetItemText(CELL_ROW_11, 2, _T("X2-F"));
+
+		fTemp1 = _wtof(m_gridCADData.GetItemText(CAD_ROW_X1, 1));
+		fTemp2 = _wtof(m_gridCADData.GetItemText(CAD_ROW_E, 1));
+		strTemp.Format(_T("%.4lf"), fTemp1 - fTemp2);
+		m_gridCoordData.SetItemText(CELL_ROW_10, 1, strTemp);
+		m_gridCoordData.SetItemText(CELL_ROW_10, 2, _T("X1-E"));
+
+
+		m_gridCoordData.SetItemText (CELL_ROW_13,  1, m_gridCADData.GetItemText (CAD_ROW_T, 1));  
+		m_gridCoordData.SetItemText(CELL_ROW_13, 2, _T("T"));
+
+		m_gridCoordData.SetItemText (CELL_ROW_12,  1, m_gridCADData.GetItemText (CAD_ROW_S, 1));
+		m_gridCoordData.SetItemText(CELL_ROW_12, 2, _T("S"));
+
+		m_gridCoordData.SetItemText(CELL_ROW_14, 1, m_gridCADData.GetItemText(CAD_ROW_A, 1));
+		m_gridCoordData.SetItemText(CELL_ROW_14, 2, _T("A"));
+	}
+	else if (nAngle == RCP_CELL_ANG_90 || nAngle == RCP_CELL_ANG_270)	// LYS 2026-09-29 270은 90 기준을 공유
+	{
+		strTemp.Format(_T("%.4lf"), RCP_GLASS_SIZE_X);
+		m_gridCoordData.SetItemText(CELL_ROW_01, 1, strTemp);
+		
+
+		strTemp.Format(_T("%.4lf"), RCP_GLASS_SIZE_Y);
+		m_gridCoordData.SetItemText(CELL_ROW_02, 1, strTemp);
+
+	//	fTemp1 = _wtof(m_gridCADData.GetItemText(CAD_ROW_E, 1));
+		fTemp1 = _wtof(m_gridCADData.GetItemText(CAD_ROW_F, 1));   // 2022.12.20 change
+		strTemp.Format(_T("%.4lf"), -((RCP_GLASS_SIZE_X / 2.0) - fTemp1));
+		m_gridCoordData.SetItemText(CELL_ROW_08, 1, strTemp);
+
+		strTemp.Format(_T("-(%.4lf / 2 - F)"), RCP_GLASS_SIZE_X);
+		m_gridCoordData.SetItemText(CELL_ROW_08, 2, strTemp);
+
+	//	fTemp1 = _wtof(m_gridCADData.GetItemText(CAD_ROW_F, 1));
+		fTemp1 = _wtof(m_gridCADData.GetItemText(CAD_ROW_E, 1));	// 2022.12.20 change
+		strTemp.Format(_T("%.4lf"), -((RCP_GLASS_SIZE_Y / 2.0) - fTemp1));
+		m_gridCoordData.SetItemText(CELL_ROW_09, 1, strTemp);
+
+		strTemp.Format(_T("-(%.4lf / 2 - E)"), RCP_GLASS_SIZE_Y);
+		m_gridCoordData.SetItemText(CELL_ROW_09, 2, strTemp);
+
+
+		// CELL SIZE
+		m_gridCoordData.SetItemText(CELL_ROW_03, 1, m_gridCADData.GetItemText(CAD_ROW_X7, 1));	m_gridCoordData.SetItemText(CELL_ROW_03, 2, _T("X7"));
+
+		m_gridCoordData.SetItemText(CELL_ROW_04, 1, m_gridCADData.GetItemText(CAD_ROW_X6, 1));	m_gridCoordData.SetItemText(CELL_ROW_04, 2, _T("X6"));
+
+		//m_gridCoordData.SetItemText (CELL_ROW_03,  1, m_gridCADData.GetItemText (CAD_ROW_R, 1));
+		//m_gridCoordData.SetItemText (CELL_ROW_04,  1, m_gridCADData.GetItemText (CAD_ROW_Q, 1));
+
+		//
+		if ((_wtoi(m_strArrCoordData.GetAt(CELL_ROW_00)) % 2) != (nAngle % 2))	// LYS 2026-09-29 종횡비가 바뀔 때만 스틱/셀을 맞바꾼다
+		{
+			m_gridCoordData.SetItemText(CELL_ROW_05, 1, m_strArrCoordData.GetAt(CELL_ROW_06));	// STICK
+			m_gridCoordData.SetItemText(CELL_ROW_06, 1, m_strArrCoordData.GetAt(CELL_ROW_05));  // CELL 
+			m_gridCoordData.SetItemText(CELL_ROW_07, 1, m_strArrCoordData.GetAt(CELL_ROW_07));  // BLOCK
+		}
+		else
+		{
+			m_gridCoordData.SetItemText(CELL_ROW_05, 1, m_strArrCoordData.GetAt(CELL_ROW_05));	// STICK
+			m_gridCoordData.SetItemText(CELL_ROW_06, 1, m_strArrCoordData.GetAt(CELL_ROW_06));  // CELL 
+			m_gridCoordData.SetItemText(CELL_ROW_07, 1, m_strArrCoordData.GetAt(CELL_ROW_07));  // BLOCK
+		}
+		//
+
+		fTemp1 = _wtof (m_gridCADData.GetItemText (CAD_ROW_X2, 1));
+		fTemp2 = _wtof (m_gridCADData.GetItemText (CAD_ROW_F, 1));
+		strTemp.Format (_T("%.4lf"), fTemp1 - fTemp2);
+		m_gridCoordData.SetItemText(CELL_ROW_10,  1, strTemp);			// CELL CENTOR
+
+		m_gridCoordData.SetItemText(CELL_ROW_10, 2, _T("X2-F"));
+
+		fTemp1 = _wtof (m_gridCADData.GetItemText (CAD_ROW_X1, 1));
+		fTemp2 = _wtof (m_gridCADData.GetItemText (CAD_ROW_E, 1));
+		strTemp.Format (_T("%.4lf"), fTemp1 - fTemp2);
+		m_gridCoordData.SetItemText(CELL_ROW_11,  1, strTemp);			// CELL CENTOR
+
+		m_gridCoordData.SetItemText(CELL_ROW_11, 2, _T("X1-E"));
+
+		//m_gridCoordData.SetItemText(CELL_ROW_12, 1, m_gridCADData.GetItemText(CAD_ROW_S, 1));	// CELL to CELL
+		//m_gridCoordData.SetItemText(CELL_ROW_13, 1, m_gridCADData.GetItemText(CAD_ROW_T, 1));	// CELL to CELL
+
+		m_gridCoordData.SetItemText (CELL_ROW_12,  1, m_gridCADData.GetItemText (CAD_ROW_T, 1));	// CELL to CELL		
+		m_gridCoordData.SetItemText(CELL_ROW_12, 2, _T("T"));
+
+		m_gridCoordData.SetItemText (CELL_ROW_13,  1, m_gridCADData.GetItemText (CAD_ROW_S, 1));	// CELL to CELL
+		m_gridCoordData.SetItemText(CELL_ROW_13, 2, _T("S"));
+
+		m_gridCoordData.SetItemText(CELL_ROW_14, 1, m_gridCADData.GetItemText(CAD_ROW_B, 1));
+		m_gridCoordData.SetItemText(CELL_ROW_14, 2, _T("B"));
+	}
+
+	m_gridCoordData.SetItemText(CELL_ROW_15, 1, _T("20.0000"));
+
+	Invalidate (FALSE);
+}
+
+void	C_MakeCellDlg::GetCadInfo ()
+{
+	S_RecipeMgr *rcp = &g_inRcpInfo.m_recipeMgr;
+
+	//CAD_ROW_A ~ CAD_ROW_X7
+	for (int i = 0; i < CAD_ROW_P1_1; i++) {
+		rcp->m_sMap.m_fCadData[i] = _wtof (m_gridCADData.GetItemText (i, 1));
+	}
+
+	//CAD_ROW_P1_1 ~ CAD_ROW_P5_2
+	for (int i = 0; i < CAD_ROW_END - CAD_ROW_P1_1; i++) {
+		wcscpy_s (rcp->m_sMap.m_chCadData[i], m_gridCADData.GetItemText (CAD_ROW_P1_1 + i, 1));
+	}
+}
+
+// LYS 2026-09-29 Hybrid Phase 2 레시피 생성 본문 - OnRecipeUpdate에서 코드 이동(논리 무변경). 그리드 입력으로 g_inRcpInfo.m_recipeMgr(작업 슬롯)를 만든다.
+//   맵/스틱/셀/CAD/회전/오프셋만 새로 쓰고 옵션(검사 항목, 램프, 컨택 등)은 작업 슬롯 값을 그대로 둔다(기존 동작).
+void	C_MakeCellDlg::BuildRecipeFromGrid (CString strRcpName)
+{
 	g_inRcpInfo.SetRcpVer (0);
 	g_inRcpInfo.ClearRcpMap ();
 	g_inRcpInfo.SetModelInfoName (strRcpName);
@@ -410,7 +664,7 @@ void	C_MakeCellDlg::OnRecipeUpdate ()
 	if (g_inRcpInfo.GetGlsRotate() == RCP_CELL_ANG_0 || g_inRcpInfo.GetGlsRotate() == RCP_CELL_ANG_180) {
 		wcscpy_s (rcp->m_sMap.m_chCellCount,	m_gridCoordData.GetItemText(CELL_ROW_05, 1));
 	}
-	else if (g_inRcpInfo.GetGlsRotate() == RCP_CELL_ANG_90) {
+	else if (g_inRcpInfo.GetGlsRotate() == RCP_CELL_ANG_90 || g_inRcpInfo.GetGlsRotate() == RCP_CELL_ANG_270) {	// LYS 2026-09-29
 		wcscpy_s(rcp->m_sMap.m_chCellCount, m_gridCoordData.GetItemText(CELL_ROW_06, 1));	// CELL 
 	}
 
@@ -445,7 +699,7 @@ void	C_MakeCellDlg::OnRecipeUpdate ()
 		//rcp->m_sMap.m_fAlignKey.x = rcp->m_sMap.m_fGlobalMark.y;
 		//rcp->m_sMap.m_fAlignKey.y = rcp->m_sMap.m_fGlobalMark.x;
 	}
-	else if (g_inRcpInfo.GetGlsRotate () == RCP_CELL_ANG_90) {
+	else if (g_inRcpInfo.GetGlsRotate () == RCP_CELL_ANG_90 || g_inRcpInfo.GetGlsRotate () == RCP_CELL_ANG_270) {	// LYS 2026-09-29
 		rcp->m_sMap.m_fContactOffset = fX1 - fE - fI + fM;
 		fReviewOffseet	= fX2 - fF - fJ + fN;
 
@@ -459,15 +713,9 @@ void	C_MakeCellDlg::OnRecipeUpdate ()
 	// LYS 2026-08-18 rotate 180은 0도 분기를 공유하면 안 되고 자체 값이 필요하다.
 	// 2026-08-07 체계에서 측정 각도는 stick m_fStageR에서 오므로 USER OFFSET은 0.
 	// 이 분기가 없어 rotate=2가 대입 없이 통과, 이전 90 값이 남던 것이 단변 270도 오위치의 원인.
-	if (g_inRcpInfo.GetGlsRotate() == RCP_CELL_ANG_0) {
-		g_inRcpInfo.m_recipeMgr.m_sInfo.m_sMotionOffsetPos.m_fStageRotate = 90.;
-	}
-	else if (g_inRcpInfo.GetGlsRotate() == RCP_CELL_ANG_90) {
-		g_inRcpInfo.m_recipeMgr.m_sInfo.m_sMotionOffsetPos.m_fStageRotate = 0;
-	}
-	else if (g_inRcpInfo.GetGlsRotate() == RCP_CELL_ANG_180) {
-		g_inRcpInfo.m_recipeMgr.m_sInfo.m_sMotionOffsetPos.m_fStageRotate = 0;
-	}
+	// LYS 2026-09-29 측정 각도 = 스틱 m_fStageR (= rotate*90, 아래에서 설정). USER OFFSET은 모든 각도에서 0.
+	// 예전 0도 값 90 때문에 rotate 0이 90에서 측정됐고 장변/단변 기준 레시피와 맞지 않았다.
+	g_inRcpInfo.m_recipeMgr.m_sInfo.m_sMotionOffsetPos.m_fStageRotate = 0;
 
 	g_inRcpInfo.m_recipeMgr.m_sInfo.m_sMotionOffsetPos.m_fHeadReviewY = fReviewOffseet2;
 	///
@@ -602,6 +850,7 @@ void	C_MakeCellDlg::OnRecipeUpdate ()
 	for (int i = (int)nMaxStick - 1; i >= 0; i--) {
 		sStick.Clear ();
 		sStick.m_fStageY = pStageY[i];
+		sStick.m_fStageR = g_inRcpInfo.GetGlsRotate () * 90.0;	// LYS 2026-09-29 스틱 R = m_nGlsRotate*90 (장변 90, 단변 180)
 		sStick.m_nStickNum = nCount++;
 		
 		g_inRcpInfo.AddStick (sStick);
@@ -685,206 +934,289 @@ void	C_MakeCellDlg::OnRecipeUpdate ()
 		}
 	}
 
-	::SendMessage (m_hWnd->m_hWnd, WM_RECIPE_EVENT, (WPARAM)M_MAKE_CELL_SET, NULL);
-
-	ShowWindow (SW_HIDE);
 }
 
-void	C_MakeCellDlg::OnCalcUpdate ()
+// LYS 2026-09-29 Hybrid Phase 2 MakeCell 하이브리드 UI (docs/HybridGlass_Porting_Plan.md 5.10)
+//   세그먼트마다 MakeCell 입력(셀 정보 이름, 좌표 그리드, CAD 그리드, OPEN 원본)을 슬롯에 보관하고 < > 로 오간다.
+//   레시피는 RECIPE APPLY 때만 바뀐다(유일한 커밋 지점). OPEN 한 슬롯만 재생성하고 나머지 세그먼트는 그대로 둔다.
+//   1세그먼트(체크 해제) 레시피의 RECIPE APPLY는 지금 동작 그대로.
+void	C_MakeCellDlg::InitHybridUI ()
 {
-	if (AfxMessageBox (_T("CAD 설계값을 계산 하여 업데이트 합니다.\n 계속 하시겠습니까?"), MB_YESNO|MB_ICONQUESTION) != IDYES) return;
+	for (int i = 1; i <= M_SEGMENT_MAX; i++) m_cmbSegCount.AddString (dfcStr (_T("%d"), i));
+	m_cmbSegCount.SetCurSel (0);
+	m_chkHybrid.SetCheck (BST_UNCHECKED);
 
-	CString strTemp;
-	double fTemp1 = 0.0, fTemp2 = 0.0;
-	int nAngle = 0;
+	m_vecSegInput.assign (1, S_MakeSegInput ());
+	m_nSegView		= 0;
+	m_nSingleSrcSeg = 0;
+	UpdateHybridUI ();
+}
 
-	nAngle = m_cmbAngle.GetCurSel ();
+BOOL	C_MakeCellDlg::ShowWindow (int nCmdShow)
+{
+	if (nCmdShow == SW_SHOW) SyncHybridFromRecipe ();
 
-	m_gridCoordData.SetItemCurSel (CELL_ROW_00, 1, nAngle);
+	return CDialogEx::ShowWindow (nCmdShow);
+}
 
+// 창을 열 때 레시피 세그먼트 수에 슬롯 수를 맞춘다. 같은 인덱스 슬롯의 입력은 유지.
+void	C_MakeCellDlg::SyncHybridFromRecipe ()
+{
+	int nRcpSeg = g_inRcpInfo.GetSegmentLoopCount ();
 
-	m_gridCoordData.SetItemText (CELL_ROW_05,  1, _T(""));
-	m_gridCoordData.SetItemText (CELL_ROW_06,  1, _T(""));
-	m_gridCoordData.SetItemText (CELL_ROW_07,  1, _T(""));
-
-	// LYS 2026-08-18 rotate 180 shares the 0-degree basis (same physical aspect)
-	if (nAngle == RCP_CELL_ANG_0 || nAngle == RCP_CELL_ANG_180) {
-
-		strTemp.Format(_T("%.4lf"), RCP_GLASS_SIZE_Y); 
-		m_gridCoordData.SetItemText(CELL_ROW_01, 1, strTemp);
-		strTemp.Format(_T("%.4lf"), RCP_GLASS_SIZE_X);
-		m_gridCoordData.SetItemText(CELL_ROW_02, 1, strTemp);
-
-	//	fTemp1 = _wtof(m_gridCADData.GetItemText(CAD_ROW_F, 1));
-		fTemp1 = _wtof(m_gridCADData.GetItemText(CAD_ROW_E, 1));
-		strTemp.Format(_T("%.4lf"), -((RCP_GLASS_SIZE_Y / 2.0) - fTemp1));
-		m_gridCoordData.SetItemText(CELL_ROW_08, 1, strTemp);
-
-		strTemp.Format(_T("-(%.4lf / 2 - E)"), RCP_GLASS_SIZE_Y);
-		m_gridCoordData.SetItemText(CELL_ROW_08, 2, strTemp);
-
-
-	//	fTemp1 = _wtof(m_gridCADData.GetItemText(CAD_ROW_E, 1));
-		fTemp1 = _wtof(m_gridCADData.GetItemText(CAD_ROW_F, 1));
-		strTemp.Format(_T("%.4lf"), -((RCP_GLASS_SIZE_X / 2.0) - fTemp1));
-		m_gridCoordData.SetItemText(CELL_ROW_09, 1, strTemp);
-
-		strTemp.Format(_T("-(%.4lf / 2 - F)"), RCP_GLASS_SIZE_X);
-		m_gridCoordData.SetItemText(CELL_ROW_09, 2, strTemp);
-
-		m_gridCoordData.SetItemText(CELL_ROW_03, 1, m_gridCADData.GetItemText(CAD_ROW_X6, 1));	m_gridCoordData.SetItemText(CELL_ROW_03, 2, _T("X6"));
-		m_gridCoordData.SetItemText(CELL_ROW_04, 1, m_gridCADData.GetItemText(CAD_ROW_X7, 1));  m_gridCoordData.SetItemText(CELL_ROW_04, 2, _T("X7"));
-		/*m_gridCoordData.SetItemText (CELL_ROW_03,  1, m_gridCADData.GetItemText (CAD_ROW_Q, 1));
-		m_gridCoordData.SetItemText (CELL_ROW_04,  1, m_gridCADData.GetItemText (CAD_ROW_R, 1));*/
-
-		//
-		if (_wtoi(m_strArrCoordData.GetAt(CELL_ROW_00)) != nAngle)
-		{
-			m_gridCoordData.SetItemText(CELL_ROW_05, 1, m_strArrCoordData.GetAt(CELL_ROW_06));
-			m_gridCoordData.SetItemText(CELL_ROW_06, 1, m_strArrCoordData.GetAt(CELL_ROW_05));
-			m_gridCoordData.SetItemText(CELL_ROW_07, 1, m_strArrCoordData.GetAt(CELL_ROW_07));
+	if ((int)m_vecSegInput.size () != nRcpSeg) {
+		SaveSegInput (m_nSegView);
+		m_vecSegInput.resize (nRcpSeg);
+		if (m_nSegView >= nRcpSeg) {
+			m_nSegView = nRcpSeg - 1;
+			LoadSegInput (m_nSegView);
 		}
-		else
-		{
-			m_gridCoordData.SetItemText(CELL_ROW_05, 1, m_strArrCoordData.GetAt(CELL_ROW_05));
-			m_gridCoordData.SetItemText(CELL_ROW_06, 1, m_strArrCoordData.GetAt(CELL_ROW_06));
-			m_gridCoordData.SetItemText(CELL_ROW_07, 1, m_strArrCoordData.GetAt(CELL_ROW_07));
-		}
-		//
-
-	/*	fTemp1 = _wtof(m_gridCADData.GetItemText(CAD_ROW_X2, 1));
-		fTemp2 = _wtof(m_gridCADData.GetItemText(CAD_ROW_F, 1));
-		strTemp.Format(_T("%.4lf"), fTemp1 - fTemp2);
-		m_gridCoordData.SetItemText(CELL_ROW_10, 1, strTemp);
-		m_gridCoordData.SetItemText(CELL_ROW_10, 2, _T("X2-F"));
-
-		fTemp1 = _wtof (m_gridCADData.GetItemText (CAD_ROW_X1, 1));
-		fTemp2 = _wtof (m_gridCADData.GetItemText (CAD_ROW_E, 1));
-		strTemp.Format (_T("%.4lf"), fTemp1 - fTemp2);
-		m_gridCoordData.SetItemText (CELL_ROW_11,  1, strTemp);
-		m_gridCoordData.SetItemText(CELL_ROW_11, 2, _T("X1-E"));*
-		
-		m_gridCoordData.SetItemText (CELL_ROW_12,  1, m_gridCADData.GetItemText (CAD_ROW_T, 1));  
-		m_gridCoordData.SetItemText(CELL_ROW_12, 2, _T("T"));
-
-		m_gridCoordData.SetItemText (CELL_ROW_13,  1, m_gridCADData.GetItemText (CAD_ROW_S, 1));
-		m_gridCoordData.SetItemText(CELL_ROW_13, 2, _T("S")); */
-
-		// 2023.02.03 change
-		fTemp1 = _wtof(m_gridCADData.GetItemText(CAD_ROW_X2, 1));
-		fTemp2 = _wtof(m_gridCADData.GetItemText(CAD_ROW_F, 1));
-		strTemp.Format(_T("%.4lf"), fTemp1 - fTemp2);
-		m_gridCoordData.SetItemText(CELL_ROW_11, 1, strTemp);
-		m_gridCoordData.SetItemText(CELL_ROW_11, 2, _T("X2-F"));
-
-		fTemp1 = _wtof(m_gridCADData.GetItemText(CAD_ROW_X1, 1));
-		fTemp2 = _wtof(m_gridCADData.GetItemText(CAD_ROW_E, 1));
-		strTemp.Format(_T("%.4lf"), fTemp1 - fTemp2);
-		m_gridCoordData.SetItemText(CELL_ROW_10, 1, strTemp);
-		m_gridCoordData.SetItemText(CELL_ROW_10, 2, _T("X1-E"));
-
-
-		m_gridCoordData.SetItemText (CELL_ROW_13,  1, m_gridCADData.GetItemText (CAD_ROW_T, 1));  
-		m_gridCoordData.SetItemText(CELL_ROW_13, 2, _T("T"));
-
-		m_gridCoordData.SetItemText (CELL_ROW_12,  1, m_gridCADData.GetItemText (CAD_ROW_S, 1));
-		m_gridCoordData.SetItemText(CELL_ROW_12, 2, _T("S"));
-
-		m_gridCoordData.SetItemText(CELL_ROW_14, 1, m_gridCADData.GetItemText(CAD_ROW_A, 1));
-		m_gridCoordData.SetItemText(CELL_ROW_14, 2, _T("A"));
-	}
-	else if (nAngle == RCP_CELL_ANG_90) 
-	{
-		strTemp.Format(_T("%.4lf"), RCP_GLASS_SIZE_X);
-		m_gridCoordData.SetItemText(CELL_ROW_01, 1, strTemp);
-		
-
-		strTemp.Format(_T("%.4lf"), RCP_GLASS_SIZE_Y);
-		m_gridCoordData.SetItemText(CELL_ROW_02, 1, strTemp);
-
-	//	fTemp1 = _wtof(m_gridCADData.GetItemText(CAD_ROW_E, 1));
-		fTemp1 = _wtof(m_gridCADData.GetItemText(CAD_ROW_F, 1));   // 2022.12.20 change
-		strTemp.Format(_T("%.4lf"), -((RCP_GLASS_SIZE_X / 2.0) - fTemp1));
-		m_gridCoordData.SetItemText(CELL_ROW_08, 1, strTemp);
-
-		strTemp.Format(_T("-(%.4lf / 2 - F)"), RCP_GLASS_SIZE_X);
-		m_gridCoordData.SetItemText(CELL_ROW_08, 2, strTemp);
-
-	//	fTemp1 = _wtof(m_gridCADData.GetItemText(CAD_ROW_F, 1));
-		fTemp1 = _wtof(m_gridCADData.GetItemText(CAD_ROW_E, 1));	// 2022.12.20 change
-		strTemp.Format(_T("%.4lf"), -((RCP_GLASS_SIZE_Y / 2.0) - fTemp1));
-		m_gridCoordData.SetItemText(CELL_ROW_09, 1, strTemp);
-
-		strTemp.Format(_T("-(%.4lf / 2 - E)"), RCP_GLASS_SIZE_Y);
-		m_gridCoordData.SetItemText(CELL_ROW_09, 2, strTemp);
-
-
-		// CELL SIZE
-		m_gridCoordData.SetItemText(CELL_ROW_03, 1, m_gridCADData.GetItemText(CAD_ROW_X7, 1));	m_gridCoordData.SetItemText(CELL_ROW_03, 2, _T("X7"));
-
-		m_gridCoordData.SetItemText(CELL_ROW_04, 1, m_gridCADData.GetItemText(CAD_ROW_X6, 1));	m_gridCoordData.SetItemText(CELL_ROW_04, 2, _T("X6"));
-
-		//m_gridCoordData.SetItemText (CELL_ROW_03,  1, m_gridCADData.GetItemText (CAD_ROW_R, 1));
-		//m_gridCoordData.SetItemText (CELL_ROW_04,  1, m_gridCADData.GetItemText (CAD_ROW_Q, 1));
-
-		//
-		if (_wtoi(m_strArrCoordData.GetAt(CELL_ROW_00)) != nAngle)
-		{
-			m_gridCoordData.SetItemText(CELL_ROW_05, 1, m_strArrCoordData.GetAt(CELL_ROW_06));	// STICK
-			m_gridCoordData.SetItemText(CELL_ROW_06, 1, m_strArrCoordData.GetAt(CELL_ROW_05));  // CELL 
-			m_gridCoordData.SetItemText(CELL_ROW_07, 1, m_strArrCoordData.GetAt(CELL_ROW_07));  // BLOCK
-		}
-		else
-		{
-			m_gridCoordData.SetItemText(CELL_ROW_05, 1, m_strArrCoordData.GetAt(CELL_ROW_05));	// STICK
-			m_gridCoordData.SetItemText(CELL_ROW_06, 1, m_strArrCoordData.GetAt(CELL_ROW_06));  // CELL 
-			m_gridCoordData.SetItemText(CELL_ROW_07, 1, m_strArrCoordData.GetAt(CELL_ROW_07));  // BLOCK
-		}
-		//
-
-		fTemp1 = _wtof (m_gridCADData.GetItemText (CAD_ROW_X2, 1));
-		fTemp2 = _wtof (m_gridCADData.GetItemText (CAD_ROW_F, 1));
-		strTemp.Format (_T("%.4lf"), fTemp1 - fTemp2);
-		m_gridCoordData.SetItemText(CELL_ROW_10,  1, strTemp);			// CELL CENTOR
-
-		m_gridCoordData.SetItemText(CELL_ROW_10, 2, _T("X2-F"));
-
-		fTemp1 = _wtof (m_gridCADData.GetItemText (CAD_ROW_X1, 1));
-		fTemp2 = _wtof (m_gridCADData.GetItemText (CAD_ROW_E, 1));
-		strTemp.Format (_T("%.4lf"), fTemp1 - fTemp2);
-		m_gridCoordData.SetItemText(CELL_ROW_11,  1, strTemp);			// CELL CENTOR
-
-		m_gridCoordData.SetItemText(CELL_ROW_11, 2, _T("X1-E"));
-
-		//m_gridCoordData.SetItemText(CELL_ROW_12, 1, m_gridCADData.GetItemText(CAD_ROW_S, 1));	// CELL to CELL
-		//m_gridCoordData.SetItemText(CELL_ROW_13, 1, m_gridCADData.GetItemText(CAD_ROW_T, 1));	// CELL to CELL
-
-		m_gridCoordData.SetItemText (CELL_ROW_12,  1, m_gridCADData.GetItemText (CAD_ROW_T, 1));	// CELL to CELL		
-		m_gridCoordData.SetItemText(CELL_ROW_12, 2, _T("T"));
-
-		m_gridCoordData.SetItemText (CELL_ROW_13,  1, m_gridCADData.GetItemText (CAD_ROW_S, 1));	// CELL to CELL
-		m_gridCoordData.SetItemText(CELL_ROW_13, 2, _T("S"));
-
-		m_gridCoordData.SetItemText(CELL_ROW_14, 1, m_gridCADData.GetItemText(CAD_ROW_B, 1));
-		m_gridCoordData.SetItemText(CELL_ROW_14, 2, _T("B"));
 	}
 
-	m_gridCoordData.SetItemText(CELL_ROW_15, 1, _T("20.0000"));
+	m_chkHybrid.SetCheck (nRcpSeg > 1 ? BST_CHECKED : BST_UNCHECKED);
+	m_cmbSegCount.SetCurSel (nRcpSeg - 1);
+	m_nSingleSrcSeg = 0;
+	UpdateHybridUI ();
+}
+
+void	C_MakeCellDlg::UpdateHybridUI ()
+{
+	BOOL bHybrid = (m_chkHybrid.GetCheck () == BST_CHECKED);
+	int	 nSeg	 = (int)m_vecSegInput.size ();
+
+	GetDlgItem (IDC_COMBO_3)->EnableWindow (bHybrid);
+	GetDlgItem (IDC_BUTTON_6)->EnableWindow (bHybrid);
+	GetDlgItem (IDC_BUTTON_7)->EnableWindow (bHybrid && m_nSegView > 0);
+	GetDlgItem (IDC_BUTTON_8)->EnableWindow (bHybrid && m_nSegView < nSeg - 1);
+
+	CString strName;
+	if (m_nSegView < g_inRcpInfo.GetSegmentCount ()) strName = g_inRcpInfo.GetSegmentName (m_nSegView);
+	else if (m_nSegView > 0)						 strName = _T("(new)");
+
+	CString str;
+	str.Format (_T("Seg %d/%d  %s%s"), m_nSegView + 1, nSeg, strName.GetString (),
+				(m_nSegView < nSeg && m_vecSegInput[m_nSegView].bOpened) ? _T("  [OPEN]") : _T(""));
+	SetDlgItemText (IDC_STATIC_1, str);
+}
+
+BOOL	C_MakeCellDlg::IsHybridEdit ()
+{
+	return (m_chkHybrid.GetCheck () == BST_CHECKED) && ((int)m_vecSegInput.size () > 1);
+}
+
+void	C_MakeCellDlg::SaveSegInput (int nSeg)
+{
+	if (nSeg < 0 || nSeg >= (int)m_vecSegInput.size ()) return;
+	S_MakeSegInput &sIn = m_vecSegInput[nSeg];
+
+	m_cmbCellInfoRcp.GetWindowText (sIn.strCellInfo);
+	sIn.nAngle	   = m_cmbAngle.GetCurSel ();
+	sIn.nRotateSel = m_gridCoordData.GetItemCurSel (CELL_ROW_00, 1);
+
+	sIn.vecOpenData.clear ();
+	for (int i = 0; i < m_strArrCoordData.GetSize (); i++) sIn.vecOpenData.push_back (m_strArrCoordData.GetAt (i));
+
+	sIn.vecCoord.assign (CELL_ROW_END, CString ());
+	sIn.vecCoordDesc.assign (CELL_ROW_END, CString ());
+	for (int i = 0; i < CELL_ROW_END; i++) {
+		sIn.vecCoord[i]		= m_gridCoordData.GetItemText (i, 1);
+		sIn.vecCoordDesc[i] = m_gridCoordData.GetItemText (i, 2);
+	}
+
+	sIn.vecCad.assign (CAD_ROW_END, CString ());
+	for (int i = 0; i < CAD_ROW_END; i++) sIn.vecCad[i] = m_gridCADData.GetItemText (i, 1);
+}
+
+// 입력이 없는 슬롯(새 세그먼트)은 빈 그리드로 보여준다 - OPEN 부터 해야 한다
+void	C_MakeCellDlg::LoadSegInput (int nSeg)
+{
+	if (nSeg < 0 || nSeg >= (int)m_vecSegInput.size ()) return;
+	const S_MakeSegInput &sIn = m_vecSegInput[nSeg];
+
+	m_cmbCellInfoRcp.SetWindowText (sIn.strCellInfo);
+	m_cmbAngle.SetCurSel ((sIn.nAngle >= 0 && sIn.nAngle < m_cmbAngle.GetCount ()) ? sIn.nAngle : 0);
+
+	m_strArrCoordData.RemoveAll ();
+	for (size_t i = 0; i < sIn.vecOpenData.size (); i++) m_strArrCoordData.Add (sIn.vecOpenData[i]);
+
+	m_gridCoordData.SetItemCurSel (CELL_ROW_00, 1, (sIn.nRotateSel >= 0) ? sIn.nRotateSel : 0);
+	for (int i = CELL_ROW_01; i < CELL_ROW_END; i++) {
+		m_gridCoordData.SetItemText (i, 1, (i < (int)sIn.vecCoord.size ())	   ? sIn.vecCoord[i]	 : CString ());
+		m_gridCoordData.SetItemText (i, 2, (i < (int)sIn.vecCoordDesc.size ()) ? sIn.vecCoordDesc[i] : CString ());
+	}
+	for (int i = 0; i < CAD_ROW_END; i++) {
+		m_gridCADData.SetItemText (i, 1, (i < (int)sIn.vecCad.size ()) ? sIn.vecCad[i] : CString ());
+	}
 
 	Invalidate (FALSE);
 }
 
-void	C_MakeCellDlg::GetCadInfo ()
+void	C_MakeCellDlg::MoveSegView (int nSeg)
 {
-	S_RecipeMgr *rcp = &g_inRcpInfo.m_recipeMgr;
+	if (nSeg < 0 || nSeg >= (int)m_vecSegInput.size () || nSeg == m_nSegView) return;
 
-	//CAD_ROW_A ~ CAD_ROW_X7
-	for (int i = 0; i < CAD_ROW_P1_1; i++) {
-		rcp->m_sMap.m_fCadData[i] = _wtof (m_gridCADData.GetItemText (i, 1));
+	SaveSegInput (m_nSegView);
+	m_nSegView = nSeg;
+	LoadSegInput (m_nSegView);
+	UpdateHybridUI ();
+}
+
+void	C_MakeCellDlg::OnSegPrev ()
+{
+	MoveSegView (m_nSegView - 1);
+}
+
+void	C_MakeCellDlg::OnSegNext ()
+{
+	MoveSegView (m_nSegView + 1);
+}
+
+// 해제는 확인 후 - ICP는 체크를 풀자마자 세그먼트를 버렸다(비이식)
+void	C_MakeCellDlg::OnHybridCheck ()
+{
+	BOOL bHybrid = (m_chkHybrid.GetCheck () == BST_CHECKED);
+
+	if (!bHybrid && (int)m_vecSegInput.size () > 1) {
+		CString strMsg;
+		strMsg.Format (_T("하이브리드 모드를 해제하시겠습니까?\n\nRECIPE APPLY 시 지금 보고 있는 세그먼트(Seg %d) 하나로 레시피가 만들어집니다."), m_nSegView + 1);
+		if (AfxMessageBox (strMsg, MB_YESNO | MB_ICONQUESTION) != IDYES) {
+			m_chkHybrid.SetCheck (BST_CHECKED);
+			return;
+		}
+
+		SaveSegInput (m_nSegView);
+		S_MakeSegInput sKeep = m_vecSegInput[m_nSegView];
+		m_nSingleSrcSeg = (m_nSegView < g_inRcpInfo.GetSegmentCount ()) ? m_nSegView : 0;
+		m_vecSegInput.assign (1, sKeep);
+		m_nSegView = 0;
+		m_cmbSegCount.SetCurSel (0);
 	}
 
-	//CAD_ROW_P1_1 ~ CAD_ROW_P5_2
-	for (int i = 0; i < CAD_ROW_END - CAD_ROW_P1_1; i++) {
-		wcscpy_s (rcp->m_sMap.m_chCadData[i], m_gridCADData.GetItemText (CAD_ROW_P1_1 + i, 1));
+	UpdateHybridUI ();
+}
+
+// 슬롯 수만 바꾼다. 레시피는 RECIPE APPLY 때 바뀐다.
+void	C_MakeCellDlg::OnSegCountApply ()
+{
+	if (m_chkHybrid.GetCheck () != BST_CHECKED) return;
+
+	int nNew = m_cmbSegCount.GetCurSel () + 1;
+	int nOld = (int)m_vecSegInput.size ();
+	if (nNew < 1 || nNew > M_SEGMENT_MAX || nNew == nOld) return;
+
+	if (nNew < nOld) {
+		CString strMsg;
+		strMsg.Format (_T("세그먼트 수를 %d개 -> %d개로 줄이시겠습니까?\n\nRECIPE APPLY 시 세그먼트 %d~%d가 삭제됩니다."), nOld, nNew, nNew + 1, nOld);
+		if (AfxMessageBox (strMsg, MB_YESNO | MB_ICONQUESTION) != IDYES) {
+			m_cmbSegCount.SetCurSel (nOld - 1);
+			return;
+		}
 	}
+
+	SaveSegInput (m_nSegView);
+	m_vecSegInput.resize (nNew);
+	if (m_nSegView >= nNew) m_nSegView = nNew - 1;
+	if (nNew == 1) m_nSingleSrcSeg = 0;
+	LoadSegInput (m_nSegView);
+	UpdateHybridUI ();
+}
+
+// 하이브리드 RECIPE APPLY: 세그먼트 전체를 새로 조립해서 한 번에 교체한다
+//   기존 세그먼트(k < 기존 수)는 그 세그먼트 값을 기준으로, OPEN 한 슬롯만 재생성 - 옵션 보존(ICP 7단계 보존 재조정 대신 단순화, D-11)
+//   새 세그먼트는 세그먼트 1 전체 복사 또는 기본값(D-11 2택) 위에 생성. CAD도 세그먼트마다 저장(ICP I17 결함 비이식)
+void	C_MakeCellDlg::ApplyHybridRecipe ()
+{
+	SaveSegInput (m_nSegView);
+
+	int nNew = (int)m_vecSegInput.size ();
+	int nOld = g_inRcpInfo.GetSegmentLoopCount ();
+
+	CString strRebuild, strKeep, strErr, strNo;
+	int nOpened = 0;
+	for (int k = 0; k < nNew && strErr.IsEmpty (); k++) {
+		strNo.Format (_T("%d "), k + 1);
+		if (m_vecSegInput[k].bOpened) {
+			if (m_vecSegInput[k].strCellInfo.IsEmpty ()) strErr.Format (_T("Seg %d: 셀 정보 이름이 비어 있습니다."), k + 1);
+			strRebuild += strNo;
+			nOpened++;
+		}
+		else if (k >= nOld) strErr.Format (_T("Seg %d는 새 세그먼트입니다 - 먼저 셀 정보를 OPEN 하세요."), k + 1);
+		else				strKeep += strNo;
+	}
+	if (strErr.IsEmpty () && nOpened == 0) strErr = _T("OPEN 한 세그먼트가 없습니다.\n다시 만들 세그먼트마다 셀 정보를 OPEN 하세요.");
+	if (!strErr.IsEmpty ()) {
+		AfxMessageBox (strErr, MB_ICONWARNING);
+		return;
+	}
+
+	CString strMsg, strRemove;
+	if (nNew < nOld) strRemove.Format (_T("\n삭제   : %d~%d"), nNew + 1, nOld);
+	if (strKeep.IsEmpty ()) strKeep = _T("-");
+	strMsg.Format (_T("하이브리드 레시피를 생성합니다 (세그먼트 %d개)\n\n재생성 : %s\n유지   : %s%s\n\n계속 하시겠습니까?"),
+				   nNew, strRebuild.GetString (), strKeep.GetString (), strRemove.GetString ());
+	if (AfxMessageBox (strMsg, MB_YESNO | MB_ICONQUESTION) != IDYES) return;
+
+	BOOL bCopy = TRUE;
+	if (nNew > nOld) {
+		int nRet = AfxMessageBox (_T("새 세그먼트의 옵션(검사 항목, 램프, 컨택 등) 초기값을 선택하세요.\n\n예 = 세그먼트 1에서 복사\n아니요 = 기본값"), MB_YESNOCANCEL | MB_ICONQUESTION);
+		if (nRet == IDCANCEL) return;
+		bCopy = (nRet == IDYES);
+	}
+
+	// 기존 세그먼트 사본 - GetSegmentMgr(활성)은 작업 슬롯을 가리키고 아래 루프가 작업 슬롯을 덮어쓰므로 먼저 복사한다
+	g_inRcpInfo.CommitActiveSegment ();
+	std::vector<S_RecipeMgr>	 vecOld;
+	std::vector<S_SegmentHeader> vecOldHdr;
+	for (int k = 0; k < nOld; k++) {
+		S_RecipeMgr *pSeg = g_inRcpInfo.GetSegmentMgr (k);
+		vecOld.push_back (pSeg ? *pSeg : S_RecipeMgr ());
+		vecOldHdr.push_back (g_inRcpInfo.GetSegmentHeader (k));
+	}
+	S_RecipeMgr sStage = g_inRcpInfo.m_recipeMgr;
+
+	std::vector<S_RecipeMgr>	 vecNew;
+	std::vector<S_SegmentHeader> vecNewHdr;
+	for (int k = 0; k < nNew; k++) {
+		S_RecipeMgr		sSeg = (k < nOld) ? vecOld[k] : (bCopy ? vecOld[0] : S_RecipeMgr ());
+		S_SegmentHeader sHdr = (k < nOld) ? vecOldHdr[k] : S_SegmentHeader ();
+
+		if (k >= nOld) {	// 새 이름 "Segment#n" - 남는 세그먼트 이름과 겹치지 않게
+			for (int n = k + 1; n < k + 1 + 100; n++) {
+				CString strCand;
+				strCand.Format (_T("Segment#%d"), n);
+				BOOL bDup = FALSE;
+				for (int j = 0; j < nOld && j < nNew; j++)	 if (strCand.CompareNoCase (vecOldHdr[j].m_chName) == 0) bDup = TRUE;
+				for (size_t j = 0; j < vecNewHdr.size (); j++) if (strCand.CompareNoCase (vecNewHdr[j].m_chName) == 0) bDup = TRUE;
+				if (!bDup) {
+					wcsncpy_s (sHdr.m_chName, strCand, _TRUNCATE);
+					break;
+				}
+			}
+		}
+
+		if (m_vecSegInput[k].bOpened) {
+			LoadSegInput (k);
+			g_inRcpInfo.m_recipeMgr = sSeg;
+			BuildRecipeFromGrid (m_vecSegInput[k].strCellInfo);
+			sSeg = g_inRcpInfo.m_recipeMgr;
+		}
+
+		vecNew.push_back (sSeg);
+		vecNewHdr.push_back (sHdr);
+	}
+
+	g_inRcpInfo.m_recipeMgr = sStage;
+	if (!g_inRcpInfo.ReplaceSegments (vecNew, vecNewHdr)) {
+		AfxMessageBox (_T("하이브리드 레시피 생성에 실패했습니다."), MB_ICONWARNING);
+		LoadSegInput (m_nSegView);
+		return;
+	}
+
+	for (int k = 0; k < nNew; k++) m_vecSegInput[k].bOpened = FALSE;	// 다음 APPLY가 지난 입력으로 재생성하지 않도록
+	LoadSegInput (m_nSegView);
+	UpdateHybridUI ();
+
+	::SendMessage (m_hWnd->m_hWnd, WM_RECIPE_EVENT, (WPARAM)M_MAKE_CELL_SET, NULL);
+
+	ShowWindow (SW_HIDE);
 }

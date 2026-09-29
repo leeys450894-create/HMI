@@ -46,7 +46,7 @@ CDlgSubManual::~CDlgSubManual()
 		m_pDlgSub_MultiMeas = nullptr;
 	}
 
-	// LYS 2026-09-28 EFA cleanup
+	// LYS 2026-09-28 EFA 화면 해제
 	if (m_pDlgSub_AgingNew)
 	{
 		m_pDlgSub_AgingNew->DestroyWindow();
@@ -178,7 +178,7 @@ BOOL CDlgSubManual::OnInitDialog()
 	m_pDlgSub_MultiMeas->ShowWindow(SW_HIDE);
 
 	//--------------------------------------------------------------------
-	//8. EFA TEST create  // LYS 2026-09-28 EFA (OCP_EFA IDD_DLG_NAVI_MANUAL_AGING_NEW)
+	//8. EFA TEST 생성  // LYS 2026-09-28 EFA (OCP_EFA IDD_DLG_NAVI_MANUAL_AGING_NEW)
 	//--------------------------------------------------------------------
 	m_pDlgSub_AgingNew = new CDlgSubManual_AgingNew(m_pAuroraMgr);
 	m_pDlgSub_AgingNew->Create(IDD_DLG_SUB_MANUAL_AGING_NEW, this);
@@ -324,7 +324,7 @@ void CDlgSubManual::OnBnClickedButtonManualWadMulti()
 }
 
 
-// LYS 2026-09-28 EFA test view (OCP_EFA CDlgNaviManual::OnBnClickedBtnManualAgingNew)
+// LYS 2026-09-28 EFA 검사 화면 (OCP_EFA CDlgNaviManual::OnBnClickedBtnManualAgingNew)
 void CDlgSubManual::OnBnClickedButtonManualAgingNew()
 {
 	CLogWrapper::GetInstance()->KMLOG(OPER, _T("CDlgSubManual::OnBnClickedButtonManualAgingNew"));

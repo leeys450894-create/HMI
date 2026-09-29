@@ -3487,14 +3487,14 @@ bool CDlgSubOperate::CheckAndApplyResumeMode()
 		if (!strCurRecipe.IsEmpty() && nTotalStick > 0
 			&& !pResumeInfo->ValidateResume(strCurRecipe, nTotalStick, nGlsRotate))
 		{
-			AfxMessageBox(_T("Resume info invalid (recipe/stick/rotation mismatch).Starting fresh."), MB_OK | MB_ICONWARNING);
+			AfxMessageBox(_T("이전 검사 정보가 현재 레시피와 맞지 않습니다 (레시피/스틱 수/회전 불일치).\n처음부터 검사합니다."), MB_OK | MB_ICONWARNING);
 			pResumeInfo->ClearResumeInfo();
 			CSystemParamShare::GetInstance()->SetResumeMode(false);
 		}
 		else
 		{
 			CString strMsg;
-			strMsg.Format(_T("Previous inspection found.Glass ID: %s\nRecipe: %s\nLast Stick: %d\nResume from Stick %d?"),
+			strMsg.Format(_T("이전 검사 이력이 있습니다.\n\nGlass ID : %s\n레시피 : %s\n마지막 완료 스틱 : %d\n\n스틱 %d부터 이어서 검사하시겠습니까?\n\n예 = 이어서 검사\n아니요 = 처음부터 검사\n취소 = 검사 시작 취소"),
 				pResumeInfo->GetGlassID(), pResumeInfo->GetRecipeID(),
 				pResumeInfo->GetLastStick() + 1, pResumeInfo->GetResumeStartStick() + 1);
 			int nRet = AfxMessageBox(strMsg, MB_YESNOCANCEL | MB_ICONQUESTION);

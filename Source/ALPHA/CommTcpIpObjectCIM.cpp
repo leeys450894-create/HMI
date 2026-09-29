@@ -17,7 +17,7 @@
 #include "Manager/CommTcpIpFactoryMgr.h"
 #include "Manager/CCommTcpIpObjectSysTime.h"
 #include "Recipe/RecipeEditMgr.h"
-#include "DoWork\AgingCycleInfo.h"	// LYS 2026-09-28 EFA: PPID 'B' -> EFA rcp check
+#include "DoWork\AgingCycleInfo.h"	// LYS 2026-09-28 EFA: PPID 'B' 수신 시 EFA rcp 존재 확인용
 
 
 #ifdef _DEBUG
@@ -217,7 +217,7 @@ void CCommTcpIpObjectCIM::xNetCallbackRecieveData(LPVOID ud)
 			{
 				const CString strRcv = vecPacketCommandPool[i];
 
-				// LYS 2026-09-28 EFA: EFA^0_OK$ / EFA^1_OK$ (OCP parses Mid(3,1), which is '^' for EFA^n - read the digit after '^')
+				// LYS 2026-09-28 EFA: EFA^0_OK$ / EFA^1_OK$ 수신 (OCP는 Mid(3,1)을 읽는데 EFA^n에서는 '^'가 걸리므로 '^' 다음 숫자를 읽는다)
 				if (strRcv.Left(3) == _T("EFA"))
 				{
 					int iDigit = 3;
@@ -1416,7 +1416,7 @@ int CCommTcpIpObjectCIM::Process_PPID(CString strMsg)
 	nRtn = GetRecipeEditMgrPtr()->OpenRecipe(strPPID);
 
 	m_pShareMemory->SetSys_AutoAgingMode(false);
-	m_pShareMemory->SetSys_NewAgingMode(false);	// LYS 2026-09-28 EFA: OCP resets both aging flags at every PPID
+	m_pShareMemory->SetSys_NewAgingMode(false);	// LYS 2026-09-28 EFA: OCP는 PPID를 받을 때마다 두 에이징 플래그를 모두 리셋한다
 
 	if (nRtn == VTM_RV_SUCCESSED && strAging == 'J') { //20210518 modify by Hee (경시변환 측정 모드 J 플래그로 변경 요청)
 		//Aging 측정 리스트 없으면 알람									//PPID 와 Aging 플래그 없을시 *알람명은 바꿔야 할수도
@@ -1433,8 +1433,8 @@ int CCommTcpIpObjectCIM::Process_PPID(CString strMsg)
 		}
 	}
 
-	// LYS 2026-09-28 EFA: OCP_EFA PPID 2nd field = 4-char WorkState, char [1] = 'A' aging / 'B' EFA (DlgNaviMaintCIM.cpp:647-724).
-	// A 1-char field is read as-is. 'J' above is kept for older hosts.
+	// LYS 2026-09-28 EFA: OCP_EFA PPID 두 번째 필드 = 4자리 WorkState, [1] 문자 'A' = 에이징 / 'B' = EFA (DlgNaviMaintCIM.cpp:647-724).
+	// 1자리 필드는 그대로 읽는다. 위의 'J'는 구형 호스트 호환용으로 유지한다.
 	TCHAR cWork = 0;
 	if (strArrPPID.GetSize() == 2)
 	{
@@ -1452,7 +1452,7 @@ int CCommTcpIpObjectCIM::Process_PPID(CString strMsg)
 		CAgingCycleInfo efaInfo;
 		if (efaInfo.Load(strPPID, true) == false || efaInfo.GetItemCount() < 1)
 		{
-			// OCP: PPIDREQ_NG + JOB_RECIPE_NOT_EXIST. nRet (not nRtn) is what the caller turns into PPID OK/NG.
+			// OCP: PPIDREQ_NG + JOB_RECIPE_NOT_EXIST. 호출부가 PPID OK/NG로 바꾸는 값은 nRtn이 아니라 nRet이다.
 			nRet = JOB_RECIPE_NOT_EXIST;
 			CString strEfaLog;
 			strEfaLog.Format(_T("[CIM] PPID WorkState 'B' but EFA rcp missing/empty: %s%s.rcp"), (LPCTSTR)CAgingCycleInfo::GetEfaRcpPath(), (LPCTSTR)strPPID);
@@ -1979,7 +1979,7 @@ int CCommTcpIpObjectCIM::Cmd_Send_AT0()
 	return nRet;
 }
 
-// LYS 2026-09-28 EFA: EFA 2-pass handshake (OCP_EFA DlgNaviMaintCIM.cpp:3022-3060)
+// LYS 2026-09-28 EFA: EFA 2-pass 핸드셰이크 (OCP_EFA DlgNaviMaintCIM.cpp:3022-3060)
 int CCommTcpIpObjectCIM::Cmd_Send_EFA0()
 {
 	m_bRecvEFA0 = false;
@@ -1991,7 +1991,7 @@ int CCommTcpIpObjectCIM::Cmd_Send_EFA1()
 	return Cmd_Send(dfEFA_T1);
 }
 
-// OCP isEFA0RecvCheck: 100 ms x 50 poll. Caller continues on timeout (user decision 2026-09-28: OCP behaviour).
+// OCP isEFA0RecvCheck: 100 ms x 50회 폴링. 타임아웃이어도 호출부는 계속 진행한다(2026-09-28 사용자 결정: OCP 동작).
 bool CCommTcpIpObjectCIM::WaitEFA0Ack(DWORD dwTimeOutMs)
 {
 	DWORD dwStart = GetTickCount();

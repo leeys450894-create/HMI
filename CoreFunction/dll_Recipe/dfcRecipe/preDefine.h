@@ -39,6 +39,8 @@ using namespace std;
 // 2026-08-07 회전 체계와 함께 추가. 기존 0/90 분기에 2가 없어 대입이 통째로 스킵되고
 // 이전 값이 그대로 남아 있었다.
 #define RCP_CELL_ANG_180	2
+// LYS 2026-09-29 m_nGlsRotate=3 (270도), MakeCell에서 90도 형상 기준을 공유
+#define RCP_CELL_ANG_270	3
 
 #define PIX_UNIFORMITY		1
 #define PIX_NON_UNIFORMITY  2
@@ -99,6 +101,7 @@ const enum RCP_VERSION{
 	RECIPE_FILE_V1008,		// LYS 2026-09-04 Align SUB Z RIGHT/LEFT
 	RECIPE_FILE_V1009,		// LYS 2026-09-09 Stick별 PROBE Z CONTACT OFFSET (_STICK_CONTACT_OFFSET_ 꼬리 블록)
 	RECIPE_FILE_V1010,		// LYS 2026-09-18 ANGLE Sub Z RIGHT/LEFT (_ANGLE_SUBZ_ 꼬리 블록)
+	RECIPE_FILE_V1011,		// LYS 2026-09-29 Hybrid 세그먼트 꼬리 블록 (_HYBRID_ ... _HYBRID_END_)
 	RECIPE_FILE_END,
 };
 

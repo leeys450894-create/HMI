@@ -1,8 +1,8 @@
 // DlgSubManual_AgingNew.h
-// LYS 2026-09-28 EFA: EFA (2-pass aging) test view.
-// Port of OCP_EFA A3_ICP CDlgNaviManualAgingNew (IDD_DLG_NAVI_MANUAL_AGING_NEW, "EFA TEST").
-// Structure copied from CDlgSubManual_AgingTest - see docs/AgingNew_EFA_Porting_Plan.md.
-// ASCII only on purpose: compiled as CP949 without /utf-8, so user messages stay English.
+// LYS 2026-09-28 EFA: EFA(2-pass 에이징) 검사 화면.
+// OCP_EFA A3_ICP CDlgNaviManualAgingNew(IDD_DLG_NAVI_MANUAL_AGING_NEW, "EFA TEST") 이식.
+// 구조는 CDlgSubManual_AgingTest에서 복사 - docs/AgingNew_EFA_Porting_Plan.md 참조.
+// /utf-8 없이 CP949로 컴파일되므로 사용자 메시지는 영어로 둔다.
 #pragma once
 #include "afxwin.h"
 #include "DlgSubManual_STEP.h"
@@ -10,8 +10,8 @@
 using namespace std;
 
 #define MAX_EFA_STICK			10
-#define MAX_EFA_ITEM			7	// same list grid as AgingTest: No | Aging | PTN | SEC | WAD | VISION | ANGLE
-#define EFA_FIXED_ITEM_COUNT	2	// OCP_EFA: "EFA list is fixed to 2 rows" (T0 = before aging, T1 = after aging)
+#define MAX_EFA_ITEM			7	// AgingTest와 같은 리스트 그리드: No | Aging | PTN | SEC | WAD | VISION | ANGLE
+#define EFA_FIXED_ITEM_COUNT	2	// OCP_EFA: "EFA 리스트는 2행 고정" (T0 = 에이징 전, T1 = 에이징 후)
 
 class CAuroraMgr;
 
@@ -37,21 +37,21 @@ protected:
 	CMySpreadDll*	m_spreadAgingList;
 	CMySpreadDll*	m_spreadAgingMeas;
 	CComboBox		m_cmbCycle;
-	CString			m_strEfaRcpPath;	// registry DIR\EFA_RCP (separate from AgingTest DIR\AGING_RCP - OCP shares the key by mistake)
+	CString			m_strEfaRcpPath;	// 레지스트리 DIR\EFA_RCP (AgingTest의 DIR\AGING_RCP와 분리 - OCP는 실수로 키를 같이 쓴다)
 	CAuroraMgr*		m_pAuroraMgr;
 	HFONT			m_hfont;
-	int				m_nHlRow;			// last highlighted list cell (grid coords)
+	int				m_nHlRow;			// 마지막으로 하이라이트한 리스트 셀 (그리드 좌표)
 	int				m_nHlCol;
 
 public:
-	static CString GetEfaRcpPath();		// "{DIR\EFA_RCP}\" with trailing backslash
+	static CString GetEfaRcpPath();		// 끝에 백슬래시가 붙은 "{DIR\EFA_RCP}\"
 
 	void UpdateStatus(BOOL bEnable);
 	void UpdateListNum();
 	BOOL IsOfflineStatus();
 	BOOL LoadAgingInfo();
 	void SaveAgingInfo();
-	void AgingItemClearAll(BOOL bFixed2 = FALSE);	// TRUE: rebuild the 2 fixed rows (OCP AgingItemClearAll(TRUE))
+	void AgingItemClearAll(BOOL bFixed2 = FALSE);	// TRUE: 고정 2행 재구성 (OCP AgingItemClearAll(TRUE))
 	void AgingItemAdd();
 	void UpdateAgingCell();
 	int	 GetMeasUse(int iMeas, int nMeasUse);
@@ -61,7 +61,7 @@ public:
 
 protected:
 	CString GetRecipeID();
-	CString GetEfaRcpFile();			// "{path}{RecipeID}.rcp", empty if no recipe
+	CString GetEfaRcpFile();			// "{path}{RecipeID}.rcp", 레시피가 없으면 빈 문자열
 	void DblClickFpspreadCellStatus(long Col, long Row);
 	void SheetChangedFsMeasArea(short OldSheet, short NewSheet);
 

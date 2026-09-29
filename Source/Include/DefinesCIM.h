@@ -17,9 +17,9 @@
 #define dfAT_0				_T("AT0$")
 #define dfAT_0_OK			_T("AT0_OK$")
 
-// LYS 2026-09-28 EFA: EFA 2-pass test handshake (OCP_EFA Include/DefinesCIM.h:132-136)
-#define dfEFA_T0			_T("EFA^0$")		// T0 (before aging) done, APD uploaded
-#define dfEFA_T1			_T("EFA^1$")		// T1 (after aging) done
+// LYS 2026-09-28 EFA: EFA 2-pass 검사 핸드셰이크 (OCP_EFA Include/DefinesCIM.h:132-136)
+#define dfEFA_T0			_T("EFA^0$")		// T0(에이징 전) 완료, APD 업로드 후
+#define dfEFA_T1			_T("EFA^1$")		// T1(에이징 후) 완료
 #define dfEFA_T0_OK			_T("EFA^0_OK$")
 #define dfEFA_T1_OK			_T("EFA^1_OK$")
 

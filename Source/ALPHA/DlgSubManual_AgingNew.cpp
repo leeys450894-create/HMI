@@ -1,12 +1,12 @@
 // DlgSubManual_AgingNew.cpp
-// LYS 2026-09-28 EFA: EFA (2-pass aging) test view - port of OCP_EFA CDlgNaviManualAgingNew.
-// Copied from CDlgSubManual_AgingTest (2026-08-06 port) and reduced to the EFA deltas:
-//   - separate mode flag  : VTM_SYSTEM::m_bNewAgingMode (OCP m_bNewAgingMode) instead of m_bAutoAgingMode
-//   - separate rcp folder : registry DIR\EFA_RCP (OCP reuses DIR\AGING_RCP by mistake -> file collision)
-//   - list fixed to 2 rows: T0 (before aging) / T1 (after aging); ITEM add/del hidden
-//   - cycle combo 1..25, pattern combo 0..25
-// File format is identical to AgingTest ({rcp}.rcp INI: [COUNT] [ITEM_n] [MASECELL]) so CAgingCycleInfo can parse it.
-// ASCII only: this file is compiled as CP949 without /utf-8 (see HMI/CLAUDE.md rule 7).
+// LYS 2026-09-28 EFA: EFA(2-pass 에이징) 검사 화면 - OCP_EFA CDlgNaviManualAgingNew 이식.
+// CDlgSubManual_AgingTest(2026-08-06 이식)를 복사해 EFA 차이만 반영했다:
+//   - 모드 플래그 분리 : m_bAutoAgingMode 대신 VTM_SYSTEM::m_bNewAgingMode (OCP m_bNewAgingMode)
+//   - rcp 폴더 분리    : 레지스트리 DIR\EFA_RCP (OCP는 실수로 DIR\AGING_RCP를 같이 써서 파일 충돌)
+//   - 리스트 2행 고정  : T0(에이징 전) / T1(에이징 후), ITEM 추가/삭제 숨김
+//   - Cycle 콤보 1..25, 패턴 콤보 0..25
+// 파일 형식은 AgingTest와 같다({rcp}.rcp INI: [COUNT] [ITEM_n] [MASECELL]) - CAgingCycleInfo가 그대로 읽는다.
+// /utf-8 없이 CP949로 컴파일되므로 사용자 메시지 문자열은 영어로 둔다(HMI/CLAUDE.md 규칙 7).
 #include "pch.h"
 #include "ALPHA.h"
 #include "DlgSubManual_AgingNew.h"
@@ -22,7 +22,7 @@
 #include <bitset>
 
 #define EFA_TIMER_HIGHLIGHT		1
-#define EFA_CELLMASK_BUF		1024	// [MASECELL] line buffer (MAX_PATH is too small for many cells)
+#define EFA_CELLMASK_BUF		1024	// [MASECELL] 한 줄 버퍼 (셀이 많으면 MAX_PATH로는 부족)
 
 IMPLEMENT_DYNAMIC(CDlgSubManual_AgingNew, CDialogEx)
 
@@ -39,7 +39,7 @@ CDlgSubManual_AgingNew::CDlgSubManual_AgingNew(CAuroraMgr* pAuroraMgr, CWnd* pPa
 
 CDlgSubManual_AgingNew::~CDlgSubManual_AgingNew()
 {
-	// spreads: same lifetime handling as CDlgSubManual_AgingTest (child windows die with the dialog)
+	// spread: CDlgSubManual_AgingTest와 같은 수명 처리 (자식 창은 다이얼로그와 함께 소멸)
 }
 
 void CDlgSubManual_AgingNew::DoDataExchange(CDataExchange* pDX)
@@ -62,7 +62,7 @@ BEGIN_MESSAGE_MAP(CDlgSubManual_AgingNew, CDialogEx)
 	ON_COMMAND(IDC_BUTTON_6, OnItemSave)
 	ON_COMMAND(IDC_BUTTON_7, OnLoadAgingInfo)
 	ON_COMMAND(IDC_BUTTON_8, OnAgingProcStrart)
-	ON_MESSAGE(SSM_DBLCLK, OnSpreadDBClick)	// DLL spread forwards dblclick (OCX EVENTSINK does not fire)
+	ON_MESSAGE(SSM_DBLCLK, OnSpreadDBClick)	// DLL spread가 더블클릭을 전달한다 (OCX EVENTSINK는 발생하지 않음)
 END_MESSAGE_MAP()
 
 BEGIN_EVENTSINK_MAP(CDlgSubManual_AgingNew, CDialog)
@@ -76,7 +76,7 @@ BOOL CDlgSubManual_AgingNew::OnEraseBkgnd(CDC* pDC)
 }
 
 //=========================================================================
-// helpers
+// 보조 함수
 //=========================================================================
 CString CDlgSubManual_AgingNew::GetEfaRcpPath()
 {
@@ -100,7 +100,7 @@ CString CDlgSubManual_AgingNew::GetEfaRcpFile()
 }
 
 //=========================================================================
-// init
+// 초기화
 //=========================================================================
 BOOL CDlgSubManual_AgingNew::OnInitDialog()
 {
@@ -115,7 +115,7 @@ BOOL CDlgSubManual_AgingNew::OnInitDialog()
 	m_chkStop.m_nFlatStyle = CMFCButton::BUTTONSTYLE_3D;
 	m_chkStop.ShowWindow(FALSE);
 
-	// FarPoint spreads (DLL). Resource IDs +28/+29 are unused by the other manual views.
+	// FarPoint spread (DLL). 리소스 ID +28/+29는 다른 수동 화면에서 쓰지 않는다.
 	m_spreadAgingList = new CMySpreadDll(IDC_FPS_AGING_LIST, FPS_RESOURCE_ID + 28, this, TRUE);
 	m_spreadAgingMeas = new CMySpreadDll(IDC_FPSPREAD_AGING_CELL_STATUS, FPS_RESOURCE_ID + 29, this, TRUE);
 
@@ -135,7 +135,7 @@ BOOL CDlgSubManual_AgingNew::OnInitDialog()
 
 		m_spreadAgingList->SetColHeaderRows(1);
 
-		m_spreadAgingList->InitMySpread_AGINGTEST_LIST();	// same 7-col layout as AgingTest
+		m_spreadAgingList->InitMySpread_AGINGTEST_LIST();	// AgingTest와 같은 7열 레이아웃
 	}
 
 	if (m_spreadAgingMeas->GetSafeHwnd() != NULL)
@@ -165,7 +165,7 @@ BOOL CDlgSubManual_AgingNew::OnInitDialog()
 	}
 
 	CString str;
-	for (int i = 0; i < 25; i++) {	// OCP_EFA: cycle count 1..25 (AgingTest 1..10)
+	for (int i = 0; i < 25; i++) {	// OCP_EFA: Cycle 횟수 1..25 (AgingTest는 1..10)
 		str.Format(_T("%d"), i + 1);
 		m_cmbCycle.AddString(str);
 	}
@@ -175,11 +175,11 @@ BOOL CDlgSubManual_AgingNew::OnInitDialog()
 	GetDlgItem(IDC_EDIT_2)->SetWindowText(m_strEfaRcpPath);
 	GetDlgItem(IDC_EDIT_1)->SetWindowText(GetRecipeID());
 
-	// EFA list is fixed to 2 rows (T0/T1) - ITEM add/del stay hidden (rc: NOT WS_VISIBLE)
+	// EFA 리스트는 2행(T0/T1) 고정 - ITEM 추가/삭제 버튼은 숨김 유지 (rc: WS_VISIBLE 아님)
 	GetDlgItem(IDC_BUTTON_4)->ShowWindow(SW_HIDE);
 	GetDlgItem(IDC_BUTTON_5)->ShowWindow(SW_HIDE);
 
-	SetTimer(EFA_TIMER_HIGHLIGHT, 500, NULL);	// progress highlight poll
+	SetTimer(EFA_TIMER_HIGHLIGHT, 500, NULL);	// 진행 하이라이트 폴링
 
 	return TRUE;
 }
@@ -193,8 +193,8 @@ void CDlgSubManual_AgingNew::UpdateStatus(BOOL bEnable)
 
 void CDlgSubManual_AgingNew::OnTimer(UINT_PTR nIDEvent)
 {
-	// EFA pass progress highlight. Engine writes m_nAgingListRow (1-base pass = T0/T1 row) and
-	// m_nAgingListCol (1=Aging 2=PTN 3=SEC 4=WAD 5=VISION 6=ANGLE), 0/0 when idle.
+	// EFA pass 진행 하이라이트. 엔진이 m_nAgingListRow(1부터, pass = T0/T1 행)와
+	// m_nAgingListCol(1=Aging 2=PTN 3=SEC 4=WAD 5=VISION 6=ANGLE)을 쓰고, 대기 중이면 0/0이다.
 	if (nIDEvent == EFA_TIMER_HIGHLIGHT)
 	{
 		do
@@ -210,12 +210,12 @@ void CDlgSubManual_AgingNew::OnTimer(UINT_PTR nIDEvent)
 				nCol = m_pAuroraMgr->GetShareMemoryMgrPtr()->GetSharedMemory()->m_nAgingListCol;
 			}
 
-			if (nRow == m_nHlRow && nCol == m_nHlCol) break;	// no change
+			if (nRow == m_nHlRow && nCol == m_nHlCol) break;	// 변화 없음
 
 			if (m_nHlRow > 0 && m_nHlCol > 0 &&
 				m_nHlRow <= m_spreadAgingList->GetMaxRows() && m_nHlCol <= m_spreadAgingList->GetMaxCols())
 			{
-				m_spreadAgingList->SetColor(m_nHlCol, m_nHlRow, RGB_WHITE, RGB_BLACK);	// FarPoint: (Col, Row)
+				m_spreadAgingList->SetColor(m_nHlCol, m_nHlRow, RGB_WHITE, RGB_BLACK);	// FarPoint 좌표는 (Col, Row)
 			}
 
 			if (nRow > 0 && nCol > 0 &&
@@ -233,11 +233,11 @@ void CDlgSubManual_AgingNew::OnTimer(UINT_PTR nIDEvent)
 }
 
 //=========================================================================
-// buttons
+// 버튼
 //=========================================================================
 void CDlgSubManual_AgingNew::OnStop()
 {
-	// HMI equivalent of OCP m_pJobProc->ActionStop()
+	// OCP m_pJobProc->ActionStop()에 해당하는 HMI 처리
 	CLogWrapper::GetInstance()->KMLOG(OPER, _T("CDlgSubManual_AgingNew::OnStop"));
 
 	CSystemParamShare::GetInstance()->SetCycleState(false);
@@ -255,7 +255,7 @@ void CDlgSubManual_AgingNew::OnStop()
 
 void CDlgSubManual_AgingNew::OnRcpOpen()
 {
-	// .rcp select -> RecipeChange (OCP LoadPPID2) -> rebuild cell map + load EFA info for the new recipe
+	// .rcp 선택 -> RecipeChange (OCP LoadPPID2) -> 셀 맵 재구성 + 새 레시피의 EFA 정보 로드
 	if (!IsOfflineStatus()) return;
 	if (m_pAuroraMgr == NULL || m_pAuroraMgr->GetRecipeEditMgrPtr() == NULL) return;
 
@@ -273,7 +273,7 @@ void CDlgSubManual_AgingNew::OnRcpOpen()
 		{
 			int j = filename.Find(_T(".rcp"));
 
-			if (j > 0)	strRcpFile = filename.Left(j);		// remove ".rcp"
+			if (j > 0)	strRcpFile = filename.Left(j);		// ".rcp" 제거
 			else		strRcpFile = filename;
 
 			if (m_pAuroraMgr->GetRecipeEditMgrPtr()->RecipeChange(strRcpFile) == VTM_RV_SUCCESSED)
@@ -290,7 +290,7 @@ void CDlgSubManual_AgingNew::OnRcpOpen()
 					AfxMessageBox(strMsg, MB_ICONWARNING);
 				}
 
-				LoadAgingInfo();	// UpdateAgingCell + MeasCellLoad run inside
+				LoadAgingInfo();	// 내부에서 UpdateAgingCell + MeasCellLoad까지 실행
 				return;
 			}
 			else
@@ -303,7 +303,7 @@ void CDlgSubManual_AgingNew::OnRcpOpen()
 
 void CDlgSubManual_AgingNew::OnItemClearAll()
 {
-	// OCP_EFA: "reset the whole list" -> rebuild the 2 fixed rows
+	// OCP_EFA: "리스트 전체 초기화" -> 고정 2행 재구성
 	if (AfxMessageBox(_T("Reset the EFA list to 2 empty items (T0 / T1).\nContinue?"), MB_YESNO | MB_ICONQUESTION) != IDYES) return;
 
 	AgingItemClearAll(TRUE);
@@ -311,12 +311,12 @@ void CDlgSubManual_AgingNew::OnItemClearAll()
 
 void CDlgSubManual_AgingNew::OnItemAdd()
 {
-	return;	// OCP_EFA: list fixed to 2 rows (button hidden)
+	return;	// OCP_EFA: 리스트 2행 고정 (버튼 숨김)
 }
 
 void CDlgSubManual_AgingNew::OnItemDel()
 {
-	return;	// OCP_EFA: list fixed to 2 rows (button hidden)
+	return;	// OCP_EFA: 리스트 2행 고정 (버튼 숨김)
 }
 
 void CDlgSubManual_AgingNew::OnItemSave()
@@ -344,9 +344,9 @@ void CDlgSubManual_AgingNew::OnLoadAgingInfo()
 
 void CDlgSubManual_AgingNew::OnAgingProcStrart()
 {
-	// EFA cycle test start via the HMI cycle-inspection path
+	// HMI 사이클 검사 경로로 EFA 사이클 테스트를 시작한다
 	// (OCP_EFA: m_bNewAgingMode + nJobCount + JOB_Proc::DoStartCycleTest -> DoWorkStartMeasICP_EFA).
-	// The engine side (2-pass loop) is Phase 2 - until then the flag is set but the sequence runs standard.
+	// 엔진 쪽 2-pass 루프는 CDoWorkGlassMeasure::ThreadRun에 구현돼 있다(Phase 2 완료).
 	if (!IsOfflineStatus()) return;
 
 	if (m_pAuroraMgr == NULL || m_pAuroraMgr->GetShareMemoryMgrPtr() == NULL ||
@@ -368,7 +368,7 @@ void CDlgSubManual_AgingNew::OnAgingProcStrart()
 	}
 
 	//=====================================================================
-	// pre-checks (mirror of AgingTest START): OCP mode, recipe EFA flag, EFA rcp file with items.
+	// 사전 검사(AgingTest START와 동일): OCP 모드, 레시피 EFA 플래그, 항목이 있는 EFA rcp 파일.
 	//=====================================================================
 	if (m_pAuroraMgr->GetSystemConfigMgrPtr() == NULL ||
 		m_pAuroraMgr->GetSystemConfigMgrPtr()->IsOCP() == false)
@@ -409,21 +409,21 @@ void CDlgSubManual_AgingNew::OnAgingProcStrart()
 		if (AfxMessageBox(strChkMsg, MB_YESNO | MB_ICONQUESTION) != IDYES) return;
 	}
 
-	int nMaxCount = m_spreadAgingList->GetMaxRows();	// HMI grid: MaxRows = item count
+	int nMaxCount = m_spreadAgingList->GetMaxRows();	// HMI 그리드: MaxRows = 항목 수
 	if (nMaxCount < 1)
 	{
 		AfxMessageBox(_T("No list information.\nLoad or save the list first."), MB_ICONWARNING);
 		return;
 	}
 
-	// cycle count from combo
+	// 콤보에서 Cycle 횟수를 읽는다
 	CString strTemp;
 	int nCycleCount = 1;
 	m_cmbCycle.GetWindowText(strTemp);
 	nCycleCount = _ttoi(strTemp);
 	if (nCycleCount < 1) nCycleCount = 1;
 
-	// collect grid -> m_vecAginList (cols 1..6 = Aging/PTN/Sec/WAD/VISION/ANGLE)
+	// 그리드 -> m_vecAginList (1..6열 = Aging/PTN/Sec/WAD/VISION/ANGLE)
 	m_vecAginList.clear();
 	S_AgingTest sAgingList;
 	for (int i = 0; i < nMaxCount; i++)
@@ -438,7 +438,7 @@ void CDlgSubManual_AgingNew::OnAgingProcStrart()
 		m_vecAginList.push_back(sAgingList);
 	}
 
-	// shared state: EFA and AgingTest modes are mutually exclusive (OCP resets both at every start)
+	// 공유 상태: EFA와 AgingTest 모드는 동시에 켜지지 않는다 (OCP도 시작할 때마다 둘 다 리셋)
 	if (m_pAuroraMgr->GetShareMemoryMgrPtr()->GetSharedMemory() != NULL)
 	{
 		m_pAuroraMgr->GetShareMemoryMgrPtr()->SetSys_AutoAgingMode(false);
@@ -448,7 +448,7 @@ void CDlgSubManual_AgingNew::OnAgingProcStrart()
 		m_pAuroraMgr->GetShareMemoryMgrPtr()->GetSharedMemory()->nJobCount = nCycleCount;
 	}
 
-	// HMI cycle-inspection start (same path as DlgSubOperate cycle button / AgingTest START)
+	// HMI 사이클 검사 시작 (DlgSubOperate 사이클 버튼 / AgingTest START와 같은 경로)
 	CSystemParamShare::GetInstance()->SetCycleCount(nCycleCount);
 	CSystemParamShare::GetInstance()->SetCycleState(true);
 
@@ -466,7 +466,7 @@ void CDlgSubManual_AgingNew::OnAgingProcStrart()
 
 LRESULT CDlgSubManual_AgingNew::OnSpreadDBClick(WPARAM wParam, LPARAM lParam)
 {
-	// forwarded by CMySpreadDll (wParam = component ID, lParam = LPSS_CELLCOORD)
+	// CMySpreadDll이 전달 (wParam = 컴포넌트 ID, lParam = LPSS_CELLCOORD)
 	if ((UINT)wParam != IDC_FPSPREAD_AGING_CELL_STATUS) return 0;
 
 	LPSS_CELLCOORD pCoord = (LPSS_CELLCOORD)lParam;
@@ -479,11 +479,11 @@ LRESULT CDlgSubManual_AgingNew::OnSpreadDBClick(WPARAM wParam, LPARAM lParam)
 }
 
 //=========================================================================
-// list grid
+// 리스트 그리드
 //=========================================================================
 void CDlgSubManual_AgingNew::UpdateListNum()
 {
-	// row numbers into header col 0. Rows 1/2 are labelled T0/T1 to match the OCP_EFA meaning.
+	// 행 번호를 헤더 0열에 쓴다. 1/2행은 OCP_EFA 의미에 맞춰 T0/T1로 표시한다.
 	CString str;
 	int nMaxRow = m_spreadAgingList->GetMaxRows();
 	for (int i = 1; i <= nMaxRow; i++) {
@@ -507,8 +507,8 @@ BOOL CDlgSubManual_AgingNew::IsOfflineStatus()
 
 BOOL CDlgSubManual_AgingNew::LoadAgingInfo()
 {
-	// {EFA_RCP}\{RecipeID}.rcp -> list grid + m_vecAginList, then cell map.
-	// HMI grid coords: header = SS_HEADER row, data rows 1..MaxRows, cols 1..6
+	// {EFA_RCP}\{RecipeID}.rcp -> 리스트 그리드 + m_vecAginList, 이어서 셀 맵.
+	// HMI 그리드 좌표: 헤더 = SS_HEADER 행, 데이터 행 1..MaxRows, 열 1..6
 	CString strEfaRcp = GetEfaRcpFile();
 	if (strEfaRcp.IsEmpty()) return FALSE;
 
@@ -558,8 +558,8 @@ BOOL CDlgSubManual_AgingNew::LoadAgingInfo()
 		m_vecAginList.push_back(sAgingList);
 	}
 
-	UpdateAgingCell();	// build 3-sheet map first
-	MeasCellLoad();		// then fill from [MASECELL]
+	UpdateAgingCell();	// 3시트 맵을 먼저 만들고
+	MeasCellLoad();		// 그다음 [MASECELL]로 채운다
 
 	return TRUE;
 }
@@ -605,7 +605,7 @@ void CDlgSubManual_AgingNew::AgingItemClearAll(BOOL bFixed2)
 
 	if (bFixed2 == FALSE) return;
 
-	// OCP_EFA AgingItemClearAll(TRUE): "EFA list is fixed to 2 rows"
+	// OCP_EFA AgingItemClearAll(TRUE): "EFA 리스트는 2행 고정"
 	for (int i = 0; i < EFA_FIXED_ITEM_COUNT; i++) AgingItemAdd();
 }
 
@@ -620,19 +620,19 @@ void CDlgSubManual_AgingNew::AgingItemAdd()
 	m_spreadAgingList->SetMaxRows(nMaxRow + 1);
 
 	for (int i = 1; i < MAX_EFA_ITEM; i++) {
-		if (i == 1 || i == 4 || i == 5 || i == 6) {	// Aging / WAD / VISION / ANGLE check boxes
+		if (i == 1 || i == 4 || i == 5 || i == 6) {	// Aging / WAD / VISION / ANGLE 체크박스
 			m_spreadAgingList->SetTypeCheckBox(&cellType, SSS_ALIGN_VCENTER | SSS_ALIGN_CENTER, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL, NULL);
 			m_spreadAgingList->SetCellType(i, nMaxRow + 1, &cellType);
 		}
 
-		if (i == 2) {	// pattern 0..25 (OCP_EFA 20260403: 10 -> 25)
+		if (i == 2) {	// 패턴 0..25 (OCP_EFA 20260403: 10 -> 25)
 			sComboList.Empty();
 			for (int p = 0; p <= 25; p++) sComboList += dfcStr(_T("%d\t"), p);
 			m_spreadAgingList->SetTypeComboBox(&cellType, SSS_ALIGN_VCENTER | SSS_ALIGN_CENTER, sComboList);
 			m_spreadAgingList->SetCellType(i, nMaxRow + 1, &cellType);
 		}
 
-		if (i == 3) {	// hold seconds
+		if (i == 3) {	// 유지 시간(초)
 			m_spreadAgingList->SetTypeEdit(&cellType, SSS_ALIGN_VCENTER | SSS_ALIGN_CENTER, 20, NULL, SS_CASE_NOCASE);
 			m_spreadAgingList->SetCellType(i, nMaxRow + 1, &cellType);
 		}
@@ -642,7 +642,7 @@ void CDlgSubManual_AgingNew::AgingItemAdd()
 }
 
 //=========================================================================
-// cell-use map (3 sheets WAD/VISION/ANGLE, [MASECELL] STICK_n = 3bit mask CSV) - same as AgingTest
+// 셀 사용 맵 (3시트 WAD/VISION/ANGLE, [MASECELL] STICK_n = 3비트 마스크 CSV) - AgingTest와 동일
 //=========================================================================
 void CDlgSubManual_AgingNew::UpdateAgingCell()
 {
@@ -738,7 +738,7 @@ void CDlgSubManual_AgingNew::MeasCellSave()
 
 void CDlgSubManual_AgingNew::MeasCellLoad()
 {
-	// [MASECELL] -> grid. Call AFTER UpdateAgingCell built the sheets.
+	// [MASECELL] -> 그리드. UpdateAgingCell이 시트를 만든 뒤에 호출할 것.
 	if (m_spreadAgingMeas == NULL || m_spreadAgingMeas->GetSafeHwnd() == NULL) return;
 
 	CString strEfaRcp = GetEfaRcpFile();
@@ -767,7 +767,7 @@ void CDlgSubManual_AgingNew::MeasCellLoad()
 			resToken = strCellData.Tokenize(_T(","), pos);
 		}
 
-		if (nCellChkArray.GetSize() != nCell) continue;	// row missing/mismatched -> keep defaults
+		if (nCellChkArray.GetSize() != nCell) continue;	// 행 없음/개수 불일치 -> 기본값 유지
 
 		for (int j = 0; j < nCell; j++) {
 			int nMask = nCellChkArray.GetAt(j);
@@ -783,7 +783,7 @@ void CDlgSubManual_AgingNew::MeasCellLoad()
 
 void CDlgSubManual_AgingNew::DblClickFpspreadCellStatus(long Col, long Row)
 {
-	// header dblclick = bulk toggle (corner: whole sheet, column header: that column)
+	// 헤더 더블클릭 = 일괄 토글 (코너: 시트 전체, 열 헤더: 그 열)
 	int nCol = 0, nRow = 0, nMaxCol = 0, nMaxRow = 0;
 	CString strValue;
 
@@ -816,5 +816,5 @@ void CDlgSubManual_AgingNew::DblClickFpspreadCellStatus(long Col, long Row)
 
 void CDlgSubManual_AgingNew::SheetChangedFsMeasArea(short OldSheet, short NewSheet)
 {
-	// OCX-era event; CMySpreadDll switches sheets itself. Kept for the EVENTSINK map.
+	// OCX 시절 이벤트. CMySpreadDll이 시트를 직접 전환한다. EVENTSINK 맵 때문에 남겨 둔다.
 }
