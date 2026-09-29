@@ -23,6 +23,8 @@ mono_crash.*
 [Rr]elease/
 [Rr]eleases/
 x64/
+# NI Vision SDK (header/lib) - x64/ rule exception, required for build
+!CoreFunction/common/NI/x64/
 x86/
 [Ww][Ii][Nn]32/
 [Aa][Rr][Mm]/
