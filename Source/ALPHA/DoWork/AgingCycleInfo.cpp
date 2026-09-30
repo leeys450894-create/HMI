@@ -8,7 +8,7 @@
 #include "pch.h"
 #include "AgingCycleInfo.h"
 
-#define DEFINE_AGING_CYCLE_STICK_MAX	100		// STICK_n scan upper bound (safety)
+// LYS 2026-09-29 Hybrid 3b DEFINE_AGING_CYCLE_STICK_MAX moved to AgingCycleInfo.h
 
 CAgingCycleInfo::CAgingCycleInfo()
 {
@@ -36,10 +36,10 @@ CString CAgingCycleInfo::GetEfaRcpPath()
 void CAgingCycleInfo::Clear()
 {
 	m_vecItem.clear();
-	m_vecCellMask.clear();
+	m_vecSegMask.clear();	// LYS 2026-09-29 Hybrid 3b A1
 }
 
-bool CAgingCycleInfo::Load(CString strRcpName, bool bEfa)	// LYS 2026-09-28 EFA
+bool CAgingCycleInfo::Load(CString strRcpName, bool bEfa, int nSegCount)	// LYS 2026-09-28 EFA
 {
 	Clear();
 
@@ -82,11 +82,32 @@ bool CAgingCycleInfo::Load(CString strRcpName, bool bEfa)	// LYS 2026-09-28 EFA
 		m_vecItem.push_back(sItem);
 	}
 
-	// ---- [MASECELL] cell map: STICK_1.. until missing ----
+	// ---- cell map per segment (LYS 2026-09-29 Hybrid 3b A1): seg 0 = [MASECELL], seg k>=1 = [MASECELL_SEG{k+1}] ----
+	int nSeg = nSegCount;
+	if (nSeg < 1) nSeg = 1;
+	if (nSeg > 8) nSeg = 8;		// = M_SEGMENT_MAX
+	m_vecSegMask.assign(nSeg, std::vector<std::vector<int>>());
+	for (int k = 0; k < nSeg; k++)
+		LoadMaskSection(GetMaskSection(k), strPath, m_vecSegMask[k]);
+
+	return true;
+}
+
+// LYS 2026-09-29 Hybrid 3b A1 mask section name per segment - the AgingTest dialog writes the same names.
+CString CAgingCycleInfo::GetMaskSection(int nSeg)
+{
+	if (nSeg <= 0) return _T("MASECELL");
+	return dfcStr(_T("MASECELL_SEG%d"), nSeg + 1);
+}
+
+// Same scan as the pre-hybrid loader: STICK_1.. until the first missing/empty key, 1024-TCHAR row buffer.
+void CAgingCycleInfo::LoadMaskSection(LPCTSTR szSection, LPCTSTR szPath, std::vector<std::vector<int>>& vecOut)
+{
+	TCHAR cValue[1024];
 	for (int iStick = 0; iStick < DEFINE_AGING_CYCLE_STICK_MAX; iStick++) {
 		ZeroMemory(cValue, sizeof(cValue));
-		GetPrivateProfileString(_T("MASECELL"), dfcStr(_T("STICK_%d"), iStick + 1), _T(""),
-			cValue, _countof(cValue), strPath);
+		GetPrivateProfileString(szSection, dfcStr(_T("STICK_%d"), iStick + 1), _T(""),
+			cValue, _countof(cValue), szPath);
 
 		CString strRow = cValue;
 		if (strRow.IsEmpty()) break;
@@ -99,10 +120,8 @@ bool CAgingCycleInfo::Load(CString strRcpName, bool bEfa)	// LYS 2026-09-28 EFA
 			resToken = strRow.Tokenize(_T(","), pos);
 		}
 
-		m_vecCellMask.push_back(vecRow);
+		vecOut.push_back(vecRow);
 	}
-
-	return true;
 }
 
 const S_AgingTest* CAgingCycleInfo::GetItem(int iItem) const
@@ -138,27 +157,38 @@ int CAgingCycleInfo::GetKindUseCount(int iKind) const
 	return nCount;
 }
 
-int CAgingCycleInfo::GetCellCount(int iStick) const
+int CAgingCycleInfo::GetStickCount(int nSeg) const
 {
-	if (iStick < 0 || iStick >= (int)m_vecCellMask.size()) return 0;
-	return (int)m_vecCellMask[iStick].size();
+	if (nSeg < 0 || nSeg >= (int)m_vecSegMask.size()) return 0;
+	return (int)m_vecSegMask[nSeg].size();
 }
 
-bool CAgingCycleInfo::IsCellUse(int iStick, int iCell, int iKind) const
+int CAgingCycleInfo::GetCellCount(int nSeg, int iStick) const
+{
+	if (nSeg < 0 || nSeg >= (int)m_vecSegMask.size()) return 0;
+	const std::vector<std::vector<int>>& vecMask = m_vecSegMask[nSeg];
+	if (iStick < 0 || iStick >= (int)vecMask.size()) return 0;
+	return (int)vecMask[iStick].size();
+}
+
+bool CAgingCycleInfo::IsCellUse(int nSeg, int iStick, int iCell, int iKind) const
 {
 	if (iKind < 0 || iKind >= enumAgingMeasKind_MAX) return false;
-	if (iStick < 0 || iStick >= (int)m_vecCellMask.size()) return false;
-	if (iCell < 0 || iCell >= (int)m_vecCellMask[iStick].size()) return false;
+	if (nSeg < 0 || nSeg >= (int)m_vecSegMask.size()) return false;
+	const std::vector<std::vector<int>>& vecMask = m_vecSegMask[nSeg];
+	if (iStick < 0 || iStick >= (int)vecMask.size()) return false;
+	if (iCell < 0 || iCell >= (int)vecMask[iStick].size()) return false;
 
-	return (((m_vecCellMask[iStick][iCell] >> iKind) & 0x01) != 0);
+	return (((vecMask[iStick][iCell] >> iKind) & 0x01) != 0);
 }
 
-bool CAgingCycleInfo::IsStickUse(int iStick, int iKind) const
+bool CAgingCycleInfo::IsStickUse(int nSeg, int iStick, int iKind) const
 {
-	if (iStick < 0 || iStick >= (int)m_vecCellMask.size()) return false;
+	if (nSeg < 0 || nSeg >= (int)m_vecSegMask.size()) return false;
+	if (iStick < 0 || iStick >= (int)m_vecSegMask[nSeg].size()) return false;
 
-	for (size_t i = 0; i < m_vecCellMask[iStick].size(); i++) {
-		if (IsCellUse(iStick, (int)i, iKind)) return true;
+	for (size_t i = 0; i < m_vecSegMask[nSeg][iStick].size(); i++) {
+		if (IsCellUse(nSeg, iStick, (int)i, iKind)) return true;
 	}
 
 	return false;

@@ -35,6 +35,10 @@ CMeasureSequenceItemEngine::CMeasureSequenceItemEngine(stAuroraMgrPool &MgrPool)
 	, m_bAgingCycleActive(false)	// LYS 2026-08-06 AgingCycle E3
 	, m_nAgingCurItem(-1)			// LYS 2026-08-06 AgingCycle E3
 	, m_bEfaCycle(false)				// LYS 2026-09-28 EFA
+	, m_nAgingGlassLatch(-1)			// LYS 2026-09-29 Hybrid 3b A4
+	, m_nAgingMaskChecked(0)			// LYS 2026-09-30
+	, m_nAgingStick(-1)				// LYS 2026-09-30
+	, m_bAgingStickSkip(false)		// LYS 2026-09-30
 {
 	ZeroMemory(m_nAgingRepeat, sizeof(m_nAgingRepeat));	// LYS 2026-08-12 AgingCycle R1
 
@@ -785,12 +789,15 @@ int CMeasureSequenceItemEngine::GetMeasureArea()
 //=========================================================================
 // LYS 2026-08-06 AgingCycle E3: 에이징 리스트 사이클 컨텍스트(OCP DoWorkStartMeasOCP_A)
 //=========================================================================
-bool CMeasureSequenceItemEngine::AgingCycleBegin(int nEfaPass)	// LYS 2026-09-28 EFA: nEfaPass >= 0이면 고정 항목
+bool CMeasureSequenceItemEngine::AgingCycleBegin(int nEfaPass, int nStick)	// LYS 2026-09-28 EFA: nEfaPass >= 0이면 고정 항목
 {
 	m_bAgingCycleActive = false;
 	m_nAgingCurItem = -1;
 	m_bEfaCycle = false;	// LYS 2026-09-28 EFA
+	m_nAgingStick = nStick;		// LYS 2026-09-30 OCP nGroup < 1: items / sticks without a cell are skipped
+	m_bAgingStickSkip = false;
 	ZeroMemory(m_nAgingRepeat, sizeof(m_nAgingRepeat));	// LYS 2026-08-12 AgingCycle R1
+	m_strCycleSegTag = (GetRecipeEditMgrPtr() != nullptr) ? GetRecipeEditMgrPtr()->GetSegLogTag() : CString();	// LYS 2026-09-30 Hybrid 3c this cycle's begin/skip/end lines (1 segment: empty)
 
 	if (m_MgrPool_link.pSystemConfigMgr == nullptr || m_MgrPool_link.pSystemConfigMgr->IsOCP() == false)
 		return false;
@@ -799,7 +806,7 @@ bool CMeasureSequenceItemEngine::AgingCycleBegin(int nEfaPass)	// LYS 2026-09-28
 	// 한 스틱은 항목 하나만 보고 스틱 안 루프백이 없다(AgingCycleNextItem -> false).
 	if (nEfaPass >= 0)
 	{
-		if (m_AgingCycleInfo.Load(GetRecipeEditMgrPtr()->GetRecipeID(), true) == false)
+		if (m_AgingCycleInfo.Load(GetRecipeEditMgrPtr()->GetRecipeID(), true, GetRecipeEditMgrPtr()->GetSegmentLoopCount()) == false)	// LYS 2026-09-29 Hybrid 3b A1
 		{
 			m_pLogFileAccessor->KMLOG(WARN, _T("EFA: efa rcp not found - run standard sequence"));
 			return false;
@@ -809,9 +816,25 @@ bool CMeasureSequenceItemEngine::AgingCycleBegin(int nEfaPass)	// LYS 2026-09-28
 		m_nAgingCurItem = nEfaPass;
 		m_bEfaCycle = true;
 		m_bAgingCycleActive = true;
+		CheckAgingMaskShape();	// LYS 2026-09-30
+
+		// LYS 2026-09-30 OCP DoWorkStartMeasICP_EFA skips a stick whose group is empty (nGroup < 1: no contact move, no measure)
+		if (AgingItemHasCell(nEfaPass) == false)
+		{
+			m_bAgingCycleActive = false;
+			m_bEfaCycle = false;
+			m_nAgingCurItem = -1;
+			m_bAgingStickSkip = true;
+
+			CString strSkip;
+			strSkip.Format(_T("EFA: pass %d/%d stick %d skipped - no cell for the item in [%s]%s"), nEfaPass + 1, m_AgingCycleInfo.GetItemCount(),
+				nStick + 1, CAgingCycleInfo::GetMaskSection(GetRecipeEditMgrPtr()->GetActiveSegment()).GetString(), m_strCycleSegTag.GetString());	// LYS 2026-09-30 Hybrid 3c seg tag
+			m_pLogFileAccessor->KMLOG(OPER, strSkip);
+			return false;
+		}
 
 		CString strEfaLog;
-		strEfaLog.Format(_T("EFA: begin pass %d/%d"), nEfaPass + 1, m_AgingCycleInfo.GetItemCount());
+		strEfaLog.Format(_T("EFA: begin pass %d/%d%s"), nEfaPass + 1, m_AgingCycleInfo.GetItemCount(), m_strCycleSegTag.GetString());	// LYS 2026-09-30 Hybrid 3c seg tag
 		m_pLogFileAccessor->KMLOG(OPER, strEfaLog);
 		return true;
 	}
@@ -819,19 +842,50 @@ bool CMeasureSequenceItemEngine::AgingCycleBegin(int nEfaPass)	// LYS 2026-09-28
 	S_RecipeInfo* pRecipeInfo = GetRecipeEditMgrPtr()->GetRecipeInfo();
 	// LYS 2026-08-12 게이트는 전용 레시피 플래그 m_bUseAging_Test를 쓴다.
 	// m_bUseAgingTest_2는 AGING 측정 항목이라 에이징 사이클을 켜면 안 된다.
-	if (pRecipeInfo == nullptr || pRecipeInfo->m_sInspectItem.m_bUseAging_Test == FALSE)
+	if (m_nAgingGlassLatch >= 0)	// LYS 2026-09-29 Hybrid 3b A4 hybrid glass: flag latched from segment 0 at glass start
+	{
+		if (m_nAgingGlassLatch == 0)
+			return false;
+	}
+	else if (pRecipeInfo == nullptr || pRecipeInfo->m_sInspectItem.m_bUseAging_Test == FALSE)
 		return false;
 
-	if (m_AgingCycleInfo.Load(GetRecipeEditMgrPtr()->GetRecipeID()) == false)
+	if (m_AgingCycleInfo.Load(GetRecipeEditMgrPtr()->GetRecipeID(), false, GetRecipeEditMgrPtr()->GetSegmentLoopCount()) == false)	// LYS 2026-09-29 Hybrid 3b A1 all segment mask sections
 	{
 		m_pLogFileAccessor->KMLOG(WARN, _T("AgingCycle: aging rcp not found - run standard sequence"));
 		return false;
 	}
 
+	CheckAgingMaskShape();	// LYS 2026-09-30
 	m_bAgingCycleActive = AgingCycleNextItem();
 
+	// LYS 2026-09-30 OCP DoWorkStartMeasOCP_A skips an item whose group is empty on the stick (nGroup < 1 -> continue: no contact
+	//   move, no pattern, no measure). AgingCycleNextItem already passes over such items; a stick where no USE_AGING item has a
+	//   cell is flagged here and the caller runs only its init step. No USE_AGING item at all = standard sequence (unchanged).
+	if (m_bAgingCycleActive == false && m_nAgingStick >= 0)
+	{
+		for (int i = 0; i < m_AgingCycleInfo.GetItemCount(); i++)
+		{
+			const S_AgingTest* pUse = m_AgingCycleInfo.GetItem(i);
+			if (pUse != nullptr && pUse->m_bUseAging)
+			{
+				m_bAgingStickSkip = true;
+				break;
+			}
+		}
+
+		if (m_bAgingStickSkip)
+		{
+			CString strSkip;
+			strSkip.Format(_T("AgingCycle: stick %d skipped - no cell for the active items in [%s]%s"),	// LYS 2026-09-30 Hybrid 3c seg tag
+				m_nAgingStick + 1, CAgingCycleInfo::GetMaskSection(GetRecipeEditMgrPtr()->GetActiveSegment()).GetString(), m_strCycleSegTag.GetString());
+			m_pLogFileAccessor->KMLOG(OPER, strSkip);
+			return false;
+		}
+	}
+
 	CString strLog;
-	strLog.Format(_T("AgingCycle: begin, items(%d) active(%d)"), m_AgingCycleInfo.GetItemCount(), (int)m_bAgingCycleActive);
+	strLog.Format(_T("AgingCycle: begin, items(%d) active(%d)%s"), m_AgingCycleInfo.GetItemCount(), (int)m_bAgingCycleActive, m_strCycleSegTag.GetString());	// LYS 2026-09-30 Hybrid 3c seg tag
 	m_pLogFileAccessor->KMLOG(OPER, strLog);
 
 	return m_bAgingCycleActive;
@@ -865,6 +919,89 @@ int CMeasureSequenceItemEngine::GetEfaPassCount()
 	return info.GetItemCount();
 }
 
+// LYS 2026-09-29 Hybrid Phase 3b A4: AgingTest on/off is glass-global (D-4 / D-14). Called once per glass by
+//   CDoWorkGlassMeasure::ThreadRun before the pass/segment loop, i.e. before any SegmentBoundary.
+//   Hybrid (N>1): latch segment 0's m_bUseAging_Test so every segment sees the same value
+//   (saving already refuses segments that differ - InRecipeFunc ValidateSegments; the latch covers unvalidated files).
+//   1 segment: -1 = not latched, AgingCycleBegin reads the recipe exactly as before.
+// LYS 2026-09-30 Hybrid Phase 3c A5 nEfaPassCount = ThreadRun's measure-start EFA decision (EFA passes actually run, 0 = not EFA).
+//   Hybrid: published to CRecipeEditMgr as the EFA glass latch, so MeasDone sends EFA^1$ from this decision and does not re-read
+//   the shared flag / EFA rcp at glass end (they can change mid-glass: OnStop, every CIM PPID). 1 segment: latch -1 = MeasDone's own gate.
+void CMeasureSequenceItemEngine::AgingGlassLatch(int nEfaPassCount)
+{
+	m_nAgingGlassLatch = -1;
+	m_nAgingMaskChecked = 0;	// LYS 2026-09-30 new glass: check each segment's mask shape again (1-segment recipes too)
+	GetRecipeEditMgrPtr()->SetEfaGlassLatch(-1);	// LYS 2026-09-30 Hybrid 3c A5 1-segment recipe: no latch, MeasDone keeps its own gate
+
+	C_OutRecipeFunc* pFunc = GetRecipeEditMgrPtr()->GetRecipeFuncPtr();
+	if (pFunc == nullptr || pFunc->GetSegmentCount() <= 1)
+		return;
+
+	S_RecipeMgr* pSeg0 = pFunc->GetSegmentMgr(0);	// read at once - the pointer is valid only until the next SetActiveSegment
+	m_nAgingGlassLatch = (pSeg0 != nullptr && pSeg0->m_sInfo.m_sInspectItem.m_bUseAging_Test != FALSE) ? 1 : 0;
+
+	CString strLog;
+	strLog.Format(_T("[HYBRID] AgingTest flag latched from segment 1 for this glass: %d%s"), m_nAgingGlassLatch,
+		(nEfaPassCount > 0) ? _T(" (unused - EFA glass)") : _T(""));	// LYS 2026-09-30 Hybrid 3c an EFA pass never reads this latch
+	m_pLogFileAccessor->KMLOG(OPER, strLog);
+
+	// LYS 2026-09-30 Hybrid 3c A5 EFA glass latch for MeasDone (EFA^1$): the decision taken at measure start
+	GetRecipeEditMgrPtr()->SetEfaGlassLatch(nEfaPassCount);
+	strLog.Format(_T("[HYBRID] EFA latched for this glass: passes %d (0 = not EFA) - EFA^1$ at MeasDone follows this"), nEfaPassCount);
+	m_pLogFileAccessor->KMLOG(OPER, strLog);
+}
+
+// LYS 2026-09-30 The measure steps read a mask row by index: cells past the row's end are measured (IsAgingCellSkip),
+//   sticks without a row are skipped (IsStickUse). A mask saved from a grid of another size is therefore silent -
+//   2026-09-30 10:29 a 5 x 20 recipe got 10-cell rows from the dialog's default grid and cells K..T were all measured.
+//   Log it once per glass and segment (reset in AgingGlassLatch). Log only: the measure rule does not change.
+void CMeasureSequenceItemEngine::CheckAgingMaskShape()
+{
+	int nSeg = GetRecipeEditMgrPtr()->GetActiveSegment();
+	if (nSeg < 0 || nSeg >= 32) return;
+	if (m_nAgingMaskChecked & (1u << nSeg)) return;
+	m_nAgingMaskChecked |= (1u << nSeg);
+
+	int nRows = m_AgingCycleInfo.GetStickCount(nSeg);
+	if (nRows <= 0)	// no mask section = every cell measured (intended)
+	{
+		if (GetRecipeEditMgrPtr()->GetSegmentLoopCount() > 1)	// LYS 2026-09-30 Hybrid 3c say it once per glass and segment (1 segment: silent as before)
+		{
+			CString strNoMask;
+			strNoMask.Format(_T("%s: mask [%s] not found - segment %d/%d measures every cell of the item's kinds (no mask = measure all)"),
+				m_bEfaCycle ? _T("EFA") : _T("AgingCycle"), CAgingCycleInfo::GetMaskSection(nSeg).GetString(), nSeg + 1, GetRecipeEditMgrPtr()->GetSegmentLoopCount());
+			m_pLogFileAccessor->KMLOG(OPER, strNoMask);
+		}
+		return;
+	}
+
+	S_RecipeData* pRD = GetRecipeEditMgrPtr()->GetRecipeData();
+	if (pRD == nullptr) return;
+	int nStick = (int)pRD->m_vecStick.size();
+
+	CString strBad, strOne;
+	int nBad = 0;
+	for (int i = 0; i < nStick && i < nRows; i++)
+	{
+		int nCell = (int)pRD->m_vecStick[i].m_vecCell.size();
+		int nMask = m_AgingCycleInfo.GetCellCount(nSeg, i);
+		if (nMask == nCell) continue;
+		if (nBad < 8)
+		{
+			strOne.Format(_T("%s%d(%d/%d)"), (nBad > 0) ? _T(",") : _T(""), i + 1, nMask, nCell);
+			strBad += strOne;
+		}
+		nBad++;
+	}
+	if (nBad == 0 && nRows == nStick) return;
+
+	CString strLog;
+	strLog.Format(_T("%s: mask [%s] does not fit the recipe - rows %d / sticks %d, cell count differs on %d row(s)%s%s - cells past a row are measured, sticks without a row are skipped"),
+		m_bEfaCycle ? _T("EFA") : _T("AgingCycle"), CAgingCycleInfo::GetMaskSection(nSeg).GetString(), nRows, nStick, nBad,
+		(nBad > 0) ? _T(", stick(mask/recipe) ") : _T(""), strBad.GetString());
+	m_pLogFileAccessor->KMLOG(WARN, strLog);
+}
+
 bool CMeasureSequenceItemEngine::AgingCycleNextItem()
 {
 	if (m_bEfaCycle) return false;	// LYS 2026-09-28 EFA: pass당 고정 항목 하나, 루프백 없음
@@ -872,13 +1009,31 @@ bool CMeasureSequenceItemEngine::AgingCycleNextItem()
 	for (int i = m_nAgingCurItem + 1; i < m_AgingCycleInfo.GetItemCount(); i++)
 	{
 		const S_AgingTest* pItem = m_AgingCycleInfo.GetItem(i);
-		if (pItem != nullptr && pItem->m_bUseAging)
+		if (pItem != nullptr && pItem->m_bUseAging && AgingItemHasCell(i))	// LYS 2026-09-30 no cell on this stick = skip the item (OCP nGroup < 1)
 		{
 			m_nAgingCurItem = i;
 			return true;
 		}
 	}
 
+	return false;
+}
+
+// LYS 2026-09-30 Does item iItem measure anything on the cycle's stick? The same test as the WAD/VISION/ANGLE step gates
+//   (item flag x IsStickUse of the active segment; no mask section = every stick), so a skipped item is exactly one whose
+//   three measure steps would all have skipped - result rows and repeat indexes do not move. OCP: DoWorkStartMeasOCP_A nGroup.
+bool CMeasureSequenceItemEngine::AgingItemHasCell(int iItem)
+{
+	if (m_nAgingStick < 0) return true;	// no stick given: item-only selection as before
+
+	const S_AgingTest* pItem = m_AgingCycleInfo.GetItem(iItem);
+	if (pItem == nullptr) return false;
+
+	int nSeg = GetRecipeEditMgrPtr()->GetActiveSegment();
+	bool bAll = (m_AgingCycleInfo.GetStickCount(nSeg) == 0);
+	if (pItem->m_bUseProperty && (bAll || m_AgingCycleInfo.IsStickUse(nSeg, m_nAgingStick, enumAgingMeasKind_WAD)))		return true;
+	if (pItem->m_bUseQuality  && (bAll || m_AgingCycleInfo.IsStickUse(nSeg, m_nAgingStick, enumAgingMeasKind_VISION)))	return true;
+	if (pItem->m_bUseAngle    && (bAll || m_AgingCycleInfo.IsStickUse(nSeg, m_nAgingStick, enumAgingMeasKind_ANGLE)))		return true;
 	return false;
 }
 
@@ -917,12 +1072,15 @@ int CMeasureSequenceItemEngine::GetAgingKindMax(int iKind) const
 void CMeasureSequenceItemEngine::AgingCycleEnd()
 {
 	if (m_bAgingCycleActive)
-		m_pLogFileAccessor->KMLOG(OPER, _T("AgingCycle: end"));
+		m_pLogFileAccessor->KMLOG(OPER, _T("AgingCycle: end") + m_strCycleSegTag);	// LYS 2026-09-30 Hybrid 3c tag cached at AgingCycleBegin (the last stick ends after the segment-0 restore)
+	m_strCycleSegTag.Empty();
 
 	m_bAgingCycleActive = false;
 	m_nAgingCurItem = -1;
 	ZeroMemory(m_nAgingRepeat, sizeof(m_nAgingRepeat));	// LYS 2026-08-12 AgingCycle R1
 	m_bEfaCycle = false;	// LYS 2026-09-28 EFA
+	m_nAgingStick = -1;			// LYS 2026-09-30
+	m_bAgingStickSkip = false;
 
 	if (m_MgrPool_link.pShareMemoryMgr != nullptr && m_MgrPool_link.pShareMemoryMgr->GetSharedMemory() != nullptr)
 	{

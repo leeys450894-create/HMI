@@ -9,6 +9,8 @@
 #include <vector>
 #include "common\CommonFunc.h"		// S_AgingTest, dfcStr
 
+#define DEFINE_AGING_CYCLE_STICK_MAX	100		// STICK_n scan upper bound (safety). LYS 2026-09-29 Hybrid 3b moved here from .cpp (AgingTest dialog stale-key cleanup)
+
 // cell-use mask bit index ([MASECELL] bit0..2)
 // LYS 2026-08-06: HMI has no COLOR mode - kinds are WAD/VISION/ANGLE only
 // (OCP 4 kinds WAD/VISION/Color/LCR -> HMI 3 kinds, per user 2026-08-06)
@@ -30,8 +32,12 @@ public:
 	static CString	GetEfaRcpPath();		// LYS 2026-09-28 EFA: 레지스트리 DIR\EFA_RCP (EFA 2-pass rcp 폴더)
 
 	// Loads item list + [MASECELL] cell map for the recipe. FALSE if file/list missing.
-	bool	Load(CString strRcpName, bool bEfa = false);	// LYS 2026-09-28 EFA: bEfa면 {EFA_RCP}\{rcp}.rcp를 읽는다
+	bool	Load(CString strRcpName, bool bEfa = false, int nSegCount = 1);	// LYS 2026-09-28 EFA: bEfa면 {EFA_RCP}\{rcp}.rcp를 읽는다
 	void	Clear();
+
+	// LYS 2026-09-29 Hybrid 3b A1 cell mask per segment: seg 0 = [MASECELL] (unchanged), seg k>=1 = [MASECELL_SEG{k+1}].
+	//   Load(.., nSegCount) reads all sections at once. A missing/empty section = no rows = measure all (same as a file without [MASECELL]).
+	static CString	GetMaskSection(int nSeg);
 
 	int		GetItemCount() const					{ return (int)m_vecItem.size(); }
 	const S_AgingTest*	GetItem(int iItem) const;
@@ -40,14 +46,16 @@ public:
 	// 측정 종류별로 예약할 결과 행 블록 크기를 정하는 데 쓴다.
 	int		GetKindUseCount(int iKind) const;
 
-	int		GetStickCount() const					{ return (int)m_vecCellMask.size(); }
-	int		GetCellCount(int iStick) const;
+	// LYS 2026-09-29 Hybrid 3b A1 nSeg = segment index (0 for 1-segment recipes), no default on purpose
+	int		GetStickCount(int nSeg) const;		// 0 = no mask rows for the segment = measure all
+	int		GetCellCount(int nSeg, int iStick) const;
 
 	// kind = enumAgingMeasKind_*. Out-of-range -> false.
-	bool	IsCellUse(int iStick, int iCell, int iKind) const;
-	bool	IsStickUse(int iStick, int iKind) const;	// any cell of the stick
+	bool	IsCellUse(int nSeg, int iStick, int iCell, int iKind) const;
+	bool	IsStickUse(int nSeg, int iStick, int iKind) const;	// any cell of the stick
 
 private:
 	std::vector<S_AgingTest>		m_vecItem;
-	std::vector<std::vector<int>>	m_vecCellMask;		// [stick][cell] = 4bit mask
+	std::vector<std::vector<std::vector<int>>>	m_vecSegMask;	// LYS 2026-09-29 Hybrid 3b A1 [seg][stick][cell] = 3bit mask
+	void	LoadMaskSection(LPCTSTR szSection, LPCTSTR szPath, std::vector<std::vector<int>>& vecOut);
 };

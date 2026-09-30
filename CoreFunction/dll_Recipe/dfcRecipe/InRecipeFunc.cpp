@@ -2,6 +2,7 @@
 #include "dfcRecipe.h"
 #include "InRecipeFunc.h"
 
+#include <memory>	// LYS 2026-09-29 unique_ptr
 #ifdef _DEBUG 
 #undef THIS_FILE
 static char THIS_FILE[] = __FILE__;
@@ -119,7 +120,7 @@ BOOL	C_InRecipeFunc::LoadRcpFile (CString strRcpName)
 
 	// LYS 2026-09-29 Hybrid Phase 1 로드 전 상태 보관 - 본문/꼬리 어디서든 실패(태그 불일치, 토큰 부족 예외)하면 통째로 되돌린다
 	//                (지금까지는 GetAt 범위 초과 예외가 그대로 튀어 앱이 죽었다 - P0-3 HMI.rcp 사례)
-	S_RecipeMgr sBakMgr = m_recipeMgr;
+	std::unique_ptr<S_RecipeMgr> pBakMgr (new S_RecipeMgr (m_recipeMgr));	// LYS 2026-09-29 스택 오버플로 방지 - S_RecipeMgr는 고정 문자 배열만 약 88KB라 스택에 두지 않는다
 	std::vector<S_RecipeMgr>	 vecBakSeg	 = m_vecSegments;
 	std::vector<S_SegmentHeader> vecBakHdr	 = m_vecSegHeader;
 	std::vector<BOOL>			 vecBakAlign = m_vecSegAlignOK;
@@ -155,7 +156,7 @@ BOOL	C_InRecipeFunc::LoadRcpFile (CString strRcpName)
 	}
 
 	if (!bOK) {
-		m_recipeMgr	  = sBakMgr;
+		m_recipeMgr	  = *pBakMgr;
 		m_vecSegments  = vecBakSeg;
 		m_vecSegHeader = vecBakHdr;
 		m_vecSegAlignOK = vecBakAlign;
@@ -751,20 +752,20 @@ BOOL	C_InRecipeFunc::LoadHybridTail (CStdioFile *pFile, int nVersion)
 		}
 	}
 
-	S_RecipeMgr sSeg0 = m_recipeMgr;
+	std::unique_ptr<S_RecipeMgr> pSeg0 (new S_RecipeMgr (m_recipeMgr));	// LYS 2026-09-29 스택 오버플로 방지 - S_RecipeMgr는 고정 문자 배열만 약 88KB라 스택에 두지 않는다
 	std::vector<S_RecipeMgr> vecSeg;
-	vecSeg.push_back (sSeg0);
+	vecSeg.push_back ((*pSeg0));
 
 	for (int k = 1; k < nSeg; k++) {
 		if (ReadString (pFile).Trim () != _T("_SEGMENT_")) return FALSE;
 		if (ReadInt (pFile) != k) return FALSE;
 
 		// 기준값 = 세그먼트 0 사본: 파일에 없는 필드(SRM 램프 등)는 지금처럼 "직전 값 유지" 의미로 세그먼트 0 값을 물려받는다
-		m_recipeMgr = sSeg0;
+		m_recipeMgr = (*pSeg0);
 		if (!LoadRcpSections (pFile, nVersion)) return FALSE;
 		vecSeg.push_back (m_recipeMgr);
 	}
-	m_recipeMgr = sSeg0;
+	m_recipeMgr = (*pSeg0);
 
 	if (ReadString (pFile).Trim () != _T("_HYBRID_END_")) return FALSE;
 
@@ -1033,7 +1034,7 @@ void	C_InRecipeFunc::SaveRcpSections (CStdioFile *pFile)
 void	C_InRecipeFunc::SaveRcpSegments (CStdioFile *pFile)
 {
 	CommitActiveSegment ();
-	S_RecipeMgr sStage = m_recipeMgr;
+	std::unique_ptr<S_RecipeMgr> pStage (new S_RecipeMgr (m_recipeMgr));	// LYS 2026-09-29 스택 오버플로 방지 - S_RecipeMgr는 고정 문자 배열만 약 88KB라 스택에 두지 않는다
 	int nSeg = (int)m_vecSegments.size ();
 
 	m_recipeMgr = m_vecSegments[0];
@@ -1058,7 +1059,7 @@ void	C_InRecipeFunc::SaveRcpSegments (CStdioFile *pFile)
 	}
 	WriteString (pFile, _T("_HYBRID_END_"));
 
-	m_recipeMgr = sStage;
+	m_recipeMgr = *pStage;
 }
 
 // LYS 2026-09-29 Hybrid Phase 1 저장 전 검사. 빈 문자열 = 통과. 1세그먼트 레시피는 검사하지 않는다(기존 동작 불변).
@@ -1105,6 +1106,14 @@ CString	C_InRecipeFunc::ValidateSegments ()
 		}
 		nTotalStick += nStick;
 
+		// LYS 2026-09-29 셀/스틱 좌표가 글라스 안에 있는지 (세그먼트 2 헤드 Y -1492.668 사고 재발 방지)
+		{
+			CString strWhat;
+			strWhat.Format (_T("세그먼트 %d [%s]"), k + 1, strName.GetString ());
+			strErr = CheckRecipeLayout (pSeg, strWhat);
+			if (!strErr.IsEmpty ()) return strErr;
+		}
+
 		if (k == 0) continue;
 		// LYS 2026-09-29 Hybrid Phase 2 런타임 ProbeCheck와 같은 슬롯만 비교 - OCP는 P5(인덱스 4)만 쓴다(MakeCell도 P5만 기록).
 		//                P1~P4에는 예전 레시피 값이 남아 있어 전부 비교하면 같은 카드인데도 거부됐다
@@ -1132,6 +1141,17 @@ CString	C_InRecipeFunc::ValidateSegments ()
 	if (nTotalStick > M_SEGMENT_STICK_MAX) {
 		strErr.Format (_T("전체 스틱 수 %d개가 최대 %d개를 넘습니다."), nTotalStick, M_SEGMENT_STICK_MAX);
 		return strErr;
+	}
+	// LYS 2026-09-29 Hybrid Phase 3b A7 result-row block G = sum of cells x sticks over all segments.
+	//   AgingTest repeat / WAD Multi Point blocks are G rows each, so G itself must fit in the APD AREA_MAX_CNT.
+	//   (K x P is checked at auto start in ALPHA - the aging / WAD multi sidecar files are not read here.)
+	{
+		int nGlassArea = 0;
+		for (int k = 0; k < nSeg; k++) nGlassArea += GetSegmentCellCount (k) * GetSegmentStickCount (k);
+		if (nGlassArea > M_RESULT_AREA_MAX) {
+			strErr.Format (_T("전체 셀 수(세그먼트별 스틱 수 x 셀 수의 합) %d개가 결과 행 최대 %d개를 넘습니다."), nGlassArea, M_RESULT_AREA_MAX);
+			return strErr;
+		}
 	}
 	return strErr;
 }
@@ -1168,4 +1188,44 @@ void	C_InRecipeFunc::CollapseToActiveSegment ()
 	m_vecSegHeader.assign (1, sHdr);
 	m_vecSegAlignOK.assign (1, FALSE);
 	m_nActiveSegment = 0;
+}
+
+// LYS 2026-09-29 셀/스틱 좌표 글라스 범위 검사 (MakeCell 셀 정보 오류 재발 방지)
+//   사고: GlassInfo [OCP_TEST_SHORT_GLASS]의 셀/스틱 수가 다른 제품 값이라 180도 세그먼트에 셀 12개 x 156.75 (1724 mm)가 생겼고
+//         헤드 Y 목표 -1492.668이 SW 리밋(MN -916)에 걸려 세그먼트 1 측정 13분 뒤에 멈췄다.
+//   셀 방향(헤드 Y) 길이 = GLASS ROTATE 90/270이면 1500, 0/180이면 925. 스틱 방향은 나머지.
+//   셀 X +- 셀 크기 X/2, 스틱 글라스 좌표(StageY + CONTACT GAP) +- 셀 크기 Y/2 가 글라스 반폭 + 1 mm 안이어야 한다.
+//   (MakeCell 생성식: StageY = 글라스 좌표 - CONTACT GAP). 빈 문자열 = 통과
+CString	C_InRecipeFunc::CheckRecipeLayout (const S_RecipeMgr *pMgr, CString strWhat)
+{
+	CString strErr;
+	if (pMgr == NULL || pMgr->m_sData.m_vecStick.empty ()) return strErr;
+
+	int	   nRot			  = pMgr->m_sInfo.m_sOptionItem.m_nGlsRotate;
+	double dCellLen		  = (nRot % 2 == 1) ? RCP_GLASS_SIZE_X : RCP_GLASS_SIZE_Y;
+	double dStickLen	  = (nRot % 2 == 1) ? RCP_GLASS_SIZE_Y : RCP_GLASS_SIZE_X;
+	double dHalfCellSize  = fabs (pMgr->m_sMap.m_fCellSize.x) / 2.0;
+	double dHalfStickSize = fabs (pMgr->m_sMap.m_fCellSize.y) / 2.0;
+	const double dTol	  = 1.0;
+
+	for (size_t s = 0; s < pMgr->m_sData.m_vecStick.size (); s++) {
+		const S_StickInfo &sStick = pMgr->m_sData.m_vecStick[s];
+
+		double dStickPos = sStick.m_fStageY + pMgr->m_sMap.m_fContactOffset;
+		if (fabs (dStickPos) + dHalfStickSize > dStickLen / 2.0 + dTol) {
+			strErr.Format (_T("%s 스틱 %d 위치가 글라스 범위를 벗어났습니다.\n\n스틱 글라스 좌표 %.3f (셀 크기 %.3f), 허용 +-%.1f (GLASS ROTATE %d도, %.0f mm 방향)\n\n셀 정보(GlassInfo)의 스틱 수(CELL STICK COUNT)·CELL to CELL Y·BLOCK DISTANCE를 확인하세요."),
+						   strWhat.GetString (), sStick.m_nStickNum, dStickPos, pMgr->m_sMap.m_fCellSize.y, dStickLen / 2.0, nRot * 90, dStickLen);
+			return strErr;
+		}
+
+		for (size_t c = 0; c < sStick.m_vecCell.size (); c++) {
+			const S_CellInfo &sCell = sStick.m_vecCell[c];
+			if (fabs (sCell.m_fCellX) + dHalfCellSize > dCellLen / 2.0 + dTol) {
+				strErr.Format (_T("%s 스틱 %d 셀 %s(%d번째) 위치가 글라스 범위를 벗어났습니다.\n\n셀 X %.3f (셀 크기 %.3f), 허용 +-%.1f (GLASS ROTATE %d도, %.0f mm 방향)\n\n셀 정보(GlassInfo)의 셀 수(CELL COUNT)·CELL to CELL X·BLOCK DISTANCE를 확인하세요."),
+							   strWhat.GetString (), sStick.m_nStickNum, sCell.m_chCellID, (int)c + 1, sCell.m_fCellX, pMgr->m_sMap.m_fCellSize.x, dCellLen / 2.0, nRot * 90, dCellLen);
+				return strErr;
+			}
+		}
+	}
+	return strErr;
 }

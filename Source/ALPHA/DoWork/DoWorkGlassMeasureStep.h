@@ -79,6 +79,8 @@ public:
 	// OCP 대응 = GetMeasUse(bit, stProbe[0].m_iUsedMeas)를 셀마다 평가
 	// (JOB_Proc.cpp:13775 / 17012 / 17546). true면 해당 셀을 건너뛴다.
 	bool IsAgingCellSkip(int iKind, int iCell);
+	// LYS 2026-09-29 Hybrid 3b A3 segment index for the AgingRcp mask = active segment (0 for 1-segment recipes)
+	int  GetAgingMaskSeg();
 	
 
 	void ResetGlassMeasAreaInfo();

@@ -34,6 +34,27 @@
 #endif
 
 
+// LYS 2026-09-29 OCP 스틱 이동/P5 접촉 판단 - 기존 게이트(jsyoon 2022.05.12)는 광학 측정 6항목(특성/화질/색/시야각/TSP/LCR)만 본다.
+//   HMI는 P1~P4가 따로 있어 그대로 두고, OCP는 P5 하나가 OST/R-TEST/AGING/EFA까지 겸하므로 전기 항목만 켜져 있어도
+//   스틱으로 이동해서 접촉해야 한다. 전에는 스테이지가 스틱으로 가지도 않고 미접촉 상태로 OST를 보냈다(하이브리드 OOS 2026-09-29).
+static bool NeedOcpElectContact (CBaseSequenceImpl *pShareItem, CMeasureSequenceItemEngine *pEngine, const S_RecipeInfo *pInfo)
+{
+	if (pShareItem == nullptr || pInfo == nullptr)
+		return false;
+	if (!(pShareItem->GetSystemConfigMgrPtr() && pShareItem->GetSystemConfigMgrPtr()->IsOCP()))
+		return false;
+
+	const S_InspectItem &sItem = pInfo->m_sInspectItem;
+	if (sItem.m_bUseElect_1 || sItem.m_bUseRTest || sItem.m_bUseAgingTest_2)
+		return true;
+
+	// 강화 검사(AgingTest 사이클)/EFA 패스 중에는 항목별 선택이 레시피 검사 항목 대신 사이클 항목을 따른다
+	if (pEngine != NULL && (pEngine->IsAgingCycleActive() || pEngine->IsEfaCycle()))
+		return true;
+
+	return false;
+}
+
 void CDoWorkGlassMeasureStep::SetMeasureStick(int nMeasureStick)
 {
 	//if (m_pStInnerID != nullptr)
@@ -457,12 +478,19 @@ bool CDoWorkGlassMeasureStep::IsAgingCellSkip(int iKind, int iCell)
 
 	CAgingCycleInfo* pInfo = m_pMeasSeqItemEngine->GetAgingCycleInfo();
 	if (pInfo == NULL) return false;
-	if (pInfo->GetStickCount() <= 0) return false;
+	int nSeg = GetAgingMaskSeg();	// LYS 2026-09-29 Hybrid 3b A3
+	if (pInfo->GetStickCount(nSeg) <= 0) return false;
 
 	int iStick = GetMeasureStick();
-	if (iCell < 0 || iCell >= pInfo->GetCellCount(iStick)) return false;
+	if (iCell < 0 || iCell >= pInfo->GetCellCount(nSeg, iStick)) return false;
 
-	return (pInfo->IsCellUse(iStick, iCell, iKind) == false);
+	return (pInfo->IsCellUse(nSeg, iStick, iCell, iKind) == false);
+}
+
+// LYS 2026-09-29 Hybrid 3b A3 the mask segment follows the active segment, the same source as the m_vecStick data the step reads
+int CDoWorkGlassMeasureStep::GetAgingMaskSeg()
+{
+	return m_pShareItem->GetRecipeEditMgrPtr()->GetActiveSegment();
 }
 
 void CDoWorkGlassMeasureStep::LogAgingRow(int iKind, const TCHAR* szTag, int* pnAreaNum)
@@ -471,10 +499,10 @@ void CDoWorkGlassMeasureStep::LogAgingRow(int iKind, const TCHAR* szTag, int* pn
 	if (m_pMeasSeqItemEngine->IsAgingCycleActive() == false) return;
 
 	CString strLog;
-	strLog.Format(_T("AgingCycle row: %s item(%d) repeat(%d) stick(%d) row(%d,%d)"),
+	strLog.Format(_T("AgingCycle row: %s item(%d) repeat(%d) stick(%d) row(%d,%d)%s"),	// LYS 2026-09-30 Hybrid 3c seg + rowbase tag (1 segment: empty)
 		szTag, m_pMeasSeqItemEngine->GetAgingCurItem() + 1,
 		m_pMeasSeqItemEngine->GetAgingRepeat(iKind), GetMeasureStick(),
-		pnAreaNum[0], pnAreaNum[1]);
+		pnAreaNum[0], pnAreaNum[1], (LPCTSTR)m_pShareItem->GetRecipeEditMgrPtr()->GetSegLogTag(TRUE));
 	m_pShareItem->GetLogFileAccessorPtr()->KMLOG(SYST, strLog);
 }
 
@@ -669,6 +697,9 @@ bool CDoWorkGlassMeasureStep_MoveMeasureArea::Run()
 		if (pRecipeInfo->m_sInspectItem.m_bUseLCR_8 == TRUE)
 			bUseMeas = true;
 	}
+
+	if (bUseMeas == false && NeedOcpElectContact (m_pShareItem, m_pMeasSeqItemEngine, pRecipeInfo))	// LYS 2026-09-29 OCP 전기 항목만 켜진 스틱도 이동+접촉
+		bUseMeas = true;
 
 	// jsyoon 2022.06.13 add
 	bool bUserStop = false;
@@ -991,6 +1022,7 @@ bool CDoWorkGlassMeasureStep_MoveMeasureArea::Run()
 	}
 	else
 	{
+		m_pShareItem->GetLogFileAccessorPtr()->KMLOG(SYST, _T("CDoWorkGlassMeasureStep_MoveMeasureArea Skip : no inspection item needs the stick"));	// LYS 2026-09-29
 		Sleep(500);	// 2023.05.10 change 1000 to 500
 	}
 
@@ -1957,6 +1989,9 @@ bool CDoWorkGlassMeasureStep_Probe_Contact::Run()
 			bUseMeas = true;
 	}
 
+	if (bUseMeas == false && NeedOcpElectContact (m_pShareItem, m_pMeasSeqItemEngine, pRecipeInfo))	// LYS 2026-09-29 OCP 전기 항목만 켜진 스틱도 이동+접촉
+		bUseMeas = true;
+
 	if (bUseMeas == true)
 	{
 		//if (pRecipeInfo != nullptr)
@@ -1990,7 +2025,8 @@ bool CDoWorkGlassMeasureStep_Probe_Contact::Run()
 			dEMove += dZOffset;
 			{
 				CString strLog;
-				strLog.Format(_T("Probe Contact stick=%d offset=%.4f -> Z5 target=%.4f (End %.4f + OD %.4f)"), iStick + 1, dZOffset, dEMove + dOD, dEMove - dZOffset, dOD);
+				strLog.Format(_T("Probe Contact stick=%d offset=%.4f -> Z5 target=%.4f (End %.4f + OD %.4f)%s"), iStick + 1, dZOffset, dEMove + dOD, dEMove - dZOffset, dOD,
+					(LPCTSTR)m_pShareItem->GetRecipeEditMgrPtr()->GetSegLogTag());	// LYS 2026-09-30 Hybrid 3c seg tag (1 segment: empty)
 				m_pShareItem->GetLogFileAccessorPtr()->KMLOG(SYST, strLog);
 			}
 
@@ -2043,6 +2079,10 @@ bool CDoWorkGlassMeasureStep_Probe_Contact::Run()
 		m_pShareItem->GetLogFileAccessorPtr()->KMLOG(SYST, _T("CDoWorkGlassMeasureStep_Probe_Contact End."));
 
 		CMCCLogMgr::GetInstance()->SetMCC_Action(MCC_A_STEP_MEAS_N_CONTACT_PROC, true, 0);
+	}
+	else
+	{
+		m_pShareItem->GetLogFileAccessorPtr()->KMLOG(SYST, _T("CDoWorkGlassMeasureStep_Probe_Contact Skip : no inspection item needs contact"));	// LYS 2026-09-29
 	}
 
 	CWindowEventHandler::GetInstance()->SendMessageToUI(enumWndID_FRAME, WM_MSG_UPDATE_POSITION_STATE, enumDoWorkStateID_MEASURE_End, NULL);
@@ -2105,8 +2145,8 @@ bool CDoWorkGlassMeasureStep_Measure_WAD::Run()
 		{
 			const S_AgingTest* pAgingItem = m_pMeasSeqItemEngine->GetAgingCycleInfo()->GetItem(m_pMeasSeqItemEngine->GetAgingCurItem());
 			bUseMeas = (pAgingItem != NULL && pAgingItem->m_bUseProperty)
-				&& (m_pMeasSeqItemEngine->GetAgingCycleInfo()->GetStickCount() == 0
-					|| m_pMeasSeqItemEngine->GetAgingCycleInfo()->IsStickUse(GetMeasureStick(), enumAgingMeasKind_WAD));
+				&& (m_pMeasSeqItemEngine->GetAgingCycleInfo()->GetStickCount(GetAgingMaskSeg()) == 0
+					|| m_pMeasSeqItemEngine->GetAgingCycleInfo()->IsStickUse(GetAgingMaskSeg(), GetMeasureStick(), enumAgingMeasKind_WAD));
 
 			if (bUseMeas && m_pShareItem->GetShareMemoryMgrPtr()->GetSharedMemory() != NULL)
 			{
@@ -2403,15 +2443,35 @@ bool CDoWorkGlassMeasureStep_Measure_WAD::Run()
 			if (pMultiMgr != nullptr && pReciepInfo != nullptr && pReciepInfo->m_sInspectItem.m_bUseSpec_Multi == TRUE)	// LYS 2026-07-23 recipe option gate
 			{
 				pMultiMgr->ResetRunState();
-				pMultiMgr->LoadMeasData(m_pShareItem->GetRecipeEditMgrPtr()->GetRecipeID());
+				// LYS 2026-09-30 Hybrid 3d B5 load the active segment ([DATA_SEG{k+1}] / [MASECELL_SEG{k+1}] for k >= 1).
+				//   1-segment recipe: GetActiveSegment() = 0 -> the same [DATA]/[MASECELL] read and log as before
+				int nMultiSegCnt = m_pShareItem->GetRecipeEditMgrPtr()->GetSegmentLoopCount();
+				int nMultiSeg = m_pShareItem->GetRecipeEditMgrPtr()->GetActiveSegment();
+				bool bMultiFirstLoad = (pMultiMgr->GetLoadedSegment() != nMultiSeg);	// log once per segment, not per stick / AgingCycle item
+				pMultiMgr->LoadMeasSegment(m_pShareItem->GetRecipeEditMgrPtr()->GetRecipeID(), nMultiSeg);
+				if (nMultiSegCnt > 1 && bMultiFirstLoad && pMultiMgr->IsDataFound() == false)
+				{
+					CString strMultiLog;
+					strMultiLog.Format(_T("[HYBRID] WAD Multi segment %d/%d: [%s] not found - base point only"), nMultiSeg + 1, nMultiSegCnt, CWadMultiMeasMgr::GetDataSection(nMultiSeg).GetString());
+					m_pShareItem->GetLogFileAccessorPtr()->KMLOG(SYST, strMultiLog);
+				}
 				if (pMultiMgr->IsMultiMode() && pMultiMgr->GetUseSize() > 0)
 				{
 					bMultiWad = true;
 					bOneCell = FALSE;
 					nOneCellCnt = 1;
-					m_pShareItem->GetLogFileAccessorPtr()->KMLOG(SYST, _T("WAD Multi Point mode active"));
+					if (nMultiSegCnt > 1)
+					{
+						CString strMultiLog;
+						strMultiLog.Format(_T("WAD Multi Point mode active (segment %d/%d, points %d)"), nMultiSeg + 1, nMultiSegCnt, pMultiMgr->GetPointCount());
+						m_pShareItem->GetLogFileAccessorPtr()->KMLOG(SYST, strMultiLog);
+					}
+					else
+						m_pShareItem->GetLogFileAccessorPtr()->KMLOG(SYST, _T("WAD Multi Point mode active"));
 				}
 			}
+			else if (pMultiMgr != nullptr && m_pShareItem->GetRecipeEditMgrPtr()->GetSegmentLoopCount() > 1)
+				pMultiMgr->ResetRunState();	// LYS 2026-09-30 Hybrid 3d B6 Multi on -> off segment in one glass: drop the run state (else the next WAD frame is len 132)
 			//
 
 			for (int k = 0; k < nOneCellCnt; k++)
@@ -2466,7 +2526,7 @@ bool CDoWorkGlassMeasureStep_Measure_WAD::Run()
 								continue;
 
 							nCellNum = nUseCELLID[iProbe]; //nCellNum = nMeasArea * iProbe + i;
-							iCellStatus = m_pShareItem->GetShareMemoryMgrPtr()->GetSharedMemory()->nCellStatus[nCellNum][nMeasStick];
+							iCellStatus = m_pShareItem->GetShareMemoryMgrPtr()->GetSharedMemory()->nCellStatus[nCellNum][m_pShareItem->GetRecipeEditMgrPtr()->ToCellStatusStick(nMeasStick)];
 
 							// PROBE CHECK
 													// PROBE CHECK
@@ -2747,7 +2807,7 @@ bool CDoWorkGlassMeasureStep_Measure_WAD::Run()
 							if (bMeasProbe[iProbe] == true)
 							{
 								nCellNum = nUseCELLID[iProbe];  // nCellNum = nMeasArea * iProbe + i;
-								m_pShareItem->GetShareMemoryMgrPtr()->GetSharedMemory()->nCellStatus[nCellNum][nMeasStick] = df_CELLSTATE_WAD_START;
+								m_pShareItem->GetShareMemoryMgrPtr()->GetSharedMemory()->nCellStatus[nCellNum][m_pShareItem->GetRecipeEditMgrPtr()->ToCellStatusStick(nMeasStick)] = df_CELLSTATE_WAD_START;
 							}
 						}
 
@@ -2764,7 +2824,7 @@ bool CDoWorkGlassMeasureStep_Measure_WAD::Run()
 						int nAgingRep = 0;
 						if (m_pMeasSeqItemEngine != NULL && m_pMeasSeqItemEngine->IsAgingCycleActive())
 							nAgingRep = m_pMeasSeqItemEngine->GetAgingRepeat(enumAgingMeasKind_WAD);
-						int nAgingRow = nArea * nMaxStick * nAgingRep;
+						int nAgingRow = m_pShareItem->GetRecipeEditMgrPtr()->GetGlassRowBlock(nArea, nMaxStick) * nAgingRep;
 
 						if (bOneCell) {
 							// LYS 2026-08-18 nOneCellCnt는 1 고정(bOneCell 폐기)이라 k는 항상 0이고
@@ -2805,8 +2865,8 @@ bool CDoWorkGlassMeasureStep_Measure_WAD::Run()
 									CString strMPLog;
 									// LYS 2026-08-18 리스트 0행은 base 자리표시자라 n/N 표기에서 제외한다
 									// (아래 "WAD Multi Point" 표시 로그와 동일 규칙).
-									strMPLog.Format(_T("WAD MultiPoint: probe(%d) point(base) stick(%d) cell(%d) row(%d)"),
-										p, GetMeasureStick(), nUseCELLID[p], nAreaNum[p]);
+									strMPLog.Format(_T("WAD MultiPoint: probe(%d) point(base) stick(%d) cell(%d) row(%d)%s"),	// LYS 2026-09-30 Hybrid 3c seg + rowbase tag
+										p, GetMeasureStick(), nUseCELLID[p], nAreaNum[p], (LPCTSTR)m_pShareItem->GetRecipeEditMgrPtr()->GetSegLogTag(TRUE));
 									m_pShareItem->GetLogFileAccessorPtr()->KMLOG(SYST, strMPLog);
 								}
 							}
@@ -2831,7 +2891,7 @@ bool CDoWorkGlassMeasureStep_Measure_WAD::Run()
 								if (bMeasProbe[iProbe] == true)
 								{
 									nCellNum = nUseCELLID[iProbe];  //nCellNum = nMeasArea * iProbe + i;
-									m_pShareItem->GetShareMemoryMgrPtr()->GetSharedMemory()->nCellStatus[nCellNum][nMeasStick] = df_CELLSTATE_WAD_END;
+									m_pShareItem->GetShareMemoryMgrPtr()->GetSharedMemory()->nCellStatus[nCellNum][m_pShareItem->GetRecipeEditMgrPtr()->ToCellStatusStick(nMeasStick)] = df_CELLSTATE_WAD_END;
 								}
 							}
 						}
@@ -2959,13 +3019,13 @@ bool CDoWorkGlassMeasureStep_Measure_WAD::Run()
 									int nBlock = m_pMeasSeqItemEngine->GetAgingKindMax(enumAgingMeasKind_WAD)
 										+ m_pMeasSeqItemEngine->GetAgingRepeat(enumAgingMeasKind_WAD) * (nPtTotal - 1)
 										+ (ip - 1);
-									nAreaNumM[0] = nUseCELLID[0] + (nArea * nMeasStick) + 1 + (nArea * nMaxStick * nBlock);
-									nAreaNumM[1] = nUseCELLID[1] + (nArea * nMeasStick) + 1 + (nArea * nMaxStick * nBlock);
+									nAreaNumM[0] = nUseCELLID[0] + (nArea * nMeasStick) + 1 + (m_pShareItem->GetRecipeEditMgrPtr()->GetGlassRowBlock(nArea, nMaxStick) * nBlock);
+									nAreaNumM[1] = nUseCELLID[1] + (nArea * nMeasStick) + 1 + (m_pShareItem->GetRecipeEditMgrPtr()->GetGlassRowBlock(nArea, nMaxStick) * nBlock);
 								}
 								else
 								{
-								nAreaNumM[0] = nUseCELLID[0] + (nArea * nMeasStick) + 1 + (nArea * nMaxStick * ip);
-								nAreaNumM[1] = nUseCELLID[1] + (nArea * nMeasStick) + 1 + (nArea * nMaxStick * ip);
+								nAreaNumM[0] = nUseCELLID[0] + (nArea * nMeasStick) + 1 + (m_pShareItem->GetRecipeEditMgrPtr()->GetGlassRowBlock(nArea, nMaxStick) * ip);
+								nAreaNumM[1] = nUseCELLID[1] + (nArea * nMeasStick) + 1 + (m_pShareItem->GetRecipeEditMgrPtr()->GetGlassRowBlock(nArea, nMaxStick) * ip);
 								}
 								m_pShareItem->GetCommTcpIpFactoryMgr()->SetMeasUseInfo(bMeasProbe, nAreaNumM, nTimeOut);
 								LogAgingRow(enumAgingMeasKind_WAD, _T("WAD-MP"), nAreaNumM);	// LYS 2026-08-12 AgingCycle R1
@@ -2975,8 +3035,8 @@ bool CDoWorkGlassMeasureStep_Measure_WAD::Run()
 								{
 									if (bMeasProbe[pl] != true) continue;
 									CString strMPLog;
-									strMPLog.Format(_T("WAD MultiPoint: probe(%d) point(%d/%d) idx(%d) stick(%d) cell(%d) row(%d)"),
-										pl, nRunCnt - 1, pMultiMgr->GetUseSize() - 1, ip, GetMeasureStick(), nUseCELLID[pl], nAreaNumM[pl]);
+									strMPLog.Format(_T("WAD MultiPoint: probe(%d) point(%d/%d) idx(%d) stick(%d) cell(%d) row(%d)%s"),	// LYS 2026-09-30 Hybrid 3c seg + rowbase tag
+										pl, nRunCnt - 1, pMultiMgr->GetUseSize() - 1, ip, GetMeasureStick(), nUseCELLID[pl], nAreaNumM[pl], (LPCTSTR)m_pShareItem->GetRecipeEditMgrPtr()->GetSegLogTag(TRUE));
 									m_pShareItem->GetLogFileAccessorPtr()->KMLOG(SYST, strMPLog);
 								}
 
@@ -3061,8 +3121,8 @@ bool CDoWorkGlassMeasureStep_Measure_VISION::Run()
 		{
 			const S_AgingTest* pAgingItem = m_pMeasSeqItemEngine->GetAgingCycleInfo()->GetItem(m_pMeasSeqItemEngine->GetAgingCurItem());
 			bUseMeas = (pAgingItem != NULL && pAgingItem->m_bUseQuality)
-				&& (m_pMeasSeqItemEngine->GetAgingCycleInfo()->GetStickCount() == 0
-					|| m_pMeasSeqItemEngine->GetAgingCycleInfo()->IsStickUse(GetMeasureStick(), enumAgingMeasKind_VISION));
+				&& (m_pMeasSeqItemEngine->GetAgingCycleInfo()->GetStickCount(GetAgingMaskSeg()) == 0
+					|| m_pMeasSeqItemEngine->GetAgingCycleInfo()->IsStickUse(GetAgingMaskSeg(), GetMeasureStick(), enumAgingMeasKind_VISION));
 
 			if (bUseMeas && m_pShareItem->GetShareMemoryMgrPtr()->GetSharedMemory() != NULL)
 			{
@@ -3406,7 +3466,7 @@ bool CDoWorkGlassMeasureStep_Measure_VISION::Run()
 							continue;
 
 						nCellNum = nUseCELLID[iProbe]; //nCellNum = nMeasArea * iProbe + i;
-						iCellStatus = m_pShareItem->GetShareMemoryMgrPtr()->GetSharedMemory()->nCellStatus[nCellNum][nMeasStick];
+						iCellStatus = m_pShareItem->GetShareMemoryMgrPtr()->GetSharedMemory()->nCellStatus[nCellNum][m_pShareItem->GetRecipeEditMgrPtr()->ToCellStatusStick(nMeasStick)];
 
 						// PROBE CHECK
 						/*!
@@ -3777,7 +3837,7 @@ bool CDoWorkGlassMeasureStep_Measure_VISION::Run()
 						if (bMeasProbe[iProbe] == true)
 						{
 							nCellNum = nUseCELLID[iProbe]; //nCellNum = nMeasArea * iProbe + i;
-							m_pShareItem->GetShareMemoryMgrPtr()->GetSharedMemory()->nCellStatus[nCellNum][nMeasStick] = df_CELLSTATE_VISION_START;
+							m_pShareItem->GetShareMemoryMgrPtr()->GetSharedMemory()->nCellStatus[nCellNum][m_pShareItem->GetRecipeEditMgrPtr()->ToCellStatusStick(nMeasStick)] = df_CELLSTATE_VISION_START;
 						}
 					}
 
@@ -3802,7 +3862,7 @@ bool CDoWorkGlassMeasureStep_Measure_VISION::Run()
 					// (OCP nAreaNum + nMaxArea * nQualityRepeat, JOB_Proc.cpp:17133).
 					int nAgingRow = 0;
 					if (m_pMeasSeqItemEngine != NULL && m_pMeasSeqItemEngine->IsAgingCycleActive())
-						nAgingRow = nArea * nMaxStick * m_pMeasSeqItemEngine->GetAgingRepeat(enumAgingMeasKind_VISION);
+						nAgingRow = m_pShareItem->GetRecipeEditMgrPtr()->GetGlassRowBlock(nArea, nMaxStick) * m_pMeasSeqItemEngine->GetAgingRepeat(enumAgingMeasKind_VISION);
 					//nAreaNum[0] = cellFirst.m_nArea + (nArea * iStick);
 					//nAreaNum[1] = cellSecond.m_nArea + (nArea * iStick);
 
@@ -3847,7 +3907,7 @@ bool CDoWorkGlassMeasureStep_Measure_VISION::Run()
 							if (bMeasProbe[iProbe] == true)
 							{
 								nCellNum = nUseCELLID[iProbe]; // nCellNum = nMeasArea * iProbe + (i - 1);
-								m_pShareItem->GetShareMemoryMgrPtr()->GetSharedMemory()->nCellStatus[nCellNum][nMeasStick] = df_CELLSTATE_VISION_END;
+								m_pShareItem->GetShareMemoryMgrPtr()->GetSharedMemory()->nCellStatus[nCellNum][m_pShareItem->GetRecipeEditMgrPtr()->ToCellStatusStick(nMeasStick)] = df_CELLSTATE_VISION_END;
 							}
 						}
 					}
@@ -4242,7 +4302,7 @@ bool CDoWorkGlassMeasureStep_Measure_COLOR::Run()
 								continue;
 
 							nCellNum = nUseCELLID[iProbe]; //nCellNum = nMeasArea * iProbe + i;
-							iCellStatus = m_pShareItem->GetShareMemoryMgrPtr()->GetSharedMemory()->nCellStatus[nCellNum][nMeasStick];
+							iCellStatus = m_pShareItem->GetShareMemoryMgrPtr()->GetSharedMemory()->nCellStatus[nCellNum][m_pShareItem->GetRecipeEditMgrPtr()->ToCellStatusStick(nMeasStick)];
 
 							// PROBE CHECK
 													// PROBE CHECK
@@ -4493,7 +4553,7 @@ bool CDoWorkGlassMeasureStep_Measure_COLOR::Run()
 							if (bMeasProbe[iProbe] == true)
 							{
 								nCellNum = nUseCELLID[iProbe]; //nCellNum = nMeasArea * iProbe + i;
-								m_pShareItem->GetShareMemoryMgrPtr()->GetSharedMemory()->nCellStatus[nCellNum][nMeasStick] = df_CELLSTATE_COLOR_START;
+								m_pShareItem->GetShareMemoryMgrPtr()->GetSharedMemory()->nCellStatus[nCellNum][m_pShareItem->GetRecipeEditMgrPtr()->ToCellStatusStick(nMeasStick)] = df_CELLSTATE_COLOR_START;
 							}
 						}
 
@@ -4524,7 +4584,7 @@ bool CDoWorkGlassMeasureStep_Measure_COLOR::Run()
 								if (bMeasProbe[iProbe] == true)
 								{
 									nCellNum = nUseCELLID[iProbe]; //nCellNum = nMeasArea * iProbe + i;
-									m_pShareItem->GetShareMemoryMgrPtr()->GetSharedMemory()->nCellStatus[nCellNum][nMeasStick] = df_CELLSTATE_COLOR_END;
+									m_pShareItem->GetShareMemoryMgrPtr()->GetSharedMemory()->nCellStatus[nCellNum][m_pShareItem->GetRecipeEditMgrPtr()->ToCellStatusStick(nMeasStick)] = df_CELLSTATE_COLOR_END;
 								}
 							}
 						}
@@ -4588,8 +4648,8 @@ bool CDoWorkGlassMeasureStep_Measure_ANGLE::Run()
 		{
 			const S_AgingTest* pAgingItem = m_pMeasSeqItemEngine->GetAgingCycleInfo()->GetItem(m_pMeasSeqItemEngine->GetAgingCurItem());
 			bUseMeas = (pAgingItem != NULL && pAgingItem->m_bUseAngle)
-				&& (m_pMeasSeqItemEngine->GetAgingCycleInfo()->GetStickCount() == 0
-					|| m_pMeasSeqItemEngine->GetAgingCycleInfo()->IsStickUse(GetMeasureStick(), enumAgingMeasKind_ANGLE));
+				&& (m_pMeasSeqItemEngine->GetAgingCycleInfo()->GetStickCount(GetAgingMaskSeg()) == 0
+					|| m_pMeasSeqItemEngine->GetAgingCycleInfo()->IsStickUse(GetAgingMaskSeg(), GetMeasureStick(), enumAgingMeasKind_ANGLE));
 
 			if (bUseMeas && m_pShareItem->GetShareMemoryMgrPtr()->GetSharedMemory() != NULL)
 			{
@@ -4903,7 +4963,7 @@ bool CDoWorkGlassMeasureStep_Measure_ANGLE::Run()
 							continue;
 
 						nCellNum = nUseCELLID[iProbe]; // nCellNum = nMeasArea* iProbe + i;
-						iCellStatus = m_pShareItem->GetShareMemoryMgrPtr()->GetSharedMemory()->nCellStatus[nCellNum][nMeasStick];
+						iCellStatus = m_pShareItem->GetShareMemoryMgrPtr()->GetSharedMemory()->nCellStatus[nCellNum][m_pShareItem->GetRecipeEditMgrPtr()->ToCellStatusStick(nMeasStick)];
 
 						// PROBE CHECK
 												// PROBE CHECK
@@ -5222,7 +5282,7 @@ bool CDoWorkGlassMeasureStep_Measure_ANGLE::Run()
 						if (bMeasProbe[iProbe] == true)
 						{
 							nCellNum = nUseCELLID[iProbe]; //nCellNum = nMeasArea * iProbe + i;
-							m_pShareItem->GetShareMemoryMgrPtr()->GetSharedMemory()->nCellStatus[nCellNum][nMeasStick] = df_CELLSTATE_ANGLE_START;
+							m_pShareItem->GetShareMemoryMgrPtr()->GetSharedMemory()->nCellStatus[nCellNum][m_pShareItem->GetRecipeEditMgrPtr()->ToCellStatusStick(nMeasStick)] = df_CELLSTATE_ANGLE_START;
 						}
 					}
 
@@ -5233,7 +5293,7 @@ bool CDoWorkGlassMeasureStep_Measure_ANGLE::Run()
 					// (OCP 레이아웃, JOB_Proc.cpp:13934 계열). 사이클 비활성 시 0.
 					int nAgingRow = 0;
 					if (m_pMeasSeqItemEngine != NULL && m_pMeasSeqItemEngine->IsAgingCycleActive())
-						nAgingRow = nArea * nMaxStick * m_pMeasSeqItemEngine->GetAgingRepeat(enumAgingMeasKind_ANGLE);
+						nAgingRow = m_pShareItem->GetRecipeEditMgrPtr()->GetGlassRowBlock(nArea, nMaxStick) * m_pMeasSeqItemEngine->GetAgingRepeat(enumAgingMeasKind_ANGLE);
 					//nAreaNum[0] = cellFirst.m_nArea + (nArea * iStick);
 					//nAreaNum[1] = cellSecond.m_nArea + (nArea * iStick);
 					nAreaNum[0] = nUseCELLID[0] + (nArea * nMeasStick) + 1 + nAgingRow;
@@ -5285,7 +5345,7 @@ bool CDoWorkGlassMeasureStep_Measure_ANGLE::Run()
 							if (bMeasProbe[iProbe] == true)
 							{
 								nCellNum = nUseCELLID[iProbe]; //nCellNum = nMeasArea * iProbe + i;
-								m_pShareItem->GetShareMemoryMgrPtr()->GetSharedMemory()->nCellStatus[nCellNum][nMeasStick] = df_CELLSTATE_ANGLE_END;
+								m_pShareItem->GetShareMemoryMgrPtr()->GetSharedMemory()->nCellStatus[nCellNum][m_pShareItem->GetRecipeEditMgrPtr()->ToCellStatusStick(nMeasStick)] = df_CELLSTATE_ANGLE_END;
 							}
 						}
 					}
@@ -5706,7 +5766,7 @@ bool CDoWorkGlassMeasureStep_Measure_VISION_COLOR::Run()
 							continue;
 
 						nCellNum = nUseCELLID[iProbe]; //nCellNum = nMeasArea * iProbe + i;
-						iCellStatus = m_pShareItem->GetShareMemoryMgrPtr()->GetSharedMemory()->nCellStatus[nCellNum][nMeasStick];
+						iCellStatus = m_pShareItem->GetShareMemoryMgrPtr()->GetSharedMemory()->nCellStatus[nCellNum][m_pShareItem->GetRecipeEditMgrPtr()->ToCellStatusStick(nMeasStick)];
 
 						// PROBE CHECK
 						/*!
@@ -6067,7 +6127,7 @@ bool CDoWorkGlassMeasureStep_Measure_VISION_COLOR::Run()
 						if (bMeasProbe[iProbe] == true)
 						{
 							nCellNum = nUseCELLID[iProbe]; //nCellNum = nMeasArea * iProbe + i;
-							m_pShareItem->GetShareMemoryMgrPtr()->GetSharedMemory()->nCellStatus[nCellNum][nMeasStick] = df_CELLSTATE_VISION_START;
+							m_pShareItem->GetShareMemoryMgrPtr()->GetSharedMemory()->nCellStatus[nCellNum][m_pShareItem->GetRecipeEditMgrPtr()->ToCellStatusStick(nMeasStick)] = df_CELLSTATE_VISION_START;
 						}
 					}
 
@@ -6140,7 +6200,7 @@ bool CDoWorkGlassMeasureStep_Measure_VISION_COLOR::Run()
 							if (bMeasProbe[iProbe] == true)
 							{
 								nCellNum = nUseCELLID[iProbe]; // nCellNum = nMeasArea * iProbe + (i - 1);
-								m_pShareItem->GetShareMemoryMgrPtr()->GetSharedMemory()->nCellStatus[nCellNum][nMeasStick] = df_CELLSTATE_VISION_END;
+								m_pShareItem->GetShareMemoryMgrPtr()->GetSharedMemory()->nCellStatus[nCellNum][m_pShareItem->GetRecipeEditMgrPtr()->ToCellStatusStick(nMeasStick)] = df_CELLSTATE_VISION_END;
 							}
 						}
 					}
@@ -6394,9 +6454,14 @@ bool CDoWorkGlassMeasureStep_AGING_PTN::Run()
 	const S_AgingTest* pItem = m_pMeasSeqItemEngine->GetAgingCycleInfo()->GetItem(m_pMeasSeqItemEngine->GetAgingCurItem());
 	if (pItem == NULL) return true;
 
+	// LYS 2026-09-30 Hybrid 3c A12 segment tag + the PG model that got the PTN (measure thread: the active header may be read). 1 segment: empty, line unchanged
+	CRecipeEditMgr* pRcp = m_pShareItem->GetRecipeEditMgrPtr();
+	CString strPtnTag = pRcp->GetSegLogTag();
+	if (!strPtnTag.IsEmpty()) strPtnTag += _T(" pg(") + pRcp->GetPGRecipeName() + _T(")");
+
 	CString strLog;
-	strLog.Format(_T("CDoWorkGlassMeasureStep_AGING_PTN Start. item(%d) ptn(%d) sec(%d)"),
-		m_pMeasSeqItemEngine->GetAgingCurItem() + 1, pItem->m_nPtnRGB, pItem->m_nPtnSec);
+	strLog.Format(_T("CDoWorkGlassMeasureStep_AGING_PTN Start. item(%d) ptn(%d) sec(%d)%s"),
+		m_pMeasSeqItemEngine->GetAgingCurItem() + 1, pItem->m_nPtnRGB, pItem->m_nPtnSec, strPtnTag.GetString());
 	m_pShareItem->GetLogFileAccessorPtr()->KMLOG(SYST, strLog);
 
 	// progress: row = current item(1-base), col 2 = lighting

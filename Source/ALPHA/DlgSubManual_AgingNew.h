@@ -42,6 +42,11 @@ protected:
 	HFONT			m_hfont;
 	int				m_nHlRow;			// 마지막으로 하이라이트한 리스트 셀 (그리드 좌표)
 	int				m_nHlCol;
+	CString			m_strViewRcp;		// LYS 2026-09-30 recipe the cell grid was built for (empty = default grid)
+	int				m_nMaskMismatch;	// LYS 2026-09-30 rows with a wrong cell count found by the last MeasCellLoad
+	CComboBox		m_cmbSeg;			// LYS 2026-09-30 Hybrid 3c A13 segment selector (hybrid recipes only, hidden otherwise)
+	int				m_nViewSeg;			// LYS 2026-09-30 Hybrid 3c A13 segment shown / saved (0 for 1-segment recipes), m_strViewRcp = its recipe stamp
+	int				m_nSegLostTick;		// LYS 2026-09-30 Hybrid 3c A13 (S2 fix) consecutive idle timer ticks that saw a 1-segment recipe (hide on 2)
 
 public:
 	static CString GetEfaRcpPath();		// 끝에 백슬래시가 붙은 "{DIR\EFA_RCP}\"
@@ -55,8 +60,13 @@ public:
 	void AgingItemAdd();
 	void UpdateAgingCell();
 	int	 GetMeasUse(int iMeas, int nMeasUse);
-	void MeasCellSave();
+	BOOL MeasCellSave();				// LYS 2026-09-30 Hybrid 3c A13 FALSE = not written (stale / overwrite declined)
 	void MeasCellLoad();
+	BOOL IsMaskViewStale();			// LYS 2026-09-30 grid not built for the current recipe -> popup + TRUE
+	BOOL ConfirmMaskOverwrite();		// LYS 2026-09-30 mismatched rows -> Yes/No before saving
+	BOOL IsSegmented();				// LYS 2026-09-30 Hybrid 3c A13 recipe has more than 1 segment
+	BOOL IsHybridRunBusy();			// LYS 2026-09-30 Hybrid 3c A13 engine running / cycle state (raw flags, no IsSegmented precondition)
+	void UpdateSegmentCombo();		// LYS 2026-09-30 Hybrid 3c A13 fill / hide the selector, reset or clamp m_nViewSeg
 	afx_msg LRESULT OnSpreadDBClick(WPARAM wParam, LPARAM lParam);
 
 protected:
@@ -77,6 +87,7 @@ protected:
 	afx_msg void OnItemSave();
 	afx_msg void OnLoadAgingInfo();
 	afx_msg void OnAgingProcStrart();
+	afx_msg void OnSelchangeSeg();		// LYS 2026-09-30 Hybrid 3c A13
 	afx_msg void OnTimer(UINT_PTR nIDEvent);
 
 	DECLARE_MESSAGE_MAP()

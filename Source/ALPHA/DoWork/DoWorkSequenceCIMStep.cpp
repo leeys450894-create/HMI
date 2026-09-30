@@ -775,7 +775,21 @@ bool CDoWorkSequenceCIMStep_MeasDone::Run()
 	// WORKSTATE_CHANGE^_CAA$는 보류 (OCP는 Format 인자가 빠진 채 보낸다 - D-3).
 	{
 		bool bEfaGlass = false;
-		if (m_pShareItem->GetSystemConfigMgrPtr() != nullptr && m_pShareItem->GetSystemConfigMgrPtr()->IsOCP())
+		// LYS 2026-09-30 Hybrid 3c A5 hybrid glass: EFA^1$ follows the EFA decision taken at measure start (engine AgingGlassLatch) -
+		//   no shared flag / EFA rcp re-read here. It can differ from the gate below when a step index was missing (EFA did not run)
+		//   or the shared flag was cleared mid-glass. -1 = not latched (1-segment recipe) -> the gate below exactly as before.
+		int nEfaLatch = m_pShareItem->GetRecipeEditMgrPtr()->GetEfaGlassLatch();
+		if (nEfaLatch >= 0)
+		{
+			bEfaGlass = (nEfaLatch > 0);
+			if (bEfaGlass)	// latch 0 (hybrid glass, not EFA) stays silent like the non-EFA 1-segment path
+			{
+				CString strLatch;
+				strLatch.Format(_T("CDoWorkSequenceCIMStep_MeasDone : [HYBRID] EFA glass latch %d pass(es) - no flag / file re-read"), nEfaLatch);
+				m_pShareItem->GetLogFileAccessorPtr()->KMLOG(SYST, strLatch);
+			}
+		}
+		else if (m_pShareItem->GetSystemConfigMgrPtr() != nullptr && m_pShareItem->GetSystemConfigMgrPtr()->IsOCP())
 		{
 			bool bFlag = m_pShareItem->GetShareMemoryMgrPtr()->GetSys_NewAgingMode();
 			S_RecipeInfo* pEfaRcp = m_pShareItem->GetRecipeEditMgrPtr()->GetRecipeInfo();

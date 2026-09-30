@@ -209,7 +209,9 @@ void CMCCLogMgr::UpdateSensor()
 {
 	// TODO: 여기에 구현 코드 추가.
 	short* pFDDCMap = NULL;
-	VTM_FOR_FDC	FDCMap;
+	// LYS 2026-09-29 스택 오버플로 방지 - VTM_FOR_FDC 전체(160,016 바이트)를 스택에 복사하지 않는다. 쓰는 것은 stFDCWData 뿐이라
+	//                아래에서 공유메모리의 그 배열만 stData로 직접 복사한다 (하이브리드 MakeCell 확인창 중 UI 타이머에서 1MB 스택 초과)
+	//VTM_FOR_FDC	FDCMap;
 	pFDDCMap = (short*)m_pSharedFDC;
 
 	if (pFDDCMap == nullptr)
@@ -217,7 +219,7 @@ void CMCCLogMgr::UpdateSensor()
 
 
 
-	memcpy(&FDCMap, pFDDCMap, sizeof(VTM_FOR_FDC));
+	//memcpy(&FDCMap, pFDDCMap, sizeof(VTM_FOR_FDC));	// LYS 2026-09-29
 	int i = 0;
 //	double dFDCData[100];
 //	ZeroMemory(&dFDCData, sizeof(dFDCData));
@@ -244,7 +246,8 @@ void CMCCLogMgr::UpdateSensor()
 ////	strcpy_s(m_pSharedFDC->FDCValue.stMainWData[20].szData, sizeof(m_pSharedFDC->FDCValue.stMainWData[20].szData), T2A(_T("20220602")));
 
 	//memcpy(stData, FDCMap.FDCValue.stFDCWData, sizeof(RDATA) * 1000);
-	memcpy(stData, FDCMap.FDCValue.stFDCWData, sizeof(stData));	// LYS 2026-09-19 위와 같은 이유 - 두 배열 모두 RDATA[FDC_WDATA_END]
+	memcpy(stData, ((VTM_FOR_FDC*)pFDDCMap)->FDCValue.stFDCWData, sizeof(stData));	// LYS 2026-09-29
+	//memcpy(stData, FDCMap.FDCValue.stFDCWData, sizeof(stData));	// LYS 2026-09-19 위와 같은 이유 - 두 배열 모두 RDATA[FDC_WDATA_END]
 
 //	if (m_lLiveCheck != FDCMap.lLiveCheck)
 	{

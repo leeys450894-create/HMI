@@ -297,6 +297,8 @@ CDlgSubOperate::CDlgSubOperate(CAuroraMgr *pAuroraMgr, CWnd* pParent /*=NULL*/)
 	m_lMeasDoneColorVision = 0;
 	m_lMeasDoneColorAngle = 0;
 	m_lMeasDoneColorColor = 0;
+	m_nHybridMapSegCnt = 0;		// LYS 2026-09-30 Hybrid Phase 6
+	m_nHybridMapFrameSeg = -2;
 }
 
 CDlgSubOperate::~CDlgSubOperate()
@@ -2793,6 +2795,11 @@ void CDlgSubOperate::GenGlassPath()
 		}
 	}
 
+	// LYS 2026-09-30 Hybrid Phase 6 operate cell map: >= 2 segments -> every segment on one layout, cached for the timer.
+	//   1 segment: BuildHybridCellMap returns false without touching anything else and the code below runs unchanged.
+	if (BuildHybridCellMap() == true)
+		return;
+
 	CELLINFO stGlassInfo;
 	ZeroMemory(&stGlassInfo, sizeof(stGlassInfo));
 
@@ -3593,6 +3600,13 @@ void CDlgSubOperate::UpdateRecipeInformation()
 
 void CDlgSubOperate::UpdateCellStatus()
 {
+	// LYS 2026-09-30 Hybrid Phase 6: a hybrid recipe draws the all-segment cache built by GenGlassPath. 1 segment: code below unchanged.
+	if (m_nHybridMapSegCnt > 1)
+	{
+		UpdateHybridCellStatus();
+		return;
+	}
+
 	RECIPELAYOUT stRecipe;
 	stRecipe.arrCellLayout.RemoveAll();
 
@@ -3614,6 +3628,8 @@ void CDlgSubOperate::UpdateCellStatus()
 	int nStickCnt = 0, nCellCnt = 0;
 	nStickCnt = pslData->m_nStickCnt;
 	nCellCnt = pslData->m_nCellCnt;
+	// LYS 2026-09-29 Hybrid 3b A8 no stick base here: m_aryCellGroup below is a 1-segment layout (status base 0).
+	//   LYS 2026-09-30 hybrid recipes never reach this code - UpdateHybridCellStatus draws every segment with its own base (Phase 6).
 
 	bool bChange = false;
 	for (iX = 0; iX < 100; iX++)
@@ -3871,6 +3887,334 @@ void CDlgSubOperate::UpdateCellStatus()
 	UpdateMeasCell(&stRecipe);
 }
 
+
+// LYS 2026-09-30 Hybrid Phase 6 operate cell map (docs/HybridGlass_Porting_Plan.md Phase 6)
+//   One fixed glass frame for every segment (this chart never rotates): x = 1500 side, y = 925 side drawn downward
+//   (SetMaxSize(..., 0, 1, 0, -1)), origin = glass centre.
+//     s = StageY + m_sMap.m_fContactOffset  (glass coordinate of the stick = inverse of MakeCell), c = CellX (head Y)
+//     rotate 1 (R90, long side)   : centre (-c, -s), size (CellSize.x, CellSize.y)
+//     other rotates (R180, short) : centre ( s, -c), size (CellSize.y, CellSize.x)
+//   LYS 2026-09-30 geometry keys on footprint: rotate 3 (R270) lays cells along 1500 like rotate 1 (CheckRecipeLayout) and
+//     takes the rotate 1 geometry; the status column and fallback names keep MakeCellID's rotate == 1 rule. Same as MakeCell GlassMap.
+//   That is where the 1-segment view (GenGlassPath block math) puts the cells of each rotation - identical for rotate 2;
+//   for rotate 1 the 1-segment view mirrors the stick rows about the segment's own centre, here they stay rigid.
+//   Status slot = nCellStatus[cell][segment stick base + MakeCellID stick] (rotate 1 direct, else N-1-i), i.e. the
+//   column the measure step / PG write through ToCellStatusStick while that segment is active.
+//   Segment vectors are read only here: GenGlassPath runs at recipe open / glass start with segment 0 active.
+bool CDlgSubOperate::BuildHybridCellMap()
+{
+	CRecipeEditMgr* pRcp = m_pAuroraMgr->GetRecipeEditMgrPtr();
+	C_OutRecipeFunc* pFunc = (pRcp != nullptr) ? pRcp->GetRecipeFuncPtr() : nullptr;
+	if (pFunc == nullptr || pRcp->GetSegmentLoopCount() <= 1)
+	{
+		m_nHybridMapSegCnt = 0;			// 1 segment: pre-hybrid GenGlassPath / UpdateCellStatus
+		m_aryHybridMapCell.RemoveAll();
+		m_aryHybridSegBox.RemoveAll();
+		return false;
+	}
+
+	CString strLog;
+	int nActive = pRcp->GetActiveSegment();
+	if (nActive != 0 && m_nHybridMapSegCnt > 1)
+	{
+		// not expected (no UI rebuild is posted mid-glass): keep the cache rather than read vectors the measure thread may be copying
+		strLog.Format(_T("[HYBRID] Cell map rebuild skipped - active segment %d, cache kept"), nActive + 1);
+		CLogWrapper::GetInstance()->KMLOG(WARN, strLog);
+		m_nHybridMapFrameSeg = -2;
+		return true;
+	}
+
+	m_aryHybridMapCell.RemoveAll();
+	m_aryHybridSegBox.RemoveAll();
+	m_aryCellGroup.RemoveAll();			// the 1-segment layout is not drawn while a hybrid recipe is open
+	m_nHybridMapFrameSeg = -2;
+
+	int nSegCnt = pFunc->GetSegmentCount();
+	int nBase = 0, nSkip = 0;
+	for (int k = 0; k < nSegCnt; k++)
+	{
+		S_RecipeMgr* pSeg = pFunc->GetSegmentMgr(k);	// valid until the next SetActiveSegment - nothing of it is kept
+		int nStick = (pSeg != nullptr) ? (int)pSeg->m_sData.m_vecStick.size() : 0;
+		int nRot = (pSeg != nullptr) ? pSeg->m_sInfo.m_sOptionItem.m_nGlsRotate : 0;
+		bool bLong = (nRot == 1);			// MakeCellID rule: only rotate 1 is direct
+		bool bLongFoot = (nRot % 2 == 1);	// LYS 2026-09-30 geometry: rotate 1 / 3 = cells along 1500
+		double dContact = 0.0, dW = 0.0, dH = 0.0;
+		if (pSeg != nullptr)
+		{
+			dContact = pSeg->m_sMap.m_fContactOffset;
+			dW = bLongFoot ? pSeg->m_sMap.m_fCellSize.x : pSeg->m_sMap.m_fCellSize.y;
+			dH = bLongFoot ? pSeg->m_sMap.m_fCellSize.y : pSeg->m_sMap.m_fCellSize.x;
+		}
+		double dBox[4] = { 1.0e9, 1.0e9, -1.0e9, -1.0e9 };
+		int nCellSeg = 0, nCellPerStick = 0;
+
+		for (int i = 0; i < nStick; i++)
+		{
+			const S_StickInfo& sStick = pSeg->m_sData.m_vecStick[i];
+			double dS = sStick.m_fStageY + dContact;
+			int nCol = nBase + (bLong ? i : (nStick - i - 1));
+			int nCells = (int)sStick.m_vecCell.size();
+			if (nCells > nCellPerStick) nCellPerStick = nCells;
+
+			for (int j = 0; j < nCells; j++)
+			{
+				if (j >= 100 || nCol < 0 || nCol >= 50)	// nCellStatus[100][50]
+				{
+					nSkip++;
+					continue;
+				}
+
+				const S_CellInfo& sCell = sStick.m_vecCell[j];
+				double dCX = bLongFoot ? -sCell.m_fCellX : dS;
+				double dCY = bLongFoot ? -dS : -sCell.m_fCellX;
+
+				S_HybridMapCell stMap;
+				ZeroMemory(&stMap, sizeof(stMap));
+				if (sCell.m_chCellID[0] != 0)
+					_tcsncpy_s(stMap.szName, _countof(stMap.szName), sCell.m_chCellID, _TRUNCATE);
+				else if (bLong)
+					_stprintf_s(stMap.szName, _countof(stMap.szName), _T("%c%02d"), 65 + j, i + 1);	// MakeCellID
+				else
+					_stprintf_s(stMap.szName, _countof(stMap.szName), _T("%c%02d"), 65 + nStick - i - 1, j + 1);
+				stMap.dSX = dCX - dW / 2;
+				stMap.dEX = dCX + dW / 2;
+				stMap.dSY = dCY - dH / 2;
+				stMap.dEY = dCY + dH / 2;
+				stMap.nCell = j;
+				stMap.nStick = nCol;
+				stMap.nSeg = k;
+				m_aryHybridMapCell.Add(stMap);
+				nCellSeg++;
+
+				if (stMap.dSX < dBox[0]) dBox[0] = stMap.dSX;
+				if (stMap.dSY < dBox[1]) dBox[1] = stMap.dSY;
+				if (stMap.dEX > dBox[2]) dBox[2] = stMap.dEX;
+				if (stMap.dEY > dBox[3]) dBox[3] = stMap.dEY;
+			}
+		}
+
+		for (int n = 0; n < 4; n++)
+			m_aryHybridSegBox.Add(dBox[n]);
+
+		strLog.Format(_T("[HYBRID] Cell map segment %d/%d rot=%d base=%d stick=%d cell=%d drawn=%d contact=%.4f x[%.1f,%.1f] y[%.1f,%.1f]"),
+			k + 1, nSegCnt, nRot, nBase, nStick, nCellPerStick, nCellSeg, dContact, dBox[0], dBox[2], dBox[1], dBox[3]);
+		CLogWrapper::GetInstance()->KMLOG(OPER, strLog);
+
+		nBase += nStick;
+	}
+	m_nHybridMapSegCnt = nSegCnt;
+
+	int nMaxCell = (m_pParentCellMeasDlg != nullptr) ? m_pParentCellMeasDlg->m_chartOrbit.m_nMaxCell : 0;
+	int nTotal = (int)m_aryHybridMapCell.GetSize();
+	strLog.Format(_T("[HYBRID] Cell map %d segments, %d cells, %d sticks, skipped %d (chart CELL_MAX %d)"), nSegCnt, nTotal, nBase, nSkip, nMaxCell);
+	CLogWrapper::GetInstance()->KMLOG((nSkip > 0 || nTotal > nMaxCell) ? WARN : OPER, strLog);
+
+	// same view call as the 1-segment tail of GenGlassPath (active segment = 0 here)
+	int nRotView = pRcp->GetRecipeInfo()->m_sOptionItem.m_nGlsRotate;
+	if (nRotView < 0 || nRotView > 3) nRotView = 0;
+	RotateGlassPath(nRotView);
+	return true;
+}
+
+// LYS 2026-09-30 Hybrid Phase 6 1 s timer for a hybrid recipe: redraw when a cached slot changed or the framed segment changed.
+//   Reads only the cache, nCellStatus / nBFCellStatus and the int active segment (A8: no segment vectors during a run).
+//   Statuses of finished segments stay on screen because every segment owns its own nCellStatus columns.
+void CDlgSubOperate::UpdateHybridCellStatus()
+{
+	VTM_SYSTEM* pShm = m_pAuroraMgr->GetShareMemoryMgrPtr()->GetSharedMemory();
+	int nCnt = (int)m_aryHybridMapCell.GetSize();
+
+	int nFrameSeg = -1;		// white frame = segment being measured, only while a cycle runs
+	if (CSystemParamShare::GetInstance()->IsCycleState() == true)
+		nFrameSeg = m_pAuroraMgr->GetRecipeEditMgrPtr()->GetActiveSegment();
+	if (nFrameSeg < 0 || nFrameSeg >= m_nHybridMapSegCnt || (nFrameSeg * 4 + 3) >= (int)m_aryHybridSegBox.GetSize())
+		nFrameSeg = -1;
+	else if (m_aryHybridSegBox[nFrameSeg * 4 + 0] > m_aryHybridSegBox[nFrameSeg * 4 + 2])
+		nFrameSeg = -1;	// segment without drawn cells
+
+	bool bChange = (nFrameSeg != m_nHybridMapFrameSeg);
+	for (int i = 0; i < nCnt && bChange == false; i++)
+	{
+		const S_HybridMapCell& stMap = m_aryHybridMapCell[i];
+		if (pShm->nCellStatus[stMap.nCell][stMap.nStick] != pShm->nBFCellStatus[stMap.nCell][stMap.nStick])
+			bChange = true;
+	}
+	if (bChange == false)
+		return;
+
+	RECIPELAYOUT stRecipe;
+	stRecipe.arrCellLayout.RemoveAll();
+	CELLLAYOUT stCell;
+
+	for (int i = 0; i < nCnt; i++)
+	{
+		const S_HybridMapCell& stMap = m_aryHybridMapCell[i];
+		ZeroMemory(&stCell, sizeof(stCell));
+		_tcscpy_s(stCell.szCellName, 32, stMap.szName);
+		stCell.dSDx = stMap.dSX;
+		stCell.dSDy = stMap.dSY;
+		stCell.dEDx = stMap.dEX;
+		stCell.dEDy = stMap.dEY;
+
+		int iStatus = pShm->nCellStatus[stMap.nCell][stMap.nStick];
+		pShm->nBFCellStatus[stMap.nCell][stMap.nStick] = iStatus;
+		SetHybridCellLook(iStatus, stCell);
+		stRecipe.arrCellLayout.Add(stCell);
+	}
+
+	if (nFrameSeg >= 0)
+	{
+		ZeroMemory(&stCell, sizeof(stCell));	// no name / status text, drawn after the cells
+		stCell.dSDx = m_aryHybridSegBox[nFrameSeg * 4 + 0] - 8.0;
+		stCell.dSDy = m_aryHybridSegBox[nFrameSeg * 4 + 1] - 8.0;
+		stCell.dEDx = m_aryHybridSegBox[nFrameSeg * 4 + 2] + 8.0;
+		stCell.dEDy = m_aryHybridSegBox[nFrameSeg * 4 + 3] + 8.0;
+		stCell.color = CLR_WHITE;
+		stRecipe.arrCellLayout.Add(stCell);
+	}
+
+	stRecipe.m_iVersion = 1;
+	stRecipe.m_iCellCnt = (int)stRecipe.arrCellLayout.GetSize();
+	UpdateMeasCell(&stRecipe);
+	m_nHybridMapFrameSeg = nFrameSeg;
+}
+
+// LYS 2026-09-30 Hybrid Phase 6 status colour / text for one cell - byte copy of the UpdateCellStatus switch
+//   (the 1-segment path keeps its own copy untouched), plus the NotCON text copy the original case misses.
+void CDlgSubOperate::SetHybridCellLook(int iStatus, CELLLAYOUT& stCell)
+{
+	CString strText;
+	switch (iStatus)
+	{
+	// Idle
+	case df_CELLSTATE_ILDE:
+		stCell.color = CLR_GRAY;
+		strText.Format(_T("IDLE"));
+		_tcscpy_s(stCell.szCellText, 32, strText);
+		break;
+	//	PTP
+	case df_CELLSTATE_PTP_NOR:	//	Normal
+		stCell.color = CLR_YELLOW;
+		strText.Format(_T("PTP Normal"));
+		_tcscpy_s(stCell.szCellText, 32, strText);
+		break;
+	case df_CELLSTATE_PTP_SHORT:	// Short
+		stCell.color = CLR_RED;
+		strText.Format(_T("PTP SHORT"));
+		_tcscpy_s(stCell.szCellText, 32, strText);
+		break;
+	case df_CELLSTATE_PTP_OPEN:	// Open
+		stCell.color = CLR_RED;
+		strText.Format(_T("PTP OPEN"));
+		_tcscpy_s(stCell.szCellText, 32, strText);
+		break;
+	//	OST
+	case df_CELLSTATE_OST_NOR:	//	Normal
+		stCell.color = CLR_YELLOW;
+		strText.Format(_T("OST Normal"));
+		_tcscpy_s(stCell.szCellText, 32, strText);
+		break;
+	case df_CELLSTATE_OST_SHORT:	// Short
+		stCell.color = CLR_RED;
+		strText.Format(_T("OST SHORT"));
+		_tcscpy_s(stCell.szCellText, 32, strText);
+		break;
+	case df_CELLSTATE_OST_OPEN:	// Open
+		stCell.color = CLR_RED;
+		strText.Format(_T("OST OPEN"));
+		_tcscpy_s(stCell.szCellText, 32, strText);
+		break;
+	// R-TEST
+	case df_CELLSTATE_PASS:		// PASS
+		stCell.color = CLR_YELLOW;
+		strText.Format(_T("PASS"));
+		_tcscpy_s(stCell.szCellText, 32, strText);
+		break;
+	case df_CELLSTATE_OVER:		// Over
+		stCell.color = CLR_RED;
+		strText.Format(_T("Over"));
+		_tcscpy_s(stCell.szCellText, 32, strText);
+		break;
+	case df_CELLSTATE_UNDER:		// UNDER
+		stCell.color = CLR_RED;
+		strText.Format(_T("Under"));
+		_tcscpy_s(stCell.szCellText, 32, strText);
+		break;
+	case df_CELLSTATE_PG_NOTCONNACT:		// PG 미연결
+		stCell.color = CLR_RED;
+		strText.Format(_T("NotCON"));
+		_tcscpy_s(stCell.szCellText, 32, strText);	// LYS 2026-09-30 missing in the 1-segment copy
+		break;
+	case df_CELLSTATE_RTEST_FAIL:		// R-TEST FAIL
+		stCell.color = CLR_RED;
+		strText.Format(_T("FAIL"));
+		_tcscpy_s(stCell.szCellText, 32, strText);
+		break;
+	// AGING
+	case df_CELLSTATE_AGING_START:
+		stCell.color = CLR_LIGHT_YELLOW;
+		strText.Format(_T("AGING S"));
+		_tcscpy_s(stCell.szCellText, 32, strText);
+		break;
+	case df_CELLSTATE_AGING_NG:		// NG
+		stCell.color = CLR_RED;
+		strText.Format(_T("AGING NG"));
+		_tcscpy_s(stCell.szCellText, 32, strText);
+		break;
+	case df_CELLSTATE_AGING_OK:		// OK
+		stCell.color = CLR_LIGHT_GRAY;
+		strText.Format(_T("AGING END"));
+		_tcscpy_s(stCell.szCellText, 32, strText);
+		break;
+
+	// Meas
+	case df_CELLSTATE_WAD_START:		// 특성측정시작
+		stCell.color = CLR_YELLOW;
+		strText.Format(_T("WAD S"));
+		_tcscpy_s(stCell.szCellText, 32, strText);
+		break;
+	case df_CELLSTATE_WAD_END:		// 특성측정완료
+		stCell.color = COLORREF(m_lMeasDoneColorWAD); // RGB_TEST_1;
+		strText.Format(_T("WAD END"));
+		_tcscpy_s(stCell.szCellText, 32, strText);
+		break;
+	case df_CELLSTATE_ANGLE_START:		// 측정시작
+		stCell.color = CLR_YELLOW;
+		strText.Format(_T("시야각 S"));
+		_tcscpy_s(stCell.szCellText, 32, strText);
+		break;
+	case df_CELLSTATE_ANGLE_END:		// 측정완료
+		stCell.color = COLORREF(m_lMeasDoneColorAngle); //RGB_TEST_2;
+		strText.Format(_T("시야각 END"));
+		_tcscpy_s(stCell.szCellText, 32, strText);
+		break;
+	case df_CELLSTATE_VISION_START:		// 화질측정시작
+		stCell.color = CLR_YELLOW;
+		strText.Format(_T("화질 S"));
+		_tcscpy_s(stCell.szCellText, 32, strText);
+		break;
+	case df_CELLSTATE_VISION_END:		// 화질측정완료
+		stCell.color = COLORREF(m_lMeasDoneColorVision); //RGB_TEST_3;
+		strText.Format(_T("화질 END"));
+		_tcscpy_s(stCell.szCellText, 32, strText);
+		break;
+	case df_CELLSTATE_COLOR_START:		// 측정시작
+		stCell.color = CLR_YELLOW;
+		strText.Format(_T("면계측 S"));
+		_tcscpy_s(stCell.szCellText, 32, strText);
+		break;
+	case df_CELLSTATE_COLOR_END:		// 측정완료
+		stCell.color = COLORREF(m_lMeasDoneColorColor); //RGB_TEST_4;
+		strText.Format(_T("면계측 END"));
+		_tcscpy_s(stCell.szCellText, 32, strText);
+		break;
+	default:
+		stCell.color = CLR_BLUE;
+		strText.Format(_T("NOTDEFINED"));
+		_tcscpy_s(stCell.szCellText, 32, strText);
+		break;
+	}
+}
 
 void CDlgSubOperate::UpdateAgingMode(bool bStart, int nTime)
 {

@@ -15,6 +15,10 @@
 #include "..\Manager\CommTcpIpFactoryMgr.h"	// LYS 2026-09-28 EFA
 #include "..\Manager\ResultMgr.h"			// LYS 2026-09-28 EFA
 #include "..\CommTcpIpObjectCIM.h"			// LYS 2026-09-28 EFA
+#include "..\Manager\MaintControlMgr.h"		// LYS 2026-09-29 Hybrid Phase 3
+#include "..\Manager\SequenceManager.h"		// LYS 2026-09-29 Hybrid Phase 3
+#include "..\FunctionModule\FunctionModuleEQState.h"	// LYS 2026-09-29 Hybrid Phase 3
+#include "DoWorkGlassSequence.h"				// LYS 2026-09-29 Hybrid Phase 3
 
 #ifdef _DEBUG
 #define new DEBUG_NEW
@@ -184,12 +188,46 @@ void CDoWorkGlassMeasure::ThreadRun()
 		if (nEfaPass > 0) { nPassCount = nEfaPass; bEfaMode = true; }
 	}
 
+	// LYS 2026-09-29 Hybrid Phase 3 세그먼트 루프 (docs/HybridGlass_Porting_Plan.md 5.4): pass -> seg -> stick.
+	//   1세그먼트 레시피는 nSegCount = 1 이라 기존 루프와 같다. 스틱 인덱스는 세그먼트 안의 로컬 값이다 -
+	//   측정 스텝은 모두 활성 세그먼트의 m_vecStick[GetMeasureStick()]을 읽으므로 스텝은 바꾸지 않는다.
+	//   Resume 시작 스틱은 (pass 0, seg 0)에만 적용, 진행 저장도 세그먼트 0만 (세그먼트 튜플은 Phase 5).
+	C_OutRecipeFunc* pSegFunc = m_pShareItem->GetRecipeEditMgrPtr()->GetRecipeFuncPtr();
+	int nSegCount = (pSegFunc != NULL) ? pSegFunc->GetSegmentLoopCount() : 1;
+	m_nCurSeg = (pSegFunc != NULL) ? pSegFunc->GetActiveSegmentIndex() : 0;
+	if (nSegCount > 1)
+	{
+		CString strSegLog;
+		strSegLog.Format(_T("[HYBRID] measure start: %d segments, %d pass, active segment %d, resume start stick %d"), nSegCount, nPassCount, m_nCurSeg + 1, (int)nStartStick);
+		m_pLogFileAccessor->KMLOG(OPER, strSegLog);
+
+		// LYS 2026-09-30 Hybrid 3c result rows are segment-local until Phase 4 (segBase) - say which rows overlap
+		CString strRowLog = _T("[HYBRID] result rows are segment-local until Phase 4 (segBase):"), strRowOne;
+		for (int k = 0; k < nSegCount; k++)
+		{
+			strRowOne.Format(_T(" seg%d rows 1..%d"), k + 1, pSegFunc->GetSegmentCellCount(k) * pSegFunc->GetSegmentStickCount(k));
+			strRowLog += strRowOne;
+		}
+		strRowLog += _T(" - an overlapping row keeps the last segment's value");
+		m_pLogFileAccessor->KMLOG(WARN, strRowLog);
+	}
+
+	// LYS 2026-09-29 Hybrid Phase 3b A4 AgingTest flag latched once per glass from segment 0 (1-segment recipes: no latch)
+	// LYS 2026-09-30 Hybrid 3c A5 the same call publishes this glass's EFA decision for MeasDone (N>1: passes actually run, 0 = not EFA; 1 segment: -1)
+	if (m_pMeasSeqItemEngine != NULL) m_pMeasSeqItemEngine->AgingGlassLatch(bEfaMode ? nPassCount : 0);
+
 	for (int nPass = 0; nPass < nPassCount; nPass++)
 	{
 		if (bEfaMode)
 		{
 			CString strPassLog;
 			strPassLog.Format(_T("EFA: pass %d/%d start (T%d)"), nPass + 1, nPassCount, nPass);
+			if (nSegCount > 1)	// LYS 2026-09-30 Hybrid 3c the pass line names the segment order (1 segment: unchanged)
+			{
+				CString strPassSeg;
+				strPassSeg.Format(_T(" - %d segments, segment 1 first"), nSegCount);
+				strPassLog += strPassSeg;
+			}
 			m_pLogFileAccessor->KMLOG(OPER, strPassLog);
 
 			if (nPass >= 1 && EfaPassBoundary(nPass) == false)
@@ -200,93 +238,104 @@ void CDoWorkGlassMeasure::ThreadRun()
 			}
 		}
 
-		for (size_t i = ((nPass == 0) ? nStartStick : 0); i < (size_t)nStepIndex; i++)		// N Stick (// LYS 2026-09-28 EFA: pass별 시작 스틱)
+		for (int nSeg = 0; nSeg < nSegCount; nSeg++)	// LYS 2026-09-29 Hybrid Phase 3 세그먼트 루프
 		{
-			CMCCLogMgr::GetInstance()->SetMCC_Action(MCC_A_STEP_MEAS_N, true, 0);
-			
-			GoToInitStep();  // Init
-
-			// LYS 2026-08-06 AgingCycle E3: per-stick aging-list cycle begin (OCP DoWorkStartMeasOCP_A)
-			bool bAgingCycle = false;
-			if (m_pMeasSeqItemEngine != NULL && nStepIdxAging >= 0 && nStepIdxVision >= 0)
-				bAgingCycle = bEfaMode ? m_pMeasSeqItemEngine->AgingCycleBegin(nPass) : m_pMeasSeqItemEngine->AgingCycleBegin();	// LYS 2026-09-28 EFA
-
-			while (true)
+			if (nSeg != m_nCurSeg && SegmentBoundary(m_nCurSeg, nSeg) == false)
 			{
-				CDoWorkGlassMeasureStep* pSeqItem = GetSeqItemStep();
-				if (pSeqItem)
+				m_pLogFileAccessor->KMLOG(WARN, _T("[HYBRID] segment boundary failed/stopped - glass measure aborted"));
+				if (GetFail() != true && GetStopUser() != true) SetFail(true, 0);	// Idle이 완료로 처리하지 않게 (알람은 원인 쪽에서 이미 발생)
+				SegmentRestore0();
+				GoToExitStep();
+				CDoWorkGlassMeasureStep* pExitItem = GetSeqItemStep();
+				if (pExitItem)
 				{
-					// LYS 2026-09-28 EFA: T1 이후 pass는 사전검사 스텝을 건너뛴다(OCP _EFA bInspCheck). 대상 = Pattern Search / OSTest / R-Test.
-					if (bEfaMode && nPass >= 1 && IsEfaSkipStep(pSeqItem->GetName()))
+					pExitItem->Run();
+				}
+				bExis = true;
+				break;
+			}
+
+			S_RecipeData* pSegData = m_pShareItem->GetRecipeEditMgrPtr()->GetRecipeData();
+			int nStickCnt = (pSegData != nullptr) ? (int)pSegData->m_vecStick.size() : 0;	// 활성 세그먼트 스틱 수 (세그먼트 0 = nStepIndex)
+
+			for (size_t i = ((nPass == 0 && nSeg == 0) ? nStartStick : 0); i < (size_t)nStickCnt; i++)		// N Stick (// LYS 2026-09-28 EFA: pass별 시작 스틱)
+			{
+				GoToInitStep();  // Init
+				long nInitStep = GetCurStep();	// LYS 2026-09-30
+
+				// LYS 2026-09-30 Hybrid 3c one header line per stick, so the step Start/End lines can be told apart by segment (1-segment recipes: no line)
+				if (nSegCount > 1)
+				{
+					CString strStickLog;
+					strStickLog.Format(_T("[HYBRID] seg %d/%d [%s] stick %d/%d (glass stick %d/%d)"), nSeg + 1, nSegCount, pSegFunc->GetSegmentName(nSeg).GetString(),
+						(int)i + 1, nStickCnt, m_pShareItem->GetRecipeEditMgrPtr()->ToCellStatusStick((int)i) + 1, pSegFunc->GetSegmentStickBase(nSegCount));
+					if (bEfaMode)
 					{
-						CString strSkip;
-						strSkip.Format(_T("EFA pass %d: skip step %s"), nPass + 1, (LPCTSTR)pSeqItem->GetName());
-						m_pLogFileAccessor->KMLOG(INSP, strSkip);
-						GoToNextStep();
-						continue;
+						CString strPass;
+						strPass.Format(_T(" pass %d/%d (T%d)"), nPass + 1, nPassCount, nPass);
+						strStickLog += strPass;
 					}
+					m_pLogFileAccessor->KMLOG(OPER, strStickLog);
+				}
 
-					SetBackupStepIndex(GetCurStep());
+				// LYS 2026-08-06 AgingCycle E3: per-stick aging-list cycle begin (OCP DoWorkStartMeasOCP_A)
+				bool bAgingCycle = false;
+				if (m_pMeasSeqItemEngine != NULL && nStepIdxAging >= 0 && nStepIdxVision >= 0)
+					bAgingCycle = bEfaMode ? m_pMeasSeqItemEngine->AgingCycleBegin(nPass, (int)i) : m_pMeasSeqItemEngine->AgingCycleBegin(-1, (int)i);	// LYS 2026-09-28 EFA, 2026-09-30 stick for the cell skip
 
-					if (GetCurStep() > 0 && GetCurStep() < GetExitStepIndex() )
-						strName.Format(_T("Stick%d_%s"), i + 1, pSeqItem->GetName());
-					else
-						strName.Empty();
+				// LYS 2026-09-30 no USE_AGING item has a cell on this stick (OCP nGroup < 1): run only the init step (flags, process state),
+				//   then the next stick - or the exit step when this is the glass's last stick. No MCC measure step for it (OCP emits none).
+				bool bAgingStickSkip = (m_pMeasSeqItemEngine != NULL && m_pMeasSeqItemEngine->IsAgingStickSkip());
+				if (bAgingStickSkip == false) CMCCLogMgr::GetInstance()->SetMCC_Action(MCC_A_STEP_MEAS_N, true, 0);
 
-					pSeqItem->SetMeasureStick(i);  // 현재측정 Stick 설정
-
-					m_pShareItem->GetSeqTactTimeMgrPtr()->SetSeqItemTimeST(1, strName, GetCurStep());	// Start Time
-
-					// LYS 2026-09-28 EFA: 종료/Idle 스텝(SetComplete + 완료 이벤트)은 마지막 pass에서만 실행한다.
-					// T0에서는 마지막 스틱도 다른 스틱처럼 Exit-1에서 끝내야 T1 도중에 RESULT/UNLOAD가 시작되지 않는다.
-					if (i + 1 == GetLoopStepIndex() && nPass == nPassCount - 1)	// Last Stick
+				while (true)
+				{
+					CDoWorkGlassMeasureStep* pSeqItem = GetSeqItemStep();
+					if (pSeqItem)
 					{
-						if (pSeqItem->Run() == true) // 동작
+						if (GetCurStep() == GetExitStepIndex()) SegmentRestore0();	// LYS 2026-09-29 Hybrid Phase 3 마지막 Idle 전에 세그먼트 0 복귀
+						// LYS 2026-09-28 EFA: T1 이후 pass는 사전검사 스텝을 건너뛴다(OCP _EFA bInspCheck). 대상 = Pattern Search / OSTest / R-Test.
+						if (bEfaMode && nPass >= 1 && IsEfaSkipStep(pSeqItem->GetName()))
 						{
-							m_pShareItem->GetSeqTactTimeMgrPtr()->SetSeqItemTimeED(1, strName, GetCurStep());	// End Time
-
-							// LYS 2026-08-06 AgingCycle E3: more aging items -> jump back to AGING step
-							if (bAgingCycle && GetCurStep() == nStepIdxVision && m_pMeasSeqItemEngine->AgingCycleNextItem())
-							{
-								GoToStep(nStepIdxAging);
-								continue;
-							}
-
+							CString strSkip;
+							strSkip.Format(_T("EFA pass %d: skip step %s%s"), nPass + 1, (LPCTSTR)pSeqItem->GetName(), (LPCTSTR)m_pShareItem->GetRecipeEditMgrPtr()->GetSegLogTag());	// LYS 2026-09-30 Hybrid 3c seg tag (1 segment: empty)
+							m_pLogFileAccessor->KMLOG(INSP, strSkip);
 							GoToNextStep();
+							continue;
 						}
-						else if (GetCurStep() == GetExitStepIndex())
-						{
-							m_pShareItem->GetSeqTactTimeMgrPtr()->SetSeqItemTimeED(1, strName, GetCurStep());	// End Time
 
-							CString strLog;
-							strLog.Format(_T("CDoWorkGlassMeasure Thread End"));
-							m_pLogFileAccessor->KMLOG(INSP, strLog);
-							break;
+						SetBackupStepIndex(GetCurStep());
+
+						if (GetCurStep() > 0 && GetCurStep() < GetExitStepIndex() )
+						{
+							if (nSegCount > 1 && bEfaMode)	// LYS 2026-09-30 Hybrid 3c tact names carry pass and segment (1 segment: unchanged)
+								strName.Format(_T("T%d_Seg%d_Stick%d_%s"), nPass, nSeg + 1, (int)i + 1, (LPCTSTR)pSeqItem->GetName());
+							else if (nSegCount > 1)
+								strName.Format(_T("Seg%d_Stick%d_%s"), nSeg + 1, (int)i + 1, (LPCTSTR)pSeqItem->GetName());
+							else
+								strName.Format(_T("Stick%d_%s"), i + 1, pSeqItem->GetName());
 						}
 						else
+							strName.Empty();
+
+						pSeqItem->SetMeasureStick(i);  // 현재측정 Stick 설정
+
+						m_pShareItem->GetSeqTactTimeMgrPtr()->SetSeqItemTimeST(1, strName, GetCurStep());	// Start Time
+
+						// LYS 2026-09-28 EFA: 종료/Idle 스텝(SetComplete + 완료 이벤트)은 마지막 pass에서만 실행한다.
+						// T0에서는 마지막 스틱도 다른 스틱처럼 Exit-1에서 끝내야 T1 도중에 RESULT/UNLOAD가 시작되지 않는다.
+						if (i + 1 == (size_t)nStickCnt && nPass == nPassCount - 1 && nSeg == nSegCount - 1)	// Last Stick (// LYS 2026-09-29 Hybrid Phase 3 마지막 세그먼트의 마지막 스틱만 완료 이벤트)
 						{
-							m_pShareItem->GetSeqTactTimeMgrPtr()->SetSeqItemTimeED(1, strName, GetCurStep());	// End Time
-
-							CString strLog;
-							strLog.Format(_T("CDoWorkGlassMeasure Thread NG, Step = %d, Exit = %d"), GetCurStep(), GetExitStepIndex());
-							m_pLogFileAccessor->KMLOG(WARN, strLog);
-
-							GoToExitStep();
-							CDoWorkGlassMeasureStep* pSeqItem = GetSeqItemStep();
-							if (pSeqItem)
+							if (pSeqItem->Run() == true) // 동작
 							{
-								pSeqItem->Run();
-							}
+								m_pShareItem->GetSeqTactTimeMgrPtr()->SetSeqItemTimeED(1, strName, GetCurStep());	// End Time
 
-							bExis = true;
-							break;
-						}
-					}
-					else
-					{
-						if (pSeqItem->Run() == true) // 동작
-						{
-							m_pShareItem->GetSeqTactTimeMgrPtr()->SetSeqItemTimeED(1, strName, GetCurStep());  // End Time
+								// LYS 2026-09-30 skipped stick: straight to the exit step (Idle = complete event); a pending stop takes the normal path
+								if (bAgingStickSkip && GetCurStep() == nInitStep && GetStopUser() != true)
+								{
+									GoToExitStep();
+									continue;
+								}
 
 								// LYS 2026-08-06 AgingCycle E3: more aging items -> jump back to AGING step
 								if (bAgingCycle && GetCurStep() == nStepIdxVision && m_pMeasSeqItemEngine->AgingCycleNextItem())
@@ -295,23 +344,96 @@ void CDoWorkGlassMeasure::ThreadRun()
 									continue;
 								}
 
-							if (GetCurStep() == GetExitStepIndex() - 1)  
+								GoToNextStep();
+							}
+							else if (GetCurStep() == GetExitStepIndex())
 							{
-								break;	// Next Stick 측정
+								m_pShareItem->GetSeqTactTimeMgrPtr()->SetSeqItemTimeED(1, strName, GetCurStep());	// End Time
+
+								CString strLog;
+								strLog.Format(_T("CDoWorkGlassMeasure Thread End"));
+								m_pLogFileAccessor->KMLOG(INSP, strLog);
+								break;
 							}
 							else
 							{
-								GoToNextStep();
+								m_pShareItem->GetSeqTactTimeMgrPtr()->SetSeqItemTimeED(1, strName, GetCurStep());	// End Time
+
+								CString strLog;
+								strLog.Format(_T("CDoWorkGlassMeasure Thread NG, Step = %d, Exit = %d"), GetCurStep(), GetExitStepIndex());
+								m_pLogFileAccessor->KMLOG(WARN, strLog);
+
+								SegmentRestore0();	// LYS 2026-09-29 Hybrid Phase 3 Idle(완료 이벤트) 전에 세그먼트 0 복귀 - Result가 활성 세그먼트를 읽는다
+								GoToExitStep();
+								CDoWorkGlassMeasureStep* pSeqItem = GetSeqItemStep();
+								if (pSeqItem)
+								{
+									pSeqItem->Run();
+								}
+
+								bExis = true;
+								break;
 							}
 						}
 						else
 						{
-							m_pShareItem->GetSeqTactTimeMgrPtr()->SetSeqItemTimeED(1, strName, GetCurStep());	// End Time
+							if (pSeqItem->Run() == true) // 동작
+							{
+								m_pShareItem->GetSeqTactTimeMgrPtr()->SetSeqItemTimeED(1, strName, GetCurStep());  // End Time
+
+								// LYS 2026-09-30 skipped stick: leave after the init step; a pending stop takes the normal path (the next init step would clear it)
+								if (bAgingStickSkip && GetCurStep() == nInitStep && GetStopUser() != true)
+								{
+									break;	// Next Stick
+								}
+
+									// LYS 2026-08-06 AgingCycle E3: more aging items -> jump back to AGING step
+									if (bAgingCycle && GetCurStep() == nStepIdxVision && m_pMeasSeqItemEngine->AgingCycleNextItem())
+									{
+										GoToStep(nStepIdxAging);
+										continue;
+									}
+
+								if (GetCurStep() == GetExitStepIndex() - 1)  
+								{
+									break;	// Next Stick 측정
+								}
+								else
+								{
+									GoToNextStep();
+								}
+							}
+							else
+							{
+								m_pShareItem->GetSeqTactTimeMgrPtr()->SetSeqItemTimeED(1, strName, GetCurStep());	// End Time
+
+								CString strLog;
+								strLog.Format(_T("CDoWorkGlassMeasure Thread NG, Step = %d, Exit = %d"), GetCurStep(), GetExitStepIndex());
+								m_pLogFileAccessor->KMLOG(WARN, strLog);
+
+								SegmentRestore0();	// LYS 2026-09-29 Hybrid Phase 3 Idle(완료 이벤트) 전에 세그먼트 0 복귀 - Result가 활성 세그먼트를 읽는다
+								GoToExitStep();
+								CDoWorkGlassMeasureStep* pSeqItem = GetSeqItemStep();
+								if (pSeqItem)
+								{
+									pSeqItem->Run();
+								}
+
+								// NG 발생 시 측정종료
+								bExis = true;
+								break;
+							}
+						}
+
+						if (GetStopUser() == true)	// 2023.08.09 add
+						{
+							m_pShareItem->GetSeqTactTimeMgrPtr()->SetSeqItemTimeED(1, strName, GetBackupStepIndex());	// End Time
 
 							CString strLog;
-							strLog.Format(_T("CDoWorkGlassMeasure Thread NG, Step = %d, Exit = %d"), GetCurStep(), GetExitStepIndex());
+							strLog.Format(_T("CDoWorkGlassMeasure Thread Stop, Step = %d, Exit = %d"), GetBackupStepIndex(), GetExitStepIndex());
 							m_pLogFileAccessor->KMLOG(WARN, strLog);
 
+							SegmentRestore0();	// LYS 2026-09-29 Hybrid Phase 3 Idle(완료 이벤트) 전에 세그먼트 0 복귀 - Result가 활성 세그먼트를 읽는다
 							GoToExitStep();
 							CDoWorkGlassMeasureStep* pSeqItem = GetSeqItemStep();
 							if (pSeqItem)
@@ -324,51 +446,34 @@ void CDoWorkGlassMeasure::ThreadRun()
 							break;
 						}
 					}
+				}
 
-					if (GetStopUser() == true)	// 2023.08.09 add
+				if (bAgingStickSkip == false) CMCCLogMgr::GetInstance()->SetMCC_Action(MCC_A_STEP_MEAS_N, false, 0);	// LYS 2026-09-30
+
+				// LYS 2026-08-06 AgingCycle E3: per-stick aging cycle end (progress reset)
+				if (m_pMeasSeqItemEngine != NULL) m_pMeasSeqItemEngine->AgingCycleEnd();
+
+				// LYS 2026-07-03 Resume Save: stick completed
+				if (!bExis)
+				{
+					CResumeInfoMgr* pResume = m_pShareItem->GetResumeInfoMgrPtr();
+					if (pResume && m_pShareItem->GetSystemConfigMgrPtr()->IsUseResumeInspection())
 					{
-						m_pShareItem->GetSeqTactTimeMgrPtr()->SetSeqItemTimeED(1, strName, GetBackupStepIndex());	// End Time
-
-						CString strLog;
-						strLog.Format(_T("CDoWorkGlassMeasure Thread Stop, Step = %d, Exit = %d"), GetBackupStepIndex(), GetExitStepIndex());
-						m_pLogFileAccessor->KMLOG(WARN, strLog);
-
-						GoToExitStep();
-						CDoWorkGlassMeasureStep* pSeqItem = GetSeqItemStep();
-						if (pSeqItem)
-						{
-							pSeqItem->Run();
-						}
-
-						// NG 발생 시 측정종료
-						bExis = true;
-						break;
+						if (nSeg == 0) pResume->UpdateStickProgress((int)i);	// LYS 2026-09-29 Hybrid Phase 3 세그먼트 1 이후 진행은 Phase 5에서 튜플로 저장
 					}
 				}
-			}
 
-			CMCCLogMgr::GetInstance()->SetMCC_Action(MCC_A_STEP_MEAS_N, false, 0);
-
-			// LYS 2026-08-06 AgingCycle E3: per-stick aging cycle end (progress reset)
-			if (m_pMeasSeqItemEngine != NULL) m_pMeasSeqItemEngine->AgingCycleEnd();
-
-			// LYS 2026-07-03 Resume Save: stick completed
-			if (!bExis)
-			{
-				CResumeInfoMgr* pResume = m_pShareItem->GetResumeInfoMgrPtr();
-				if (pResume && m_pShareItem->GetSystemConfigMgrPtr()->IsUseResumeInspection())
+				if (bExis == true)
 				{
-					pResume->UpdateStickProgress((int)i);
+					break;
 				}
 			}
-
-			if (bExis == true)
-			{
-				break;
-			}
+			if (bExis == true) break;
 		}
 		if (bExis == true) break;	// LYS 2026-09-28 EFA: 남은 pass도 중단
 	}
+
+	SegmentRestore0();	// LYS 2026-09-29 Hybrid Phase 3 어떤 경로로 끝나도 세그먼트 0으로 (중복 호출 무해)
 }
 
 // LYS 2026-09-28 EFA: T1 이후 반복하지 않는 스텝 (OCP _EFA bInspCheck가 ReviewSearch / 사전검사를 건너뛴다).
@@ -388,6 +493,13 @@ bool CDoWorkGlassMeasure::EfaPassBoundary(int nPass)
 {
 	CString strLog;
 	strLog.Format(_T("EFA: pass boundary before pass %d (T0 done) - result flush + CIM handshake"), nPass + 1);
+	int nBoundarySeg = m_pShareItem->GetRecipeEditMgrPtr()->GetSegmentLoopCount();	// LYS 2026-09-30 Hybrid 3c (1 segment: both lines unchanged)
+	if (nBoundarySeg > 1)
+	{
+		CString strSegAll;
+		strSegAll.Format(_T(" (all %d segments)"), nBoundarySeg);
+		strLog += strSegAll;
+	}
 	m_pLogFileAccessor->KMLOG(OPER, strLog);
 
 	if (m_pShareItem->IfPauseEvt_WaitResumeEvt() != true) return false;	// pass 사이 사용자 정지
@@ -405,6 +517,7 @@ bool CDoWorkGlassMeasure::EfaPassBoundary(int nPass)
 		bSave = CResultMgr::GetInstance()->SaveResultDone();
 	}
 	strLog.Format(_T("EFA: T0 result flush %s"), bSave ? _T("OK") : _T("NG (UploadDataDone/export timeout) - continue"));
+	if (nBoundarySeg > 1) strLog += _T(" - hybrid: rows of the segments overlap until Phase 4 (segBase)");	// LYS 2026-09-30 Hybrid 3c
 	m_pLogFileAccessor->KMLOG(bSave ? OPER : WARN, strLog);
 
 	// ---- 2) CIM 핸드셰이크 (OCP처럼 ONLINE REMOTE일 때만) ----
@@ -435,4 +548,217 @@ bool CDoWorkGlassMeasure::EfaPassBoundary(int nPass)
 	pCIM->WaitEFA0Ack(5000);	// OK / TIMEOUT 로그를 남긴다. 어느 쪽이든 T1은 계속 진행 (OCP)
 
 	return (m_pShareItem->IfPauseEvt_WaitResumeEvt() == true);
+}
+
+// LYS 2026-09-29 Hybrid Phase 3 활성 세그먼트 + 세그먼트 .alg 전환 (모션 없음)
+//   .alg 는 파일에서 다시 읽는다 - 흡착 단계 Probe Align이 작업 슬롯 m_sAlign을 PROBE 레시피로 덮어쓴 적이 있어
+//   세그먼트 벡터의 사본을 그대로 믿지 않는다. 측정 스텝(PtrnSearch)과 Glass SW Align이 이 m_sAlign을 쓴다.
+bool CDoWorkGlassMeasure::SegmentSwitchData(int nSeg)
+{
+	CRecipeEditMgr*  pRcp  = m_pShareItem->GetRecipeEditMgrPtr();
+	C_OutRecipeFunc* pFunc = pRcp->GetRecipeFuncPtr();
+	CString strLog;
+
+	if (pFunc == NULL || pFunc->SetActiveSegment(nSeg) == FALSE)
+	{
+		strLog.Format(_T("[HYBRID] SetActiveSegment(%d) failed"), nSeg + 1);
+		m_pLogFileAccessor->KMLOG(WARN, strLog);
+		return false;
+	}
+	m_nCurSeg = nSeg;
+	pRcp->SyncCellStatusStickBase();	// LYS 2026-09-29 Hybrid 3b A8 nCellStatus column base follows the active segment
+
+	CString strAlign = pFunc->GetSegmentAlignName(nSeg);
+	if (pRcp->OpenAlignRecipe(strAlign) != VTM_RV_SUCCESSED)
+	{
+		strLog.Format(_T("[HYBRID] Segment %d align recipe [%s] load failed"), nSeg + 1, strAlign.GetString());
+		m_pLogFileAccessor->KMLOG(WARN, strLog);
+		return false;
+	}
+
+	strLog.Format(_T("[HYBRID] active segment -> %d/%d [%s] rot=%d stick=%d cell=%d align=%s PG=%s WAD=%s"),
+		nSeg + 1, pFunc->GetSegmentLoopCount(), pFunc->GetSegmentName(nSeg).GetString(), pFunc->GetSegmentRotate(nSeg),
+		pFunc->GetSegmentStickCount(nSeg), pFunc->GetSegmentCellCount(nSeg), strAlign.GetString(),
+		pRcp->GetPGRecipeName().GetString(), pRcp->GetWADRecipeName().GetString());
+	m_pLogFileAccessor->KMLOG(OPER, strLog);
+	return true;
+}
+
+// LYS 2026-09-29 Hybrid Phase 3 결과 저장·다음 글라스 전에 세그먼트 0으로 (데이터만, 모션 없음)
+//   Result 아이템이 활성 세그먼트의 검사 항목을 읽고, 엔진 시작부 Resume 저장/UI가 스틱 수를 읽는다.
+void CDoWorkGlassMeasure::SegmentRestore0()
+{
+	if (m_nCurSeg == 0) return;
+
+	C_OutRecipeFunc* pFunc = m_pShareItem->GetRecipeEditMgrPtr()->GetRecipeFuncPtr();
+	if (pFunc == NULL || pFunc->GetSegmentCount() <= 1)
+	{
+		m_nCurSeg = 0;
+		return;
+	}
+
+	m_pLogFileAccessor->KMLOG(OPER, _T("[HYBRID] restore segment 1 (data only, no motion)"));
+	if (SegmentSwitchData(0) == false)
+	{
+		// LYS 2026-09-30 Hybrid 3c a failed restore used to be silent - Result then reads the segment left active
+		CString strRestore;
+		strRestore.Format(_T("[HYBRID] restore segment 1 failed - active segment stays %d (Result reads it, EFA^1$ uses the glass latch)"), pFunc->GetActiveSegmentIndex() + 1);
+		m_pLogFileAccessor->KMLOG(WARN, strRestore);
+		m_nCurSeg = 0;
+	}
+}
+
+// LYS 2026-09-29 Hybrid Phase 3 세그먼트 경계 (docs/HybridGlass_Porting_Plan.md 5.4, D-1 확정 순서)
+//   임의 쌍(from -> to)을 받는다 - EFA T1 시작 때 N-1 -> 0 복귀가 있다.
+//   1) 사용자 정지  2) 흡착 상태(글라스가 있으면 EQ MEASURE)  3) 활성 세그먼트 + 세그먼트 .alg
+//   4) PG/WAD 레시피명이 이전 세그먼트와 다를 때만 재송신 (공란 = RecipeID 라 1세그먼트 레시피는 해당 없음)
+//   5) GLASS ROTATE가 다르면: Safety 위치(MoveCmd_SafetyAll - 측정 Safety 스텝과 같은 경로) -> Stage R 회전 -> Glass SW Align 재실행
+//      (R 2도 넘는 회전은 Stage X >= INTERLOCKPOS 에서만 허용 - Safety 위치 1064.7 이 이를 만족)
+//      같은 방향이면 5)는 생략 (ICP와 같은 규칙). 자동 재흡착은 하지 않는다(D-1).
+//   false = 중단. 원인 쪽에서 SetFail(알람) 또는 사용자 정지가 세워져 있다.
+bool CDoWorkGlassMeasure::SegmentBoundary(int nFrom, int nTo)
+{
+	CRecipeEditMgr*  pRcp  = m_pShareItem->GetRecipeEditMgrPtr();
+	C_OutRecipeFunc* pFunc = pRcp->GetRecipeFuncPtr();
+	if (pFunc == NULL) return false;
+
+	DWORD dwStart	= GetTickCount();
+	int	  nRotFrom	= pFunc->GetSegmentRotate(nFrom);
+	int	  nRotTo	= pFunc->GetSegmentRotate(nTo);
+	bool  bTurn		= (nRotFrom != nRotTo);
+	CString strPGFrom  = pRcp->GetPGRecipeName();	// 지금 활성 = nFrom
+	CString strWADFrom = pRcp->GetWADRecipeName();
+
+	CString strLog;
+	strLog.Format(_T("[HYBRID] Segment boundary %d -> %d/%d [%s] rot %d -> %d : %s"), nFrom + 1, nTo + 1, pFunc->GetSegmentLoopCount(),
+		pFunc->GetSegmentName(nTo).GetString(), nRotFrom, nRotTo, bTurn ? _T("safety + rotate + re-align") : _T("same orientation"));
+	m_pLogFileAccessor->KMLOG(OPER, strLog);
+
+	// 1) 사용자 정지
+	if (m_pShareItem->IfPauseEvt_WaitResumeEvt() != true || GetStopUser() == true) return false;
+
+	// 2) 흡착 상태 - 흡착 단계 CheckMeasStatus와 같은 기준
+	CFunctionModuleEQState* pEQ = CSequenceManager::GetInstance()->GetFunctionModuleEQState();
+	if (pEQ != NULL && pEQ->IsGlassSensorOn() == true && pEQ->GetEQState() != enumEQStateMeas)
+	{
+		m_pLogFileAccessor->KMLOG(WARN, _T("[HYBRID] Segment boundary: glass exists but EQ state is not MEASURE"));
+		SetFail(true, PLC_STATE_NOT_MEASURE);
+		return false;
+	}
+
+	// 3) 활성 세그먼트 + .alg
+	if (SegmentSwitchData(nTo) == false)
+	{
+		SetFail(true, JOB_RECIPE_NOT_EXIST);
+		return false;
+	}
+
+	S_RecipeInfo* pInfo = pRcp->GetRecipeInfo();
+	S_RecipeData* pData = pRcp->GetRecipeData();
+	if (pInfo == nullptr || pData == nullptr || pData->m_vecStick.empty())
+	{
+		m_pLogFileAccessor->KMLOG(WARN, _T("[HYBRID] Segment boundary: segment has no stick"));
+		SetFail(true, JOB_RECIPE_NOT_EXIST);
+		return false;
+	}
+
+	long nRet = VTM_RV_SUCCESSED;
+
+	// 4) 외부 레시피 - 이름이 바뀔 때만 (ICP는 매 경계마다 다시 보냈다: I-결함9 비이식)
+	//    PG: 글라스 시작과 같은 두 단계 (Recipe 아이템 DoWorkRecipeOpen = Turn Off + Model 송신, PreMeas RcpChangeDone = ACK 대기)
+	bool bUsePG  = (pInfo->m_sInspectItem.m_bUsePre_0 == TRUE || pInfo->m_sInspectItem.m_bUseElect_1 == TRUE || pInfo->m_sInspectItem.m_bUseAgingTest_2 == TRUE);
+	bool bUseWAD = (pInfo->m_sInspectItem.m_bUseSpec_3 == TRUE);
+	CString strPGTo  = pRcp->GetPGRecipeName();
+	CString strWADTo = pRcp->GetWADRecipeName();
+
+	if (bUsePG && strPGTo.CompareNoCase(strPGFrom) != 0)
+	{
+		strLog.Format(_T("[HYBRID] PG recipe change [%s] -> [%s]"), strPGFrom.GetString(), strPGTo.GetString());
+		m_pLogFileAccessor->KMLOG(OPER, strLog);
+		nRet = m_pShareItem->GetCommTcpIpFactoryMgr()->DoWorkRecipeOpen(enumTCPIpFactorytID_PG);
+		if (nRet == VTM_RV_SUCCESSED) nRet = m_pShareItem->GetCommTcpIpFactoryMgr()->DoWorkInspectStart(enumTCPIpFactorytID_PG, enumTCPIpFactoryt_PGEvent_1);
+	}
+	if (nRet == VTM_RV_SUCCESSED && bUseWAD && strWADTo.CompareNoCase(strWADFrom) != 0)
+	{
+		strLog.Format(_T("[HYBRID] WAD recipe change [%s] -> [%s]"), strWADFrom.GetString(), strWADTo.GetString());
+		m_pLogFileAccessor->KMLOG(OPER, strLog);
+		nRet = m_pShareItem->GetCommTcpIpFactoryMgr()->DoWorkRecipeOpen(enumTCPIpFactorytID_WAD);
+	}
+	if (nRet != VTM_RV_SUCCESSED)
+	{
+		strLog.Format(_T("[HYBRID] Segment boundary: external recipe change NG (%d)"), (int)nRet);
+		m_pLogFileAccessor->KMLOG(WARN, strLog);
+		SetFail(true, (int)nRet);
+		return false;
+	}
+
+	// 5) 방향 전환 (D-1): Safety -> Stage R -> 재Align
+	if (bTurn)
+	{
+		CMaintControlMgr* pMaint = m_pShareItem->GetMaintControlMgrPtr();
+		bool   bAlign = (pInfo->m_sOptionItem.m_bUseAlign == TRUE);
+		double dR	  = pData->m_vecStick[0].m_fStageR + pInfo->m_sMotionOffsetPos.m_fStageRotate;	// MoveMeasureArea와 같은 식
+		double dAlgR  = pRcp->GetRecipeMgrPtr()->m_sAlign.m_sGlsAlign.m_fStageRotate;
+		if (bAlign && fabs(dR - dAlgR) > 0.5)
+		{
+			strLog.Format(_T("[HYBRID] WARN stage R %.3f differs from .alg StageRotate %.3f - align runs at the .alg angle"), dR, dAlgR);
+			m_pLogFileAccessor->KMLOG(WARN, strLog);
+		}
+
+		// 5-1) Safety 위치
+		m_pLogFileAccessor->KMLOG(OPER, _T("[HYBRID] 1/3 move to safety position (MoveCmd_SafetyAll)"));
+		nRet = pMaint->MoveCmd_SafetyAll();
+		if (nRet != df_MOTION_RV_SUCCESSED)
+		{
+			strLog.Format(_T("[HYBRID] safety move NG (%d)"), (int)nRet);
+			m_pLogFileAccessor->KMLOG(WARN, strLog);
+			SetFail(true, (int)nRet);
+			return false;
+		}
+		if (m_pShareItem->IfPauseEvt_WaitResumeEvt() != true || GetStopUser() == true) return false;
+
+		// 5-2) 이전 방향에서 잰 Glass Align 오프셋 해제 (Probe Align 오프셋은 유지 - ResetAlign은 쓰지 않는다)
+		if (bAlign)
+		{
+			pMaint->SetGlassAlignXYR(0.0, 0.0, 0.0);
+			pMaint->SetGlassAlignDone(false);
+		}
+
+		// 5-3) Stage R 회전
+		strLog.Format(_T("[HYBRID] 2/3 rotate AXIS_LOADER_R -> %.3f (stick R %.3f + user offset %.3f)"), dR, pData->m_vecStick[0].m_fStageR, pInfo->m_sMotionOffsetPos.m_fStageRotate);
+		m_pLogFileAccessor->KMLOG(OPER, strLog);
+		nRet = pMaint->MoveCmdPosA(AXIS_LOADER_R, dR, true, SPEED_HIGH);
+		if (nRet != df_MOTION_RV_SUCCESSED)
+		{
+			strLog.Format(_T("[HYBRID] stage rotate NG (%d)"), (int)nRet);
+			m_pLogFileAccessor->KMLOG(WARN, strLog);
+			SetFail(true, (int)nRet);
+			return false;
+		}
+		if (m_pShareItem->IfPauseEvt_WaitResumeEvt() != true || GetStopUser() == true) return false;
+
+		// 5-4) Glass SW Align 재실행 (흡착 단계 Probe Align 중첩 실행과 같은 방식). 레시피 ALIGN USE가 OFF면 엔진처럼 생략
+		if (bAlign)
+		{
+			m_pLogFileAccessor->KMLOG(OPER, _T("[HYBRID] 3/3 glass SW align (segment .alg)"));
+			CDoWorkGlassSequence* pGlassSeq = CSequenceManager::GetInstance()->GeDoWorkGlassSequence();
+			bool bAligned = (pGlassSeq != NULL) && pGlassSeq->ItemStart(_T("SEQUENCE_ITEM_DWGLASS_SEQ_GLASS_SW_ALIGN"), true);
+			m_pShareItem->GetShareMemoryMgrPtr()->SetSys_ProcessStatus(SPS_PROCESS);	// SW Align Idle 스텝이 SPS_IDLE로 바꾼다
+			if (bAligned == false)
+			{
+				m_pLogFileAccessor->KMLOG(WARN, _T("[HYBRID] glass SW align NG (alarm raised by the align item)"));
+				if (GetStopUser() != true) SetFail(true, 0);
+				return false;
+			}
+		}
+		else
+		{
+			m_pLogFileAccessor->KMLOG(OPER, _T("[HYBRID] 3/3 recipe ALIGN USE = OFF - re-align skipped (glass align offset kept)"));
+		}
+	}
+
+	strLog.Format(_T("[HYBRID] Segment %d/%d ready (%.1f s)"), nTo + 1, pFunc->GetSegmentLoopCount(), (GetTickCount() - dwStart) / 1000.0);
+	m_pLogFileAccessor->KMLOG(OPER, strLog);
+
+	return (m_pShareItem->IfPauseEvt_WaitResumeEvt() == true && GetStopUser() != true);
 }

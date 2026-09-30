@@ -99,11 +99,13 @@ public:
 // CDoWorkGlassMeasure::ThreadRun이 측정 스레드에서 구동한다(단일 스레드 사용).
 //=========================================================================
 public:
-	bool				AgingCycleBegin(int nEfaPass = -1);	// 게이트(bIsOCP + 레시피 m_bUseAging_Test) + 에이징 rcp 로드. nEfaPass>=0: EFA 고정 항목 (// LYS 2026-09-28 EFA)
+	bool				AgingCycleBegin(int nEfaPass = -1, int nStick = -1);	// 게이트(bIsOCP + 레시피 m_bUseAging_Test) + 에이징 rcp 로드. nEfaPass>=0: EFA 고정 항목 (// LYS 2026-09-28 EFA)
+	bool				IsAgingStickSkip() const	{ return m_bAgingStickSkip; }	// LYS 2026-09-30 AgingCycleBegin(nStick >= 0) found no USE_AGING item with a cell on the stick
 	void				AgingCycleEnd();
 	bool				AgingCycleNextItem();	// advance to next USE_AGING item. FALSE = exhausted
 	bool				IsAgingCycleActive() const	{ return m_bAgingCycleActive; }
 	int					GetAgingCurItem() const		{ return m_nAgingCurItem; }
+	void				AgingGlassLatch(int nEfaPassCount = 0);				// LYS 2026-09-29 Hybrid 3b A4 once per glass, before the segment loop. LYS 2026-09-30 3c A5 + publishes the EFA glass latch (N>1), -1 (1 segment)
 
 	// LYS 2026-09-28 EFA: 2-pass EFA 검사(OCP DoWorkStartMeasICP_EFA). Pass = 리스트 항목, 항목 루프는 스틱 루프 바깥.
 	int					GetEfaPassCount();				// 0 = EFA 아님(일반 단일 pass). {EFA_RCP}\{rcp}.rcp를 읽는다
@@ -121,6 +123,13 @@ private:
 	int					m_nAgingCurItem;
 	int					m_nAgingRepeat[enumAgingMeasKind_MAX];	// LYS 2026-08-12 AgingCycle R1
 	bool				m_bEfaCycle;						// LYS 2026-09-28 EFA
+	int					m_nAgingGlassLatch;				// LYS 2026-09-29 Hybrid 3b A4 -1 = not latched (1 segment), 0/1 = segment 0 m_bUseAging_Test
+	unsigned int		m_nAgingMaskChecked;			// LYS 2026-09-30 bit k = segment k mask shape already checked on this glass
+	void				CheckAgingMaskShape();			// LYS 2026-09-30 WARN once per glass and segment when the loaded mask does not fit the recipe
+	int					m_nAgingStick;					// LYS 2026-09-30 stick of the running cycle (-1 = not given: item-only selection)
+	bool				m_bAgingStickSkip;				// LYS 2026-09-30 set by AgingCycleBegin, cleared by AgingCycleEnd
+	bool				AgingItemHasCell(int iItem);	// LYS 2026-09-30 same test as the WAD/VISION/ANGLE step gates
+	CString				m_strCycleSegTag;				// LYS 2026-09-30 Hybrid 3c segment tag of the running cycle (the last AgingCycleEnd logs after the segment-0 restore)
 
 public:
 	CMeasureSequenceItemEngine(stAuroraMgrPool &MgrPool);

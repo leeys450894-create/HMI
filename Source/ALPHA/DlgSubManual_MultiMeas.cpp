@@ -13,11 +13,14 @@
 #include "Manager\SystemConfigMgr.h"		// LYS 2026-07-23 Phase 2
 #include "Manager\WadMultiMeasMgr.h"		// LYS 2026-07-23 Phase 2
 #include "Recipe\RecipeEditMgr.h"			// LYS 2026-07-23 Phase 3 (cell map size)
+#include "Manager\SequenceManager.h"		// LYS 2026-09-30 Hybrid 3d busy guard
 
 #include "..\CoreFunction\common\MySpreadDll.h"
 
 // Fallback WAD Multi recipe folder (normally read from [OPT_PARA] WAD_MULTI_RCP_PATH)
 #define DEF_WAD_MULTI_RCP_PATH	_T("D:\\HBS\\PARAM_OCP\\PARAM\\MultiMeasRcp\\")
+
+#define MM_TIMER_SEG			1		// LYS 2026-09-30 Hybrid 3d segment view refresh (hybrid view only)
 
 // point list grid columns (11 data cols: No + 10 fields, OCP layout)
 enum
@@ -48,6 +51,16 @@ CDlgSubManual_MultiMeas::CDlgSubManual_MultiMeas(CAuroraMgr* pAuroraMgr, CWnd* p
 	, m_hFont(nullptr)
 {
 	m_strMultiRcpPath = DEF_WAD_MULTI_RCP_PATH;
+
+	// LYS 2026-09-30 Hybrid 3d
+	m_nViewSeg = 0;
+	m_nViewSegCount = 1;
+	m_nViewStick = 0;
+	m_nViewCell = 0;
+	m_nMaskMismatch = 0;
+	m_nMaskExtra = 0;
+	m_bViewDataFound = false;
+	m_bViewMaskFound = false;
 }
 
 CDlgSubManual_MultiMeas::~CDlgSubManual_MultiMeas()
@@ -61,6 +74,7 @@ CDlgSubManual_MultiMeas::~CDlgSubManual_MultiMeas()
 void CDlgSubManual_MultiMeas::DoDataExchange(CDataExchange* pDX)
 {
 	CDialogEx::DoDataExchange(pDX);
+	DDX_Control(pDX, IDC_COMBO_MM_SEG, m_cmbSeg);	// LYS 2026-09-30 Hybrid 3d
 }
 
 BEGIN_MESSAGE_MAP(CDlgSubManual_MultiMeas, CDialogEx)
@@ -70,6 +84,9 @@ BEGIN_MESSAGE_MAP(CDlgSubManual_MultiMeas, CDialogEx)
 	ON_BN_CLICKED(IDC_BUTTON_MM_ADD_ROW,   &CDlgSubManual_MultiMeas::OnBnClickedButtonMmAddRow)
 	ON_BN_CLICKED(IDC_BUTTON_MM_DEL_ROW,   &CDlgSubManual_MultiMeas::OnBnClickedButtonMmDelRow)
 	ON_MESSAGE(SSM_DBLCLK, &CDlgSubManual_MultiMeas::OnSpreadDblClick)
+	ON_CBN_SELCHANGE(IDC_COMBO_MM_SEG, &CDlgSubManual_MultiMeas::OnSelchangeComboMmSeg)	// LYS 2026-09-30 Hybrid 3d
+	ON_WM_TIMER()
+	ON_WM_SHOWWINDOW()
 END_MESSAGE_MAP()
 
 CWadMultiMeasMgr* CDlgSubManual_MultiMeas::GetMgr()
@@ -388,6 +405,22 @@ void CDlgSubManual_MultiMeas::LoadFromMgr()
 		str.Format(_T("%.4f"), pMgr->GetCellY());	m_spreadCellSize->SetData(2, 1, str);
 	}
 
+	// LYS 2026-09-30 Hybrid 3d (D3d-4) hybrid view of a segment without its section: CELL 0/0 would refuse even the
+	//   base point on save (IsCellRangeValid), so start from the segment's recipe cell size (same X/Y as the recipe map)
+	m_bViewDataFound = pMgr->IsDataFound();
+	m_bViewMaskFound = pMgr->IsMaskFound();
+	if (IsViewSegmented() && m_bViewDataFound == false && m_spreadCellSize && m_spreadCellSize->GetSafeHwnd())
+	{
+		C_OutRecipeFunc* pSegFunc = m_pAuroraMgr->GetRecipeEditMgrPtr()->GetRecipeFuncPtr();
+		S_RecipeMgr* pSegMgr = (pSegFunc != nullptr) ? pSegFunc->GetSegmentMgr(m_nViewSeg) : nullptr;
+		if (pSegMgr != nullptr)
+		{
+			CString str;
+			str.Format(_T("%.4f"), fabs(pSegMgr->m_sMap.m_fCellSize.x));	m_spreadCellSize->SetData(1, 1, str);
+			str.Format(_T("%.4f"), fabs(pSegMgr->m_sMap.m_fCellSize.y));	m_spreadCellSize->SetData(2, 1, str);
+		}
+	}
+
 	RebuildCellMap();
 }
 
@@ -445,7 +478,12 @@ void CDlgSubManual_MultiMeas::RebuildCellMap()
 
 	S_RecipeData* pRD = nullptr;
 	if (m_pAuroraMgr != nullptr && m_pAuroraMgr->GetRecipeEditMgrPtr() != nullptr)
-		pRD = m_pAuroraMgr->GetRecipeEditMgrPtr()->GetRecipeData();
+	{
+		// LYS 2026-09-30 Hybrid 3d hybrid view: the viewed segment's size (read only - SetActiveSegment is never called here)
+		C_OutRecipeFunc* pSegFunc = IsViewSegmented() ? m_pAuroraMgr->GetRecipeEditMgrPtr()->GetRecipeFuncPtr() : nullptr;
+		S_RecipeMgr* pSegMgr = (pSegFunc != nullptr) ? pSegFunc->GetSegmentMgr(m_nViewSeg) : nullptr;
+		pRD = (pSegMgr != nullptr) ? &pSegMgr->m_sData : m_pAuroraMgr->GetRecipeEditMgrPtr()->GetRecipeData();
+	}
 
 	if (pRD != nullptr && pRD->m_vecStick.size() > 0)
 	{
@@ -460,6 +498,10 @@ void CDlgSubManual_MultiMeas::RebuildCellMap()
 
 	m_spreadCellMap->SetMaxRows(nStick);
 	m_spreadCellMap->SetMaxCols(nCell);
+	m_nViewStick = nStick;	// LYS 2026-09-30 Hybrid 3d stale check
+	m_nViewCell = nCell;
+	m_nMaskMismatch = 0;
+	m_nMaskExtra = 0;
 
 	if (nStick <= 0 || nCell <= 0)
 		return;
@@ -488,6 +530,28 @@ void CDlgSubManual_MultiMeas::RebuildCellMap()
 			m_spreadCellMap->SetData(nCol, nRow, bUse ? _T("1") : _T("0"));
 		}
 	}
+
+	// LYS 2026-09-30 Hybrid 3d hybrid view: mask rows that do not fit this segment (shown cell by cell, like the runtime)
+	if (IsViewSegmented() && pMgr != nullptr && pMgr->IsMaskFound())
+	{
+		int nRows = pMgr->GetCellUseStickCount();
+		for (int i = 0; i < nRows && i < nStick; i++)
+			if (pMgr->GetCellUseCellCount(i) != nCell) m_nMaskMismatch++;
+		if (nRows > nStick) m_nMaskExtra = nRows - nStick;
+		if (m_nMaskMismatch > 0 || m_nMaskExtra > 0)
+		{
+			CString strLog;
+			strLog.Format(_T("[HYBRID] WAD Multi [%s]: %d row(s) with cell count != %d, %d row(s) past stick %d"),
+				CWadMultiMeasMgr::GetMaskSection(m_nViewSeg).GetString(), m_nMaskMismatch, nCell, m_nMaskExtra, nStick);
+			CLogWrapper::GetInstance()->KMLOG(WARN, strLog);
+
+			CString strWarn;
+			strWarn.Format(_T("세그먼트 %d WAD Multi 셀 맵에 셀 수가 %d개가 아닌 행 %d개, 스틱 수(%d)를 넘는 행 %d개가 있습니다.\n셀 단위로 표시되며, 저장하면 화면 값으로 덮어씁니다(넘는 행은 삭제)."),
+				m_nViewSeg + 1, nCell, m_nMaskMismatch, nStick, m_nMaskExtra);
+			AfxMessageBox(strWarn, MB_ICONWARNING);
+		}
+	}
+
 }
 
 //---------------------------------------------------------------
@@ -512,6 +576,14 @@ BOOL CDlgSubManual_MultiMeas::IsOfflineStatus()
 			AfxMessageBox(_T("Not offline mode.\nChange to offline mode and try again."), MB_ICONWARNING);
 			return FALSE;
 		}
+	}
+
+	// LYS 2026-09-30 Hybrid 3d B16a no Recipe Open / Save / segment switch while a hybrid recipe is being measured
+	//   (RecipeChange under the measure thread resets the segment vectors). 1-segment recipes: unchanged.
+	if (IsHybridRunBusy())
+	{
+		AfxMessageBox(_T("하이브리드 레시피 측정 중에는 이 작업을 할 수 없습니다.\n측정이 끝난 뒤 다시 시도하십시오."), MB_ICONWARNING);
+		return FALSE;
 	}
 
 	return TRUE;
@@ -581,6 +653,7 @@ void CDlgSubManual_MultiMeas::OnBnClickedButtonMmOpen()
 
 	if (pMgr->LoadMeasData(strFileName) == true)
 	{
+		UpdateSegmentCombo();	// LYS 2026-09-30 Hybrid 3d view = segment 0 of the recipe just opened (1-segment: selector stays hidden)
 		LoadFromMgr();
 		GetDlgItem(IDC_EDIT_MM_RECIPE)->SetWindowText(strFileName);
 
@@ -596,6 +669,7 @@ void CDlgSubManual_MultiMeas::OnBnClickedButtonMmOpen()
 			return;
 
 		pMgr->Clear();
+		UpdateSegmentCombo();	// LYS 2026-09-30 Hybrid 3d
 		LoadFromMgr();		// empty -> default 1 row + cell map from current recipe
 		GetDlgItem(IDC_EDIT_MM_RECIPE)->SetWindowText(strFileName);
 	}
@@ -618,6 +692,18 @@ void CDlgSubManual_MultiMeas::OnBnClickedButtonMmSave()
 	if (strRecipe.IsEmpty() || strRecipe == _T("UNKNOWN"))
 	{
 		AfxMessageBox(_T("No recipe name.\nOpen a recipe first."), MB_ICONWARNING);
+		return;
+	}
+
+	// LYS 2026-09-30 Hybrid 3d hybrid view: save the viewed segment only, with its own checks (the 1-segment path below is unchanged)
+	if (IsViewSegmented())
+	{
+		SaveViewSegment(TRUE);
+		return;
+	}
+	if (IsSegmented())	// a 1-segment view while a hybrid recipe is loaded (opened elsewhere): its grid is not this recipe's
+	{
+		AfxMessageBox(_T("WAD Multi 화면을 연 뒤 레시피가 바뀌었습니다.\nRecipe Open으로 다시 연 뒤 저장하십시오."), MB_ICONWARNING);
 		return;
 	}
 
@@ -760,4 +846,274 @@ LRESULT CDlgSubManual_MultiMeas::OnSpreadDblClick(WPARAM wParam, LPARAM lParam)
 	}
 
 	return 0;
+}
+
+//---------------------------------------------------------------
+// LYS 2026-09-30 Hybrid Phase 3d segment view (HybridGlass_Porting_Plan.md Phase 3d (5))
+//   The grid shows GetSegmentMgr(m_nViewSeg) and saves to [DATA_SEG{k+1}] / [MASECELL_SEG{k+1}] (segment 0 = [DATA]/[MASECELL]).
+//   SetActiveSegment is never called here - the measure thread owns the active segment.
+//---------------------------------------------------------------
+BOOL CDlgSubManual_MultiMeas::IsSegmented()
+{
+	if (m_pAuroraMgr == nullptr || m_pAuroraMgr->GetRecipeEditMgrPtr() == nullptr) return FALSE;
+	return (m_pAuroraMgr->GetRecipeEditMgrPtr()->GetSegmentLoopCount() > 1) ? TRUE : FALSE;
+}
+
+BOOL CDlgSubManual_MultiMeas::IsViewSegmented()
+{
+	return (m_nViewSegCount > 1) ? TRUE : FALSE;
+}
+
+BOOL CDlgSubManual_MultiMeas::IsHybridRunBusy()
+{
+	if (IsSegmented() == FALSE) return FALSE;
+	if (CSequenceManager::GetInstance()->IsEngineCompleteAll() == false) return TRUE;
+	return CSystemParamShare::GetInstance()->IsCycleState() ? TRUE : FALSE;
+}
+
+void CDlgSubManual_MultiMeas::UpdateSegmentCombo()
+{
+	CRecipeEditMgr* pRcp = (m_pAuroraMgr != nullptr) ? m_pAuroraMgr->GetRecipeEditMgrPtr() : nullptr;
+	C_OutRecipeFunc* pFunc = (pRcp != nullptr) ? pRcp->GetRecipeFuncPtr() : nullptr;
+	int nSeg = (pRcp != nullptr && pFunc != nullptr) ? pRcp->GetSegmentLoopCount() : 1;
+	if (nSeg < 1) nSeg = 1;
+
+	m_nViewSeg = 0;
+	m_nViewSegCount = nSeg;
+	m_strViewSegRcp = (pRcp != nullptr) ? pRcp->GetRecipeID() : CString(_T(""));
+
+	BOOL bShow = (nSeg > 1) ? TRUE : FALSE;
+	if (m_cmbSeg.GetSafeHwnd() != NULL)
+	{
+		m_cmbSeg.ResetContent();
+		if (bShow)
+		{
+			CString str;
+			for (int k = 0; k < nSeg; k++)
+			{
+				str.Format(_T("Seg %d/%d %s R%d (%d x %d)"), k + 1, nSeg, pFunc->GetSegmentName(k).GetString(), pFunc->GetSegmentRotate(k) * 90,
+					pFunc->GetSegmentStickCount(k), pFunc->GetSegmentCellCount(k));
+				m_cmbSeg.AddString(str);
+			}
+			m_cmbSeg.SetCurSel(0);
+		}
+		m_cmbSeg.EnableWindow(TRUE);
+		m_cmbSeg.ShowWindow(bShow ? SW_SHOW : SW_HIDE);
+	}
+	if (GetDlgItem(IDC_STATIC_MM_SEG) != NULL)		GetDlgItem(IDC_STATIC_MM_SEG)->ShowWindow(bShow ? SW_SHOW : SW_HIDE);
+	if (GetDlgItem(IDC_STATIC_MM_SEG_INFO) != NULL)	GetDlgItem(IDC_STATIC_MM_SEG_INFO)->ShowWindow(bShow ? SW_SHOW : SW_HIDE);
+
+	if (bShow)
+	{
+		CWadMultiMeasMgr* pMgr = GetMgr();
+		if (pMgr != nullptr) pMgr->ResetRunState();	// B6: an idle load into the shared manager must not leave a run state behind
+		SetTimer(MM_TIMER_SEG, 500, NULL);
+	}
+	else
+		KillTimer(MM_TIMER_SEG);
+}
+
+void CDlgSubManual_MultiMeas::SetSegInfoText(LPCTSTR szText)
+{
+	CWnd* pInfo = GetDlgItem(IDC_STATIC_MM_SEG_INFO);
+	if (pInfo == NULL) return;
+	CString strOld;
+	pInfo->GetWindowText(strOld);
+	if (strOld != szText) pInfo->SetWindowText(szText);	// the 500 ms timer would flicker otherwise
+}
+
+void CDlgSubManual_MultiMeas::UpdateSegmentInfo()
+{
+	if (IsViewSegmented() == FALSE) return;
+
+	CString strLine1, strLine2;
+	C_OutRecipeFunc* pFunc = m_pAuroraMgr->GetRecipeEditMgrPtr()->GetRecipeFuncPtr();
+	S_RecipeMgr* pSegMgr = (pFunc != nullptr && m_nViewSeg < pFunc->GetSegmentCount()) ? pFunc->GetSegmentMgr(m_nViewSeg) : nullptr;
+	if (pSegMgr != nullptr)
+		strLine1.Format(_T("Multi(recipe) %s  cell %.2f x %.2f"), (pSegMgr->m_sInfo.m_sInspectItem.m_bUseSpec_Multi == TRUE) ? _T("ON") : _T("OFF"),
+			fabs(pSegMgr->m_sMap.m_fCellSize.x), fabs(pSegMgr->m_sMap.m_fCellSize.y));
+
+	CString strData = CWadMultiMeasMgr::GetDataSection(m_nViewSeg);
+	if (m_bViewDataFound)
+		strLine2.Format(_T("[%s] found"), strData.GetString());
+	else
+	{
+		strLine2.Format(_T("[%s] none -> base point only"), strData.GetString());
+		if (m_bViewMaskFound) strLine2 += _T(", [") + CWadMultiMeasMgr::GetMaskSection(m_nViewSeg) + _T("] present");
+	}
+	SetSegInfoText(strLine1 + _T("\n") + strLine2);
+}
+
+// hybrid view only. Short-circuit order: the segment vectors are read only when the counts still match.
+BOOL CDlgSubManual_MultiMeas::IsMultiViewStale(BOOL bPopup)
+{
+	if (IsViewSegmented() == FALSE) return FALSE;
+
+	BOOL bStale = FALSE;
+	CRecipeEditMgr* pRcp = m_pAuroraMgr->GetRecipeEditMgrPtr();
+	CString strEdit, strRcpID = pRcp->GetRecipeID();
+	GetDlgItem(IDC_EDIT_MM_RECIPE)->GetWindowText(strEdit);
+	if (strEdit != strRcpID || m_strViewSegRcp != strRcpID || pRcp->GetSegmentLoopCount() != m_nViewSegCount)
+		bStale = TRUE;
+	else
+	{
+		C_OutRecipeFunc* pFunc = pRcp->GetRecipeFuncPtr();
+		if (pFunc == nullptr || m_nViewSeg >= pFunc->GetSegmentCount()
+			|| pFunc->GetSegmentStickCount(m_nViewSeg) != m_nViewStick || pFunc->GetSegmentCellCount(m_nViewSeg) != m_nViewCell)
+			bStale = TRUE;
+	}
+	if (bStale && bPopup)
+		AfxMessageBox(_T("WAD Multi 화면을 연 뒤 레시피가 바뀌었습니다.\nRecipe Open으로 다시 연 뒤 저장하십시오."), MB_ICONWARNING);
+	return bStale;
+}
+
+BOOL CDlgSubManual_MultiMeas::SaveViewSegment(BOOL bAsk)
+{
+	CWadMultiMeasMgr* pMgr = GetMgr();
+	if (pMgr == nullptr || IsViewSegmented() == FALSE) return FALSE;
+
+	if (bAsk)
+	{
+		CString strAsk;
+		strAsk.Format(_T("세그먼트 %d/%d WAD Multi 설정을 저장하시겠습니까?"), m_nViewSeg + 1, m_nViewSegCount);
+		if (AfxMessageBox(strAsk, MB_YESNO | MB_ICONQUESTION) != IDYES) return FALSE;
+	}
+	if (IsMultiViewStale(TRUE)) return FALSE;
+
+	CString strRecipe = m_strViewSegRcp;
+	C_OutRecipeFunc* pFunc = m_pAuroraMgr->GetRecipeEditMgrPtr()->GetRecipeFuncPtr();
+
+	SaveToMgr();
+
+	int nNgIndex = -1;
+	if (pMgr->IsCellRangeValid(nNgIndex) != true)
+	{
+		CString strMsg;
+		strMsg.Format(_T("포인트 %d가 셀 범위(±Cell/2) 밖에 있습니다.\n저장을 취소합니다."), nNgIndex + 1);
+		AfxMessageBox(strMsg, MB_ICONWARNING);
+		return FALSE;
+	}
+
+	S_RecipeMgr* pSegMgr = (pFunc != nullptr) ? pFunc->GetSegmentMgr(m_nViewSeg) : nullptr;
+	if (pSegMgr != nullptr)
+	{
+		double dRX = fabs(pSegMgr->m_sMap.m_fCellSize.x), dRY = fabs(pSegMgr->m_sMap.m_fCellSize.y);
+		if (fabs(pMgr->GetCellX() - dRX) > 0.5 || fabs(pMgr->GetCellY() - dRY) > 0.5)
+		{
+			CString strAsk;
+			strAsk.Format(_T("Cell Size(%.4f x %.4f)가 세그먼트 %d 레시피 셀 크기(%.4f x %.4f)와 다릅니다.\n포인트 좌표는 이 세그먼트(R%d) 기준입니다. 그래도 저장하시겠습니까?"),
+				pMgr->GetCellX(), pMgr->GetCellY(), m_nViewSeg + 1, dRX, dRY, pFunc->GetSegmentRotate(m_nViewSeg) * 90);
+			if (AfxMessageBox(strAsk, MB_YESNO | MB_ICONWARNING) != IDYES) return FALSE;
+		}
+	}
+
+	if (m_nMaskMismatch > 0 || m_nMaskExtra > 0)
+	{
+		CString strAsk;
+		strAsk.Format(_T("셀 수가 맞지 않던 행 %d개와 스틱 수를 넘는 행 %d개를 지금 화면 값으로 덮어씁니다(넘는 행은 삭제).\n계속 하시겠습니까?"), m_nMaskMismatch, m_nMaskExtra);
+		if (AfxMessageBox(strAsk, MB_YESNO | MB_ICONWARNING) != IDYES) return FALSE;
+	}
+
+	// lower-bound warning only: K comes from the AgingRcp (edited elsewhere); the auto start check refuses
+	int nG = m_pAuroraMgr->GetRecipeEditMgrPtr()->GetGlassRowBlock(0, 0);
+	int nPk = pMgr->GetPointCount();
+	if (pMgr->IsMultiMode() && nPk > 1 && nG * nPk > M_RESULT_AREA_MAX)
+	{
+		CString strWarn;
+		strWarn.Format(_T("결과 행 수가 한도를 넘습니다: 셀 %d x 포인트 %d = %d > %d.\n자동 시작 시 거부됩니다."), nG, nPk, nG * nPk, M_RESULT_AREA_MAX);
+		AfxMessageBox(strWarn, MB_ICONWARNING);
+	}
+
+	if (pMgr->SaveMeasSegment(strRecipe, m_nViewSeg, true) != true)
+	{
+		AfxMessageBox(_T("WAD Multi 레시피 저장에 실패했습니다."), MB_ICONWARNING);
+		return FALSE;
+	}
+
+	pMgr->ResetRunState();
+	pMgr->LoadMeasSegment(strRecipe, m_nViewSeg);	// reload for verification (OCP Save->Load pattern)
+	LoadFromMgr();
+	UpdateSegmentInfo();
+
+	CString strLog;
+	strLog.Format(_T("[HYBRID] WAD Multi saved %s [%s]/[%s] points %d rows %d"), strRecipe.GetString(),
+		CWadMultiMeasMgr::GetDataSection(m_nViewSeg).GetString(), CWadMultiMeasMgr::GetMaskSection(m_nViewSeg).GetString(),
+		pMgr->GetPointCount(), pMgr->GetCellUseStickCount());
+	CLogWrapper::GetInstance()->KMLOG(OPER, strLog);
+
+	if (bAsk) AfxMessageBox(_T("WAD Multi 레시피를 저장했습니다."));
+	return TRUE;
+}
+
+void CDlgSubManual_MultiMeas::OnSelchangeComboMmSeg()
+{
+	int nSel = m_cmbSeg.GetCurSel();
+	if (nSel < 0 || nSel == m_nViewSeg) return;
+
+	if (IsViewSegmented() == FALSE || IsOfflineStatus() != TRUE || IsMultiViewStale(TRUE))	// IsOfflineStatus also blocks a busy hybrid run
+	{
+		m_cmbSeg.SetCurSel(m_nViewSeg);
+		return;
+	}
+
+	CString strAsk;
+	strAsk.Format(_T("세그먼트 %d WAD Multi 설정을 먼저 저장하시겠습니까?\n예: 저장 후 전환 / 아니요: 저장하지 않고 전환 / 취소: 전환 취소"), m_nViewSeg + 1);
+	int nAns = AfxMessageBox(strAsk, MB_YESNOCANCEL | MB_ICONQUESTION);
+	if (nAns == IDCANCEL || (nAns == IDYES && SaveViewSegment(FALSE) == FALSE))
+	{
+		m_cmbSeg.SetCurSel(m_nViewSeg);
+		return;
+	}
+
+	CWadMultiMeasMgr* pMgr = GetMgr();
+	if (pMgr == nullptr)
+	{
+		m_cmbSeg.SetCurSel(m_nViewSeg);
+		return;
+	}
+
+	m_nViewSeg = nSel;
+	pMgr->ResetRunState();
+	if (pMgr->LoadMeasSegment(m_strViewSegRcp, nSel) == false)
+		pMgr->Clear();
+	LoadFromMgr();
+	UpdateSegmentInfo();
+}
+
+// The dialog is a WS_CHILD of CDlgSubManual: WM_SHOWWINDOW arrives only via the Manual sub-tab buttons, not when the
+// Manual screen itself comes back from the top navigation - hence the timer (hybrid view only; none for 1-segment recipes).
+void CDlgSubManual_MultiMeas::RefreshSegmentState()
+{
+	if (IsViewSegmented() == FALSE || m_cmbSeg.GetSafeHwnd() == NULL) return;
+
+	if (IsHybridRunBusy())	// GetSegmentMgr is not read while the measure thread may be copying segments
+	{
+		m_cmbSeg.EnableWindow(FALSE);
+		SetSegInfoText(_T("Hybrid run in progress"));
+		return;
+	}
+	if (IsMultiViewStale(FALSE))
+	{
+		m_cmbSeg.EnableWindow(FALSE);
+		SetSegInfoText(_T("Recipe changed - press Recipe Open"));
+		return;
+	}
+	if (m_cmbSeg.IsWindowEnabled() == FALSE) m_cmbSeg.EnableWindow(TRUE);
+	UpdateSegmentInfo();
+}
+
+void CDlgSubManual_MultiMeas::OnTimer(UINT_PTR nIDEvent)
+{
+	if (nIDEvent == MM_TIMER_SEG)
+		RefreshSegmentState();
+
+	CDialogEx::OnTimer(nIDEvent);
+}
+
+void CDlgSubManual_MultiMeas::OnShowWindow(BOOL bShow, UINT nStatus)
+{
+	CDialogEx::OnShowWindow(bShow, nStatus);
+
+	if (bShow)
+		RefreshSegmentState();
 }

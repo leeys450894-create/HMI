@@ -1134,7 +1134,7 @@ int  CCommTcpIpObjectWAD::_ExeMeasWAD(int iFunc, bool bWait, bool bWadRHeadUse)
 
 		stELP.hrd.cmd = 1;		// Ox31
 		stELP.hrd.len = 32;
-		str.Format(_T("%s"), m_pRecipeEditMgr->GetRecipeID());
+		str.Format(_T("%s"), m_pRecipeEditMgr->GetWADRecipeName());	// LYS 2026-09-29 Hybrid Phase 3 세그먼트 WAD 모델명 (공란 = RecipeID, 기존 GetRecipeID)
 		_tcscpy_s(stELP.szModel, _countof(stELP.szModel), str);
 	}		
 		break;

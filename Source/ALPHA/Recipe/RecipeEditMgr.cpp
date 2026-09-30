@@ -37,6 +37,11 @@ CRecipeEditMgr::CRecipeEditMgr(stAuroraMgrPool &MgrPool)
 	m_ptrnReview.ClearPtrn();
 
 	m_pRecipeFunc = nullptr;
+	m_nCellStatusStickBase = 0;	// LYS 2026-09-29 Hybrid 3b A8
+	m_nSegCountCache = 1;	// LYS 2026-09-30 Hybrid 3c segment log tag caches (1 = not hybrid)
+	m_nActiveSegCache = 0;
+	m_nSegRowBaseCache = 0;
+	m_nEfaGlassLatch = -1;	// LYS 2026-09-30 Hybrid 3c A5 not latched
 
 	//----------------------------------------------------------------------
 	// Thread 생성
@@ -130,6 +135,8 @@ int CRecipeEditMgr::RecipeChange(CString strRecipeID)
 	{
 		return  JOB_RECIPE_NOT_EXIST;
 	}
+	SyncCellStatusStickBase();	// LYS 2026-09-29 Hybrid 3b A8 LoadRcpFile activates segment 0 -> base 0
+	m_nEfaGlassLatch = -1;	// LYS 2026-09-30 Hybrid 3c A5 new recipe / new glass: the next measure start latches again
 
 	CString strAlignRecipe;
 	strAlignRecipe.Format(_T("%s"), GetRecipeInfo()->m_sOptionItem.m_chAlignName);
@@ -278,6 +285,100 @@ int CRecipeEditMgr::OpenAlignRecipe(CString strRecipeID)
 	}
 	
 	return nRet;
+}
+
+// LYS 2026-09-29 Hybrid Phase 3 외부 장치 레시피명 (docs/HybridGlass_Porting_Plan.md 5.6, D-3)
+//   활성 세그먼트 헤더의 PG/WAD 이름, 공란이면 RecipeID(지금 동작 그대로). CIM PPID / APD RECIPE_ID는 파일명 그대로 둔다.
+CString CRecipeEditMgr::GetPGRecipeName()
+{
+	if (m_pRecipeFunc != NULL && m_pRecipeFunc->GetSegmentCount() > 0)
+	{
+		S_SegmentHeader sHdr = m_pRecipeFunc->GetSegmentHeader(m_pRecipeFunc->GetActiveSegmentIndex());
+		CString strName = sHdr.m_chPGName;
+		strName.Trim();
+		if (strName.IsEmpty() != true) return strName;
+	}
+	return GetRecipeID();
+}
+
+CString CRecipeEditMgr::GetWADRecipeName()
+{
+	if (m_pRecipeFunc != NULL && m_pRecipeFunc->GetSegmentCount() > 0)
+	{
+		S_SegmentHeader sHdr = m_pRecipeFunc->GetSegmentHeader(m_pRecipeFunc->GetActiveSegmentIndex());
+		CString strName = sHdr.m_chWADName;
+		strName.Trim();
+		if (strName.IsEmpty() != true) return strName;
+	}
+	return GetRecipeID();
+}
+
+// LYS 2026-09-29 Hybrid Phase 3b segment helpers (docs/HybridGlass_Porting_Plan.md 5.7 / 5.9)
+//   A recipe with <= 1 segment short-circuits to the pre-hybrid value without touching the segment vectors.
+int CRecipeEditMgr::GetSegmentLoopCount()
+{
+	return (m_pRecipeFunc != NULL) ? m_pRecipeFunc->GetSegmentLoopCount() : 1;
+}
+
+int CRecipeEditMgr::GetActiveSegment()
+{
+	if (m_pRecipeFunc == NULL || m_pRecipeFunc->GetSegmentCount() <= 1) return 0;
+	return m_pRecipeFunc->GetActiveSegmentIndex();
+}
+
+// A8 the base is cached as a plain int: the PG receive thread (CommTcpIpObjectPG) and the UI timer (DlgSubOperate)
+//   read it while the measure thread may be inside SetActiveSegment, which rewrites the segment vectors by value.
+//   Callers: RecipeChange (segment 0 active after LoadRcpFile) and CDoWorkGlassMeasure::SegmentSwitchData.
+void CRecipeEditMgr::SyncCellStatusStickBase()
+{
+	int nBase = 0;
+	if (m_pRecipeFunc != NULL && m_pRecipeFunc->GetSegmentCount() > 1)
+		nBase = m_pRecipeFunc->GetSegmentStickBase(m_pRecipeFunc->GetActiveSegmentIndex());
+	if (nBase < 0 || nBase >= M_SEGMENT_STICK_MAX) nBase = 0;
+	m_nCellStatusStickBase = nBase;
+
+	// LYS 2026-09-30 Hybrid 3c segment log tag caches - same two refresh points as the base (RecipeChange, SegmentSwitchData)
+	int nSegCnt = (m_pRecipeFunc != NULL) ? m_pRecipeFunc->GetSegmentCount() : 1;
+	int nActSeg = 0, nRowBase = 0;
+	if (nSegCnt > 1)
+	{
+		nActSeg = m_pRecipeFunc->GetActiveSegmentIndex();
+		for (int k = 0; k < nActSeg && k < nSegCnt; k++)
+			nRowBase += m_pRecipeFunc->GetSegmentCellCount(k) * m_pRecipeFunc->GetSegmentStickCount(k);
+	}
+	else nSegCnt = 1;
+	m_nSegCountCache = nSegCnt;
+	m_nActiveSegCache = nActSeg;
+	m_nSegRowBaseCache = nRowBase;
+}
+
+int CRecipeEditMgr::ToCellStatusStick(int nLocalStick) const
+{
+	if (nLocalStick < 0) return nLocalStick;	// keep the callers' -1 guards working
+	return nLocalStick + m_nCellStatusStickBase;
+}
+
+int CRecipeEditMgr::GetGlassRowBlock(int nAreaActive, int nStickActive)
+{
+	if (m_pRecipeFunc == NULL || m_pRecipeFunc->GetSegmentCount() <= 1)
+		return nAreaActive * nStickActive;	// 1 segment: exactly the old nArea * nMaxStick
+	int nG = 0;
+	for (int k = 0; k < m_pRecipeFunc->GetSegmentCount(); k++)
+		nG += m_pRecipeFunc->GetSegmentCellCount(k) * m_pRecipeFunc->GetSegmentStickCount(k);
+	return nG;
+}
+
+// LYS 2026-09-30 Hybrid Phase 3c segment tag appended to per-stick / row logs. Reads the int caches and the segment vector size only,
+//   so the PG receive / UI threads may call it. 1-segment recipe -> empty string, so every existing log line stays byte-identical.
+//   The vector-size check also covers a stale cache: CDlgTestMode reloads the recipe without RecipeChange (no SyncCellStatusStickBase).
+CString CRecipeEditMgr::GetSegLogTag(BOOL bRowBase) const
+{
+	CString strTag;
+	if (m_nSegCountCache <= 1) return strTag;
+	if (m_pRecipeFunc == NULL || m_pRecipeFunc->GetSegmentLoopCount() <= 1) return strTag;
+	if (bRowBase) strTag.Format(_T(" seg(%d/%d) rowbase(%d)"), m_nActiveSegCache + 1, m_nSegCountCache, m_nSegRowBaseCache);
+	else          strTag.Format(_T(" seg(%d/%d)"), m_nActiveSegCache + 1, m_nSegCountCache);
+	return strTag;
 }
 
 bool CRecipeEditMgr::SaveRecipe(CString strRecipeID)

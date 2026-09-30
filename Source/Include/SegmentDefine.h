@@ -7,6 +7,7 @@
 
 #define M_SEGMENT_MAX			8		// segments per recipe
 #define M_SEGMENT_STICK_MAX		50		// total sticks over all segments (nCellStatus[100][50])
+#define M_RESULT_AREA_MAX		2500	// LYS 2026-09-29 Hybrid 3b result rows per glass = dResult APD AREA_MAX_CNT
 #define M_SEG_NAME_LEN			64
 #define M_SEG_EXT_LEN			256
 

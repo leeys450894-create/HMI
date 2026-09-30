@@ -574,6 +574,13 @@
 #define IDC_BTN_MANUAL_PLC_BIT_ON       21003
 #define IDC_BTN_MANUAL_PLC_BIT_OFF      21004
 #define IDC_BTN_CCD_RESET               21005
+#define IDC_COMBO_AGING_SEG             21006
+#define IDC_STATIC_AGING_SEG            21007
+#define IDC_COMBO_EFA_SEG               21008
+#define IDC_STATIC_EFA_SEG              21009
+#define IDC_COMBO_MM_SEG                21010
+#define IDC_STATIC_MM_SEG               21011
+#define IDC_STATIC_MM_SEG_INFO          21012
 
 // Next default values for new objects
 // 

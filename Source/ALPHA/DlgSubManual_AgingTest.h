@@ -34,6 +34,10 @@ protected:
 	CMySpreadDll*	m_spreadAgingList;
 	CMySpreadDll*	m_spreadAgingMeas;
 	CComboBox		m_cmbCycle;
+	CComboBox		m_cmbSeg;			// LYS 2026-09-29 Hybrid 3b A13 segment selector (shown only for hybrid recipes)
+	int				m_nViewSeg;			// segment shown in the cell grid (0 for 1-segment recipes)
+	int				m_nMaskMismatch;	// rows with a wrong cell count found by the last MeasCellLoad
+	CString			m_strViewSegRcp;	// recipe the combo was built for
 	CString			m_strAgingRcpPath;
 	CAuroraMgr*		m_pAuroraMgr;	// LYS 2026-08-06 Phase 1
 	HFONT			m_hfont;
@@ -49,8 +53,13 @@ public:
 	void AgingItemAdd();
 	void UpdateAgingCell();
 	int	 GetMeasUse(int iMeas, int nMeasUse);
-	void MeasCellSave();
+	BOOL MeasCellSave();				// LYS 2026-09-29 Hybrid 3b A13 FALSE = not written (cancelled / recipe changed)
 	void MeasCellLoad();
+	BOOL IsSegmented();					// LYS 2026-09-29 Hybrid 3b A13 recipe has more than 1 segment
+	BOOL IsHybridRunBusy();				// hybrid recipe and a measure run / cycle test in progress
+	void UpdateSegmentCombo();
+	BOOL IsMaskViewStale(CString strRcpID);	// grid built for another recipe or not the recipe's size -> popup + TRUE (LYS 2026-09-30 every recipe)
+	BOOL ConfirmMaskOverwrite();			// LYS 2026-09-30 mismatched rows shown unchecked -> Yes/No before saving
 	afx_msg LRESULT OnSpreadDBClick(WPARAM wParam, LPARAM lParam);
 
 protected:
@@ -69,6 +78,7 @@ protected:
 	afx_msg void OnItemSave();
 	afx_msg void OnLoadAgingInfo();
 	afx_msg void OnAgingProcStrart();
+	afx_msg void OnSelchangeSeg();		// LYS 2026-09-29 Hybrid 3b A13
 	afx_msg void OnTimer(UINT_PTR nIDEvent);	// LYS 2026-08-06 E4: aging progress highlight
 
 	DECLARE_MESSAGE_MAP()

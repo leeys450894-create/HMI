@@ -105,4 +105,8 @@ class C_InRecipeFunc
 		BOOL SetSegmentHeader (int nSeg, S_SegmentHeader sHdr);
 		BOOL ReplaceSegments (const std::vector<S_RecipeMgr> &vecSeg, const std::vector<S_SegmentHeader> &vecHdr);
 		void CollapseToActiveSegment ();
+
+	// LYS 2026-09-29 셀/스틱 좌표 글라스 범위 검사 (MakeCell 셀 정보 오류 재발 방지)
+	public:
+		CString CheckRecipeLayout (const S_RecipeMgr *pMgr, CString strWhat);
 };
