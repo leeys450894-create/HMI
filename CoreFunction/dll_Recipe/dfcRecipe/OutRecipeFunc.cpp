@@ -1,6 +1,7 @@
 #include "pch.h"
 #include "dfcRecipe.h"
 #include "OutRecipeFunc.h"
+#include <memory>	// LYS 2026-09-29 unique_ptr
 
 #ifdef _DEBUG 
 #undef THIS_FILE
@@ -102,7 +103,7 @@ BOOL	C_OutRecipeFunc::LoadRcpFile (CString strRcpName)
 
 	// LYS 2026-09-29 Hybrid Phase 1 로드 전 상태 보관 - 본문/꼬리 어디서든 실패(태그 불일치, 토큰 부족 예외)하면 통째로 되돌린다
 	//                (지금까지는 GetAt 범위 초과 예외가 그대로 튀어 앱이 죽었다 - P0-3 HMI.rcp 사례)
-	S_RecipeMgr sBakMgr = m_recipeMgr;
+	std::unique_ptr<S_RecipeMgr> pBakMgr (new S_RecipeMgr (m_recipeMgr));	// LYS 2026-09-29 스택 오버플로 방지 - S_RecipeMgr는 고정 문자 배열만 약 88KB라 스택에 두지 않는다
 	std::vector<S_RecipeMgr>	 vecBakSeg	 = m_vecSegments;
 	std::vector<S_SegmentHeader> vecBakHdr	 = m_vecSegHeader;
 	std::vector<BOOL>			 vecBakAlign = m_vecSegAlignOK;
@@ -138,7 +139,7 @@ BOOL	C_OutRecipeFunc::LoadRcpFile (CString strRcpName)
 	}
 
 	if (!bOK) {
-		m_recipeMgr	  = sBakMgr;
+		m_recipeMgr	  = *pBakMgr;
 		m_vecSegments  = vecBakSeg;
 		m_vecSegHeader = vecBakHdr;
 		m_vecSegAlignOK = vecBakAlign;
@@ -730,20 +731,20 @@ BOOL	C_OutRecipeFunc::LoadHybridTail (CStdioFile *pFile, int nVersion)
 		}
 	}
 
-	S_RecipeMgr sSeg0 = m_recipeMgr;
+	std::unique_ptr<S_RecipeMgr> pSeg0 (new S_RecipeMgr (m_recipeMgr));	// LYS 2026-09-29 스택 오버플로 방지 - S_RecipeMgr는 고정 문자 배열만 약 88KB라 스택에 두지 않는다
 	std::vector<S_RecipeMgr> vecSeg;
-	vecSeg.push_back (sSeg0);
+	vecSeg.push_back ((*pSeg0));
 
 	for (int k = 1; k < nSeg; k++) {
 		if (ReadString (pFile).Trim () != _T("_SEGMENT_")) return FALSE;
 		if (ReadInt (pFile) != k) return FALSE;
 
 		// 기준값 = 세그먼트 0 사본: 파일에 없는 필드(SRM 램프 등)는 지금처럼 "직전 값 유지" 의미로 세그먼트 0 값을 물려받는다
-		m_recipeMgr = sSeg0;
+		m_recipeMgr = (*pSeg0);
 		if (!LoadRcpSections (pFile, nVersion)) return FALSE;
 		vecSeg.push_back (m_recipeMgr);
 	}
-	m_recipeMgr = sSeg0;
+	m_recipeMgr = (*pSeg0);
 
 	if (ReadString (pFile).Trim () != _T("_HYBRID_END_")) return FALSE;
 

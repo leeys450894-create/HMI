@@ -401,7 +401,7 @@ bool CCommTcpIpObjectPG::WaitInspectionComplete(DWORD dwTimeOut, int iMeasType)
 	nCellCnt = pslData->m_nCellCnt;
 
 	int iStick = 0;
-	iStick = m_pShareMemoryMgr->GetSharedMemory()->m_nAgingStartStick[4];
+	iStick = m_pRecipeEditMgr->ToCellStatusStick(m_pShareMemoryMgr->GetSharedMemory()->m_nAgingStartStick[4]);	// LYS 2026-09-29 Hybrid 3b A8 status column = slot + segment stick base
 
 	// 2022.12.22 add
 	if (iStick < 0)	return true;
@@ -552,7 +552,7 @@ bool CCommTcpIpObjectPG::WaitInspectionComplete(DWORD dwTimeOut, int iMeasType)
 		else if (iMeasType == 8)	// AGING
 		{
 			int iStick = 0;
-			iStick = m_pShareMemoryMgr->GetSharedMemory()->m_nAgingStartStick[4];
+			iStick = m_pRecipeEditMgr->ToCellStatusStick(m_pShareMemoryMgr->GetSharedMemory()->m_nAgingStartStick[4]);	// LYS 2026-09-29 Hybrid 3b A8 status column = slot + segment stick base
 
 			for (size_t i = 0; i < nCellCnt; i++)
 			{
@@ -1009,7 +1009,7 @@ bool CCommTcpIpObjectPG::WaitInspectionComplete(DWORD dwTimeOut, int iMeasType)
 	else if (iMeasType == 8)	// AGING
 	{
 		int iStick = 0;
-		iStick = m_pShareMemoryMgr->GetSharedMemory()->m_nAgingStartStick[4];
+		iStick = m_pRecipeEditMgr->ToCellStatusStick(m_pShareMemoryMgr->GetSharedMemory()->m_nAgingStartStick[4]);	// LYS 2026-09-29 Hybrid 3b A8 status column = slot + segment stick base
 
 		if (nCellCnt > 10 && !IsOCP())	// LYS 2026-09-07 OCP: no ODD/EVEN split
 		{
@@ -1454,7 +1454,7 @@ void CCommTcpIpObjectPG::xNetCallbackRecieveData(LPVOID ud)
 						nCellCnt = pslData->m_nCellCnt;
 
 						int iStick = 0;
-						iStick = m_pShareMemoryMgr->GetSharedMemory()->m_nAgingStartStick[4];
+						iStick = m_pRecipeEditMgr->ToCellStatusStick(m_pShareMemoryMgr->GetSharedMemory()->m_nAgingStartStick[4]);	// LYS 2026-09-29 Hybrid 3b A8 status column = slot + segment stick base
 
 						if (nCellCnt > 10 && !IsOCP())	// LYS 2026-09-07 OCP: no ODD/EVEN split
 						{
@@ -1934,7 +1934,7 @@ int	 CCommTcpIpObjectPG::_ExePGCtrl(int iEvent, int iCellNum)
 		Sleep(1000);
 		ZeroMemory(&stPg, sizeof(stPg));	// LYS 2026-09-14 iCmd/iCellNum 잔존값이 뒤의 Model 명령에 섞이지 않게 초기화
 
-		str.Format(_T("%s"), m_pRecipeEditMgr->GetRecipeID()); 
+		str.Format(_T("%s"), m_pRecipeEditMgr->GetPGRecipeName());	// LYS 2026-09-29 Hybrid Phase 3 세그먼트 PG 모델명 (공란 = RecipeID, 기존 GetRecipeID)
 
 		// Model
 		stPg.iStream = 2;
@@ -2345,7 +2345,7 @@ int	 CCommTcpIpObjectPG::_ExePGCtrl(int iEvent, int iCellNum)
 			nCellCnt = pslData->m_nCellCnt;
 
 			int iStick = 0;
-			iStick = m_pShareMemoryMgr->GetSharedMemory()->m_nAgingStartStick[4];
+			iStick = m_pRecipeEditMgr->ToCellStatusStick(m_pShareMemoryMgr->GetSharedMemory()->m_nAgingStartStick[4]);	// LYS 2026-09-29 Hybrid 3b A8 status column = slot + segment stick base
 
 			if (nCellCnt > 10 && !IsOCP())	// LYS 2026-09-07 OCP: no ODD/EVEN split
 			{
@@ -2516,7 +2516,7 @@ int	 CCommTcpIpObjectPG::_ExePGCtrl(int iEvent, int iCellNum)
 			nCellCnt = pslData->m_nCellCnt;
 
 			int iStick = 0;
-			iStick = m_pShareMemoryMgr->GetSharedMemory()->m_nAgingStartStick[4];
+			iStick = m_pRecipeEditMgr->ToCellStatusStick(m_pShareMemoryMgr->GetSharedMemory()->m_nAgingStartStick[4]);	// LYS 2026-09-29 Hybrid 3b A8 status column = slot + segment stick base
 
 			for (size_t i = 0; i < nCellCnt; i++)
 			{

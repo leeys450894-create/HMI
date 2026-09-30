@@ -88,6 +88,21 @@ private:
 
 	CArray <CELLINFO, CELLINFO&>   m_aryCellGroup;
 
+	// LYS 2026-09-30 Hybrid Phase 6 operate cell map: every segment of a hybrid recipe on one glass.
+	//   Built by GenGlassPath (recipe open / glass start, segment 0 active). The 1 s timer reads only this cache,
+	//   nCellStatus and the int active segment - never the segment vectors (A8). m_nHybridMapSegCnt 0 = 1-segment path.
+	struct S_HybridMapCell
+	{
+		TCHAR	szName[32];			// recipe cell ID
+		double	dSX, dSY, dEX, dEY;	// chart frame: x = 1500 side, y = 925 side (drawn downward), origin = glass centre
+		int		nCell, nStick;		// nCellStatus[nCell][nStick], nStick = segment stick base + MakeCellID stick
+		int		nSeg;
+	};
+	CArray <S_HybridMapCell, S_HybridMapCell&>	m_aryHybridMapCell;
+	CArray <double, double>	m_aryHybridSegBox;	// 4 per segment: min x, min y, max x, max y of its cells
+	int		m_nHybridMapSegCnt;		// segments in the cache, 0 = 1-segment recipe
+	int		m_nHybridMapFrameSeg;	// segment framed in the last drawing, -1 none, -2 force a redraw
+
 	long m_lMeasDoneColorWAD;
 	long m_lMeasDoneColorVision;
 	long m_lMeasDoneColorAngle;	
@@ -165,6 +180,9 @@ public:
 	void UpdateFixtureInOut();
 	void GenGlassPath();
 	void UpdateCellStatus();
+	bool BuildHybridCellMap();								// LYS 2026-09-30 Hybrid Phase 6
+	void UpdateHybridCellStatus();							// LYS 2026-09-30 Hybrid Phase 6
+	void SetHybridCellLook(int iStatus, CELLLAYOUT& stCell);	// LYS 2026-09-30 Hybrid Phase 6
 	afx_msg void OnBnClickedButton1();
 	void UpdateCurCoord();
 	afx_msg void OnBnClickedButtonChangeControlmode();

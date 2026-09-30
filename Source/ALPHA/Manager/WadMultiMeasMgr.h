@@ -11,6 +11,10 @@
 //   [DATA]     CLASS,SUB_CLASS,X,Y,ENABLE,RX,GX,BY,WX,WY (필드별 콤마 병합 리스트)
 //              INSP_MODE (0=Single/1=Multi), CELL_X, CELL_Y
 //   [MASECELL] STICK_n = 셀별 0/1 콤마 리스트
+//
+// LYS 2026-09-30 Hybrid 3d 하이브리드 레시피: 세그먼트 k(>=1)는 [DATA_SEG{k+1}] / [MASECELL_SEG{k+1}] (같은 13키 / STICK_n).
+//   세그먼트 0은 [DATA]/[MASECELL] 그대로(OCP 호환). 섹션이 없으면 그 세그먼트는 base 점만 측정한다.
+//   평면 멤버 = 마지막으로 적재한 세그먼트 한 벌 (측정 스텝이 WAD 스텝마다 활성 세그먼트를 다시 적재).
 
 #include <vector>
 #include <afxmt.h>
@@ -53,8 +57,17 @@ public:
 	//---------------------------------------------------------------
 	// File IO (INI, OCP compatible)
 	//---------------------------------------------------------------
-	bool	LoadMeasData(CString strRecipeID);		// load [DATA] + [MASECELL]; false if file missing
-	bool	SaveMeasData(CString strRecipeID);		// save all from memory
+	bool	LoadMeasData(CString strRecipeID);		// load [DATA] + [MASECELL]; false if file missing (= LoadMeasSegment(rcp, 0))
+	bool	SaveMeasData(CString strRecipeID);		// save all from memory (= SaveMeasSegment(rcp, 0, false))
+
+	// LYS 2026-09-30 Hybrid 3d one segment of a hybrid recipe <-> flat members
+	static CString	GetDataSection(int nSeg);		// nSeg <= 0 -> "DATA",     else "DATA_SEG%d"     (nSeg + 1)
+	static CString	GetMaskSection(int nSeg);		// nSeg <= 0 -> "MASECELL", else "MASECELL_SEG%d" (nSeg + 1)
+	bool	LoadMeasSegment(CString strRecipeID, int nSeg);	// false only if the file is missing
+	bool	SaveMeasSegment(CString strRecipeID, int nSeg, bool bDeleteStaleRows);	// true: delete STICK_n keys past the saved rows
+	int		GetLoadedSegment();
+	bool	IsDataFound();							// loaded segment's [DATA*] parsed >= 1 point
+	bool	IsMaskFound();							// loaded segment's [MASECELL*] has >= 1 row
 
 	void	Clear();
 
@@ -120,6 +133,9 @@ private:
 	CString							m_strRcpFolderPath;
 	CString							m_strLoadedRecipeID;
 	bool							m_bLoaded;
+	int								m_nLoadedSeg;	// LYS 2026-09-30 Hybrid 3d segment held by the flat members
+	bool							m_bDataFound;	// LYS 2026-09-30 Hybrid 3d
+	bool							m_bMaskFound;	// LYS 2026-09-30 Hybrid 3d
 
 	bool							m_bInspMode;	// INSP_MODE (0=Single, 1=Multi)
 	double							m_dCellX;

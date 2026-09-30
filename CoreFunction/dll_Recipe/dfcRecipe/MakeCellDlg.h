@@ -22,6 +22,7 @@ const enum CELL_ROW {
 #include "BaseDialog.h"
 #include "IniFile.h"
 #include <vector>	// LYS 2026-09-29 Hybrid Phase 2 - RecipeManager.cpp includes this header without pch
+#include "GlassMap.h"	// LYS 2026-09-30 IDC_STATIC_CELL_OVERLAY (ICP C_GlassMap)
 
 
 class C_MakeCellDlg : public C_BaseDialog
@@ -74,7 +75,9 @@ class C_MakeCellDlg : public C_BaseDialog
 			std::vector<CString> vecCoord;		// 좌표 그리드 DATA 열
 			std::vector<CString> vecCoordDesc;	// 좌표 그리드 DESCRIPTION 열
 			std::vector<CString> vecCad;		// CAD 그리드 값 열
-			S_MakeSegInput () : bOpened (FALSE), nAngle (0), nRotateSel (0) {}
+			S_GlassMapSeg		 sPreview;		// LYS 2026-09-30 overlay cells built from this slot's grid (used while bOpened)
+			BOOL				 bPreview;
+			S_MakeSegInput () : bOpened (FALSE), nAngle (0), nRotateSel (0), bPreview (FALSE) {}
 		};
 		CButton		m_chkHybrid;
 		CComboBox	m_cmbSegCount;
@@ -91,6 +94,12 @@ class C_MakeCellDlg : public C_BaseDialog
 		void MoveSegView (int nSeg);
 		void BuildRecipeFromGrid (CString strRcpName);
 		void ApplyHybridRecipe ();
+
+		// LYS 2026-09-30 IDC_STATIC_CELL_OVERLAY - ICP MakeCellDlg IDC_STATIC_2 (C_GlassMap): every segment on one glass
+		C_GlassMap	m_wndCellOverlay;
+		void UpdateCellOverlay ();
+		void RefreshViewPreview ();	// LYS 2026-09-30 grid -> preview of the slot on view
+		BOOL BuildGridPreview (S_GlassMapSeg &sOut);
 		afx_msg void OnHybridCheck ();
 		afx_msg void OnSegCountApply ();
 		afx_msg void OnSegPrev ();

@@ -16,6 +16,7 @@
 #include "SystemParamShare.h"
 #include "Manager\SequenceManager.h"
 #include "Manager\SystemConfigMgr.h"
+#include "DoWork\AgingCycleInfo.h"		// LYS 2026-09-30 Hybrid 3c A13 mask section names (engine loader)
 #include "afxdialogex.h"
 
 #include <iostream>
@@ -35,6 +36,9 @@ CDlgSubManual_AgingNew::CDlgSubManual_AgingNew(CAuroraMgr* pAuroraMgr, CWnd* pPa
 	m_hfont = NULL;
 	m_nHlRow = 0;
 	m_nHlCol = 0;
+	m_nMaskMismatch = 0;	// LYS 2026-09-30
+	m_nViewSeg = 0;			// LYS 2026-09-30 Hybrid 3c A13
+	m_nSegLostTick = 0;		// LYS 2026-09-30 Hybrid 3c A13 (S2 fix)
 }
 
 CDlgSubManual_AgingNew::~CDlgSubManual_AgingNew()
@@ -48,6 +52,7 @@ void CDlgSubManual_AgingNew::DoDataExchange(CDataExchange* pDX)
 	DDX_Control(pDX, IDC_STATIC_MANUAL_TITLE, m_LabelInfo);
 	DDX_Control(pDX, IDC_BUTTON_1, m_chkStop);
 	DDX_Control(pDX, IDC_COMBO_1, m_cmbCycle);
+	DDX_Control(pDX, IDC_COMBO_EFA_SEG, m_cmbSeg);	// LYS 2026-09-30 Hybrid 3c A13 (control in ALPHA.rc, hidden by default)
 	for (int i = 0; i < MAX_EFA_STICK; i++) DDX_Control(pDX, IDC_CHECK_1 + i, m_chkStick[i]);
 }
 
@@ -62,6 +67,7 @@ BEGIN_MESSAGE_MAP(CDlgSubManual_AgingNew, CDialogEx)
 	ON_COMMAND(IDC_BUTTON_6, OnItemSave)
 	ON_COMMAND(IDC_BUTTON_7, OnLoadAgingInfo)
 	ON_COMMAND(IDC_BUTTON_8, OnAgingProcStrart)
+	ON_CBN_SELCHANGE(IDC_COMBO_EFA_SEG, OnSelchangeSeg)	// LYS 2026-09-30 Hybrid 3c A13
 	ON_MESSAGE(SSM_DBLCLK, OnSpreadDBClick)	// DLL spread가 더블클릭을 전달한다 (OCX EVENTSINK는 발생하지 않음)
 END_MESSAGE_MAP()
 
@@ -197,6 +203,41 @@ void CDlgSubManual_AgingNew::OnTimer(UINT_PTR nIDEvent)
 	// m_nAgingListCol(1=Aging 2=PTN 3=SEC 4=WAD 5=VISION 6=ANGLE)을 쓰고, 대기 중이면 0/0이다.
 	if (nIDEvent == EFA_TIMER_HIGHLIGHT)
 	{
+		// LYS 2026-09-30 Hybrid 3c A13 recipe changed outside this dialog to a 1-segment recipe -> hide the selector (the stamp is cleared,
+		//   SAVE refused until LOAD / Recipe Open); hybrid run busy -> selector disabled. Engine / cycle flags and the segment count only,
+		//   never the segment contents. 1-segment recipes: the combo is hidden, so nothing here runs.
+		// LYS 2026-09-30 Hybrid 3c A13 (S2 fix) run flags are tested first: every cycle's recipe step reloads the recipe (OpenRecipe on the
+		//   measure thread) and GetSegmentLoopCount() reads 1 while only segment 0 is parsed -> never hide during a run. The hide also
+		//   needs 2 idle ticks in a row (a CIM PPID OpenRecipe can reload while idle) and is done here without UpdateSegmentCombo, which
+		//   would re-read the count and could fill the labels from a recipe that is being reloaded.
+		if (m_cmbSeg.GetSafeHwnd() != NULL && (m_cmbSeg.GetStyle() & WS_VISIBLE))
+		{
+			if (IsHybridRunBusy())
+			{
+				m_nSegLostTick = 0;
+				if (m_cmbSeg.IsWindowEnabled()) m_cmbSeg.EnableWindow(FALSE);
+			}
+			else if (IsSegmented() == FALSE)
+			{
+				if (++m_nSegLostTick >= 2)
+				{
+					m_nSegLostTick = 0;
+					m_nViewSeg = 0;
+					m_strViewRcp.Empty();	// review F6: the grid no longer matches -> SAVE / segment switch refused as stale until LOAD
+					m_cmbSeg.ResetContent();
+					m_cmbSeg.EnableWindow(TRUE);
+					m_cmbSeg.ShowWindow(SW_HIDE);
+					if (GetDlgItem(IDC_STATIC_EFA_SEG) != NULL) GetDlgItem(IDC_STATIC_EFA_SEG)->ShowWindow(SW_HIDE);
+					CLogWrapper::GetInstance()->KMLOG(OPER, _T("[HYBRID] EFA view: the recipe is no longer hybrid - segment selector hidden, LOAD / Recipe Open before saving"));
+				}
+			}
+			else
+			{
+				m_nSegLostTick = 0;
+				if (!m_cmbSeg.IsWindowEnabled()) m_cmbSeg.EnableWindow(TRUE);
+			}
+		}
+
 		do
 		{
 			if (m_spreadAgingList == NULL || m_spreadAgingList->GetSafeHwnd() == NULL) break;
@@ -367,6 +408,22 @@ void CDlgSubManual_AgingNew::OnAgingProcStrart()
 		return;
 	}
 
+	// LYS 2026-09-30 Hybrid 3c A13 (review F3) the cycle measures CSystemParamShare's recipe (the recipe step calls OpenRecipe with it),
+	//   not the one this dialog opened with RecipeChange. START is refused unless both are the same recipe, otherwise the
+	//   EFA flag / file / mask / segment checks below would describe another recipe.
+	// LYS 2026-09-30 user request: 1-segment recipes too (was hybrid only). Run recipe "UNKNOWN" (nothing opened for a run yet) is refused.
+	if (strRcp.CompareNoCase(CSystemParamShare::GetInstance()->GetRecipeID()) != 0)
+	{
+		CString strRunRcp = CSystemParamShare::GetInstance()->GetRecipeID();
+		CString strRefuse;
+		strRefuse.Format(_T("EFA START refused - dialog recipe %s != run recipe %s (the cycle measures the run recipe)"), (LPCTSTR)strRcp, (LPCTSTR)strRunRcp);
+		CLogWrapper::GetInstance()->KMLOG(OPER, strRefuse);
+		CString strMsg;
+		strMsg.Format(_T("이 화면의 레시피(%s)와 운전 레시피(%s)가 다릅니다.\nSTART는 운전 레시피를 측정하므로 이 화면의 셀 맵과 사전 검사가 맞지 않습니다.\n운전 레시피를 이 레시피로 연 뒤(운전 화면 CYCLE 또는 수동 측정 화면의 레시피 열기) 다시 시도하십시오."), (LPCTSTR)strRcp, (LPCTSTR)strRunRcp);
+		AfxMessageBox(strMsg, MB_ICONWARNING);
+		return;
+	}
+
 	//=====================================================================
 	// 사전 검사(AgingTest START와 동일): OCP 모드, 레시피 EFA 플래그, 항목이 있는 EFA rcp 파일.
 	//=====================================================================
@@ -407,6 +464,35 @@ void CDlgSubManual_AgingNew::OnAgingProcStrart()
 		CString strChkMsg;
 		strChkMsg.Format(_T("EFA list normally has %d items (T0 / T1) but the file has %d.\nContinue anyway?"), EFA_FIXED_ITEM_COUNT, nFileItem);
 		if (AfxMessageBox(strChkMsg, MB_YESNO | MB_ICONQUESTION) != IDYES) return;
+	}
+
+	// LYS 2026-09-30 Hybrid 3c A13 (D3c-6) hybrid: report each segment's EFA mask section (the engine reads the file, not this grid).
+	//   A segment without its section measures every cell of the item's kinds (D4) -> Yes/No. IsOfflineStatus passed above.
+	if (IsSegmented())
+	{
+		C_OutRecipeFunc* pSegFunc = m_pAuroraMgr->GetRecipeEditMgrPtr()->GetRecipeFuncPtr();
+		int nSegCnt = (pSegFunc != NULL) ? pSegFunc->GetSegmentCount() : 1;
+		CAgingCycleInfo efaInfo;
+		efaInfo.Load(strRcp, true, nSegCnt);
+		CString strSegLog = _T("[HYBRID] EFA START masks:"), strOne, strNoMask;
+		for (int k = 0; k < nSegCnt && pSegFunc != NULL; k++)
+		{
+			int nRows = efaInfo.GetStickCount(k);
+			strOne.Format(_T(" seg%d [%s] rows %d/%d"), k + 1, CAgingCycleInfo::GetMaskSection(k).GetString(), nRows, pSegFunc->GetSegmentStickCount(k));
+			strSegLog += strOne;
+			if (nRows == 0) { strOne.Format(_T("%s%d"), strNoMask.IsEmpty() ? _T("") : _T(", "), k + 1); strNoMask += strOne; }
+		}
+		CLogWrapper::GetInstance()->KMLOG(OPER, strSegLog);
+		if (strNoMask.IsEmpty() == FALSE)
+		{
+			CString strAskSeg;
+			strAskSeg.Format(_T("세그먼트 %s에는 EFA 셀 맵이 없어 모든 셀을 측정합니다.\n계속 하시겠습니까?"), (LPCTSTR)strNoMask);
+			if (AfxMessageBox(strAskSeg, MB_YESNO | MB_ICONQUESTION) != IDYES)
+			{
+				CLogWrapper::GetInstance()->KMLOG(OPER, _T("[HYBRID] EFA START cancelled - segment(s) ") + strNoMask + _T(" without a mask section"));
+				return;
+			}
+		}
 	}
 
 	int nMaxCount = m_spreadAgingList->GetMaxRows();	// HMI 그리드: MaxRows = 항목 수
@@ -502,6 +588,14 @@ BOOL CDlgSubManual_AgingNew::IsOfflineStatus()
 		}
 	}
 
+	// LYS 2026-09-29 Hybrid 3b A13 no recipe open / save / reload / START while a hybrid recipe is being measured (1-segment recipes: unchanged)
+	if (m_pAuroraMgr != NULL && m_pAuroraMgr->GetRecipeEditMgrPtr() != NULL && m_pAuroraMgr->GetRecipeEditMgrPtr()->GetSegmentLoopCount() > 1
+		&& (CSequenceManager::GetInstance()->IsEngineCompleteAll() == false || CSystemParamShare::GetInstance()->IsCycleState()))
+	{
+		AfxMessageBox(_T("하이브리드 레시피 측정 중에는 이 작업을 할 수 없습니다.\n측정이 끝난 뒤 다시 시도하십시오."), MB_ICONWARNING);
+		return FALSE;
+	}
+
 	return TRUE;
 }
 
@@ -511,6 +605,7 @@ BOOL CDlgSubManual_AgingNew::LoadAgingInfo()
 	// HMI 그리드 좌표: 헤더 = SS_HEADER 행, 데이터 행 1..MaxRows, 열 1..6
 	CString strEfaRcp = GetEfaRcpFile();
 	if (strEfaRcp.IsEmpty()) return FALSE;
+	UpdateSegmentCombo();	// LYS 2026-09-30 Hybrid 3c A13 reset/clamp the viewed segment before the grid is rebuilt (compares with the previous m_strViewRcp; 1-segment: stays hidden)
 
 	TCHAR cValue[MAX_PATH];
 	ZeroMemory(cValue, sizeof(cValue));
@@ -519,7 +614,14 @@ BOOL CDlgSubManual_AgingNew::LoadAgingInfo()
 	int nMaxCount = _ttoi(cValue);
 
 	AgingItemClearAll();
-	if (nMaxCount <= 0) return FALSE;
+	if (nMaxCount <= 0) {
+		// LYS 2026-09-30 no EFA rcp yet: still build this recipe's cell map. Before, SAVE wrote the dialog's
+		//   default 10 x 5 one-sheet grid (the AgingTest dialog did exactly that on 2026-09-30 10:29)
+		m_strViewRcp = GetRecipeID();
+		UpdateAgingCell();
+		MeasCellLoad();
+		return FALSE;
+	}
 
 	m_vecAginList.clear();
 	S_AgingTest sAgingList;
@@ -558,6 +660,7 @@ BOOL CDlgSubManual_AgingNew::LoadAgingInfo()
 		m_vecAginList.push_back(sAgingList);
 	}
 
+	m_strViewRcp = GetRecipeID();	// LYS 2026-09-30 the grid below is built for this recipe
 	UpdateAgingCell();	// 3시트 맵을 먼저 만들고
 	MeasCellLoad();		// 그다음 [MASECELL]로 채운다
 
@@ -568,6 +671,7 @@ void CDlgSubManual_AgingNew::SaveAgingInfo()
 {
 	CString strEfaRcp = GetEfaRcpFile();
 	if (strEfaRcp.IsEmpty()) return;
+	if (IsMaskViewStale()) return;	// LYS 2026-09-30 grid not built for this recipe (default 10 x 5 before LOAD / Recipe Open) - checked before any write
 
 	dfcCreateFolder(m_strEfaRcpPath);
 
@@ -577,6 +681,8 @@ void CDlgSubManual_AgingNew::SaveAgingInfo()
 		AfxMessageBox(_T("Add EFA items before saving."));
 		return;
 	}
+
+	if (ConfirmMaskOverwrite() == FALSE) return;	// LYS 2026-09-30
 
 	strValue.Format(_T("%d"), nMaxCount);
 	WritePrivateProfileString(_T("COUNT"), _T("MaxCount"), strValue, strEfaRcp);
@@ -651,7 +757,13 @@ void CDlgSubManual_AgingNew::UpdateAgingCell()
 	int nStick = 0, nCell = 0;
 	S_RecipeData* pRD = NULL;
 	if (m_pAuroraMgr != NULL && m_pAuroraMgr->GetRecipeEditMgrPtr() != NULL)
-		pRD = m_pAuroraMgr->GetRecipeEditMgrPtr()->GetRecipeData();
+	{
+		// LYS 2026-09-30 Hybrid 3c A13 hybrid: dimensions of the viewed segment (no SetActiveSegment - the measure thread owns it).
+		//   Callers (LoadAgingInfo, OnSelchangeSeg) passed IsOfflineStatus. 1-segment: GetRecipeData() as before.
+		C_OutRecipeFunc* pSegFunc = m_pAuroraMgr->GetRecipeEditMgrPtr()->GetRecipeFuncPtr();
+		S_RecipeMgr* pSegMgr = (IsSegmented() && pSegFunc != NULL) ? pSegFunc->GetSegmentMgr(m_nViewSeg) : NULL;
+		pRD = (pSegMgr != NULL) ? &pSegMgr->m_sData : m_pAuroraMgr->GetRecipeEditMgrPtr()->GetRecipeData();
+	}
 
 	if (pRD != NULL && pRD->m_vecStick.size() > 0)
 	{
@@ -702,19 +814,23 @@ int CDlgSubManual_AgingNew::GetMeasUse(int iMeas, int nMeasUse)
 	return ((nMeasUse >> iMeas) & 0x01) ? 1 : 0;
 }
 
-void CDlgSubManual_AgingNew::MeasCellSave()
+BOOL CDlgSubManual_AgingNew::MeasCellSave()	// LYS 2026-09-30 Hybrid 3c A13 BOOL: FALSE = not written (stale / overwrite declined)
 {
-	if (m_spreadAgingMeas == NULL || m_spreadAgingMeas->GetSafeHwnd() == NULL) return;
+	if (m_spreadAgingMeas == NULL || m_spreadAgingMeas->GetSafeHwnd() == NULL) return TRUE;
 
 	CString strEfaRcp = GetEfaRcpFile();
-	if (strEfaRcp.IsEmpty()) return;
+	if (strEfaRcp.IsEmpty()) return TRUE;
+	// LYS 2026-09-30 Hybrid 3c A13 section of the viewed segment: segment 0 = [MASECELL] (unchanged), k>=1 = [MASECELL_SEG{k+1}]
+	CString strSec = CAgingCycleInfo::GetMaskSection(IsSegmented() ? m_nViewSeg : 0);
+	// hybrid: the segment-switch save comes here directly -> own checks (after SaveAgingInfo both pass silently: same view, count cleared)
+	if (IsSegmented() && (IsMaskViewStale() || ConfirmMaskOverwrite() == FALSE)) return FALSE;
 
 	short nKeepSheet = m_spreadAgingMeas->GetSheet();
 
 	m_spreadAgingMeas->SetSheet(1);
 	int nCell = m_spreadAgingMeas->GetMaxCols();
 	int nStick = m_spreadAgingMeas->GetMaxRows();
-	if (nStick < 1 || nCell < 1) { m_spreadAgingMeas->SetSheet(nKeepSheet); return; }
+	if (nStick < 1 || nCell < 1) { m_spreadAgingMeas->SetSheet(nKeepSheet); return TRUE; }
 
 	std::bitset<3> bit;
 	CString strCellData;
@@ -730,10 +846,29 @@ void CDlgSubManual_AgingNew::MeasCellSave()
 			strCellData += dfcStr(_T("%d,"), (int)bit.to_ulong());
 		}
 
-		WritePrivateProfileString(_T("MASECELL"), dfcStr(_T("STICK_%d"), i + 1), strCellData, strEfaRcp);
+		WritePrivateProfileString(strSec, dfcStr(_T("STICK_%d"), i + 1), strCellData, strEfaRcp);
+	}
+
+	// LYS 2026-09-30 Hybrid 3c A13 hybrid only: delete this section's rows beyond the segment's stick count
+	//   (the loader stops at the first missing STICK_n; key by key - deleting the section would move it to the file end)
+	if (IsSegmented())
+	{
+		TCHAR cOld[16];
+		for (int i = nStick; i < DEFINE_AGING_CYCLE_STICK_MAX; i++)
+		{
+			ZeroMemory(cOld, sizeof(cOld));
+			GetPrivateProfileString(strSec, dfcStr(_T("STICK_%d"), i + 1), _T(""), cOld, _countof(cOld), strEfaRcp);
+			if (cOld[0] == 0) break;
+			WritePrivateProfileString(strSec, dfcStr(_T("STICK_%d"), i + 1), NULL, strEfaRcp);
+		}
+		CString strLog;
+		strLog.Format(_T("[HYBRID] EFA rcp %s: [%s] saved %d stick(s) x %d cell(s)"), (LPCTSTR)GetRecipeID(), (LPCTSTR)strSec, nStick, nCell);
+		CLogWrapper::GetInstance()->KMLOG(OPER, strLog);
+		m_nMaskMismatch = 0;
 	}
 
 	m_spreadAgingMeas->SetSheet(nKeepSheet);
+	return TRUE;
 }
 
 void CDlgSubManual_AgingNew::MeasCellLoad()
@@ -743,6 +878,8 @@ void CDlgSubManual_AgingNew::MeasCellLoad()
 
 	CString strEfaRcp = GetEfaRcpFile();
 	if (strEfaRcp.IsEmpty()) return;
+	m_nMaskMismatch = 0;	// LYS 2026-09-30
+	CString strSec = CAgingCycleInfo::GetMaskSection(IsSegmented() ? m_nViewSeg : 0);	// LYS 2026-09-30 Hybrid 3c A13 segment 0 = MASECELL (unchanged)
 
 	short nKeepSheet = m_spreadAgingMeas->GetSheet();
 
@@ -754,9 +891,32 @@ void CDlgSubManual_AgingNew::MeasCellLoad()
 	TCHAR cCellData[EFA_CELLMASK_BUF];
 	CArray<int, int> nCellChkArray;
 
+	// LYS 2026-09-30 Hybrid 3c A13 (D3c-13) segment k>=1 without its section: the EFA engine measures every cell (D4),
+	//   so show every cell checked - otherwise SAVE would turn "measure all" into "measure none". Segment 0: unchanged.
+	if (IsSegmented() && m_nViewSeg >= 1)
+	{
+		ZeroMemory(cCellData, sizeof(cCellData));
+		GetPrivateProfileString(strSec, _T("STICK_1"), _T(""), cCellData, EFA_CELLMASK_BUF, strEfaRcp);
+		if (cCellData[0] == 0)
+		{
+			for (int k = 0; k < 3; k++)
+			{
+				m_spreadAgingMeas->SetSheet(k + 1);
+				for (int i = 0; i < nStick; i++)
+					for (int j = 0; j < nCell; j++)
+						m_spreadAgingMeas->SetData(j + 1, i + 1, _T("1"));
+			}
+			m_spreadAgingMeas->SetSheet(nKeepSheet);
+			CString strNo;
+			strNo.Format(_T("[HYBRID] EFA rcp [%s] not found - shown all checked (the engine measures every cell)"), (LPCTSTR)strSec);
+			CLogWrapper::GetInstance()->KMLOG(OPER, strNo);
+			return;
+		}
+	}
+
 	for (int i = 0; i < nStick; i++) {
 		ZeroMemory(cCellData, sizeof(cCellData));
-		GetPrivateProfileString(_T("MASECELL"), dfcStr(_T("STICK_%d"), i + 1), _T(""), cCellData, EFA_CELLMASK_BUF, strEfaRcp);
+		GetPrivateProfileString(strSec, dfcStr(_T("STICK_%d"), i + 1), _T(""), cCellData, EFA_CELLMASK_BUF, strEfaRcp);	// LYS 2026-09-30 Hybrid 3c A13
 
 		int pos = 0;
 		nCellChkArray.RemoveAll();
@@ -767,6 +927,7 @@ void CDlgSubManual_AgingNew::MeasCellLoad()
 			resToken = strCellData.Tokenize(_T(","), pos);
 		}
 
+		if (nCellChkArray.GetSize() != nCell && nCellChkArray.GetSize() > 0) m_nMaskMismatch++;	// LYS 2026-09-30 present but wrong cell count
 		if (nCellChkArray.GetSize() != nCell) continue;	// 행 없음/개수 불일치 -> 기본값 유지
 
 		for (int j = 0; j < nCell; j++) {
@@ -778,7 +939,166 @@ void CDlgSubManual_AgingNew::MeasCellLoad()
 		}
 	}
 
+	if (m_nMaskMismatch > 0)	// LYS 2026-09-30 same warning as the AgingTest dialog
+	{
+		CString strLog;
+		strLog.Format(_T("%sEFA rcp [%s]: %d row(s) with cell count != %d shown unchecked (%s)"), IsSegmented() ? _T("[HYBRID] ") : _T(""), (LPCTSTR)strSec, m_nMaskMismatch, nCell, (LPCTSTR)strEfaRcp);	// LYS 2026-09-30 Hybrid 3c A13 1-segment: same text
+		CLogWrapper::GetInstance()->KMLOG(WARN, strLog);
+
+		CString strWarn;
+		if (IsSegmented())	// LYS 2026-09-30 Hybrid 3c A13
+			strWarn.Format(_T("세그먼트 %d 셀 맵에 셀 수가 %d개가 아닌 행이 %d개 있습니다.\n해당 행은 미체크로 표시되며, 저장하면 화면 값으로 덮어씁니다."), m_nViewSeg + 1, nCell, m_nMaskMismatch);
+		else
+			strWarn.Format(_T("셀 맵에 셀 수가 %d개가 아닌 행이 %d개 있습니다.\n해당 행은 미체크로 표시되며, 저장하면 화면 값으로 덮어씁니다."), nCell, m_nMaskMismatch);
+		AfxMessageBox(strWarn, MB_ICONWARNING);
+	}
+
 	m_spreadAgingMeas->SetSheet(nKeepSheet);
+}
+
+// LYS 2026-09-30 the cell grid is not the current recipe's: never built (default 10 x 5 before LOAD / Recipe Open),
+//   the recipe changed outside this dialog, or the size differs -> popup + TRUE. Same rule as the AgingTest dialog.
+BOOL CDlgSubManual_AgingNew::IsMaskViewStale()
+{
+	int nStick = 0, nCell = 0;
+	S_RecipeData* pRD = (m_pAuroraMgr != NULL && m_pAuroraMgr->GetRecipeEditMgrPtr() != NULL) ? m_pAuroraMgr->GetRecipeEditMgrPtr()->GetRecipeData() : NULL;
+	if (IsSegmented())	// LYS 2026-09-30 Hybrid 3c A13 compare with the viewed segment (no SetActiveSegment); callers passed IsOfflineStatus
+	{
+		C_OutRecipeFunc* pSegFunc = m_pAuroraMgr->GetRecipeEditMgrPtr()->GetRecipeFuncPtr();
+		S_RecipeMgr* pSegMgr = (pSegFunc != NULL && m_nViewSeg >= 0 && m_nViewSeg < pSegFunc->GetSegmentCount()) ? pSegFunc->GetSegmentMgr(m_nViewSeg) : NULL;
+		pRD = (pSegMgr != NULL) ? &pSegMgr->m_sData : NULL;	// segment gone -> size 0 -> stale
+	}
+	if (pRD != NULL && pRD->m_vecStick.size() > 0)
+	{
+		nStick = (int)pRD->m_vecStick.size();
+		nCell = (int)pRD->m_vecStick[0].m_vecCell.size();
+	}
+
+	BOOL bStale = (GetRecipeID() != m_strViewRcp) ? TRUE : FALSE;
+	if (bStale == FALSE && m_spreadAgingMeas != NULL && m_spreadAgingMeas->GetSafeHwnd() != NULL)
+	{
+		short nKeepSheet = m_spreadAgingMeas->GetSheet();
+		m_spreadAgingMeas->SetSheet(1);
+		if (m_spreadAgingMeas->GetMaxRows() != nStick || m_spreadAgingMeas->GetMaxCols() != nCell) bStale = TRUE;
+		m_spreadAgingMeas->SetSheet(nKeepSheet);
+	}
+	if (bStale == FALSE) return FALSE;
+	AfxMessageBox(_T("셀 맵이 현재 레시피와 맞지 않습니다(불러온 뒤 레시피가 바뀌었거나 아직 불러오지 않음).\n레시피 열기 또는 이전값 불러오기 후 다시 저장하십시오."), MB_ICONWARNING);
+	return TRUE;
+}
+
+// LYS 2026-09-30 rows whose cell count did not match were shown unchecked; ask once before they are overwritten (TRUE = go on)
+BOOL CDlgSubManual_AgingNew::ConfirmMaskOverwrite()
+{
+	if (m_nMaskMismatch <= 0) return TRUE;
+	CString strAsk;
+	if (IsSegmented())	// LYS 2026-09-30 Hybrid 3c A13
+		strAsk.Format(_T("세그먼트 %d 셀 맵에서 셀 수가 맞지 않던 행 %d개를 지금 화면 값으로 덮어씁니다.\n계속 하시겠습니까?"), m_nViewSeg + 1, m_nMaskMismatch);
+	else
+		strAsk.Format(_T("셀 맵에서 셀 수가 맞지 않던 행 %d개를 지금 화면 값으로 덮어씁니다.\n계속 하시겠습니까?"), m_nMaskMismatch);
+	if (AfxMessageBox(strAsk, MB_YESNO | MB_ICONWARNING) != IDYES) return FALSE;
+	m_nMaskMismatch = 0;
+	return TRUE;
+}
+
+//=========================================================================
+// LYS 2026-09-30 Hybrid 3c A13 segment selector for the EFA rcp cell mask (D6, same structure as the AgingTest dialog,
+//   details as the WAD Multi dialog (D3c-12): R in the label, disabled while a hybrid run is busy, stale check before switching).
+//   Hybrid only: grid = GetSegmentMgr(m_nViewSeg), save/load = CAgingCycleInfo::GetMaskSection(m_nViewSeg).
+//   [COUNT]/[ITEM_n] (T0/T1) stay glass-common (A2). SetActiveSegment is never called here.
+//=========================================================================
+BOOL CDlgSubManual_AgingNew::IsSegmented()
+{
+	if (m_pAuroraMgr == NULL || m_pAuroraMgr->GetRecipeEditMgrPtr() == NULL) return FALSE;
+	return (m_pAuroraMgr->GetRecipeEditMgrPtr()->GetSegmentLoopCount() > 1) ? TRUE : FALSE;
+}
+
+BOOL CDlgSubManual_AgingNew::IsHybridRunBusy()
+{
+	// LYS 2026-09-30 Hybrid 3c A13 (S2 fix) raw run flags, no IsSegmented() precondition (the recipe step's reload makes it FALSE for
+	//   a moment). Only called by the timer while the selector is visible, i.e. on a hybrid view.
+	if (CSequenceManager::GetInstance()->IsEngineCompleteAll() == false) return TRUE;
+	return CSystemParamShare::GetInstance()->IsCycleState() ? TRUE : FALSE;
+}
+
+// Callers: LoadAgingInfo and OnSelchangeSeg (after IsOfflineStatus, or once the recipe is no longer hybrid -> nSeg = 1, no segment
+//   contents read). The timer hides the selector itself (S2 fix) and never calls this.
+void CDlgSubManual_AgingNew::UpdateSegmentCombo()
+{
+	if (m_cmbSeg.GetSafeHwnd() == NULL) return;
+
+	CString strRcpID = GetRecipeID();
+	C_OutRecipeFunc* pFunc = (m_pAuroraMgr != NULL && m_pAuroraMgr->GetRecipeEditMgrPtr() != NULL) ? m_pAuroraMgr->GetRecipeEditMgrPtr()->GetRecipeFuncPtr() : NULL;
+	int nSeg = (IsSegmented() && pFunc != NULL) ? pFunc->GetSegmentCount() : 1;
+	if (nSeg < 1) nSeg = 1;
+
+	BOOL bWasShown = (m_cmbSeg.GetStyle() & WS_VISIBLE) ? TRUE : FALSE;
+	BOOL bReset = (strRcpID != m_strViewRcp || m_nViewSeg < 0 || m_nViewSeg >= nSeg) ? TRUE : FALSE;	// LoadAgingInfo stamps m_strViewRcp right after this call
+	if (bReset) m_nViewSeg = 0;
+	// review F6: the grid on screen no longer matches m_nViewSeg (view reset, or a hybrid view whose recipe became 1-segment)
+	//   -> clear the stamp, so SAVE / a segment switch is refused as stale until LOAD / Recipe Open rebuilds the grid
+	if (bReset || (bWasShown && nSeg <= 1)) m_strViewRcp.Empty();
+
+	m_cmbSeg.ResetContent();
+	if (nSeg > 1)
+	{
+		CString str;
+		for (int k = 0; k < nSeg; k++)
+		{
+			str.Format(_T("Seg %d/%d %s R%d (%d x %d)"), k + 1, nSeg, pFunc->GetSegmentName(k).GetString(), pFunc->GetSegmentRotate(k) * 90,
+				pFunc->GetSegmentStickCount(k), pFunc->GetSegmentCellCount(k));
+			m_cmbSeg.AddString(str);
+		}
+		m_cmbSeg.SetCurSel(m_nViewSeg);
+	}
+	m_cmbSeg.EnableWindow(TRUE);
+	m_cmbSeg.ShowWindow((nSeg > 1) ? SW_SHOW : SW_HIDE);
+	if (GetDlgItem(IDC_STATIC_EFA_SEG) != NULL) GetDlgItem(IDC_STATIC_EFA_SEG)->ShowWindow((nSeg > 1) ? SW_SHOW : SW_HIDE);
+}
+
+void CDlgSubManual_AgingNew::OnSelchangeSeg()
+{
+	int nSel = m_cmbSeg.GetCurSel();
+	if (nSel < 0 || nSel == m_nViewSeg) return;
+
+	if (IsSegmented() == FALSE)	// recipe became 1-segment outside this dialog: hide the selector, clear the stamp (the timer does the same)
+	{
+		UpdateSegmentCombo();
+		return;
+	}
+	if (!IsOfflineStatus())	// also blocks a busy hybrid run (segment contents are not read while the measure thread may copy them)
+	{
+		m_cmbSeg.SetCurSel(m_nViewSeg);
+		return;
+	}
+	C_OutRecipeFunc* pSegFunc = m_pAuroraMgr->GetRecipeEditMgrPtr()->GetRecipeFuncPtr();
+	if (pSegFunc == NULL || nSel >= pSegFunc->GetSegmentCount())	// review F6: segment count changed since the combo was filled -> rebuild it, no switch
+	{
+		UpdateSegmentCombo();
+		return;
+	}
+	if (IsMaskViewStale())	// recipe changed since LOAD / grid is not the viewed segment's (popup) - checked before asking, as the WAD Multi dialog does
+	{
+		m_cmbSeg.SetCurSel(m_nViewSeg);
+		return;
+	}
+
+	CString strAsk;
+	strAsk.Format(_T("세그먼트 %d 셀 맵을 먼저 저장하시겠습니까?\n예: 저장 후 전환 / 아니요: 저장하지 않고 전환 / 취소: 전환 취소"), m_nViewSeg + 1);
+	int nAns = AfxMessageBox(strAsk, MB_YESNOCANCEL | MB_ICONQUESTION);
+	if (nAns == IDCANCEL || (nAns == IDYES && MeasCellSave() == FALSE))	// mask of the segment being left; the T0/T1 list is glass-common and saved by SAVE
+	{
+		m_cmbSeg.SetCurSel(m_nViewSeg);
+		return;
+	}
+
+	CString strLog;
+	strLog.Format(_T("[HYBRID] EFA view: segment %d -> %d/%d (%s)"), m_nViewSeg + 1, nSel + 1, pSegFunc->GetSegmentCount(), (nAns == IDYES) ? _T("saved first") : _T("not saved"));
+	CLogWrapper::GetInstance()->KMLOG(OPER, strLog);
+
+	m_nViewSeg = nSel;
+	UpdateAgingCell();
+	MeasCellLoad();
 }
 
 void CDlgSubManual_AgingNew::DblClickFpspreadCellStatus(long Col, long Row)

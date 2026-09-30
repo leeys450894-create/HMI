@@ -55,6 +55,28 @@ private:
 
 	CString			m_strMultiRcpPath;		// WAD Multi recipe folder ([OPT_PARA] WAD_MULTI_RCP_PATH)
 
+	// LYS 2026-09-30 Hybrid 3d segment view (hybrid recipes only - a 1-segment recipe keeps every old path)
+	CComboBox		m_cmbSeg;				// IDC_COMBO_MM_SEG
+	int				m_nViewSeg;				// segment shown / saved
+	int				m_nViewSegCount;		// segment count the view was built for (1 = old single view)
+	CString			m_strViewSegRcp;		// recipe the view was built for
+	int				m_nViewStick;			// cell map size built by RebuildCellMap
+	int				m_nViewCell;
+	int				m_nMaskMismatch;		// mask rows with another cell count (hybrid view)
+	int				m_nMaskExtra;			// mask rows past the segment's stick count (hybrid view)
+	bool			m_bViewDataFound;		// file state of the viewed segment when it was loaded
+	bool			m_bViewMaskFound;
+
+	BOOL	IsSegmented();					// loaded recipe has more than 1 segment
+	BOOL	IsViewSegmented();				// the view was built for a hybrid recipe
+	BOOL	IsHybridRunBusy();				// hybrid recipe and a measure run / cycle in progress
+	void	UpdateSegmentCombo();			// Recipe Open: reset the view to segment 0 of the loaded recipe
+	void	UpdateSegmentInfo();
+	void	SetSegInfoText(LPCTSTR szText);
+	void	RefreshSegmentState();			// timer / show: busy / recipe changed / normal
+	BOOL	IsMultiViewStale(BOOL bPopup);
+	BOOL	SaveViewSegment(BOOL bAsk);
+
 protected:
 	virtual void DoDataExchange(CDataExchange* pDX);
 	virtual BOOL OnInitDialog();
@@ -62,6 +84,9 @@ protected:
 	DECLARE_MESSAGE_MAP()
 
 	afx_msg LRESULT OnSpreadDblClick(WPARAM wParam, LPARAM lParam);	// SSM_DBLCLK (cell map bulk toggle)
+	afx_msg void OnSelchangeComboMmSeg();		// LYS 2026-09-30 Hybrid 3d
+	afx_msg void OnTimer(UINT_PTR nIDEvent);
+	afx_msg void OnShowWindow(BOOL bShow, UINT nStatus);
 
 public:
 	afx_msg void OnBnClickedButtonMmOpen();

@@ -55,6 +55,11 @@ class CRecipeEditMgr : public CAuroraSubMgr
 	stAuroraMgrPool			*m_pMgrPool_link;
 	CPtrnInfo				m_ptrnReview;
 	C_OutRecipeFunc			* m_pRecipeFunc;
+	volatile int			m_nCellStatusStickBase;	// LYS 2026-09-29 Hybrid 3b A8 set on the measure thread, read by the PG receive / UI threads
+	volatile int			m_nSegCountCache;	// LYS 2026-09-30 Hybrid 3c segment log tag caches - int reads only, so the PG receive / UI threads may call GetSegLogTag
+	volatile int			m_nActiveSegCache;	//   1 / 0 / 0 = not hybrid. Written only by SyncCellStatusStickBase (RecipeChange, SegmentSwitchData)
+	volatile int			m_nSegRowBaseCache;	//   cell x stick sum of the segments before the active one (Phase 4 segBase preview, printed only)
+	volatile int			m_nEfaGlassLatch;	// LYS 2026-09-30 Hybrid 3c A5 EFA glass latch: -1 = not latched, 0 = not EFA, n = EFA passes (reset in RecipeChange)
 
 	CShareMemoryMgr* GetShareMemoryMgrPtr() { return m_pMgrPool_link->pShareMemoryMgr; }
 
@@ -101,6 +106,20 @@ public:
 	BOOL	DeleteRecipe(CString strRecipeID);
 	bool	IsRecipeOpened() const;
 	CString	GetRecipeID() const;
+	CString	GetPGRecipeName();		// LYS 2026-09-29 Hybrid Phase 3 활성 세그먼트 PG 모델명 (공란 = RecipeID)
+	CString	GetWADRecipeName();		// LYS 2026-09-29 Hybrid Phase 3 활성 세그먼트 WAD 모델명 (공란 = RecipeID)
+	// LYS 2026-09-29 Hybrid Phase 3b segment helpers - each returns the 1-segment value when the recipe has <= 1 segment
+	int		GetSegmentLoopCount();									// segments in the measure loop (1 = not hybrid)
+	int		GetActiveSegment();										// A3 mask segment = active segment (0 = not hybrid)
+	void	SyncCellStatusStickBase();								// A8 recompute the cached base - call right after the active segment changes
+	int		GetCellStatusStickBase() const	{ return m_nCellStatusStickBase; }	// A8 nCellStatus column base of the active segment (0 = not hybrid)
+	int		ToCellStatusStick(int nLocalStick) const;				// A8 segment-local status stick -> nCellStatus column (negative unchanged)
+	int		GetGlassRowBlock(int nAreaActive, int nStickActive);	// A7 result-row block G (not hybrid = nAreaActive * nStickActive)
+	// LYS 2026-09-30 Hybrid Phase 3c segment identity for logs (int caches only - any thread may call these)
+	CString	GetSegLogTag(BOOL bRowBase = FALSE) const;				// "" when the recipe has <= 1 segment, else " seg(k/N)" (+ " rowbase(b)")
+	int		GetSegRowBase() const	{ return m_nSegRowBaseCache; }	// Phase 4 segBase preview - printed only, never added to a row in 3c
+	void	SetEfaGlassLatch(int nPass)	{ m_nEfaGlassLatch = nPass; }	// A5 measure thread, once per glass (engine AgingGlassLatch)
+	int		GetEfaGlassLatch() const	{ return m_nEfaGlassLatch; }	// A5 -1 = not latched (1-segment recipe / after RecipeChange), 0 = not EFA, n = EFA passes
 	CString	GetRecipeFolderPath() const;
 	int		DefaultRecipeCopy(CString strRecipeID);
 

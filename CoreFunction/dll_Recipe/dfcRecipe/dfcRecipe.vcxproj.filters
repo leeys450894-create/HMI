@@ -75,6 +75,9 @@
     <ClCompile Include="MakeCellDlg.cpp">
       <Filter>소스 파일\Dlg</Filter>
     </ClCompile>
+    <ClCompile Include="GlassMap.cpp">
+      <Filter>소스 파일\Dlg</Filter>
+    </ClCompile>
     <ClCompile Include="IniFile.cpp">
       <Filter>소스 파일</Filter>
     </ClCompile>
@@ -126,6 +129,9 @@
       <Filter>헤더 파일\Dlg</Filter>
     </ClInclude>
     <ClInclude Include="MakeCellDlg.h">
+      <Filter>헤더 파일\Dlg</Filter>
+    </ClInclude>
+    <ClInclude Include="GlassMap.h">
       <Filter>헤더 파일\Dlg</Filter>
     </ClInclude>
     <ClInclude Include="IniFile.h">

@@ -24,6 +24,8 @@ CDlgSubManual_AgingTest::CDlgSubManual_AgingTest(CAuroraMgr* pAuroraMgr, CWnd* p
 	m_hfont = NULL;				// LYS 2026-08-06 Phase 1
 	m_nHlRow = 0;			// LYS 2026-08-06 E4
 	m_nHlCol = 0;
+	m_nViewSeg = 0;			// LYS 2026-09-29 Hybrid 3b A13
+	m_nMaskMismatch = 0;
 	//m_pSystem = NULL;
 	//m_pSystem = SMEM_GetSharedMemory();
 }
@@ -38,6 +40,7 @@ void CDlgSubManual_AgingTest::DoDataExchange(CDataExchange* pDX)
 	DDX_Control(pDX, IDC_STATIC_MANUAL_TITLE, m_LabelInfo);
 	DDX_Control(pDX, IDC_BUTTON_1, m_chkStop);
 	DDX_Control(pDX, IDC_COMBO_1, m_cmbCycle);
+	DDX_Control(pDX, IDC_COMBO_AGING_SEG, m_cmbSeg);	// LYS 2026-09-29 Hybrid 3b A13
 	for (int i = 0; i < MAX_AGING_STICK; i++) DDX_Control(pDX, IDC_CHECK_1 + i, m_chkStick[i]);
 }
 
@@ -53,6 +56,7 @@ BEGIN_MESSAGE_MAP(CDlgSubManual_AgingTest, CDialogEx)
 	ON_COMMAND(IDC_BUTTON_6, OnItemSave)
 	ON_COMMAND(IDC_BUTTON_7, OnLoadAgingInfo)
 	ON_COMMAND(IDC_BUTTON_8, OnAgingProcStrart)
+	ON_CBN_SELCHANGE(IDC_COMBO_AGING_SEG, OnSelchangeSeg)	// LYS 2026-09-29 Hybrid 3b A13
 	ON_MESSAGE(SSM_DBLCLK, OnSpreadDBClick)	// LYS 2026-08-06 Phase 3: DLL spread forwards dblclick
 END_MESSAGE_MAP()
 
@@ -195,6 +199,9 @@ void CDlgSubManual_AgingTest::OnTimer(UINT_PTR nIDEvent)
 	// (1=Aging 2=PTN 3=SEC 4=WAD 5=VISION 6=ANGLE)을 쓰고 유휴 시 0/0.
 	if (nIDEvent == 1)
 	{
+		// LYS 2026-09-29 Hybrid 3b A13 recipe changed outside this dialog to a 1-segment recipe -> hide the segment selector
+		if (m_cmbSeg.GetSafeHwnd() != NULL && (m_cmbSeg.GetStyle() & WS_VISIBLE) && IsSegmented() == FALSE) UpdateSegmentCombo();
+
 		do
 		{
 			if (m_spreadAgingList == NULL || m_spreadAgingList->GetSafeHwnd() == NULL) break;
@@ -377,6 +384,21 @@ void CDlgSubManual_AgingTest::OnAgingProcStrart()
 		return;
 	}
 
+	// LYS 2026-09-30 user request: the cycle measures CSystemParamShare's recipe (the recipe step calls OpenRecipe with it), not the one
+	//   this dialog opened with RecipeChange -> START is refused unless both are the same recipe (1-segment and hybrid alike), otherwise
+	//   the aging flag / file / mask checks below would describe another recipe. Run recipe "UNKNOWN" (nothing opened for a run) is refused.
+	if (strRcp.CompareNoCase(CSystemParamShare::GetInstance()->GetRecipeID()) != 0)
+	{
+		CString strRunRcp = CSystemParamShare::GetInstance()->GetRecipeID();
+		CString strRefuse;
+		strRefuse.Format(_T("AgingTest START refused - dialog recipe %s != run recipe %s (the cycle measures the run recipe)"), (LPCTSTR)strRcp, (LPCTSTR)strRunRcp);
+		CLogWrapper::GetInstance()->KMLOG(OPER, strRefuse);
+		CString strMsg;
+		strMsg.Format(_T("이 화면의 레시피(%s)와 운전 레시피(%s)가 다릅니다.\nSTART는 운전 레시피를 측정하므로 이 화면의 셀 맵과 사전 검사가 맞지 않습니다.\n운전 레시피를 이 레시피로 연 뒤(운전 화면 CYCLE 또는 수동 측정 화면의 레시피 열기) 다시 시도하십시오."), (LPCTSTR)strRcp, (LPCTSTR)strRunRcp);
+		AfxMessageBox(strMsg, MB_ICONWARNING);
+		return;
+	}
+
 	//=====================================================================
 	// LYS 2026-08-18 START 사전 검사.
 	// 엔진은 m_bAutoAgingMode를 보지 않는다. 에이징 사이클은 AgingCycleBegin()이 통과할
@@ -508,6 +530,14 @@ BOOL CDlgSubManual_AgingTest::IsOfflineStatus()
 		}
 	}
 
+	// LYS 2026-09-29 Hybrid 3b A13 no recipe open / save / reload / START / segment switch while a hybrid recipe is being measured
+	//   (RecipeChange mid-run resets the segments under the measure thread). 1-segment recipes: unchanged.
+	if (IsHybridRunBusy())
+	{
+		AfxMessageBox(_T("하이브리드 레시피 측정 중에는 이 작업을 할 수 없습니다.\n측정이 끝난 뒤 다시 시도하십시오."), MB_ICONWARNING);
+		return FALSE;
+	}
+
 	return TRUE;
 }
 
@@ -519,6 +549,7 @@ BOOL CDlgSubManual_AgingTest::LoadAgingInfo()
 	if (m_pAuroraMgr != NULL && m_pAuroraMgr->GetRecipeEditMgrPtr() != NULL)
 		strRcpID = m_pAuroraMgr->GetRecipeEditMgrPtr()->GetRecipeID();
 	if (strRcpID.IsEmpty()) return FALSE;
+	UpdateSegmentCombo();	// LYS 2026-09-29 Hybrid 3b A13 reset/clamp the viewed segment before the grid is rebuilt
 
 	CString strAgingRcpPath;
 	strAgingRcpPath = dfcStr(_T("%s%s.rcp"), m_strAgingRcpPath, strRcpID);
@@ -530,7 +561,15 @@ BOOL CDlgSubManual_AgingTest::LoadAgingInfo()
 	int nMaxCount = _ttoi(cValue);
 
 	AgingItemClearAll();
-	if (nMaxCount <= 0) return FALSE;
+	if (nMaxCount <= 0) {
+		// LYS 2026-09-30 no AgingRcp yet: build this recipe's cell map for every recipe (3b did it for hybrid only).
+		//   A 1-segment recipe used to keep the dialog's default 10 x 5 one-sheet grid, and SAVE wrote it
+		//   (2026-09-30 10:29: 5 x 20 recipe saved as 10-cell rows with 7/0 values -> cells K..T measured)
+		m_strViewSegRcp = strRcpID;
+		UpdateAgingCell();
+		MeasCellLoad();
+		return FALSE;
+	}
 
 	m_vecAginList.clear();
 	S_AgingTest sAgingList;
@@ -570,6 +609,7 @@ BOOL CDlgSubManual_AgingTest::LoadAgingInfo()
 		m_vecAginList.push_back(sAgingList);
 	}
 
+	m_strViewSegRcp = strRcpID;	// LYS 2026-09-29 Hybrid 3b A13 the grid below is built for this recipe
 	UpdateAgingCell();	// LYS 2026-08-06 Phase 3: build 3-sheet map first
 	MeasCellLoad();		// LYS 2026-08-06 Phase 3: then fill from [MASECELL]
 
@@ -584,6 +624,8 @@ void CDlgSubManual_AgingTest::SaveAgingInfo()
 		strRcpID = m_pAuroraMgr->GetRecipeEditMgrPtr()->GetRecipeID();
 	if (strRcpID.IsEmpty()) return;
 	strAgingRcpPath = dfcStr(_T("%s%s.rcp"), m_strAgingRcpPath, strRcpID);
+	if (IsMaskViewStale(strRcpID)) return;	// LYS 2026-09-29 Hybrid 3b A13 check before [COUNT]/[ITEM_n] are written (MeasCellSave repeats it)
+	// LYS 2026-09-30 IsMaskViewStale checks 1-segment recipes too (default 10 x 5 grid before LOAD / Recipe Open)
 	
 	dfcCreateFolder(m_strAgingRcpPath);
 	
@@ -594,6 +636,8 @@ void CDlgSubManual_AgingTest::SaveAgingInfo()
 		return;
 	}
 	
+	if (ConfirmMaskOverwrite() == FALSE) return;	// LYS 2026-09-30 ask before [COUNT]/[ITEM_n] are written
+
 	strValue.Format(_T("%d"), nMaxCount);	// LYS 2026-08-06 Phase 1
 	WritePrivateProfileString(_T("COUNT"), _T("MaxCount"), strValue, strAgingRcpPath);
 	
@@ -713,7 +757,12 @@ void CDlgSubManual_AgingTest::UpdateAgingCell()
 	int nStick = 0, nCell = 0;
 	S_RecipeData* pRD = NULL;
 	if (m_pAuroraMgr != NULL && m_pAuroraMgr->GetRecipeEditMgrPtr() != NULL)
-		pRD = m_pAuroraMgr->GetRecipeEditMgrPtr()->GetRecipeData();
+	{
+		// LYS 2026-09-29 Hybrid 3b A13 hybrid: dimensions of the selected segment (no SetActiveSegment - the measure thread owns it)
+		C_OutRecipeFunc* pSegFunc = m_pAuroraMgr->GetRecipeEditMgrPtr()->GetRecipeFuncPtr();
+		S_RecipeMgr* pSegMgr = (IsSegmented() && pSegFunc != NULL) ? pSegFunc->GetSegmentMgr(m_nViewSeg) : NULL;
+		pRD = (pSegMgr != NULL) ? &pSegMgr->m_sData : m_pAuroraMgr->GetRecipeEditMgrPtr()->GetRecipeData();
+	}
 
 	if (pRD != NULL && pRD->m_vecStick.size() > 0)
 	{
@@ -774,25 +823,29 @@ int CDlgSubManual_AgingTest::GetMeasUse(int iMeas, int nMeasUse)
 	return iRet;
 }
 
-void CDlgSubManual_AgingTest::MeasCellSave()
+BOOL CDlgSubManual_AgingTest::MeasCellSave()	// LYS 2026-09-29 Hybrid 3b A13 FALSE = not written
 {
 	// LYS 2026-08-06 Phase 3: 그리드 -> [MASECELL] STICK_n = 3bit 마스크 CSV
 	// bit0..2 = WAD / VISION / ANGLE (HMI엔 COLOR 없음, OCP는 4종)
-	if (m_spreadAgingMeas == NULL || m_spreadAgingMeas->GetSafeHwnd() == NULL) return;
+	if (m_spreadAgingMeas == NULL || m_spreadAgingMeas->GetSafeHwnd() == NULL) return TRUE;
 
 	CString strRcpID = _T("");
 	if (m_pAuroraMgr != NULL && m_pAuroraMgr->GetRecipeEditMgrPtr() != NULL)
 		strRcpID = m_pAuroraMgr->GetRecipeEditMgrPtr()->GetRecipeID();
-	if (strRcpID.IsEmpty()) return;
+	if (strRcpID.IsEmpty()) return TRUE;
 
 	CString strAgingRcpPath = dfcStr(_T("%s%s.rcp"), m_strAgingRcpPath, strRcpID);
+	CString strSec = CAgingCycleInfo::GetMaskSection(IsSegmented() ? m_nViewSeg : 0);	// LYS 2026-09-29 Hybrid 3b A13 segment 0 = MASECELL (unchanged)
+	// LYS 2026-09-30 stale/size check and overwrite confirmation for every recipe (1-segment too)
+	if (IsMaskViewStale(strRcpID)) return FALSE;
+	if (ConfirmMaskOverwrite() == FALSE) return FALSE;
 
 	short nKeepSheet = m_spreadAgingMeas->GetSheet();
 
 	m_spreadAgingMeas->SetSheet(1);
 	int nCell = m_spreadAgingMeas->GetMaxCols();
 	int nStick = m_spreadAgingMeas->GetMaxRows();
-	if (nStick < 1 || nCell < 1) { m_spreadAgingMeas->SetSheet(nKeepSheet); return; }
+	if (nStick < 1 || nCell < 1) { m_spreadAgingMeas->SetSheet(nKeepSheet); return TRUE; }
 
 	std::bitset<3> bit;
 	CString strCellData;
@@ -808,10 +861,25 @@ void CDlgSubManual_AgingTest::MeasCellSave()
 			strCellData += dfcStr(_T("%d,"), (int)bit.to_ulong());
 		}
 
-		WritePrivateProfileString(_T("MASECELL"), dfcStr(_T("STICK_%d"), i + 1), strCellData, strAgingRcpPath);
+		WritePrivateProfileString(strSec, dfcStr(_T("STICK_%d"), i + 1), strCellData, strAgingRcpPath);
 	}
 
+	// LYS 2026-09-29 Hybrid 3b A13 delete this section's rows beyond the segment's stick count (the loader reads until the first missing key)
+	if (IsSegmented())
+	{
+		TCHAR cOld[16];
+		for (int i = nStick; i < DEFINE_AGING_CYCLE_STICK_MAX; i++)
+		{
+			ZeroMemory(cOld, sizeof(cOld));
+			GetPrivateProfileString(strSec, dfcStr(_T("STICK_%d"), i + 1), _T(""), cOld, _countof(cOld), strAgingRcpPath);
+			if (cOld[0] == 0) break;
+			WritePrivateProfileString(strSec, dfcStr(_T("STICK_%d"), i + 1), NULL, strAgingRcpPath);
+		}
+	}
+	m_nMaskMismatch = 0;
+
 	m_spreadAgingMeas->SetSheet(nKeepSheet);
+	return TRUE;
 }
 
 void CDlgSubManual_AgingTest::MeasCellLoad()
@@ -825,6 +893,8 @@ void CDlgSubManual_AgingTest::MeasCellLoad()
 	if (strRcpID.IsEmpty()) return;
 
 	CString strAgingRcpPath = dfcStr(_T("%s%s.rcp"), m_strAgingRcpPath, strRcpID);
+	CString strSec = CAgingCycleInfo::GetMaskSection(IsSegmented() ? m_nViewSeg : 0);	// LYS 2026-09-29 Hybrid 3b A13
+	m_nMaskMismatch = 0;
 
 	short nKeepSheet = m_spreadAgingMeas->GetSheet();
 
@@ -836,9 +906,27 @@ void CDlgSubManual_AgingTest::MeasCellLoad()
 	TCHAR cCellData[1024];	// OCP used MAX_PATH - too small for many cells
 	CArray<int, int> nCellChkArray;
 
+	// LYS 2026-09-29 Hybrid 3b A13 segment k>=1 without its section: the engine measures every cell, so show every cell checked
+	if (IsSegmented() && m_nViewSeg >= 1)
+	{
+		ZeroMemory(cCellData, sizeof(cCellData));
+		GetPrivateProfileString(strSec, _T("STICK_1"), _T(""), cCellData, 1024, strAgingRcpPath);
+		if (cCellData[0] == 0)
+		{
+			for (int k = 0; k < 3; k++) {
+				m_spreadAgingMeas->SetSheet(k + 1);
+				for (int i = 0; i < nStick; i++)
+					for (int j = 0; j < nCell; j++)
+						m_spreadAgingMeas->SetData(j + 1, i + 1, _T("1"));
+			}
+			m_spreadAgingMeas->SetSheet(nKeepSheet);
+			return;
+		}
+	}
+
 	for (int i = 0; i < nStick; i++) {
 		ZeroMemory(cCellData, sizeof(cCellData));
-		GetPrivateProfileString(_T("MASECELL"), dfcStr(_T("STICK_%d"), i + 1), _T(""), cCellData, 1024, strAgingRcpPath);
+		GetPrivateProfileString(strSec, dfcStr(_T("STICK_%d"), i + 1), _T(""), cCellData, 1024, strAgingRcpPath);
 
 		int pos = 0;
 		nCellChkArray.RemoveAll();
@@ -849,7 +937,10 @@ void CDlgSubManual_AgingTest::MeasCellLoad()
 			resToken = strCellData.Tokenize(_T(","), pos);
 		}
 
-		if (nCellChkArray.GetSize() != nCell) continue;	// row missing/mismatched -> keep defaults
+		if (nCellChkArray.GetSize() != nCell) {	// row missing/mismatched -> keep defaults
+			if (nCellChkArray.GetSize() > 0) m_nMaskMismatch++;	// LYS 2026-09-29 Hybrid 3b A13 present but wrong cell count
+			continue;
+		}
 
 		for (int j = 0; j < nCell; j++) {
 			int nMask = nCellChkArray.GetAt(j);
@@ -860,7 +951,146 @@ void CDlgSubManual_AgingTest::MeasCellLoad()
 		}
 	}
 
+	// LYS 2026-09-30 warn for every recipe (1-segment too): rows with another cell count stay unchecked and SAVE overwrites them
+	if (m_nMaskMismatch > 0)	// LYS 2026-09-29 Hybrid 3b A13 (2026-09-28 16:12 case: rows kept unchecked, then saved as zeros)
+	{
+		CString strLog;
+		strLog.Format(_T("%sAgingRcp %s: %d row(s) with cell count != %d shown unchecked (%s)"), IsSegmented() ? _T("[HYBRID] ") : _T(""), strSec.GetString(), m_nMaskMismatch, nCell, strAgingRcpPath.GetString());
+		CLogWrapper::GetInstance()->KMLOG(WARN, strLog);
+
+		CString strWarn;
+		if (IsSegmented())
+			strWarn.Format(_T("세그먼트 %d 셀 맵에 셀 수가 %d개가 아닌 행이 %d개 있습니다.\n해당 행은 미체크로 표시되며, 저장하면 화면 값으로 덮어씁니다."), m_nViewSeg + 1, nCell, m_nMaskMismatch);
+		else
+			strWarn.Format(_T("셀 맵에 셀 수가 %d개가 아닌 행이 %d개 있습니다.\n해당 행은 미체크로 표시되며, 저장하면 화면 값으로 덮어씁니다."), nCell, m_nMaskMismatch);
+		AfxMessageBox(strWarn, MB_ICONWARNING);
+	}
+
 	m_spreadAgingMeas->SetSheet(nKeepSheet);
+}
+
+// LYS 2026-09-29 Hybrid 3b A13 segment selector for the AgingRcp cell mask.
+//   Hybrid recipes only: the grid shows GetSegmentMgr(m_nViewSeg) and saves to CAgingCycleInfo::GetMaskSection(m_nViewSeg).
+//   SetActiveSegment is never called here (the measure thread owns the active segment).
+BOOL CDlgSubManual_AgingTest::IsSegmented()
+{
+	if (m_pAuroraMgr == NULL || m_pAuroraMgr->GetRecipeEditMgrPtr() == NULL) return FALSE;
+	return (m_pAuroraMgr->GetRecipeEditMgrPtr()->GetSegmentLoopCount() > 1) ? TRUE : FALSE;
+}
+
+BOOL CDlgSubManual_AgingTest::IsHybridRunBusy()
+{
+	if (IsSegmented() == FALSE) return FALSE;
+	if (CSequenceManager::GetInstance()->IsEngineCompleteAll() == false) return TRUE;
+	return CSystemParamShare::GetInstance()->IsCycleState() ? TRUE : FALSE;
+}
+
+void CDlgSubManual_AgingTest::UpdateSegmentCombo()
+{
+	if (m_cmbSeg.GetSafeHwnd() == NULL) return;
+
+	CString strRcpID = _T("");
+	C_OutRecipeFunc* pFunc = NULL;
+	if (m_pAuroraMgr != NULL && m_pAuroraMgr->GetRecipeEditMgrPtr() != NULL)
+	{
+		strRcpID = m_pAuroraMgr->GetRecipeEditMgrPtr()->GetRecipeID();
+		pFunc = m_pAuroraMgr->GetRecipeEditMgrPtr()->GetRecipeFuncPtr();
+	}
+	int nSeg = (IsSegmented() && pFunc != NULL) ? pFunc->GetSegmentCount() : 1;
+
+	if (strRcpID != m_strViewSegRcp || m_nViewSeg < 0 || m_nViewSeg >= nSeg) m_nViewSeg = 0;	// m_strViewSegRcp is stamped by LoadAgingInfo right before the grid is rebuilt
+
+	m_cmbSeg.ResetContent();
+	if (nSeg > 1)
+	{
+		CString str;
+		for (int k = 0; k < nSeg; k++)
+		{
+			str.Format(_T("Seg %d/%d %s (%d x %d)"), k + 1, nSeg, pFunc->GetSegmentName(k).GetString(), pFunc->GetSegmentStickCount(k), pFunc->GetSegmentCellCount(k));
+			m_cmbSeg.AddString(str);
+		}
+		m_cmbSeg.SetCurSel(m_nViewSeg);
+	}
+	m_cmbSeg.ShowWindow((nSeg > 1) ? SW_SHOW : SW_HIDE);
+	if (GetDlgItem(IDC_STATIC_AGING_SEG) != NULL) GetDlgItem(IDC_STATIC_AGING_SEG)->ShowWindow((nSeg > 1) ? SW_SHOW : SW_HIDE);
+}
+
+// LYS 2026-09-29 Hybrid 3b A13 the grid/combo were built for another recipe (changed outside this dialog, or LOAD not done yet)
+// LYS 2026-09-30 every recipe, and the grid size must be the recipe's: the default 10 x 5 grid shown before LOAD / Recipe Open
+//   has no recipe stamp, so saving it is refused (it wrote 10-cell rows for a 20-cell recipe on 2026-09-30)
+BOOL CDlgSubManual_AgingTest::IsMaskViewStale(CString strRcpID)
+{
+	int nStick = 0, nCell = 0;
+	BOOL bStale = (strRcpID != m_strViewSegRcp) ? TRUE : FALSE;
+	if (bStale == FALSE)
+	{
+		S_RecipeData* pRD = NULL;
+		if (IsSegmented())
+		{
+			C_OutRecipeFunc* pSegFunc = m_pAuroraMgr->GetRecipeEditMgrPtr()->GetRecipeFuncPtr();
+			S_RecipeMgr* pSegMgr = (pSegFunc != NULL && m_nViewSeg < pSegFunc->GetSegmentCount()) ? pSegFunc->GetSegmentMgr(m_nViewSeg) : NULL;
+			if (pSegMgr == NULL) bStale = TRUE;
+			else pRD = &pSegMgr->m_sData;
+		}
+		else
+			pRD = m_pAuroraMgr->GetRecipeEditMgrPtr()->GetRecipeData();
+
+		if (pRD != NULL && pRD->m_vecStick.size() > 0)
+		{
+			nStick = (int)pRD->m_vecStick.size();
+			nCell = (int)pRD->m_vecStick[0].m_vecCell.size();
+		}
+	}
+	if (bStale == FALSE && m_spreadAgingMeas != NULL && m_spreadAgingMeas->GetSafeHwnd() != NULL)
+	{
+		short nKeepSheet = m_spreadAgingMeas->GetSheet();
+		m_spreadAgingMeas->SetSheet(1);
+		if (m_spreadAgingMeas->GetMaxRows() != nStick || m_spreadAgingMeas->GetMaxCols() != nCell) bStale = TRUE;
+		m_spreadAgingMeas->SetSheet(nKeepSheet);
+	}
+	if (bStale == FALSE) return FALSE;
+	AfxMessageBox(_T("셀 맵이 현재 레시피와 맞지 않습니다(불러온 뒤 레시피가 바뀌었거나 아직 불러오지 않음).\n레시피 열기 또는 이전값 불러오기 후 다시 저장하십시오."), MB_ICONWARNING);
+	return TRUE;
+}
+
+// LYS 2026-09-30 rows whose cell count did not match were shown unchecked by MeasCellLoad; ask once before they are overwritten.
+//   TRUE = go on (nothing to ask, or accepted - then the count is cleared so MeasCellSave does not ask again)
+BOOL CDlgSubManual_AgingTest::ConfirmMaskOverwrite()
+{
+	if (m_nMaskMismatch <= 0) return TRUE;
+	CString strAsk;
+	if (IsSegmented())
+		strAsk.Format(_T("세그먼트 %d 셀 맵에서 셀 수가 맞지 않던 행 %d개를 지금 화면 값으로 덮어씁니다.\n계속 하시겠습니까?"), m_nViewSeg + 1, m_nMaskMismatch);
+	else
+		strAsk.Format(_T("셀 맵에서 셀 수가 맞지 않던 행 %d개를 지금 화면 값으로 덮어씁니다.\n계속 하시겠습니까?"), m_nMaskMismatch);
+	if (AfxMessageBox(strAsk, MB_YESNO | MB_ICONWARNING) != IDYES) return FALSE;
+	m_nMaskMismatch = 0;
+	return TRUE;
+}
+
+void CDlgSubManual_AgingTest::OnSelchangeSeg()
+{
+	int nSel = m_cmbSeg.GetCurSel();
+	if (nSel < 0 || nSel == m_nViewSeg) return;
+
+	if (IsSegmented() == FALSE || !IsOfflineStatus())	// IsOfflineStatus also blocks while a hybrid run is busy
+	{
+		m_cmbSeg.SetCurSel(m_nViewSeg);
+		return;
+	}
+
+	CString strAsk;
+	strAsk.Format(_T("세그먼트 %d 셀 맵을 먼저 저장하시겠습니까?\n예: 저장 후 전환 / 아니요: 저장하지 않고 전환 / 취소: 전환 취소"), m_nViewSeg + 1);
+	int nAns = AfxMessageBox(strAsk, MB_YESNOCANCEL | MB_ICONQUESTION);
+	if (nAns == IDCANCEL || (nAns == IDYES && MeasCellSave() == FALSE))	// mask of the segment being left; the item list is glass-common and saved by SAVE
+	{
+		m_cmbSeg.SetCurSel(m_nViewSeg);
+		return;
+	}
+
+	m_nViewSeg = nSel;
+	UpdateAgingCell();
+	MeasCellLoad();
 }
 
 void CDlgSubManual_AgingTest::DblClickFpspreadCellStatus(long Col, long Row)

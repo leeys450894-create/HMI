@@ -315,6 +315,14 @@ void CDlgSubManual_AutoContact::OnRcpOpen()
 {
 	if (!IsOfflineStatus()) return;
 
+	// LYS 2026-09-29 Hybrid 3b A13 no recipe change while a hybrid recipe is being measured (RecipeChange mid-run resets the segments). 1-segment recipes: unchanged
+	if (m_pAuroraMgr != NULL && m_pAuroraMgr->GetRecipeEditMgrPtr() != NULL && m_pAuroraMgr->GetRecipeEditMgrPtr()->GetSegmentLoopCount() > 1
+		&& (CSequenceManager::GetInstance()->IsEngineCompleteAll() == false || CSystemParamShare::GetInstance()->IsCycleState()))
+	{
+		AfxMessageBox(_T("하이브리드 레시피 측정 중에는 이 작업을 할 수 없습니다.\n측정이 끝난 뒤 다시 시도하십시오."), MB_ICONWARNING);
+		return;
+	}
+
 	//gLog(m_pSystem->hLog, "CDlgSubManual_AutoContact::OnRcpOpen()", LOG_LEVEL_O);
 
 	CString filename = _T(""), strRcpFile;

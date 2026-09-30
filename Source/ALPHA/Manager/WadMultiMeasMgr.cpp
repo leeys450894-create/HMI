@@ -32,6 +32,9 @@ static LPCTSTR s_szFieldKey[eMM_FIELD_COUNT] =
 CWadMultiMeasMgr::CWadMultiMeasMgr(CString strRcpFolderPath)
 	: m_strRcpFolderPath(strRcpFolderPath)
 	, m_bLoaded(false)
+	, m_nLoadedSeg(0)		// LYS 2026-09-30 Hybrid 3d
+	, m_bDataFound(false)
+	, m_bMaskFound(false)
 	, m_bInspMode(false)
 	, m_dCellX(0.0)
 	, m_dCellY(0.0)
@@ -89,14 +92,50 @@ void CWadMultiMeasMgr::Clear()
 	m_dCellY = 0.0;
 	m_vecPoint.clear();
 	m_vecCellUse.clear();
+	m_nLoadedSeg = 0;	// LYS 2026-09-30 Hybrid 3d
+	m_bDataFound = false;
+	m_bMaskFound = false;
 }
 
 //---------------------------------------------------------------
-// LoadMeasData
+// LoadMeasData = segment 0 (meaning unchanged)
 //---------------------------------------------------------------
 bool CWadMultiMeasMgr::LoadMeasData(CString strRecipeID)
 {
+	return LoadMeasSegment(strRecipeID, 0);
+}
+
+// LYS 2026-09-30 Hybrid 3d section names: segment 0 keeps the OCP literals, segment k >= 1 gets a suffix.
+//   Same rule as CAgingCycleInfo::GetMaskSection, kept here so this class stays a leaf (no AgingCycleInfo / dfcStr).
+CString CWadMultiMeasMgr::GetDataSection(int nSeg)
+{
+	if (nSeg <= 0) return _T("DATA");
+	CString str;
+	str.Format(_T("DATA_SEG%d"), nSeg + 1);
+	return str;
+}
+
+CString CWadMultiMeasMgr::GetMaskSection(int nSeg)
+{
+	if (nSeg <= 0) return _T("MASECELL");
+	CString str;
+	str.Format(_T("MASECELL_SEG%d"), nSeg + 1);
+	return str;
+}
+
+//---------------------------------------------------------------
+// LoadMeasSegment - LYS 2026-09-30 Hybrid 3d the old LoadMeasData body, section names per segment
+//---------------------------------------------------------------
+bool CWadMultiMeasMgr::LoadMeasSegment(CString strRecipeID, int nSeg)
+{
+	CString strDataSec = GetDataSection(nSeg);
+	CString strMaskSec = GetMaskSection(nSeg);
+
 	CSingleLock lock(&m_cs, TRUE);
+
+	m_nLoadedSeg = (nSeg > 0) ? nSeg : 0;
+	m_bDataFound = false;
+	m_bMaskFound = false;
 
 	m_bLoaded = false;
 	m_strLoadedRecipeID.Empty();
@@ -120,21 +159,21 @@ bool CWadMultiMeasMgr::LoadMeasData(CString strRecipeID)
 	for (int nField = 0; nField < eMM_FIELD_COUNT; nField++)
 	{
 		ZeroMemory(szBuf, sizeof(szBuf));
-		::GetPrivateProfileString(_T("DATA"), s_szFieldKey[nField], _T(""), szBuf, WAD_MULTI_INI_BUF, strFile);
+		::GetPrivateProfileString(strDataSec, s_szFieldKey[nField], _T(""), szBuf, WAD_MULTI_INI_BUF, strFile);
 		ParseJoinedList(nField, szBuf);
 	}
 
 	//-----------------------------------------------------------
 	// [DATA] INSP_MODE / CELL_X / CELL_Y
 	//-----------------------------------------------------------
-	m_bInspMode = (::GetPrivateProfileInt(_T("DATA"), _T("INSP_MODE"), 0, strFile) != 0);
+	m_bInspMode = (::GetPrivateProfileInt(strDataSec, _T("INSP_MODE"), 0, strFile) != 0);
 
 	ZeroMemory(szBuf, sizeof(szBuf));
-	::GetPrivateProfileString(_T("DATA"), _T("CELL_X"), _T("0"), szBuf, WAD_MULTI_INI_BUF, strFile);
+	::GetPrivateProfileString(strDataSec, _T("CELL_X"), _T("0"), szBuf, WAD_MULTI_INI_BUF, strFile);
 	m_dCellX = _tstof(szBuf);
 
 	ZeroMemory(szBuf, sizeof(szBuf));
-	::GetPrivateProfileString(_T("DATA"), _T("CELL_Y"), _T("0"), szBuf, WAD_MULTI_INI_BUF, strFile);
+	::GetPrivateProfileString(strDataSec, _T("CELL_Y"), _T("0"), szBuf, WAD_MULTI_INI_BUF, strFile);
 	m_dCellY = _tstof(szBuf);
 
 	//-----------------------------------------------------------
@@ -146,7 +185,7 @@ bool CWadMultiMeasMgr::LoadMeasData(CString strRecipeID)
 		strKey.Format(_T("STICK_%d"), iStick + 1);
 
 		ZeroMemory(szBuf, sizeof(szBuf));
-		::GetPrivateProfileString(_T("MASECELL"), strKey, _T(""), szBuf, WAD_MULTI_INI_BUF, strFile);
+		::GetPrivateProfileString(strMaskSec, strKey, _T(""), szBuf, WAD_MULTI_INI_BUF, strFile);
 
 		if (szBuf[0] == 0)
 			break;
@@ -166,6 +205,9 @@ bool CWadMultiMeasMgr::LoadMeasData(CString strRecipeID)
 		m_vecCellUse.push_back(vecRow);
 	}
 
+	m_bDataFound = (m_vecPoint.size() > 0);	// LYS 2026-09-30 Hybrid 3d parse result, no extra I/O
+	m_bMaskFound = (m_vecCellUse.size() > 0);
+
 	m_bLoaded = true;
 	m_strLoadedRecipeID = strRecipeID;
 
@@ -173,10 +215,21 @@ bool CWadMultiMeasMgr::LoadMeasData(CString strRecipeID)
 }
 
 //---------------------------------------------------------------
-// SaveMeasData
+// SaveMeasData = segment 0, no row deletion (meaning unchanged)
 //---------------------------------------------------------------
 bool CWadMultiMeasMgr::SaveMeasData(CString strRecipeID)
 {
+	return SaveMeasSegment(strRecipeID, 0, false);
+}
+
+//---------------------------------------------------------------
+// SaveMeasSegment - LYS 2026-09-30 Hybrid 3d the old SaveMeasData body, section names per segment
+//---------------------------------------------------------------
+bool CWadMultiMeasMgr::SaveMeasSegment(CString strRecipeID, int nSeg, bool bDeleteStaleRows)
+{
+	CString strDataSec = GetDataSection(nSeg);
+	CString strMaskSec = GetMaskSection(nSeg);
+
 	CSingleLock lock(&m_cs, TRUE);
 
 	if (m_strRcpFolderPath.IsEmpty() || strRecipeID.IsEmpty())
@@ -195,7 +248,7 @@ bool CWadMultiMeasMgr::SaveMeasData(CString strRecipeID)
 	for (int nField = 0; nField < eMM_FIELD_COUNT; nField++)
 	{
 		CString strJoined = BuildJoinedList(nField);
-		bOK &= (::WritePrivateProfileString(_T("DATA"), s_szFieldKey[nField], strJoined, strFile) != 0);
+		bOK &= (::WritePrivateProfileString(strDataSec, s_szFieldKey[nField], strJoined, strFile) != 0);
 	}
 
 	//-----------------------------------------------------------
@@ -203,13 +256,13 @@ bool CWadMultiMeasMgr::SaveMeasData(CString strRecipeID)
 	//-----------------------------------------------------------
 	CString strVal;
 	strVal.Format(_T("%d"), m_bInspMode ? 1 : 0);
-	bOK &= (::WritePrivateProfileString(_T("DATA"), _T("INSP_MODE"), strVal, strFile) != 0);
+	bOK &= (::WritePrivateProfileString(strDataSec, _T("INSP_MODE"), strVal, strFile) != 0);
 
 	strVal.Format(_T("%.4f"), m_dCellX);
-	bOK &= (::WritePrivateProfileString(_T("DATA"), _T("CELL_X"), strVal, strFile) != 0);
+	bOK &= (::WritePrivateProfileString(strDataSec, _T("CELL_X"), strVal, strFile) != 0);
 
 	strVal.Format(_T("%.4f"), m_dCellY);
-	bOK &= (::WritePrivateProfileString(_T("DATA"), _T("CELL_Y"), strVal, strFile) != 0);
+	bOK &= (::WritePrivateProfileString(strDataSec, _T("CELL_Y"), strVal, strFile) != 0);
 
 	//-----------------------------------------------------------
 	// [MASECELL]
@@ -225,13 +278,33 @@ bool CWadMultiMeasMgr::SaveMeasData(CString strRecipeID)
 			strRow += strCell;
 		}
 
-		bOK &= (::WritePrivateProfileString(_T("MASECELL"), strKey, strRow, strFile) != 0);
+		bOK &= (::WritePrivateProfileString(strMaskSec, strKey, strRow, strFile) != 0);
+	}
+
+	// LYS 2026-09-30 Hybrid 3d delete STICK_n keys past the rows just written, key by key (the loader reads up to the
+	//   first missing key). Deleting the whole section instead would move it to the end of the file on the next write.
+	if (bDeleteStaleRows)
+	{
+		TCHAR szOld[16];
+		for (int iStick = (int)m_vecCellUse.size(); iStick < WAD_MULTI_MAX_STICK; iStick++)
+		{
+			CString strKey;
+			strKey.Format(_T("STICK_%d"), iStick + 1);
+			ZeroMemory(szOld, sizeof(szOld));
+			::GetPrivateProfileString(strMaskSec, strKey, _T(""), szOld, 16, strFile);
+			if (szOld[0] == 0)
+				break;
+			::WritePrivateProfileString(strMaskSec, strKey, NULL, strFile);
+		}
 	}
 
 	if (bOK)
 	{
 		m_bLoaded = true;
 		m_strLoadedRecipeID = strRecipeID;
+		m_nLoadedSeg = (nSeg > 0) ? nSeg : 0;	// LYS 2026-09-30 Hybrid 3d
+		m_bDataFound = (m_vecPoint.size() > 0);
+		m_bMaskFound = (m_vecCellUse.size() > 0);
 	}
 
 	return bOK;
@@ -250,6 +323,25 @@ CString CWadMultiMeasMgr::GetLoadedRecipeID()
 {
 	CSingleLock lock(&m_cs, TRUE);
 	return m_strLoadedRecipeID;
+}
+
+// LYS 2026-09-30 Hybrid 3d
+int CWadMultiMeasMgr::GetLoadedSegment()
+{
+	CSingleLock lock(&m_cs, TRUE);
+	return m_nLoadedSeg;
+}
+
+bool CWadMultiMeasMgr::IsDataFound()
+{
+	CSingleLock lock(&m_cs, TRUE);
+	return m_bDataFound;
+}
+
+bool CWadMultiMeasMgr::IsMaskFound()
+{
+	CSingleLock lock(&m_cs, TRUE);
+	return m_bMaskFound;
 }
 
 bool CWadMultiMeasMgr::IsMultiMode()

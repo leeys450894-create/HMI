@@ -2,6 +2,7 @@
 #include "dfcRecipe.h"
 #include "MakeCellDlg.h"
 #include "afxdialogex.h"
+#include <memory>	// LYS 2026-09-29 unique_ptr
 
 IMPLEMENT_DYNAMIC (C_MakeCellDlg, CDialogEx)
 
@@ -29,6 +30,7 @@ void C_MakeCellDlg::DoDataExchange (CDataExchange* pDX)
 	DDX_Control (pDX, IDC_GRID_3,   m_gridCADData);
 	DDX_Control (pDX, IDC_CHECK_1,  m_chkHybrid);	// LYS 2026-09-29 Hybrid Phase 2
 	DDX_Control (pDX, IDC_COMBO_3,  m_cmbSegCount);
+	DDX_Control (pDX, IDC_STATIC_CELL_OVERLAY, m_wndCellOverlay);	// LYS 2026-09-30 ICP IDC_STATIC_2
 
 }
 
@@ -67,6 +69,7 @@ BOOL C_MakeCellDlg::OnInitDialog ()
 	InitCoordInfo ();
 	InitCADInfo ();
 	InitHybridUI ();	// LYS 2026-09-29 Hybrid Phase 2
+	UpdateCellOverlay ();	// LYS 2026-09-30
 
 	return TRUE;
 }
@@ -323,6 +326,7 @@ void	C_MakeCellDlg::OnCellInfoOpen ()
 	// LYS 2026-09-29 Hybrid Phase 2 OPEN 한 슬롯만 하이브리드 RECIPE APPLY에서 재생성된다
 	if (m_nSegView >= 0 && m_nSegView < (int)m_vecSegInput.size ()) m_vecSegInput[m_nSegView].bOpened = TRUE;
 	UpdateHybridUI ();
+	UpdateCellOverlay ();	// LYS 2026-09-30 ICP OnCellInfoOpen -> UpdateGlassMap
 
 	Invalidate (FALSE);
 }
@@ -413,10 +417,23 @@ void	C_MakeCellDlg::OnRecipeUpdate ()
 	}
 
 	// LYS 2026-09-29 Hybrid Phase 2 하이브리드 해제 후 적용: 해제할 때 보고 있던 세그먼트를 기준으로 1세그먼트 레시피를 만든다
+	int  nOldActive = g_inRcpInfo.GetActiveSegmentIndex ();	// LYS 2026-09-29
 	BOOL bCollapse = (g_inRcpInfo.GetSegmentCount () > 1);
 	if (bCollapse) g_inRcpInfo.SetActiveSegment (m_nSingleSrcSeg);
 
+	std::unique_ptr<S_RecipeMgr> pBefore (new S_RecipeMgr (g_inRcpInfo.m_recipeMgr));	// LYS 2026-09-29 좌표 검사 실패 시 되돌린다 (힙 - 스택 오버플로 방지)
 	BuildRecipeFromGrid (strRcpName);
+
+	// LYS 2026-09-29 셀/스틱 좌표가 글라스 밖이면 적용하지 않는다 (셀 정보 오류로 헤드 Y SW 리밋에 걸린 사고 재발 방지)
+	{
+		CString strLayoutErr = g_inRcpInfo.CheckRecipeLayout (&g_inRcpInfo.m_recipeMgr, _T("레시피"));
+		if (!strLayoutErr.IsEmpty ()) {
+			g_inRcpInfo.m_recipeMgr = *pBefore;
+			if (bCollapse) g_inRcpInfo.SetActiveSegment (nOldActive);
+			AfxMessageBox (_T("레시피 생성 불가 (셀 좌표 검사)\n\n") + strLayoutErr, MB_ICONWARNING);
+			return;
+		}
+	}
 
 	if (bCollapse) g_inRcpInfo.CollapseToActiveSegment ();
 
@@ -615,6 +632,8 @@ void	C_MakeCellDlg::OnCalcUpdate ()
 	}
 
 	m_gridCoordData.SetItemText(CELL_ROW_15, 1, _T("20.0000"));
+
+	UpdateCellOverlay ();	// LYS 2026-09-30 ICP OnCalcUpdate -> UpdateGlassMap
 
 	Invalidate (FALSE);
 }
@@ -954,7 +973,10 @@ void	C_MakeCellDlg::InitHybridUI ()
 
 BOOL	C_MakeCellDlg::ShowWindow (int nCmdShow)
 {
-	if (nCmdShow == SW_SHOW) SyncHybridFromRecipe ();
+	if (nCmdShow == SW_SHOW) {
+		SyncHybridFromRecipe ();
+		UpdateCellOverlay ();	// LYS 2026-09-30
+	}
 
 	return CDialogEx::ShowWindow (nCmdShow);
 }
@@ -1055,10 +1077,12 @@ void	C_MakeCellDlg::MoveSegView (int nSeg)
 {
 	if (nSeg < 0 || nSeg >= (int)m_vecSegInput.size () || nSeg == m_nSegView) return;
 
+	RefreshViewPreview ();	// LYS 2026-09-30 outgoing slot: its grid as it is now (hand edits) stays in the overlay
 	SaveSegInput (m_nSegView);
 	m_nSegView = nSeg;
 	LoadSegInput (m_nSegView);
 	UpdateHybridUI ();
+	UpdateCellOverlay ();	// LYS 2026-09-30
 }
 
 void	C_MakeCellDlg::OnSegPrev ()
@@ -1093,6 +1117,7 @@ void	C_MakeCellDlg::OnHybridCheck ()
 	}
 
 	UpdateHybridUI ();
+	UpdateCellOverlay ();	// LYS 2026-09-30
 }
 
 // 슬롯 수만 바꾼다. 레시피는 RECIPE APPLY 때 바뀐다.
@@ -1119,6 +1144,7 @@ void	C_MakeCellDlg::OnSegCountApply ()
 	if (nNew == 1) m_nSingleSrcSeg = 0;
 	LoadSegInput (m_nSegView);
 	UpdateHybridUI ();
+	UpdateCellOverlay ();	// LYS 2026-09-30
 }
 
 // 하이브리드 RECIPE APPLY: 세그먼트 전체를 새로 조립해서 한 번에 교체한다
@@ -1167,17 +1193,22 @@ void	C_MakeCellDlg::ApplyHybridRecipe ()
 	g_inRcpInfo.CommitActiveSegment ();
 	std::vector<S_RecipeMgr>	 vecOld;
 	std::vector<S_SegmentHeader> vecOldHdr;
+	vecOld.resize (nOld);	// LYS 2026-09-29 스택 오버플로 방지 - S_RecipeMgr는 고정 문자 배열만 약 88KB라 스택에 두지 않는다
 	for (int k = 0; k < nOld; k++) {
 		S_RecipeMgr *pSeg = g_inRcpInfo.GetSegmentMgr (k);
-		vecOld.push_back (pSeg ? *pSeg : S_RecipeMgr ());
+		if (pSeg) vecOld[k] = *pSeg;
 		vecOldHdr.push_back (g_inRcpInfo.GetSegmentHeader (k));
 	}
-	S_RecipeMgr sStage = g_inRcpInfo.m_recipeMgr;
+	std::unique_ptr<S_RecipeMgr> pStage (new S_RecipeMgr (g_inRcpInfo.m_recipeMgr));
 
 	std::vector<S_RecipeMgr>	 vecNew;
+	vecNew.reserve (nNew);
 	std::vector<S_SegmentHeader> vecNewHdr;
 	for (int k = 0; k < nNew; k++) {
-		S_RecipeMgr		sSeg = (k < nOld) ? vecOld[k] : (bCopy ? vecOld[0] : S_RecipeMgr ());
+		vecNew.resize (k + 1);	// LYS 2026-09-29 새 세그먼트는 벡터 원소(힙)에서 바로 만든다 - 스택 사본/임시 객체 없음
+		S_RecipeMgr		&sSeg = vecNew[k];
+		if (k < nOld)	sSeg = vecOld[k];
+		else if (bCopy) sSeg = vecOld[0];
 		S_SegmentHeader sHdr = (k < nOld) ? vecOldHdr[k] : S_SegmentHeader ();
 
 		if (k >= nOld) {	// 새 이름 "Segment#n" - 남는 세그먼트 이름과 겹치지 않게
@@ -1198,14 +1229,25 @@ void	C_MakeCellDlg::ApplyHybridRecipe ()
 			LoadSegInput (k);
 			g_inRcpInfo.m_recipeMgr = sSeg;
 			BuildRecipeFromGrid (m_vecSegInput[k].strCellInfo);
+
+			// LYS 2026-09-29 셀/스틱 좌표 글라스 범위 검사 - 하나라도 실패하면 레시피를 바꾸지 않는다
+			CString strWhat;
+			strWhat.Format (_T("Seg %d"), k + 1);
+			CString strLayoutErr = g_inRcpInfo.CheckRecipeLayout (&g_inRcpInfo.m_recipeMgr, strWhat);
+			if (!strLayoutErr.IsEmpty ()) {
+				g_inRcpInfo.m_recipeMgr = *pStage;
+				LoadSegInput (m_nSegView);
+				UpdateHybridUI ();
+				AfxMessageBox (_T("하이브리드 레시피 생성 불가 (셀 좌표 검사)\n\n") + strLayoutErr, MB_ICONWARNING);
+				return;
+			}
 			sSeg = g_inRcpInfo.m_recipeMgr;
 		}
 
-		vecNew.push_back (sSeg);
 		vecNewHdr.push_back (sHdr);
 	}
 
-	g_inRcpInfo.m_recipeMgr = sStage;
+	g_inRcpInfo.m_recipeMgr = *pStage;
 	if (!g_inRcpInfo.ReplaceSegments (vecNew, vecNewHdr)) {
 		AfxMessageBox (_T("하이브리드 레시피 생성에 실패했습니다."), MB_ICONWARNING);
 		LoadSegInput (m_nSegView);
@@ -1219,4 +1261,101 @@ void	C_MakeCellDlg::ApplyHybridRecipe ()
 	::SendMessage (m_hWnd->m_hWnd, WM_RECIPE_EVENT, (WPARAM)M_MAKE_CELL_SET, NULL);
 
 	ShowWindow (SW_HIDE);
+}
+
+// LYS 2026-09-30 IDC_STATIC_CELL_OVERLAY - ICP MakeCellDlg IDC_STATIC_2 (C_GlassMap::UpdateGlassMap): every segment on one glass.
+//   Source per slot = what the next RECIPE APPLY uses for it:
+//     single mode (1 slot)   : the grid - the non-hybrid APPLY always builds from it; the recipe while the grid does not build
+//     hybrid, OPEN-ed slot   : its grid, built while the slot is on view and kept in the slot (MoveSegView refreshes the
+//                              outgoing slot first, so a hand edit made before the move is shown)
+//     hybrid, other slots    : the recipe as it is (g_inRcpInfo, the editor copy) - hybrid APPLY keeps them and clears bOpened
+//   Refreshed on OPEN / CAD CALC / segment move / hybrid check / count apply / show (ICP: OPEN and CALC); a hand edit in the
+//   grids of the slot on view shows after the next of these.
+void	C_MakeCellDlg::RefreshViewPreview ()
+{
+	int nSlot = (int)m_vecSegInput.size ();
+	if (m_nSegView < 0 || m_nSegView >= nSlot) return;
+
+	S_MakeSegInput &sIn = m_vecSegInput[m_nSegView];
+	if (!sIn.bOpened && nSlot != 1) {
+		sIn.bPreview = FALSE;
+		return;
+	}
+
+	S_GlassMapSeg sGrid;
+	sIn.bPreview = BuildGridPreview (sGrid);
+	sIn.sPreview = sGrid;
+}
+
+void	C_MakeCellDlg::UpdateCellOverlay ()
+{
+	if (m_wndCellOverlay.GetSafeHwnd () == NULL) return;
+
+	RefreshViewPreview ();
+
+	int nSlot	= (int)m_vecSegInput.size ();
+	int nRcpSeg	= g_inRcpInfo.GetSegmentCount ();
+	std::vector<S_GlassMapSeg> vecSeg (nSlot);
+	for (int k = 0; k < nSlot; k++) {
+		const S_MakeSegInput &sIn = m_vecSegInput[k];
+		if (sIn.bOpened || nSlot == 1) {
+			if (sIn.bPreview) {
+				vecSeg[k] = sIn.sPreview;
+				continue;
+			}
+			if (sIn.bOpened) continue;	// an OPEN-ed grid that does not build draws nothing, not the old cells
+		}
+
+		if (nRcpSeg <= 1) {
+			if (k == 0) C_GlassMap::BuildSeg (&g_inRcpInfo.m_recipeMgr, vecSeg[k]);
+			continue;
+		}
+		int nSrc = (nSlot == 1) ? m_nSingleSrcSeg : k;	// hybrid unchecked: the non-hybrid APPLY starts from that segment
+		if (nSrc < nRcpSeg) C_GlassMap::BuildSeg (g_inRcpInfo.GetSegmentMgr (nSrc), vecSeg[k]);
+	}
+
+	m_wndCellOverlay.UpdateGlassMap (vecSeg, m_nSegView);
+}
+
+// "5" or "3,2" -> 5, the way BuildRecipeFromGrid adds up the stick / cell count lists
+static int SumMakeCellCount (const CString &str, BOOL &bBad)
+{
+	int nSum = 0, nPos = 0;
+	CString strTok = str.Tokenize (_T(","), nPos);
+	while (nPos != -1) {
+		int n = _wtoi (strTok.Trim ());
+		if (n < 0 || n > 10000) bBad = TRUE;
+		else					nSum += n;
+		strTok = str.Tokenize (_T(","), nPos);
+	}
+	return nSum;
+}
+
+// LYS 2026-09-30 Grid -> overlay cells without changing the recipe. BuildRecipeFromGrid writes only g_inRcpInfo.m_recipeMgr
+//   (the editor's working slot), so it runs there and the slot is put back - the stage / restore ApplyHybridRecipe uses.
+//   Counts are checked first: BuildRecipeFromGrid allocates new double[stick count] without a check.
+BOOL	C_MakeCellDlg::BuildGridPreview (S_GlassMapSeg &sOut)
+{
+	sOut = S_GlassMapSeg ();
+
+	BOOL bBad	= FALSE;
+	int	 nStick	= SumMakeCellCount (m_gridCoordData.GetItemText (CELL_ROW_05, 1), bBad);
+	int	 nCell	= SumMakeCellCount (m_gridCoordData.GetItemText (CELL_ROW_06, 1), bBad);
+	if (bBad || nStick < 1 || nStick > 200 || nCell < 1 || nCell > 500) return FALSE;
+
+	CString strRcpName;
+	m_cmbCellInfoRcp.GetWindowText (strRcpName);
+
+	std::unique_ptr<S_RecipeMgr> pKeep (new S_RecipeMgr (g_inRcpInfo.m_recipeMgr));	// heap - S_RecipeMgr is about 88 KB
+	BOOL bOk = TRUE;
+	try {
+		BuildRecipeFromGrid (strRcpName);
+		C_GlassMap::BuildSeg (&g_inRcpInfo.m_recipeMgr, sOut);
+	}
+	catch (...) {
+		bOk = FALSE;
+	}
+	g_inRcpInfo.m_recipeMgr = *pKeep;
+
+	return bOk && !sOut.vecCell.empty ();
 }
