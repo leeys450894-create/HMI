@@ -113,3 +113,22 @@ void CResultManager::DataClear()
 	if (m_dlgResult != NULL)
 		m_dlgResult->DataClear();
 }
+
+// LYS 2026-10-06 Hybrid Phase 5 resume replay: while on, UploadData skips the 1 s display wait (normal runs keep it off)
+void CResultManager::SetFastUpload(bool bOn)
+{
+	if (m_dlgResult != NULL)
+		m_dlgResult->m_bFastUpload = bOn;
+}
+
+// LYS 2026-10-06 Hybrid Phase 5 resume replay: rows waiting in the shared ring / rows the monitor thread finished (0 / 0 without a dialog)
+void CResultManager::GetUploadState(int* pQueue, long* pDone)
+{
+	if (m_dlgResult != NULL)
+	{
+		m_dlgResult->GetUploadState(pQueue, pDone);
+		return;
+	}
+	if (pQueue != NULL) *pQueue = 0;
+	if (pDone != NULL) *pDone = 0;
+}

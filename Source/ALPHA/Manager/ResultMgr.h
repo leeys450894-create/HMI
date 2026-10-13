@@ -11,6 +11,9 @@ public:
 	bool	SaveResultDone();
 	void	SetConfigPath(CString strPath);
 	void	ClearData();
+	// LYS 2026-10-06 Hybrid Phase 5 journal replay (stage 5-0 dResult exports)
+	void	SetFastUpload(bool bOn);						// true = skip the 1 s display wait (CResumeJournal::Replay only, reset on every exit)
+	void	GetUploadState(int* pQueue, long* pDone);	// rows waiting in the dResult ring / finished uploads since the DLL loaded (monotonic)
 
 
 

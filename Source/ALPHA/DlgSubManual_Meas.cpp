@@ -1091,6 +1091,7 @@ int CDlgSubManual_Meas::DoWorkManual()
 	//	return 0;
 	//}
 
+	InterlockedExchange(&m_nWorkBusy, 1);	// LYS 2026-10-13 Hybrid Phase 7 (14)-C worker queued (2 is only taken and released inside UI-thread functions)
 	SetEvent(m_hStartEvent);
 	return 0;
 }
@@ -1169,6 +1170,10 @@ void CDlgSubManual_Meas::OnBnClickedBtnManualMeasMeasurementCellMove3()
 */
 int CDlgSubManual_Meas::ManualMoveCell(int iMode, int iMove)
 {
+	// LYS 2026-10-13 manual meas = CycleTest positions (rca.md (5)(c) M6): OCP SPEC / QUALITY / ANGLE take the auto builders (ManualMoveCellShared).
+	//   REVIEW / COLOR and HMI mode run the legacy code below unchanged
+	if (UseSharedMeasPos(iMode)) return ManualMoveCellShared(iMode, iMove);
+
 	int nRet = VTM_RV_SUCCESSED;
 	stMotorPosition stPosition[20];
 	ZeroMemory(&stPosition, sizeof(stPosition));
@@ -1779,6 +1784,7 @@ int CDlgSubManual_Meas::ManualMoveStick(int iStick)
 	bool bOCP = (m_pAuroraMgr->GetSystemConfigMgrPtr() != nullptr
 		&& m_pAuroraMgr->GetSystemConfigMgrPtr()->IsOCP());
 
+	// LYS 2026-10-13 Hybrid Phase 7 CalcStickPose (hybrid gate) copies the pose formula below - change both together
 	// LYS 2026-08-24 Target stage pose
 	double dOffsetX = 0., dOffsetR = 0.;
 	dOffsetX = pRecipeInfo->m_sMotionOffsetPos.m_fStageY;
@@ -1840,6 +1846,13 @@ int CDlgSubManual_Meas::ManualMoveStick(int iStick)
 			if (m_pAuroraMgr->GetMaintControlMgr()->GetCurPos(AXIS_PROBE_Z5) > 0.1)
 			nRet = m_pAuroraMgr->GetMaintControlMgr()->MoveCmdPos_ProbeUnContact(AXIS_PROBE_Z5, dfMove);
 		}
+	}
+
+	// LYS 2026-10-13 manual meas = CycleTest positions ((8) safety, verify_fix #3): OCP - the shared moves leave Sub Z and FRONT Z at recipe height.
+	//   Raise Sub Z Z3~Z6 / FRONT Z (only axes below safety, no log when none) before the stage turns or moves. HMI mode: unchanged
+	if (nRet == VTM_RV_SUCCESSED && bOCP)
+	{
+		nRet = RetractHeadZBeforeStage(iStick);
 	}
 
 	// LYS 2026-08-24 Retract the back head before the stage turns.
@@ -2021,7 +2034,11 @@ UINT CDlgSubManual_Meas::ThreadRun(LPVOID pParam)
 
 		if (dw == WAIT_OBJECT_0) // Start Event 1가 set될 때까지 기다린다.
 		{
+			// LYS 2026-10-13 Hybrid Phase 7 (14)-C 3-state lock: take it here (0 -> 1; 1 = DoWorkManual marked it already), wait while a UI segment
+			//   switch holds 2. The auto-reset start event queues a second run (double click) - it takes the lock again here. 1 segment: nobody takes 2
+			while (InterlockedCompareExchange(&pThis->m_nWorkBusy, 1, 0) == 2) Sleep(10);
 			pThis->ThreadFunc();
+			InterlockedExchange(&pThis->m_nWorkBusy, 0);	// LYS 2026-10-13 Hybrid Phase 7 every return of ThreadFunc
 		}
 		else if (dw == (WAIT_OBJECT_0 + 1)) // Close Event 가 set될 때까지 기다린다.
 		{
@@ -2063,14 +2080,46 @@ UINT CDlgSubManual_Meas::ThreadFunc()
 		return 0;
 	}
 
+	// LYS 2026-10-13 Hybrid Phase 7 D7-14 (b) multi-cycle gap (IsCycleState with the engine done and SPS IDLE): refused on a hybrid runtime recipe only
+	if (CSystemParamShare::GetInstance()->IsCycleState() && IsHybridRuntime())
+	{
+		CString strCycLog;
+		strCycLog.Format(_T("[HYBRID] Manual Meas step %d refused - cycle test running (IsCycleState)"), m_iStep);
+		CLogWrapper::GetInstance()->KMLOG(WARN, strCycLog);
+		CD_DisplayMessage dlg(_T("프로세스 진행 중 입니다. 정지 후 사용하세요."));
+		dlg.DoModal();
+
+		return 0;
+	}
+
 	m_pAuroraMgr->GetShareMemoryMgrPtr()->SetSys_ProcessStatus(SPS_CYCLETEST);
 
 	this->EnableWindow(FALSE);
+	// LYS 2026-10-13 Hybrid Phase 7 manual motion gate (runtime recipe with > 1 segment only; 1 segment returns true, no log) - before the step
+	//   case changes m_iNumStick. Then the manual cell ID check before a measure set (D4b-9, D7-12 (b): hybrid only, 1 segment returns true)
+	int nGateStep = m_iStep;	// LYS 2026-10-13 Hybrid Phase 7 fix (impl review 4): the gate judges this value - the step switch below must run the same step
+	if (CheckHybridGate(nGateStep) == false || (IsMeasSetStep(nGateStep) && ValidateManualCellId() == false))
+	{
+		this->EnableWindow(TRUE);
+		m_pAuroraMgr->GetShareMemoryMgrPtr()->SetSys_ProcessStatus(SPS_IDLE);
+		return 0;
+	}
+	int nNowStep = m_iStep;
+	if (nNowStep != nGateStep && IsHybridRuntime())	// hybrid only: m_iStep changed while the gate ran -> not run (1 segment: the switch reads m_iStep as before)
+	{
+		CString strStepLog;
+		strStepLog.Format(_T("[HYBRID] Manual Meas step %d refused - step changed to %d while the gate ran"), nGateStep, nNowStep);
+		RefuseHybrid(strStepLog, _T("수동 동작 선택이 바뀌었습니다.\n이번 동작은 하지 않습니다. 다시 실행하십시오."));
+		this->EnableWindow(TRUE);
+		m_pAuroraMgr->GetShareMemoryMgrPtr()->SetSys_ProcessStatus(SPS_IDLE);
+		return 0;
+	}
 	
 	switch (m_iStep)
 	{
 	case enumStepID_RECIPE_OPEN:
 	{
+		bool bLoadFail = false;	// LYS 2026-10-13 Hybrid Phase 7 D4b-15 (b) / (14)-K hybrid recipe open refused (1 segment: always false)
 		OnClickBtnManualMeasRecipeOpen();
 
 	CString sFilter = _T("Recipe Files (*.rcp) | *.rcp | All Files(*.*) | *.* |");
@@ -2089,7 +2138,29 @@ UINT CDlgSubManual_Meas::ThreadFunc()
 
 		if (AfxMessageBox(_T("Load This Recipe : ") + strRcpFile, MB_OKCANCEL) == IDOK)
 		{
-			if (0 < m_pAuroraMgr->GetRecipeEditMgrPtr()->OpenRecipe(strRcpFile))
+			// LYS 2026-10-13 Hybrid Phase 7 D4b-15 (b) / D7-11 (b) on a hybrid runtime recipe: 0 < OpenRecipe() also accepted JOB_RECIPE_NOT_EXIST (1013).
+			//   Refuse when the .rcp load itself failed (load serial unchanged) or a hybrid .rcp came without its .alg ((14)-K). 1 segment: the original 0 < test
+			C_OutRecipeFunc* pLoadFunc = m_pAuroraMgr->GetRecipeEditMgrPtr()->GetRecipeFuncPtr();
+			int nLoadSeq = (pLoadFunc != NULL) ? pLoadFunc->GetRcpLoadSeq() : 0;
+			int nOpenRtn = m_pAuroraMgr->GetRecipeEditMgrPtr()->OpenRecipe(strRcpFile);
+			bool bHybOpen = IsHybridRuntime();	// after the load: a failed load leaves the previous recipe (and its segment count) in place
+			if (bHybOpen && pLoadFunc != NULL && strRcpFile.IsEmpty() != true && pLoadFunc->GetRcpLoadSeq() == nLoadSeq)
+			{
+				bLoadFail = true;	// m_bOpenRcp and the groups stay as they were
+				CString strOpenLog;
+				strOpenLog.Format(_T("[HYBRID] Manual Meas recipe open refused - %s could not be read (returned %d, load serial %d unchanged)"), (LPCTSTR)strRcpFile, nOpenRtn, nLoadSeq);
+				CLogWrapper::GetInstance()->KMLOG(WARN, strOpenLog);
+				AfxMessageBox(_T("레시피 [") + strRcpFile + _T("] 파일을 읽을 수 없습니다.\n파일이 없거나 손상되었습니다. (Cell ID 트레일러 등)\n\n이전 레시피를 그대로 사용합니다."), MB_ICONWARNING);
+			}
+			else if (bHybOpen && nOpenRtn == JOB_RECIPE_NOT_EXIST && pLoadFunc != NULL && pLoadFunc->GetSegmentLoopCount() > 1)
+			{
+				bLoadFail = true;	// (14)-K the DLL holds the new hybrid recipe without its .alg - G0-b refuses every gated step until it is reopened
+				CString strOpenLog;
+				strOpenLog.Format(_T("[HYBRID] Manual Meas recipe open refused - %s returned %d (.alg load failed)"), (LPCTSTR)strRcpFile, nOpenRtn);
+				CLogWrapper::GetInstance()->KMLOG(WARN, strOpenLog);
+				AfxMessageBox(_T("레시피 [") + strRcpFile + _T("]의 Align 파일(.alg)을 읽지 못했습니다.\n하이브리드 레시피는 Align 파일 없이 열지 않습니다.\n\nAlign 파일을 확인한 뒤 다시 여십시오."), MB_ICONWARNING);
+			}
+			else if (0 < nOpenRtn)
 			{
 				m_bOpenRcp = true;
 			}
@@ -2100,11 +2171,40 @@ UINT CDlgSubManual_Meas::ThreadFunc()
 		}
 	}
 
-	if(m_bOpenRcp == true)
+	if(m_bOpenRcp == true && bLoadFail == false)	// LYS 2026-10-13 Hybrid Phase 7 bLoadFail: hybrid open refused above (1 segment: always false)
 	{
 		UPdateTestBtn(true);
 
+		// LYS 2026-10-13 Hybrid Phase 7 a newly loaded hybrid recipe (synced cache and live count > 1, view stamp stale) starts at stick 1 / cell 1 -
+		//   segments differ in size (W7/W8); a cancelled dialog keeps the stick. 1 segment keeps the current stick as before.
+		//   D7-20: the PG device model is unknown after a recipe open (1 segment: string only, never read)
+		bool bHybView = (m_pAuroraMgr->GetRecipeEditMgrPtr()->GetSegCountCache() > 1 && m_pAuroraMgr->GetRecipeEditMgrPtr()->GetSegmentLoopCount() > 1);
+		bool bHybReset = (bHybView && IsHybridViewStale());
+		m_strPgModelSent.Empty();
+		if (bHybReset)
+		{
+			m_iNumStick = 0;
+			m_iNumCell = 0;
+		}
+		// LYS 2026-10-13 manual meas = CycleTest positions (review fix #9): nothing loaded (dialog cancelled or load failed - load serial unchanged) while
+		//   the shared groups of this stick are held -> keep them and m_iNumCell: the heads still stand at m_vecMeasGroup[m_iNumCell], which the measure set /
+		//   test steps use (legacy rebuilt the same legacy groups here and kept the index). The inner IDs are reset as that rebuild did. A loaded recipe,
+		//   a hybrid view reset, another stick or legacy groups -> MakeMeasGroup as before
+		if (bHybReset == false && m_nMeasGroupMode >= 0 && IsMeasGroupCurrent(m_nMeasGroupMode))
+		{
+			SetInnerIdArea(m_nMeasureArea, false);
+			CString strKeepLog;
+			strKeepLog.Format(_T("[MANUAL] Manual Meas recipe open: no recipe loaded - %s groups of stick %d kept (group %d of %d)"),
+				(m_nMeasGroupMode == M_TYPE_SPEC) ? _T("WAD") : ((m_nMeasGroupMode == M_TYPE_ANGLE) ? _T("ANGLE") : _T("VISION")), m_iNumStick + 1, m_iNumCell + 1, (int)m_vecMeasGroup.size());
+			CLogWrapper::GetInstance()->KMLOG(SYST, strKeepLog);
+		}
+		else
 		MakeMeasGroup();
+		if (bHybView)
+		{
+			StampHybridView();	// LYS 2026-10-13 Hybrid Phase 7 G0 view stamp (1 segment: none)
+			UpdateCurStickUI();
+		}
 	}
 
 	//	// File Open
@@ -2118,6 +2218,9 @@ UINT CDlgSubManual_Meas::ThreadFunc()
 	// Glass Get 
 	case enumStepID_GLASS_GET_01:
 	{
+		// LYS 2026-10-13 manual meas review #6: OCP raise Sub Z / FRONT Z before the stage / probe moves (none below safety = no log)
+		nRet = RetractHeadZBeforeStep(_T("GLASS GET (loader position)"));
+		if (nRet != VTM_RV_SUCCESSED) break;
 		nRet = MoveLoaderXYR(0);
 	}
 	break;
@@ -2165,6 +2268,9 @@ UINT CDlgSubManual_Meas::ThreadFunc()
 	// Glass Put
 	case enumStepID_GLASS_PUT_01:
 	{
+		// LYS 2026-10-13 manual meas review #6: OCP raise Sub Z / FRONT Z before the stage / probe moves (none below safety = no log)
+		nRet = RetractHeadZBeforeStep(_T("GLASS PUT (unloader position)"));
+		if (nRet != VTM_RV_SUCCESSED) break;
 		nRet = MoveLoaderXYR(1);
 	}
 	break;
@@ -2207,6 +2313,9 @@ UINT CDlgSubManual_Meas::ThreadFunc()
 	// Align
 	case enumStepID_GLASS_ALIGN:
 	{
+		// LYS 2026-10-13 manual meas review #6: OCP raise Sub Z / FRONT Z before the stage / probe moves (none below safety = no log)
+		nRet = RetractHeadZBeforeStep(_T("GLASS ALIGN"));
+		if (nRet != VTM_RV_SUCCESSED) break;
 		bool bRet = false;
 		CDoWorkGlassSequence* pDoWorkGlassSeq = CSequenceManager::GetInstance()->GeDoWorkGlassSequence();
 		bRet = pDoWorkGlassSeq->ItemStart(_T("SEQUENCE_ITEM_DWGLASS_SEQ_GLASS_SW_ALIGN"), true);
@@ -2219,6 +2328,9 @@ UINT CDlgSubManual_Meas::ThreadFunc()
 	// jsyoon 2022.08.17 add
 	case enumStepID_PROBE_ALIGN:
 	{
+		// LYS 2026-10-13 manual meas review #6: OCP raise Sub Z / FRONT Z before the stage / probe moves (none below safety = no log)
+		nRet = RetractHeadZBeforeStep(_T("PROBE ALIGN"));
+		if (nRet != VTM_RV_SUCCESSED) break;
 		bool bRet = false;
 		CSequenceManager::GetInstance()->GetFunctionModuleProbeACC()->SetProbe(df_PROBE_MEAS);
 
@@ -3370,6 +3482,7 @@ UINT CDlgSubManual_Meas::ThreadFunc()
 					//nAreaNum[1] = nUseCELLID[1] + (nMeasArea * df_MAX_PROBE * m_iNumStick) + 1;
 					nAreaNum[0] = nUseCELLID[0] + (nArea * nMeasStick) + 1;
 					nAreaNum[1] = nUseCELLID[1] + (nArea * nMeasStick) + 1;
+					AddSegRowBase(nAreaNum);	// LYS 2026-10-13 Hybrid Phase 7 segBase of the active segment (1 segment: base 0, no-op)
 					m_pAuroraMgr->GetCommTcpIpFactoryMgrPtr()->SetMeasUseInfo(bMeasProbe, nAreaNum, 3000);
 				}
 			}
@@ -3505,6 +3618,7 @@ UINT CDlgSubManual_Meas::ThreadFunc()
 						//if (nUseCELLID[1] >= 0) nAreaNum[1] = nUseCELLID[1] + (nArea * nMeasStick) + 1;
 					}
 					
+					AddSegRowBase(nAreaNum);	// LYS 2026-10-13 Hybrid Phase 7 segBase of the active segment (1 segment: base 0, no-op)
 					m_pAuroraMgr->GetCommTcpIpFactoryMgrPtr()->SetMeasUseInfo(bMeasProbe, nAreaNum, nTimeOut);
 				}
 			}
@@ -3626,6 +3740,7 @@ UINT CDlgSubManual_Meas::ThreadFunc()
 					//nAreaNum[1] = nUseCELLID[1] + (nMeasArea * df_MAX_PROBE * m_iNumStick) + 1;
 					nAreaNum[0] = nUseCELLID[0] + (nArea * nMeasStick) + 1;
 					nAreaNum[1] = nUseCELLID[1] + (nArea * nMeasStick) + 1;
+					AddSegRowBase(nAreaNum);	// LYS 2026-10-13 Hybrid Phase 7 segBase of the active segment (1 segment: base 0, no-op)
 					m_pAuroraMgr->GetCommTcpIpFactoryMgrPtr()->SetMeasUseInfo(bMeasProbe, nAreaNum, 3000);
 				}
 			}
@@ -3747,6 +3862,7 @@ UINT CDlgSubManual_Meas::ThreadFunc()
 					//nAreaNum[1] = nUseCELLID[1] + (nMeasArea * df_MAX_PROBE * m_iNumStick) + 1;
 					nAreaNum[0] = nUseCELLID[0] + (nArea * nMeasStick) + 1;
 					nAreaNum[1] = nUseCELLID[1] + (nArea * nMeasStick) + 1;
+					AddSegRowBase(nAreaNum);	// LYS 2026-10-13 Hybrid Phase 7 segBase of the active segment (1 segment: base 0, no-op)
 					m_pAuroraMgr->GetCommTcpIpFactoryMgrPtr()->SetMeasUseInfo(bMeasProbe, nAreaNum, 3000);
 				}
 			}
@@ -3846,10 +3962,20 @@ UINT CDlgSubManual_Meas::ThreadFunc()
 	break;
 	case enumStepID_MOVE_CELL:
 	{
+		// LYS 2026-10-13 manual meas = CycleTest positions: the move type is read once (verify_fix #10). OCP SPEC / QUALITY / ANGLE: the stage must be at
+		//   the current stick pose first ((8), refused before anything changes), then the groups of that type are built for m_iNumStick (EnsureMeasGroup,
+		//   stick range guard verify_fix #1). Other types: EnsureMeasGroup puts the legacy groups back if shared ones were in place
+		int iMeasTypeNow = m_iMeasType;
+		if (UseSharedMeasPos(iMeasTypeNow) && CheckManualMeasPose(iMeasTypeNow) == false)
+		{
+			nRet = VTM_RV_FAILED;	// WARN + popup done; VTM_RV_FAILED (0) raises no alarm below
+			break;
+		}
 		m_iNumCell = 0;
+		EnsureMeasGroup(iMeasTypeNow);
 
 		// 이동
-		nRet = ManualMoveCell(m_iMeasType, 0);
+		nRet = ManualMoveCell(iMeasTypeNow, 0);	// LYS 2026-10-13 manual meas = CycleTest positions: one read of m_iMeasType (verify_fix #10)
 	}
 	break;
 	case enumStepID_MOVE_CELL_NEXT:
@@ -3857,11 +3983,28 @@ UINT CDlgSubManual_Meas::ThreadFunc()
 		int nSize = 0;
 		//S_RecipeData* pRecipeData;
 		//pRecipeData = m_pAuroraMgr->GetRecipeEditMgrPtr()->GetRecipeData();
+		// LYS 2026-10-13 manual meas = CycleTest positions: one read of the type (verify_fix #10). OCP SPEC / QUALITY / ANGLE: pose check first ((8)).
+		//   When the groups held are not this type's current ones (another type's shared groups, the legacy groups, another stick or another recipe
+		//   load), this button acts as the type's move button: cell 1 of freshly built groups (rca M5) - m_iNumCell = 0 whenever the group set is replaced.
+		//   Legacy types after shared groups get the legacy groups back, also from cell 1. Same type, same groups: the next group as before
+		int iMeasTypeNow = m_iMeasType;
+		if (UseSharedMeasPos(iMeasTypeNow) && CheckManualMeasPose(iMeasTypeNow) == false)
+		{
+			nRet = VTM_RV_FAILED;	// WARN + popup done, m_iNumCell unchanged; VTM_RV_FAILED (0) raises no alarm below
+			break;
+		}
+		if (IsMeasGroupCurrent(iMeasTypeNow) == false)
+		{
+			m_iNumCell = 0;
+			EnsureMeasGroup(iMeasTypeNow);
+			nRet = ManualMoveCell(iMeasTypeNow, 0);
+			break;
+		}
 		nSize = m_vecMeasGroup.size();
 		if (nSize > m_iNumCell + 1)
 			m_iNumCell++;
 
-		nRet = ManualMoveCell(m_iMeasType, m_iNumCell);
+		nRet = ManualMoveCell(iMeasTypeNow, m_iNumCell);
 	}
 	break;
 	case enumStepID_MOVE_STICK:
@@ -3902,6 +4045,9 @@ UINT CDlgSubManual_Meas::ThreadFunc()
 	break;
 	case enumStepID_MOVE_PROBE:
 	{
+		// LYS 2026-10-13 manual meas review #6: OCP raise Sub Z / FRONT Z before the stage / probe moves (none below safety = no log)
+		nRet = RetractHeadZBeforeStep(_T("PROBE MOVE"));
+		if (nRet != VTM_RV_SUCCESSED) break;
 		int nSize = 0;
 		double dStageY = 0, dProbeGap = 0., dProbeShift = 0.;
 
@@ -4188,6 +4334,21 @@ UINT CDlgSubManual_Meas::ThreadFunc()
 			nRet = m_pAuroraMgr->GetCommTcpIpFactoryMgrPtr()->DoWorkInspectStart(enumTCPIpFactorytID_PG, enumTCPIpFactoryt_PGEvent_1);
 		}
 
+		// LYS 2026-10-13 Hybrid Phase 7 D7-20 (14)-F model the PG device holds now - before the forced success below (1 segment: string only, never read)
+		if (nRet == VTM_RV_SUCCESSED)
+		{
+			m_strPgModelSent = m_pAuroraMgr->GetRecipeEditMgrPtr()->GetPGRecipeName();
+			if (IsHybridRuntime())
+			{
+				CString strPgLog;
+				strPgLog.Format(_T("[HYBRID] Manual Meas PG model sent [%s]"), (LPCTSTR)m_strPgModelSent);
+				CLogWrapper::GetInstance()->KMLOG(OPER, strPgLog);
+			}
+		}
+		else
+		{
+			m_strPgModelSent.Empty();	// LYS 2026-10-13 Hybrid Phase 7 a failed send leaves the device model unknown
+		}
 		if (nRet != VTM_RV_SUCCESSED)
 		{
 			nRet = VTM_RV_SUCCESSED;
@@ -4667,6 +4828,7 @@ int CDlgSubManual_Meas::MakeCellID(int* pnCellNum, bool* pbMeasProbe, TCHAR* ppc
 	CString strCellId;
 	TCHAR cCellID[df_MAX_PROBE][32];
 	ZeroMemory(cCellID, sizeof(cCellID));
+	int nLetterBase = m_pAuroraMgr->GetRecipeEditMgrPtr()->GetCellIdLetterBase();	// LYS 2026-10-13 Hybrid Phase 7 letter carry (D4b-9, auto MakeCellID); -1 = 1-segment recipe -> the original "%c" lines below
 
 	for (size_t iProbe = 0; iProbe < df_MAX_PROBE; iProbe++)
 	{
@@ -4676,11 +4838,15 @@ int CDlgSubManual_Meas::MakeCellID(int* pnCellNum, bool* pbMeasProbe, TCHAR* ppc
 
 			if (iRotate == 1) // YY, BT
 			{
+				if (nLetterBase >= 0 && nCellNum >= 0) strCellId.Format(_T("%s%02d"), (LPCTSTR)CRecipeEditMgr::CellIdLetterPrefix(nLetterBase + nCellNum), iStick + 1);	// LYS 2026-10-13 Hybrid Phase 7 (cell -1 -> the legacy "@" line)
+				else
 				strCellId.Format(_T("%c%02d"), 65 + nCellNum, iStick + 1);
 				nMeasStick = iStick;
 			}
 			else // DG
 			{
+				if (nLetterBase >= 0) strCellId.Format(_T("%s%02d"), (LPCTSTR)CRecipeEditMgr::CellIdLetterPrefix(nLetterBase + nMaxStick - iStick - 1), nCellNum + 1);	// LYS 2026-10-13 Hybrid Phase 7 (nMeasStick below stays segment-local)
+				else
 				strCellId.Format(_T("%c%02d"), 65 + nMaxStick - iStick - 1, nCellNum + 1);
 				nMeasStick = nMaxStick - iStick - 1;
 			}
@@ -4709,6 +4875,8 @@ void CDlgSubManual_Meas::GenCellID(int* pnCellNum, bool* pbMeasProbe, TCHAR* ppc
 	CString strMeasCell;
 	strMeasCell.Empty();
 	int iTop = 0, nMaxTop = 5;
+	bool bHybridCid = (m_pAuroraMgr->GetRecipeEditMgrPtr()->GetCellIdLetterBase() >= 0);	// LYS 2026-10-13 Hybrid Phase 7 letter carry (false = 1-segment recipe -> original B-panel parser, no length guard)
+	bool bHybridTok = IsHybridRuntime();	// LYS 2026-10-13 Hybrid Phase 7 D7-12 (b) manual / derived cell token on a hybrid runtime recipe only
 
 	//2022.08.26 JCY Modify
 	S_RecipeData* pRecipeData;
@@ -4738,6 +4906,7 @@ void CDlgSubManual_Meas::GenCellID(int* pnCellNum, bool* pbMeasProbe, TCHAR* ppc
 	for (size_t nProbe = 0; nProbe < df_MAX_PROBE; nProbe++)
 	{
 		strMcrID.Empty();
+		bool bCidOverride = false;	// LYS 2026-10-13 Hybrid Phase 7 manual / derived token this slot
 
 		if (pbMeasProbe[nProbe])
 		{
@@ -4751,10 +4920,22 @@ void CDlgSubManual_Meas::GenCellID(int* pnCellNum, bool* pbMeasProbe, TCHAR* ppc
 			// Glass Part A or B
 			CString strPart;
 			strPart.Format(_T("%s"), strGlassID.Mid(strGlassID.GetLength() - 2, 1));
+			// LYS 2026-10-13 Hybrid Phase 7 D4b-9 manual / derived cell token (the DoWorkGlassMeasureStep GenCellID hook): final value, B offset already
+			//   inside -> skip the B-panel branch. ValidateManualCellId bound latch 1 to this load + Glass ID right before this measure set
+			CString strCidTok;
+			if (bHybridTok) bCidOverride = m_pAuroraMgr->GetRecipeEditMgrPtr()->GetManualCellToken(strPart.CompareNoCase(_T("B")) == 0, m_iNumStick, pnCellNum[nProbe], strGlassID, strCidTok);
+			if (bCidOverride) strTmp = strCidTok;
 
-			if (strPart.CompareNoCase(_T("B")) == 0)	// AB
+			if (bCidOverride == false && strPart.CompareNoCase(_T("B")) == 0)	// AB (LYS 2026-10-13 Hybrid Phase 7: an override token is final)
 			{
 				CString strBuf;
+				if (bHybridCid)	// LYS 2026-10-13 Hybrid Phase 7 the letter prefix may be 2 letters (AA01): split letters / digits instead of Mid(0,1) / Mid(1,2)
+				{
+					int nPfx = 0;
+					while (nPfx < strTmp.GetLength() && strTmp[nPfx] >= _T('A') && strTmp[nPfx] <= _T('Z')) nPfx++;
+					strBuf.Format(_T("%s%02d"), (LPCTSTR)strTmp.Left(nPfx), nMaxTop + _ttoi(strTmp.Mid(nPfx)));
+				}
+				else
 				strBuf.Format(_T("%s%02d"), strTmp.Mid(0, 1), nMaxTop + _ttoi(strTmp.Mid(1, 2)));  // A01~A10
 				strTmp.Format(_T("%s"), strBuf);
 
@@ -4770,6 +4951,13 @@ void CDlgSubManual_Meas::GenCellID(int* pnCellNum, bool* pbMeasProbe, TCHAR* ppc
 			strMcrID.Format(_T("%s"), gf_MakeMcrID(strCellID));
 		}
 
+		if ((bHybridCid || bCidOverride) && strMcrID.GetLength() > 31)	// LYS 2026-10-13 Hybrid Phase 7 m_szCellID[..][32]: _tcscpy_s aborts on 32+ chars (2-letter prefix / manual token + long GlassID)
+		{
+			CString strCidLog;
+			strCidLog.Format(bHybridCid ? _T("[HYBRID] cell ID %s longer than 31 - cut to 31") : _T("[CELLID] cell ID %s longer than 31 - cut to 31"), (LPCTSTR)strMcrID);
+			CLogWrapper::GetInstance()->KMLOG(WARN, strCidLog);
+			strMcrID = strMcrID.Left(31);
+		}
 		TRACE(_T("GenCellID:%s %d,%d:%s\n"), strMeasCell, pnCellNum[nProbe] + 1, nProbe + 1, strMcrID);
 		_tcscpy_s(m_pAuroraMgr->GetShareMemoryMgrPtr()->GetSharedMemory()->stLotInfo.m_szCellID[nProbe], 32, strMcrID);		// CELL ID 설정
 	}
@@ -4835,8 +5023,15 @@ int CDlgSubManual_Meas::GetMeasureArea()
 	return m_nMeasureArea;
 }
 
-int CDlgSubManual_Meas::MakeMeasGroup()
+int CDlgSubManual_Meas::MakeMeasGroup(bool bKeepInnerId)
 {
+	// LYS 2026-10-13 manual meas = CycleTest positions (verify_fix #9): the groups built here are the legacy ones. When they replace shared groups
+	//   (RECIPE_OPEN, Phase 7a resync, a legacy type after a shared move) the cell index restarts at 1 - the measure set / test steps read
+	//   m_vecMeasGroup[m_iNumCell] unchecked. Legacy groups replacing legacy groups keep m_iNumCell as before
+	if (m_nMeasGroupMode != -1) m_iNumCell = 0;
+	m_nMeasGroupMode = -1;
+	m_nMeasGroupStick = -1;
+	m_nMeasGroupLoadSeq = -1;
 	// TODO: 여기에 구현 코드 추가.
 	m_vecMeasGroup.clear();
 
@@ -4996,7 +5191,8 @@ int CDlgSubManual_Meas::MakeMeasGroup()
 	delete[] pnPair;	// LYS 2026-09-14
 
 	nMeasArea = m_vecMeasGroup.size();
-	SetMeasureArea(nMeasArea *2);
+//	SetMeasureArea(nMeasArea *2);	// LYS 2026-10-13 manual meas = CycleTest positions (review fix #7): replaced by the line below (bKeepInnerId false = this reset + the inner ID stamp)
+	SetInnerIdArea(nMeasArea * 2, bKeepInnerId);
 
 	return 0;
 }
@@ -5171,4 +5367,766 @@ void CDlgSubManual_Meas::OnBnClickedBtnManualPlcBItOff()
 void CDlgSubManual_Meas::OnBnClickedBtnManualPlcWadReset()
 {
 	// TODO: 여기에 컨트롤 알림 처리기 코드를 추가합니다.
+}
+
+// LYS 2026-10-13 Hybrid Phase 7 7a manual motion gate (p7x_plan (2-4), (3-3)..(3-7), (14)-A B C F K M, (15)). Every function below returns at once
+//   on a 1-segment runtime recipe (segment-count cache <= 1 and live DLL count <= 1) - no log, no popup - so the 1-segment manual screen is unchanged.
+//   The Glass Align reference R mark (stage 7-0) lives in CMaintControlMgr: GetGlassAlignRefR = Align coordinate R when AlignGlass succeeded.
+
+// (14)-A hybrid runtime recipe - fix stage (impl review 1): one predicate = busy ? cache > 1 : live > 1. While a LoadRcpFile runs the segment-count
+//   cache int decides, otherwise the live DLL count: a DLL TestMode reload over a 1-segment runtime leaves the cache at 1 (hybrid), a 1-segment reload
+//   over a hybrid runtime leaves it at 2 (a 1-segment runtime - CheckHybridGate re-syncs it silently). Worker-thread callers only. Ints + one vector size, no log
+bool CDlgSubManual_Meas::IsHybridRuntime()
+{
+	CRecipeEditMgr* pRcp = m_pAuroraMgr->GetRecipeEditMgrPtr();
+	if (pRcp == NULL) return false;
+	C_OutRecipeFunc* pFunc = pRcp->GetRecipeFuncPtr();
+	if (pFunc == NULL || pFunc->IsRcpLoadBusy() == TRUE) return (pRcp->GetSegCountCache() > 1);	// load running: the cache int only
+	return (pFunc->GetSegmentLoopCount() > 1);
+}
+
+// (14)-B step classes: S stick move / P pose dependent / C contact + measure set / T unsupported / G align (G0 + G0-b only) / PG (G0 + PG model only)
+int CDlgSubManual_Meas::HybridStepClass(int nStep)
+{
+	switch (nStep)
+	{
+	case enumStepID_MOVE_STICK:
+	case enumStepID_MOVE_STICK_PRE:		// also the literal m_iStep = 26 (OnBnClickedBtnManualGlassRotate2)
+	case enumStepID_MOVE_STICK_NEXT:
+		return HYB_STEP_S;
+	case enumStepID_MOVE_CELL:
+	case enumStepID_MOVE_CELL_NEXT:
+	case enumStepID_MEAS_TEST_WAD:
+	case enumStepID_MEAS_TEST_VISION:
+	case enumStepID_MEAS_TEST_COLOR:
+	case enumStepID_MEAS_TEST_ANGLE:
+	case enumStepID_PRE_TEST_01:		// D7-23 (a): PG tests / aging after a contact need the stick pose (R-B)
+	case enumStepID_PRE_TEST_02:
+	case enumStepID_PRE_TEST_03:
+	case enumStepID_PRE_TEST_04:
+	case enumStepID_AGING_TEST:
+		return HYB_STEP_P;
+	case enumStepID_PROBE_CONTACT:
+	case enumStepID_PROBE_CONTACT_ALL:
+	case enumStepID_MEAS_SET_WAD:
+	case enumStepID_MEAS_SET_VISION:
+	case enumStepID_MEAS_SET_COLOR:
+	case enumStepID_MEAS_SET_ANGLE:
+		return HYB_STEP_C;
+	case enumStepID_MEAS_SET_TSP:		// D7-13 (a): TSP / LCR / probe move (off-screen or hidden buttons) are not ported to hybrid
+	case enumStepID_MEAS_SET_LCR:
+	case enumStepID_MEAS_TEST_TSP:
+	case enumStepID_MEAS_TEST_LCR:
+	case enumStepID_MOVE_PROBE:
+		return HYB_STEP_T;
+	case enumStepID_GLASS_ALIGN:
+	case enumStepID_PROBE_ALIGN:		// stage 7-4 adds the segment prepare step here
+		return HYB_STEP_G;
+	case enumStepID_PG_CMD_01:
+	case enumStepID_PG_CMD_02:
+	case enumStepID_PG_CMD_03:
+	case enumStepID_PG_CMD_05:			// PG_CMD_04 Turn Off: no gate
+		return HYB_STEP_PG;
+	}
+	return HYB_STEP_NONE;
+}
+
+bool CDlgSubManual_Meas::IsMeasSetStep(int nStep)
+{
+	return (nStep == enumStepID_MEAS_SET_WAD || nStep == enumStepID_MEAS_SET_VISION || nStep == enumStepID_MEAS_SET_COLOR || nStep == enumStepID_MEAS_SET_ANGLE);
+}
+
+// D7-20 steps that drive the PG with the active segment's model: PG tests / aging / PG commands always; the measure sets (PG TP) and the
+//   COLOR test only when the active segment uses the PG (pre / electric / aging inspection)
+bool CDlgSubManual_Meas::IsPgStep(int nStep)
+{
+	switch (nStep)
+	{
+	case enumStepID_PRE_TEST_01:
+	case enumStepID_PRE_TEST_02:
+	case enumStepID_PRE_TEST_03:
+	case enumStepID_PRE_TEST_04:
+	case enumStepID_AGING_TEST:
+	case enumStepID_PG_CMD_01:
+	case enumStepID_PG_CMD_02:
+	case enumStepID_PG_CMD_03:
+	case enumStepID_PG_CMD_05:
+		return true;
+	case enumStepID_MEAS_SET_WAD:
+	case enumStepID_MEAS_SET_VISION:
+	case enumStepID_MEAS_SET_COLOR:
+	case enumStepID_MEAS_SET_ANGLE:
+	case enumStepID_MEAS_TEST_COLOR:
+	{
+		S_RecipeInfo* pInfo = m_pAuroraMgr->GetRecipeEditMgrPtr()->GetRecipeInfo();
+		if (pInfo == NULL) return true;
+		return (pInfo->m_sInspectItem.m_bUsePre_0 == TRUE || pInfo->m_sInspectItem.m_bUseElect_1 == TRUE || pInfo->m_sInspectItem.m_bUseAgingTest_2 == TRUE);
+	}
+	}
+	return false;
+}
+
+// target stick of a stick-move step - the same rule as the MOVE_STICK / _NEXT / _PRE cases, taken before they change m_iNumStick
+int CDlgSubManual_Meas::PeekTargetStick(int nStep)
+{
+	if (nStep == enumStepID_MOVE_STICK) return 0;
+	if (nStep == enumStepID_MOVE_STICK_NEXT)
+	{
+		S_RecipeData* pRecipeData = m_pAuroraMgr->GetRecipeEditMgrPtr()->GetRecipeData();
+		int nSize = (pRecipeData != NULL) ? (int)pRecipeData->m_vecStick.size() : 0;
+		return (nSize > m_iNumStick + 1) ? m_iNumStick + 1 : m_iNumStick;
+	}
+	if (nStep == enumStepID_MOVE_STICK_PRE) return (m_iNumStick > 0) ? m_iNumStick - 1 : m_iNumStick;
+	return m_iNumStick;
+}
+
+// target stage pose of a stick = ManualMoveStick's formula (OCP absolute / non-OCP relative + recipe StageY / StageRotate offsets).
+//   Keep both in step ((12) risk). false = no pose (no recipe / stick outside the active segment)
+bool CDlgSubManual_Meas::CalcStickPose(int iStick, double& dStageY, double& dStageR)
+{
+	CRecipeEditMgr* pRcp = m_pAuroraMgr->GetRecipeEditMgrPtr();
+	if (pRcp == NULL) return false;
+	S_RecipeData* pRecipeData = pRcp->GetRecipeData();
+	S_RecipeMap* pRecipeMap = pRcp->GetRecipeMap();
+	S_RecipeInfo* pRecipeInfo = pRcp->GetRecipeInfo();
+	if (pRecipeData == nullptr || pRecipeMap == nullptr || pRecipeInfo == nullptr) return false;
+	if (iStick < 0 || iStick >= (int)pRecipeData->m_vecStick.size()) return false;
+
+	bool bOCP = (m_pAuroraMgr->GetSystemConfigMgrPtr() != nullptr && m_pAuroraMgr->GetSystemConfigMgrPtr()->IsOCP());
+	double dOffsetX = pRecipeInfo->m_sMotionOffsetPos.m_fStageY;
+	double dOffsetR = pRecipeInfo->m_sMotionOffsetPos.m_fStageRotate;
+	if (bOCP)
+		dStageY = pRecipeData->m_vecStick[iStick].m_fStageY + dOffsetX;
+	else if (iStick > 0)
+		dStageY = pRecipeData->m_vecStick[0].m_fStageY - pRecipeData->m_vecStick[iStick].m_fStageY + dOffsetX;
+	else
+		dStageY = pRecipeMap->m_fCellDistance.y * iStick + dOffsetX;
+	dStageR = pRecipeData->m_vecStick[iStick].m_fStageR + dOffsetR;
+	return true;
+}
+
+// (2-5) view stamp: what the stick / cell selection and the measure groups were built from
+void CDlgSubManual_Meas::StampHybridView()
+{
+	CRecipeEditMgr* pRcp = m_pAuroraMgr->GetRecipeEditMgrPtr();
+	C_OutRecipeFunc* pFunc = pRcp->GetRecipeFuncPtr();
+	m_strViewRcp = pRcp->GetRecipeID();
+	m_nViewLoadSeq = (pFunc != NULL) ? pFunc->GetRcpLoadSeq() : -1;
+	m_nViewSegCount = pRcp->GetSegmentLoopCount();
+	m_nViewActive = pRcp->GetActiveSegment();
+	m_bViewStamped = true;
+}
+
+bool CDlgSubManual_Meas::IsHybridViewStale()
+{
+	if (m_bViewStamped == false) return true;
+	CRecipeEditMgr* pRcp = m_pAuroraMgr->GetRecipeEditMgrPtr();
+	C_OutRecipeFunc* pFunc = pRcp->GetRecipeFuncPtr();
+	if (m_strViewRcp != pRcp->GetRecipeID()) return true;
+	if (pFunc == NULL || m_nViewLoadSeq != pFunc->GetRcpLoadSeq()) return true;
+	if (m_nViewSegCount != pRcp->GetSegmentLoopCount()) return true;
+	if (m_nViewActive != pRcp->GetActiveSegment()) return true;
+	return false;
+}
+
+// G0 resync (worker, after the idle guard): stick 1 / cell 1 of the active segment, groups rebuilt, PG model unknown, new stamp. No RecipeChange
+void CDlgSubManual_Meas::ResyncHybridView()
+{
+	m_pAuroraMgr->GetRecipeEditMgrPtr()->SyncCellStatusStickBase();
+	m_iNumStick = 0;
+	m_iNumCell = 0;
+	MakeMeasGroup();
+	m_strPgModelSent.Empty();
+	StampHybridView();
+	UpdateCurStickUI();
+}
+
+// tail of the refusal WARN lines: segment (-1 = unknown while a load runs) / stick (1-based), live stage pose, target pose, Glass Align mark
+CString CDlgSubManual_Meas::HybridGateDetail(int nSeg, int nSegCnt, int iStick, bool bTarget, double dTgtY, double dTgtR)
+{
+	CMaintControlMgr* pM = m_pAuroraMgr->GetMaintControlMgr();
+	double dRef = 0.0;
+	CString strSeg, strTgt, strRef, strOut;
+	if (nSeg >= 0) strSeg.Format(_T("%d"), nSeg + 1); else strSeg = _T("?");
+	if (bTarget) strTgt.Format(_T("target X %.3f R %.3f"), dTgtY, dTgtR); else strTgt = _T("target -");
+	if (pM->GetGlassAlignRefR(&dRef)) strRef.Format(_T("%.3f"), dRef); else strRef = _T("none");
+	strOut.Format(_T("(seg %s/%d stick %d, X %.3f R %.3f, %s, align R %s)"), (LPCTSTR)strSeg, nSegCnt, iStick + 1,
+		pM->GetCurPos(AXIS_X), pM->GetCurPos(AXIS_LOADER_R), (LPCTSTR)strTgt, (LPCTSTR)strRef);
+	return strOut;
+}
+
+// one WARN line + the Korean popup (worker thread, like the :2058 interlock). No alarm. The caller restores the window and SPS_IDLE
+void CDlgSubManual_Meas::RefuseHybrid(const CString& strWarn, const CString& strPopup)
+{
+	CLogWrapper::GetInstance()->KMLOG(WARN, strWarn);
+	CD_DisplayMessage dlg(strPopup);
+	dlg.DoModal();
+}
+
+// (3-3) / (14)-B dispatcher gate, worker thread right after EnableWindow(FALSE) and before the step case (which may change m_iNumStick).
+//   Order: hybrid predicate, class, load running, T (fix review 5), G0-b, G0, PG model, G, target pose, R-A, (S passes), R-B, R-C. false = refused before any
+//   axis moves (WARN + popup done here)
+bool CDlgSubManual_Meas::CheckHybridGate(int nStep)
+{
+	CRecipeEditMgr* pRcp = m_pAuroraMgr->GetRecipeEditMgrPtr();
+	if (pRcp == NULL) return true;
+	C_OutRecipeFunc* pFunc = pRcp->GetRecipeFuncPtr();
+	// a LoadRcpFile in another thread (CIM PPID / DLL TestMode) rewrites the segment vectors: wait up to 2 s so the segment count can be read
+	//   (a 1-segment recipe is then judged like any other time instead of being refused)
+	for (int i = 0; i < 200 && pFunc != NULL && pFunc->IsRcpLoadBusy() == TRUE; i++) Sleep(10);
+	bool bLoadBusy = (pFunc != NULL && pFunc->IsRcpLoadBusy() == TRUE);
+	int nLive = (pFunc != NULL && bLoadBusy == false) ? pFunc->GetSegmentLoopCount() : 1;
+	int nCache = pRcp->GetSegCountCache();
+	if (bLoadBusy == false && nCache <= 1 && nLive <= 1) return true;						// D7-4 (a): 1 segment - no log, unchanged path
+	if (bLoadBusy == false && nLive <= 1) { pRcp->SyncCellStatusStickBase(); return true; }	// stale cache over a 1-segment reload: silent, no log
+
+	int nClass = HybridStepClass(nStep);
+	if (nClass == HYB_STEP_NONE) return true;
+	CString strWarn, strPop;
+	int nSegCnt = (bLoadBusy == false) ? nLive : nCache;
+	int nAct = (bLoadBusy == false) ? pFunc->GetActiveSegmentIndex() : -1;
+	// LYS 2026-10-13 Hybrid Phase 7 fix (impl review 5): a load still running after the 2 s wait above is refused before R-T (R-T then always has the
+	//   segment index). A 1-segment recipe whose load runs > 2 s is refused here too - safe direction, practically unreachable (EnableWindow(FALSE) waits
+	//   for any UI-thread load); documented for 7-7
+	if (bLoadBusy)
+	{
+		strWarn.Format(_T("[HYBRID] Manual Meas step %d refused - stale (recipe load running) %s"), nStep, (LPCTSTR)HybridGateDetail(nAct, nSegCnt, m_iNumStick, false, 0.0, 0.0));
+		RefuseHybrid(strWarn, _T("레시피를 다시 읽는 중입니다(다른 화면 또는 CIM).\n수동 동작을 하지 않습니다. 잠시 후 다시 실행하십시오."));
+		return false;
+	}
+	if (nClass == HYB_STEP_T)		// R-T (D7-13 (a))
+	{
+		strWarn.Format(_T("[HYBRID] Manual Meas step %d refused - unsupported %s"), nStep, (LPCTSTR)HybridGateDetail(nAct, nSegCnt, m_iNumStick, false, 0.0, 0.0));
+		RefuseHybrid(strWarn, _T("하이브리드 레시피에서는 이 수동 동작(TSP / LCR / Probe 이동)을 지원하지 않습니다."));
+		return false;
+	}
+	if (pFunc->IsSegmentAlignLoaded(nAct) != TRUE)	// G0-b: a reload bypassed RecipeChange (DLL TestMode) - RecipeID / segment .alg are stale, no resync
+	{
+		strWarn.Format(_T("[HYBRID] Manual Meas step %d refused - reload bypassed RecipeChange (segment %d .alg not loaded) - reopen the recipe"), nStep, nAct + 1);
+		RefuseHybrid(strWarn, _T("레시피가 다른 경로(TestMode 등)로 다시 로드되어 세그먼트 Align 파일이 없습니다.\n수동 동작을 하지 않습니다.\n\n[레세피 선택]으로 레시피를 다시 여십시오."));
+		return false;
+	}
+	if (nCache <= 1 || IsHybridViewStale())		// G0: reloaded elsewhere (auto run, CIM, another screen) - resync, refuse this one step
+	{
+		ResyncHybridView();
+		strWarn.Format(_T("[HYBRID] Manual Meas view resynced (recipe %s load %d seg %d/%d) - step %d not run"), (LPCTSTR)pRcp->GetRecipeID(), pFunc->GetRcpLoadSeq(),
+			pRcp->GetActiveSegment() + 1, pRcp->GetSegmentLoopCount(), nStep);
+		RefuseHybrid(strWarn, _T("레시피가 다시 로드되었습니다(다른 화면 또는 자동 운전).\n스틱·셀 선택을 처음(스틱 1)으로 되돌렸습니다.\n위치를 확인한 뒤 다시 실행하십시오."));
+		return false;
+	}
+	if (IsPgStep(nStep))	// D7-20 (a): the PG device must hold this segment's model ([PG recipe change] = RECIPE_OPEN_PG)
+	{
+		CString strPgModel = pRcp->GetPGRecipeName();
+		if (strPgModel.CompareNoCase(m_strPgModelSent) != 0)
+		{
+			strWarn.Format(_T("[HYBRID] Manual Meas step %d refused - pg model (sent [%s], segment [%s])"), nStep, (LPCTSTR)m_strPgModelSent, (LPCTSTR)strPgModel);
+			strPop.Format(_T("PG 장치에 이 세그먼트의 PG 모델(%s)을 보냈는지 확인되지 않았습니다.\n(세그먼트 %d/%d)\n\n[PG 레세피 변경]을 먼저 실행하십시오."), (LPCTSTR)strPgModel, nAct + 1, nLive);
+			RefuseHybrid(strWarn, strPop);
+			return false;
+		}
+	}
+	if (nClass == HYB_STEP_PG) return true;
+	if (nClass == HYB_STEP_G)
+	{
+		if (nStep == enumStepID_GLASS_ALIGN)	// (14) C-10: a Probe .alg may have replaced the active m_sAlign - read the segment .alg again first
+		{
+			CString strAlg = pFunc->GetSegmentAlignName(nAct);
+			if (pRcp->OpenAlignRecipe(strAlg) != VTM_RV_SUCCESSED)
+			{
+				strWarn.Format(_T("[HYBRID] Manual Meas step %d refused - alg-open (segment %d/%d .alg [%s] not read)"), nStep, nAct + 1, nLive, (LPCTSTR)strAlg);
+				strPop.Format(_T("세그먼트 %d/%d의 Align 파일(%s)을 읽지 못했습니다.\nALIGN을 하지 않습니다."), nAct + 1, nLive, (LPCTSTR)strAlg);
+				RefuseHybrid(strWarn, strPop);
+				return false;
+			}
+			CString strAlgLog;
+			strAlgLog.Format(_T("[HYBRID] Manual Meas glass align: segment %d/%d .alg [%s] read again"), nAct + 1, nLive, (LPCTSTR)strAlg);
+			CLogWrapper::GetInstance()->KMLOG(OPER, strAlgLog);
+		}
+		return true;
+	}
+
+	int iStick = (nClass == HYB_STEP_S) ? PeekTargetStick(nStep) : m_iNumStick;
+	double dY = 0.0, dR = 0.0;
+	if (CalcStickPose(iStick, dY, dR) == false)
+	{
+		if (nClass == HYB_STEP_S) return true;		// ManualMoveStick guards the index itself and moves nothing
+		strWarn.Format(_T("[HYBRID] Manual Meas step %d refused - pose (stick %d not in this segment) %s"), nStep, iStick + 1, (LPCTSTR)HybridGateDetail(nAct, nLive, iStick, false, 0.0, 0.0));
+		strPop.Format(_T("스테이지가 세그먼트 %d/%d 스틱 %d 위치에 있지 않습니다.\n(스틱 %d은 이 세그먼트에 없습니다)\n\n스틱 이동을 먼저 하십시오."), nAct + 1, nLive, iStick + 1, iStick + 1);
+		RefuseHybrid(strWarn, strPop);	// (14) CS-11: P / C never run without a target pose
+		return false;
+	}
+	CMaintControlMgr* pM = m_pAuroraMgr->GetMaintControlMgr();
+	double dRef = 0.0;
+	bool bRef = pM->GetGlassAlignRefR(&dRef);
+	if (bRef && fabs(dR - dRef) > 2.0)	// R-A (D7-6: 2.0 deg = the motion layer's rotate threshold). Mark and target are the same axis coordinate, no modulo
+	{
+		strWarn.Format(_T("[HYBRID] Manual Meas step %d refused - orientation %s"), nStep, (LPCTSTR)HybridGateDetail(nAct, nLive, iStick, true, dY, dR));
+		strPop.Format(_T("Glass Align은 R %.1f 방향에서 한 값입니다.\n이동할 스틱(세그먼트 %d/%d, 스틱 %d)은 R %.1f 방향이라 이동하지 않습니다.\n\nMOVE SAFETY 후 ALIGN 동작으로 이 방향을 다시 정렬하십시오."),
+			dRef, nAct + 1, nLive, iStick + 1, dR);
+		RefuseHybrid(strWarn, strPop);
+		return false;
+	}
+	if (nClass == HYB_STEP_S) return true;
+	double dCurY = pM->GetCurPos(AXIS_X), dCurR = pM->GetCurPos(AXIS_LOADER_R);
+	if (fabs(dCurY - dY) > 0.1 || fabs(dCurR - dR) > 0.02)	// R-B (D7-6: X 0.1 mm, R 0.02 deg - (14) C-11)
+	{
+		strWarn.Format(_T("[HYBRID] Manual Meas step %d refused - pose %s"), nStep, (LPCTSTR)HybridGateDetail(nAct, nLive, iStick, true, dY, dR));
+		strPop.Format(_T("스테이지가 세그먼트 %d/%d 스틱 %d 위치에 있지 않습니다.\n(현재 X %.3f R %.3f / 목표 X %.3f R %.3f)\n\n스틱 이동을 먼저 하십시오."),
+			nAct + 1, nLive, iStick + 1, dCurY, dCurR, dY, dR);
+		RefuseHybrid(strWarn, strPop);
+		return false;
+	}
+	S_RecipeInfo* pInfo = pRcp->GetRecipeInfo();
+	if (nClass == HYB_STEP_C && pInfo != NULL && pInfo->m_sOptionItem.m_bUseAlign == TRUE && bRef == false)	// R-C (D7-5 (a)): same-direction align required
+	{
+		strWarn.Format(_T("[HYBRID] Manual Meas step %d refused - align (ALIGN USE on, no glass align mark) %s"), nStep, (LPCTSTR)HybridGateDetail(nAct, nLive, iStick, true, dY, dR));
+		strPop.Format(_T("세그먼트 %d/%d는 ALIGN USE가 켜져 있지만 이 방향(R %.1f)의 Glass Align이 없습니다.\n컨택·측정 셋팅을 하지 않습니다.\n\nMOVE SAFETY 후 ALIGN 동작을 먼저 하십시오."), nAct + 1, nLive, dR);
+		RefuseHybrid(strWarn, strPop);
+		return false;
+	}
+	return true;
+}
+
+// English text of one Cell ID error for the log - copy of DoWorkGlassRecipeStep.cpp CellIdErrText (that file stays unchanged)
+static CString CellIdErrText(const S_CellIdError& e, int nGlassIdLen)
+{
+	CString strWhere, strWhy;
+	strWhere.Format(_T("Segment %d Stick %d Cell %d (%c)"), e.m_nSeg + 1, e.m_nStick + 1, e.m_nCell + 1, e.m_nPanel ? _T('B') : _T('A'));
+	switch (e.m_nCode)
+	{
+	case M_CELLID_ERR_EMPTY:  strWhy = _T("empty"); break;
+	case M_CELLID_ERR_LENGTH: strWhy.Format(_T("'%s' longer than %d chars (cell ID max 31, GlassID length %d)"), e.m_strToken.GetString(), e.m_nLimit, nGlassIdLen); break;
+	case M_CELLID_ERR_FORMAT: strWhy.Format(_T("'%s' is not A-Z letters + digits"), e.m_strToken.GetString()); break;
+	case M_CELLID_ERR_DERIVE: strWhy.Format(_T("B cell ID cannot be derived from A manual ID '%s'"), e.m_strToken.GetString()); break;
+	case M_CELLID_ERR_DUP:    strWhy.Format(_T("duplicate '%s' (Segment %d Stick %d Cell %d (%c))"), e.m_strToken.GetString(),
+								  e.m_nSeg2 + 1, e.m_nStick2 + 1, e.m_nCell2 + 1, e.m_nPanel2 ? _T('B') : _T('A')); break;
+	default:                  strWhy.Format(_T("error %d"), e.m_nCode); break;
+	}
+	return strWhere + _T(": ") + strWhy;
+}
+
+// D4b-9 / D7-12 (b) manual cell ID check right before a measure set (hybrid runtime recipe only). Same order as CheckCellIdConfig
+//   (DoWorkGlassRecipeStep.cpp): load try / busy / serial, ValidateCellIdConfig, busy / try again. Pass: latch 1 bound to this load + Glass ID on
+//   every pass ((14) CS-13: RecipeChange, a failed auto check and a mid-glass invalidation move it), one OPER line per load serial + Glass ID.
+//   Fail: WARN + popup, the measure set is not run
+bool CDlgSubManual_Meas::ValidateManualCellId()
+{
+	if (IsHybridRuntime() == false) return true;	// D7-12 (b): 1-segment recipe - nothing, no log (manual measure keeps Auto cell IDs)
+	CRecipeEditMgr* pRcp = m_pAuroraMgr->GetRecipeEditMgrPtr();
+	C_OutRecipeFunc* pFunc = pRcp->GetRecipeFuncPtr();
+	if (pFunc == NULL) return true;
+	int nLoadTry = pFunc->GetRcpLoadTry();	// try count first, then the busy count (LoadRcpFile raises them the other way round)
+	BOOL bLoadBusy = pFunc->IsRcpLoadBusy();
+	int nLoadSeq = pFunc->GetRcpLoadSeq();
+	if (pFunc->IsCellIdDefault()) return true;		// Auto/Auto: nothing to check, no log
+	CString strGlassID = CSystemParamShare::GetInstance()->GetGlassID();
+	CString strGidLog = strGlassID.IsEmpty() ? CString(_T("(none)")) : strGlassID;
+	int nGid = strGlassID.GetLength(), nLongest = 0;
+	std::vector<S_CellIdError> vecErr;
+	CString strLog, strPop;
+	if (pFunc->ValidateCellIdConfig(nGid, vecErr, &nLongest) != TRUE)
+	{
+		for (size_t i = 0; i < vecErr.size() && i < 10; i++)
+			CLogWrapper::GetInstance()->KMLOG(WARN, _T("[CELLID] ") + CellIdErrText(vecErr[i], nGid));
+		if (vecErr.size() > 10)
+		{
+			strLog.Format(_T("[CELLID] ... %d more"), (int)vecErr.size() - 10);
+			CLogWrapper::GetInstance()->KMLOG(WARN, strLog);
+		}
+		strLog.Format(_T("[CELLID] manual measure: cell ID check failed (%d errors, GlassID %s) - measure set skipped"), (int)vecErr.size(), (LPCTSTR)strGidLog);
+		CLogWrapper::GetInstance()->KMLOG(WARN, strLog);
+		pRcp->SetCellIdLatch(-1);
+		m_nCidValSeq = -1;
+		strPop.Format(_T("Cell ID 설정 검사에 실패했습니다 (%d건).\n측정 셋팅을 하지 않습니다. 로그 [CELLID]를 확인하십시오."), (int)vecErr.size());
+		CD_DisplayMessage dlg(strPop);
+		dlg.DoModal();
+		return false;
+	}
+	if (bLoadBusy == TRUE || pFunc->IsRcpLoadBusy() == TRUE || pFunc->GetRcpLoadTry() != nLoadTry)	// a load ran while the config was read
+	{
+		strLog.Format(_T("[CELLID] manual measure: recipe reloaded during the cell ID check (recipe load %d/%d, GlassID %s) - measure set skipped"), nLoadSeq, pFunc->GetRcpLoadSeq(), (LPCTSTR)strGidLog);
+		CLogWrapper::GetInstance()->KMLOG(WARN, strLog);
+		pRcp->SetCellIdLatch(-1);
+		m_nCidValSeq = -1;
+		CD_DisplayMessage dlg(_T("Cell ID 검사 중 레시피가 다시 로드되었습니다.\n측정 셋팅을 하지 않습니다. 다시 실행하십시오."));
+		dlg.DoModal();
+		return false;
+	}
+	pRcp->SetCellIdLatch(1, nLoadSeq, strGlassID);	// GetManualCellToken compares the load serial and the Glass ID
+	if (m_nCidValSeq != nLoadSeq || m_strCidValGlass != strGlassID)
+	{
+		bool bManA = (pFunc->GetCellIdMode(0) == M_CELLID_MODE_MANUAL), bManB = (pFunc->GetCellIdMode(1) == M_CELLID_MODE_MANUAL);
+		bool bPanelB = (strGlassID.Mid(nGid - 2, 1).CompareNoCase(_T("B")) == 0);	// same rule as GenCellID
+		strLog.Format(_T("[CELLID] manual cell ID: A %s, B %s, glass panel %c (GlassID %s), longest ID %d/31 chars (manual measure)"),
+			bManA ? _T("MANUAL") : _T("AUTO"), bManB ? _T("MANUAL") : (bManA ? _T("AUTO (from A)") : _T("AUTO")),
+			bPanelB ? _T('B') : _T('A'), (LPCTSTR)strGidLog, ((nGid > 0) ? nGid - 1 : 0) + nLongest + 1);
+		CLogWrapper::GetInstance()->KMLOG(OPER, strLog);
+		m_nCidValSeq = nLoadSeq;
+		m_strCidValGlass = strGlassID;
+	}
+	return true;
+}
+
+// (3-6) / (14) CS-12 result rows of the active segment: segBase added to every head row > 0 (the auto rule adds it on both heads,
+//   DoWorkGlassMeasureStep.cpp; the manual resting-head row nArea * stick stays in the active segment block). 1 segment: base 0 -> returns at once
+void CDlgSubManual_Meas::AddSegRowBase(int* pnAreaNum)
+{
+	if (pnAreaNum == NULL) return;
+	int nBase = m_pAuroraMgr->GetRecipeEditMgrPtr()->GetResultRowBase();
+	if (nBase == 0) return;
+	for (int h = 0; h < DF_MAX_HEAD; h++)
+	{
+		if (pnAreaNum[h] > 0) pnAreaNum[h] += nBase;
+	}
+}
+
+//=========================================================================
+// LYS 2026-10-13 manual meas = CycleTest positions (manualpos/rca.md (5)(c) + (8) user decisions; verify_fix #1 #4 #5 #9 #10 #11).
+//   On OCP the SPEC / QUALITY / ANGLE move buttons and their next cell call the builders of the auto Measure steps (MeasBuildGroups /
+//   MeasBuildMovePos), so they command the CycleTest positions: D1 2-head pairs (WAD 444 / VISION 500 / ANGLE 1400 here), no cell filter (D3),
+//   D6 (b) the full move array on every press, D10 WAD result Y = auto. REVIEW / COLOR (D4), VISION_COLOR on (verify_fix #5) and HMI mode (D5)
+//   keep the legacy code. Safety (8): 1-segment pose check before these moves, Sub Z / FRONT Z raised before ManualMoveStick moves the stage
+//=========================================================================
+
+// HEAD_OFFSET mode of a manual move type (MeasBuildGroups / MeasBuildMovePos / GetHeadOffset): 0 WAD / 1 ANGLE / 2 VISION
+static int ManualMeasHeadMode(int iMode)
+{
+	if (iMode == M_TYPE_SPEC) return 0;
+	if (iMode == M_TYPE_ANGLE) return 1;
+	return 2;
+}
+
+static LPCTSTR ManualMeasLogName(int iMode)
+{
+	if (iMode == M_TYPE_SPEC) return _T("WAD");
+	if (iMode == M_TYPE_ANGLE) return _T("ANGLE");
+	return _T("VISION");
+}
+
+static LPCTSTR ManualMeasPopupName(int iMode)
+{
+	if (iMode == M_TYPE_SPEC) return _T("특성");
+	if (iMode == M_TYPE_ANGLE) return _T("시야각");
+	return _T("화질");
+}
+
+static int ManualRcpLoadSeq(CRecipeEditMgr* pRcp)
+{
+	C_OutRecipeFunc* pFunc = (pRcp != NULL) ? pRcp->GetRecipeFuncPtr() : NULL;
+	return (pFunc != NULL) ? pFunc->GetRcpLoadSeq() : -1;
+}
+
+// verify_fix #4: the axes MoveCmdPosWAD / MoveCmdPosVision / MoveCmdPosAngle really command. The manual move waits on these only: VISION FILTER1/2
+//   (no branch in MoveCmdPosVision - a servo-off filter would time out after 30 s), Z1 (commanded by neither MoveCmdPosVision nor MoveCmdPosAngle)
+//   and the zeroed ANGLE slots 0/1 (AXIS_X) are skipped. Disabled axes (angle optics not fitted) return at once in DoWork_MotionDone
+static bool ManualMeasWaitAxis(int nMode, int iAxis)
+{
+	if (iAxis == AXIS_Y1 || iAxis == AXIS_Y2 || iAxis == AXIS_Y3 || iAxis == AXIS_Y4 || iAxis == AXIS_X2 || iAxis == AXIS_X3 || iAxis == AXIS_Z2) return true;
+	if (nMode == 0) return (iAxis == AXIS_Z3 || iAxis == AXIS_Z4);
+	if (iAxis == AXIS_Z5 || iAxis == AXIS_Z6) return true;
+	if (nMode == 2) return (iAxis == AXIS_ZOOM1 || iAxis == AXIS_THETA1 || iAxis == AXIS_ZOOM2 || iAxis == AXIS_THETA2);
+	return (iAxis >= AXIS_ANGLE_SF1 && iAxis <= AXIS_ANGLE_AZM2);
+}
+
+// verify_fix #11: MoveCmdPosWAD / MoveCmdPosAngle send X2 and X3 in one Multi command, and the Multi path has no gantry gap check (only
+//   MoveCmdPosA_Sub / MoveCmdPosR_Sub have it). The gantry whose move opens the gap to the other one goes first with MoveCmdPosA (gap-checked,
+//   waits); the Multi then re-commands it in place. Targets as those functions compute them on OCP: WAD X2 = array + HEAD1_WAD_X with
+//   X3 = SafetyHeadX2, ANGLE X3 = array + HEAD1_ANGLE_X with X2 = SafetyHeadX1. VISION orders its gantries itself (MoveCmdPosA, X2 first when it
+//   rises). Returns success when nothing has to go first. The target array is not changed
+static long ManualGantryFirst(CMaintControlMgr* pMaint, CPositionConfigMgr* pPosCfg, int nMode, const stMotorPosition* pPos, int nAxis)
+{
+	if (pMaint == nullptr || pPosCfg == nullptr || pMaint->GetMotorControlMgrPtr() == nullptr || pPos == nullptr) return VTM_RV_SUCCESSED;
+	if (nMode != 0 && nMode != 1) return VTM_RV_SUCCESSED;
+	int iPrimary = -1;
+	double dArrayX = 0.0;
+	for (int k = 0; k < nAxis; k++)
+	{
+		if (pPos[k].axis == AXIS_X2 || pPos[k].axis == AXIS_X3)
+		{
+			iPrimary = pPos[k].axis;
+			dArrayX = pPos[k].dPosition;
+			break;
+		}
+	}
+	double dOffX = 0.0, dOffY = 0.0, dOffZ = 0.0;
+	pPosCfg->GetHeadOffset(0, nMode, &dOffX, &dOffY, &dOffZ);
+	double dSafetyX2 = 0.0, dSafetyX3 = 0.0;	// Position.ini SafetyHeadX1 (BACK GANTRY X2) / SafetyHeadX2 (FRONT GANTRY X3)
+	pPosCfg->GetSafetyPosition(nullptr, &dSafetyX2, &dSafetyX3, nullptr, nullptr, nullptr, nullptr);
+	double dTgtX2 = 0.0, dTgtX3 = 0.0;
+	if (nMode == 0 && iPrimary == AXIS_X2)
+	{
+		dTgtX2 = dArrayX + dOffX;
+		dTgtX3 = dSafetyX3;
+	}
+	else if (nMode == 1 && iPrimary == AXIS_X3)
+	{
+		dTgtX3 = dArrayX + dOffX;
+		dTgtX2 = dSafetyX2;
+	}
+	else
+	{
+		return VTM_RV_SUCCESSED;	// no gantry in the array / an HMI-mode layout (not on the OCP shared path)
+	}
+
+	CMotorControlMgr* pMotor = pMaint->GetMotorControlMgrPtr();
+	double dCurX2 = pMotor->GetOrgPos(AXIS_X2), dCurX3 = pMotor->GetOrgPos(AXIS_X3);	// raw, as the gap interlock reads them
+	bool bMoveX2 = (fabs(dTgtX2 - dCurX2) > 0.01), bMoveX3 = (fabs(dTgtX3 - dCurX3) > 0.01);
+	if (bMoveX2 && fabs(dTgtX2 - dCurX3) > fabs(dCurX2 - dCurX3))
+		return pMaint->MoveCmdPosA(AXIS_X2, dTgtX2, true, SPEED_HIGH);	// X2 moves away from X3
+	if (bMoveX3 && fabs(dTgtX3 - dCurX2) > fabs(dCurX3 - dCurX2))
+		return pMaint->MoveCmdPosA(AXIS_X3, dTgtX3, true, SPEED_HIGH);	// X3 moves away from X2
+	return VTM_RV_SUCCESSED;
+}
+
+// D5 OCP only, D4 SPEC / QUALITY / ANGLE only. verify_fix #5: with USE_VISION_COLOR the auto QUALITY runs the VISION_COLOR step (not shared), so
+//   manual QUALITY stays legacy then
+bool CDlgSubManual_Meas::UseSharedMeasPos(int iMode)
+{
+	if (iMode != M_TYPE_SPEC && iMode != M_TYPE_QUALITY && iMode != M_TYPE_ANGLE) return false;
+	CSystemConfigMgr* pSys = m_pAuroraMgr->GetSystemConfigMgrPtr();
+	if (pSys == nullptr || pSys->IsOCP() == false) return false;
+	if (iMode == M_TYPE_QUALITY && pSys->IsUseInspVisionColor()) return false;
+	return true;
+}
+
+// the groups held are the ones a move of iMode uses now: shared types - this type, this stick, this recipe load; legacy types - the legacy groups
+bool CDlgSubManual_Meas::IsMeasGroupCurrent(int iMode)
+{
+	if (UseSharedMeasPos(iMode) == false) return (m_nMeasGroupMode == -1);
+	return (m_nMeasGroupMode == iMode && m_nMeasGroupStick == m_iNumStick && m_nMeasGroupLoadSeq == ManualRcpLoadSeq(m_pAuroraMgr->GetRecipeEditMgrPtr()));
+}
+
+// worker thread, only right after m_iNumCell = 0 (MOVE_CELL, MOVE_CELL_NEXT with a replaced group set) - the measure set / test steps index the
+//   groups with m_iNumCell unchecked. Shared types: the auto builder for stick m_iNumStick of the active segment (GetRecipeData, as the auto
+//   GetMeasureStick + active segment), all cells (D3), D1 2-head pairs; logs "[MANUAL_WAD|MANUAL_ANGLE|MANUAL_VISION] HeadPair by order ...".
+//   verify_fix #1: no recipe or m_iNumStick outside m_vecStick (the stick index survives a recipe change) -> groups emptied, WARN + popup.
+//   Legacy types: the legacy groups are put back when shared ones were in place
+int CDlgSubManual_Meas::EnsureMeasGroup(int iMode)
+{
+	if (UseSharedMeasPos(iMode) == false)
+	{
+		if (m_nMeasGroupMode != -1) MakeMeasGroup(true);	// MakeMeasGroup resets the stamp to -1. LYS 2026-10-13 manual meas = CycleTest positions (review fix #7): true keeps the inner IDs of this stick / load
+		return (int)m_vecMeasGroup.size();
+	}
+	CRecipeEditMgr* pRcp = m_pAuroraMgr->GetRecipeEditMgrPtr();
+	S_RecipeInfo* pInfo = (pRcp != NULL) ? pRcp->GetRecipeInfo() : NULL;
+	S_RecipeData* pData = (pRcp != NULL) ? pRcp->GetRecipeData() : NULL;
+	int nStickCnt = (pData != NULL) ? (int)pData->m_vecStick.size() : 0;
+	if (pInfo == NULL || pData == NULL || m_iNumStick < 0 || m_iNumStick >= nStickCnt)
+	{
+		m_vecMeasGroup.clear();
+		SetMeasureArea(0);
+		m_nMeasGroupMode = -2;	// refused: the next move of any type builds again (a legacy type restores the legacy groups)
+		m_nMeasGroupStick = -1;
+		m_nMeasGroupLoadSeq = -1;
+		CString strWarn, strPop;
+		strWarn.Format(_T("[MANUAL] Manual Meas %s groups not built - stick %d not in the recipe (%d sticks)%s"), ManualMeasLogName(iMode), m_iNumStick + 1, nStickCnt,
+			(pInfo == NULL || pData == NULL) ? _T(", no recipe data") : _T(""));
+		strPop.Format(_T("현재 스틱 %d이 레시피(스틱 %d개)에 없어 %s 위치로 이동하지 않습니다.\n\n[레세피 선택] 후 스틱 이동을 먼저 하십시오."), m_iNumStick + 1, nStickCnt, ManualMeasPopupName(iMode));
+		RefuseHybrid(strWarn, strPop);	// one WARN line + the popup (worker thread), no alarm
+		return 0;
+	}
+	int nMode = ManualMeasHeadMode(iMode);
+	LPCTSTR pszTag = (nMode == 0) ? _T("MANUAL_WAD") : ((nMode == 1) ? _T("MANUAL_ANGLE") : _T("MANUAL_VISION"));
+	vector<S_MeasPos> vecGroup;
+	MeasBuildGroups(nMode, m_pAuroraMgr->GetPositionConfigMgrPtr(), m_pAuroraMgr->GetMaintControlMgr(), pInfo, pData, m_iNumStick, nullptr, pszTag, vecGroup);
+	m_vecMeasGroup.swap(vecGroup);
+	SetInnerIdArea((int)m_vecMeasGroup.size() * 2, true);	// LYS 2026-10-13 manual meas = CycleTest positions (review fix #7): was SetMeasureArea - a new inner ID per press and type
+	m_nMeasGroupMode = iMode;
+	m_nMeasGroupStick = m_iNumStick;
+	m_nMeasGroupLoadSeq = ManualRcpLoadSeq(pRcp);
+	if (m_vecMeasGroup.empty())
+	{
+		CString strWarn;
+		strWarn.Format(_T("[MANUAL] Manual Meas %s: stick %d has no cells - nothing to move"), ManualMeasLogName(iMode), m_iNumStick + 1);
+		CLogWrapper::GetInstance()->KMLOG(WARN, strWarn);
+	}
+	return (int)m_vecMeasGroup.size();
+}
+
+// LYS 2026-10-13 manual meas = CycleTest positions (review fix #7): the inner ID array (m_pStInnerID, indexed by the cell number in the stick - GenInnerID)
+//   was reset only by a recipe open before (legacy MakeMeasGroup). bKeep (shared builds, legacy restore after a shared move): kept while the stick and
+//   the recipe load are the ones it was made for, so a cell keeps its inner ID across presses and move types (auto keeps it for the whole stick); grown in
+//   place when a type needs more slots. Another stick / load, no array, or bKeep false (RECIPE_OPEN, Phase 7a resync) -> SetMeasureArea (reset)
+void CDlgSubManual_Meas::SetInnerIdArea(int nNeed, bool bKeep)
+{
+	int nSeq = ManualRcpLoadSeq(m_pAuroraMgr->GetRecipeEditMgrPtr());
+	if (bKeep && m_pStInnerID != NULL && m_nInnerIdStick == m_iNumStick && m_nInnerIdLoadSeq == nSeq)
+	{
+		if (nNeed > m_nMeasureArea)
+		{
+			TCHAR** pGrow = new TCHAR * [nNeed];
+			for (int i = 0; i < nNeed; i++)
+			{
+				if (i < m_nMeasureArea)
+					pGrow[i] = m_pStInnerID[i];	// kept inner ID
+				else
+				{
+					pGrow[i] = new TCHAR[32];
+					memset(pGrow[i], 0x00, 32 * sizeof(TCHAR));
+				}
+			}
+			delete[] m_pStInnerID;	// the pointer table only - its strings moved to pGrow
+			m_pStInnerID = pGrow;
+			m_nMeasureArea = nNeed;
+		}
+	}
+	else
+	{
+		SetMeasureArea(nNeed);
+	}
+	m_nInnerIdStick = m_iNumStick;
+	m_nInnerIdLoadSeq = nSeq;
+}
+
+// (8) safety: on a 1-segment runtime the shared moves run only when the stage is at the current stick's pose (Phase 7a CalcStickPose, X 0.1 mm /
+//   R 0.02 deg - the hybrid R-B values, same live axes). Hybrid runtime: CheckHybridGate R-B already checked this step before the step switch -
+//   7a behaviour unchanged, nothing here. false = refused before any axis moves (WARN + popup, no alarm)
+bool CDlgSubManual_Meas::CheckManualMeasPose(int iMode)
+{
+	if (IsHybridRuntime()) return true;
+	CString strWarn, strPop;
+	double dY = 0.0, dR = 0.0;
+	if (CalcStickPose(m_iNumStick, dY, dR) == false)
+	{
+		CRecipeEditMgr* pRcp = m_pAuroraMgr->GetRecipeEditMgrPtr();
+		S_RecipeData* pData = (pRcp != NULL) ? pRcp->GetRecipeData() : NULL;
+		int nStickCnt = (pData != NULL) ? (int)pData->m_vecStick.size() : 0;
+		strWarn.Format(_T("[MANUAL] Manual Meas %s move refused - stick %d not in the recipe (%d sticks)"), ManualMeasLogName(iMode), m_iNumStick + 1, nStickCnt);
+		strPop.Format(_T("현재 스틱 %d이 레시피(스틱 %d개)에 없어 %s 위치로 이동하지 않습니다.\n\n[레세피 선택] 후 스틱 이동을 먼저 하십시오."), m_iNumStick + 1, nStickCnt, ManualMeasPopupName(iMode));
+		RefuseHybrid(strWarn, strPop);
+		return false;
+	}
+	CMaintControlMgr* pM = m_pAuroraMgr->GetMaintControlMgr();
+	double dCurY = pM->GetCurPos(AXIS_X), dCurR = pM->GetCurPos(AXIS_LOADER_R);
+	if (fabs(dCurY - dY) > 0.1 || fabs(dCurR - dR) > 0.02)
+	{
+		strWarn.Format(_T("[MANUAL] Manual Meas %s move refused - stage not at stick %d pose (X %.3f R %.3f, target X %.3f R %.3f)"),
+			ManualMeasLogName(iMode), m_iNumStick + 1, dCurY, dCurR, dY, dR);
+		strPop.Format(_T("스테이지가 스틱 %d 위치에 있지 않아 %s 위치로 이동하지 않습니다.\n(현재 X %.3f R %.3f / 목표 X %.3f R %.3f)\n\n스틱 이동을 먼저 하십시오."),
+			m_iNumStick + 1, ManualMeasPopupName(iMode), dCurY, dCurR, dY, dR);
+		RefuseHybrid(strWarn, strPop);
+		return false;
+	}
+	return true;
+}
+
+// one shared move - the move button and every next cell (D6 (b): the full array each time; axes already in place are re-commanded and do not
+//   move). Same array, nAxis and calls as the auto step: MarkIdleHeadSafety, and for WAD SetMeasPos with the auto result Y (dHeadBackG, D10) first.
+//   Then the departing gantry first (verify_fix #11), MoveCmdPos*(..., false) and a wait on the axes really commanded (verify_fix #4)
+int CDlgSubManual_Meas::ManualMoveCellShared(int iMode, int iMove)
+{
+	CRecipeEditMgr* pRcp = m_pAuroraMgr->GetRecipeEditMgrPtr();
+	S_RecipeInfo* pInfo = (pRcp != NULL) ? pRcp->GetRecipeInfo() : NULL;
+	CMaintControlMgr* pMaint = m_pAuroraMgr->GetMaintControlMgr();
+	int nMeasArea = (int)m_vecMeasGroup.size();
+	if (pInfo == NULL || pMaint == NULL || m_nMeasGroupMode != iMode || iMove < 0 || iMove >= nMeasArea) return VTM_RV_FAILED;
+
+	int nMode = ManualMeasHeadMode(iMode);
+	const S_MeasPos& grp = m_vecMeasGroup[iMove];
+	stMotorPosition stPosition[22];
+	ZeroMemory(&stPosition, sizeof(stPosition));	// as the auto steps - ANGLE slots 0/1 stay zeroed (skipped by the wait). Never ClearMotorPos here
+	double dLeft = 0., dRight = 0.;
+	int nAxis = MeasBuildMovePos(nMode, grp, nMeasArea, true, true, pInfo, pInfo->m_sMotionOffsetPos.m_fStageY,
+		stPosition, (int)_countof(stPosition), &dLeft, &dRight);	// bFirst = true (D6 b), bOCP = true (UseSharedMeasPos is OCP only)
+	if (nAxis <= 0) return VTM_RV_FAILED;
+
+	if (nMode == 0)
+	{
+		double dXPos = grp.dHeadBackG - pMaint->GetCurPos(AXIS_X) - pInfo->m_sMotionOffsetPos.m_fHeadReviewY;	// D10: the auto WAD result Y
+		m_pAuroraMgr->GetCommTcpIpFactoryMgrPtr()->SetMeasPos(enumTCPIpFactorytID_WAD, dXPos, dLeft, dRight);
+	}
+	MarkIdleHeadSafety(stPosition, nAxis, grp, 0.0);	// as auto: the idle head of a single-cell group -> [SAFETY]
+	long nRet = ManualGantryFirst(pMaint, m_pAuroraMgr->GetPositionConfigMgrPtr(), nMode, stPosition, nAxis);
+	if (nRet == VTM_RV_SUCCESSED)
+	{
+		if (nMode == 0)
+			nRet = pMaint->MoveCmdPosWAD(stPosition, nAxis, SPEED_HIGH, false);
+		else if (nMode == 1)
+			nRet = pMaint->MoveCmdPosAngle(stPosition, nAxis, SPEED_HIGH, false);
+		else
+			nRet = pMaint->MoveCmdPosVision(stPosition, nAxis, SPEED_HIGH, false);
+	}
+	if (nRet == VTM_RV_SUCCESSED)
+	{
+		for (int k = (nMode == 1) ? 2 : 0; k < nAxis; k++)	// ANGLE: slots 0/1 are the zeroed dummies of the auto layout
+		{
+			if (ManualMeasWaitAxis(nMode, stPosition[k].axis) == false) continue;
+			nRet = pMaint->DoWork_MotionDone(stPosition[k].axis);
+			if (nRet != df_MOTION_RV_SUCCESSED) break;
+		}
+	}
+	return (int)nRet;
+}
+
+// LYS 2026-10-13 manual meas review #6 (user decision): GLASS GET / PUT loader move, GLASS ALIGN, PROBE ALIGN and PROBE MOVE turn or move the
+//   stage / probe like a stick move, so on OCP they raise Sub Z / FRONT Z first with the same helper (only axes below safety; none = no
+//   command, no log). HMI mode: no-op. A failed raise returns its code and the step body is skipped (the worker raises the alarm)
+long CDlgSubManual_Meas::RetractHeadZBeforeStep(LPCTSTR pszWhat)
+{
+	if (m_pAuroraMgr->GetSystemConfigMgrPtr() == nullptr || m_pAuroraMgr->GetSystemConfigMgrPtr()->IsOCP() == false) return VTM_RV_SUCCESSED;
+	return RetractHeadZBeforeStage(-1, pszWhat);
+}
+
+// (8) safety, verify_fix #3 (OCP; ManualMoveStick calls it after its "already on target" return, before the stage turns or moves): the shared
+//   moves leave Sub Z (Z3/Z4 WAD, Z5/Z6 VISION / ANGLE) and FRONT Z at recipe height. Each of them below its safety height is raised first:
+//   FRONT Z (Z2) -> Position.ini SafetyZ2 (the key MOVE SAFETY uses for Z2), then Sub Z -> INTERLOCKSUBZSAFETY (CoreFunction.ini, 0 = top;
+//   larger = lower on all five axes). Only those axes are commanded and one SYST line names them; none below safety = no command, no log
+//   (a stick move from a raised state is unchanged). A failed raise returns its code and the stage does not move
+long CDlgSubManual_Meas::RetractHeadZBeforeStage(int iStick, LPCTSTR pszWhat)
+{
+	CMaintControlMgr* pMaint = m_pAuroraMgr->GetMaintControlMgr();
+	CPositionConfigMgr* pPosCfg = m_pAuroraMgr->GetPositionConfigMgrPtr();
+	if (pMaint == nullptr || pPosCfg == nullptr || pMaint->GetMotorControlMgrPtr() == nullptr) return VTM_RV_SUCCESSED;
+	CMotorControlMgr* pMotor = pMaint->GetMotorControlMgrPtr();
+	double dSubZSafety = pMotor->GetInterlockSubZSafety();
+	double dSafetyZ2 = 0.0;
+	pPosCfg->GetSafetyPosition(nullptr, nullptr, nullptr, nullptr, nullptr, nullptr, &dSafetyZ2);
+
+	CString strAxes, strOne;
+	bool bZ2 = false;
+	axis_data_type* pProp = pMotor->GetAxisProperty(AXIS_Z2);
+	double dCurZ2 = pMaint->GetCurPos(AXIS_Z2);
+	if (pProp != nullptr && pProp->bUse != FALSE && dCurZ2 > dSafetyZ2 + 0.1)
+	{
+		bZ2 = true;
+		strOne.Format(_T(" FRONT Z %.3f -> %.3f"), dCurZ2, dSafetyZ2);
+		strAxes += strOne;
+	}
+	const int nSubAxis[4] = { AXIS_Z3, AXIS_Z4, AXIS_Z5, AXIS_Z6 };
+	const int nSubName[4] = { 3, 4, 5, 6 };
+	stMotorPosition stSubZ[4];
+	CMaintControlMgr::ClearMotorPos(stSubZ, 4);
+	int nSubZ = 0;
+	for (int k = 0; k < 4; k++)
+	{
+		pProp = pMotor->GetAxisProperty(nSubAxis[k]);
+		double dCur = pMaint->GetCurPos(nSubAxis[k]);
+		if (pProp == nullptr || pProp->bUse == FALSE || dCur <= dSubZSafety + 0.1) continue;
+		stSubZ[nSubZ].axis = nSubAxis[k];
+		stSubZ[nSubZ].dPosition = dSubZSafety;
+		nSubZ++;
+		strOne.Format(_T(" Z%d %.3f -> %.3f"), nSubName[k], dCur, dSubZSafety);
+		strAxes += strOne;
+	}
+	if (bZ2 == false && nSubZ == 0) return VTM_RV_SUCCESSED;
+
+	CString strLog;
+	if (pszWhat == nullptr)
+		strLog.Format(_T("[MANUAL] Manual Meas stick move (stick %d): head Z raised before the stage moves -%s"), iStick + 1, (LPCTSTR)strAxes);
+	else	// LYS 2026-10-13 review #6
+		strLog.Format(_T("[MANUAL] Manual Meas %s: head Z raised before the stage moves -%s"), pszWhat, (LPCTSTR)strAxes);
+	CLogWrapper::GetInstance()->KMLOG(SYST, strLog);
+	long nRet = VTM_RV_SUCCESSED;
+	if (bZ2) nRet = pMaint->MoveCmdPosA(AXIS_Z2, dSafetyZ2, true, SPEED_HIGH);
+	if (nRet == VTM_RV_SUCCESSED && nSubZ > 0) nRet = pMaint->MoveCmdPosMulti(stSubZ, nSubZ, SPEED_HIGH, true, false);
+	if (nRet != VTM_RV_SUCCESSED)
+	{
+		if (pszWhat == nullptr)
+			strLog.Format(_T("[MANUAL] Manual Meas stick move (stick %d): head Z raise failed (RET %d) - stage not moved"), iStick + 1, (int)nRet);
+		else	// LYS 2026-10-13 review #6
+			strLog.Format(_T("[MANUAL] Manual Meas %s: head Z raise failed (RET %d) - step not run"), pszWhat, (int)nRet);
+		CLogWrapper::GetInstance()->KMLOG(WARN, strLog);
+	}
+	return nRet;
 }

@@ -46,6 +46,8 @@ class CMaintControlMgr : public CAuroraSubMgr
 	int    m_nLastHomeAlarm;
 	bool m_bGlassAlignDone = false;	// LYS 2026-09-15 Glass Align 성공 후 오프셋이 유효한 동안 true (타이틀바 표시용)
 	bool m_bProbeAlignDone = false;	// LYS 2026-09-15 Probe Align 성공 후 오프셋이 유효한 동안 true
+	double m_dGlassAlignRefR = 0.0;		// LYS 2026-10-13 Hybrid Phase 7 Glass Align reference R mark (Align coordinate R when AlignGlass succeeded)
+	bool m_bGlassAlignRefValid = false;	// LYS 2026-10-13 Hybrid Phase 7 true from AlignGlass success until SetGlassAlignXYR / Do_StageVac_On / Do_StageVac_Off
 	double m_dProbeAlignOffset[3];  // Probe Align 보정값
 
 	double m_dAlignOffset[100];		// HW Align 보정값(Probe 장착시 보정값
@@ -116,6 +118,12 @@ public:
 	void SetProbeAlignDone(bool bDone) { m_bProbeAlignDone = bDone; }
 	bool IsGlassAlignDone() const { return m_bGlassAlignDone; }
 	bool IsProbeAlignDone() const { return m_bProbeAlignDone; }
+	// LYS 2026-10-13 Hybrid Phase 7 Glass Align reference R mark (p7x_plan (2-3), D7-3 (a)): GetCurPos(AXIS_LOADER_R) taken right after AlignGlass succeeded
+	//   (Align coordinate R = that .alg StageRotate - the TZero rotation went into the offset). Cleared by SetGlassAlignXYR (align start, segment boundary,
+	//   ResetAlign) and by Do_StageVac_On/Off (manual glass change). Only the hybrid manual gates read it - 1-segment recipes never do.
+	void SetGlassAlignRefR(double dR) { m_dGlassAlignRefR = dR; m_bGlassAlignRefValid = true; }
+	bool GetGlassAlignRefR(double* pdR) const { if (m_bGlassAlignRefValid == false || m_bGlassAlignDone == false) return false; if (pdR != nullptr) *pdR = m_dGlassAlignRefR; return true; }	// false = no mark (*pdR untouched)
+	bool IsGlassAlignOrientationOk(double dTargetR, double dTol = 2.0) const { double dRef = 0.0; if (GetGlassAlignRefR(&dRef) == false) return true; double dDiff = dTargetR - dRef; if (dDiff < 0.0) dDiff = -dDiff; return dDiff <= dTol; }	// no mark -> true; D7-6 2.0 deg
 	int SetGlassAlignXYR(double dX, double dY, double dR);
 	int SetProbeAlignXYR(double dX, double dY, double dR, int nProbe = 0);
 	int MoveProbeAlignR(double dR);

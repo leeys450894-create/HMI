@@ -586,6 +586,14 @@ BOOL CDlgSubManual_MultiMeas::IsOfflineStatus()
 		return FALSE;
 	}
 
+	// LYS 2026-10-12 1-segment recipes too (user request): a recipe open / save / reload / START mid-run changes the running glass
+	//   (e.g. Sampling) and resets the EFA / cell ID / result latches and the cell status - blocked while any glass is being measured
+	if (CSequenceManager::GetInstance()->IsEngineCompleteAll() == false || CSystemParamShare::GetInstance()->IsCycleState())
+	{
+		AfxMessageBox(_T("측정 중에는 이 작업을 할 수 없습니다.\n측정이 끝난 뒤 다시 시도하십시오."), MB_ICONWARNING);
+		return FALSE;
+	}
+
 	return TRUE;
 }
 
@@ -645,7 +653,27 @@ void CDlgSubManual_MultiMeas::OnBnClickedButtonMmOpen()
 	if (AfxMessageBox(_T("Load This Recipe : ") + strFileName, MB_OKCANCEL) != IDOK)
 		return;
 
-	if (m_pAuroraMgr->GetRecipeEditMgrPtr()->OpenRecipe(strFileName) <= 0)
+	// LYS 2026-10-13 Hybrid Phase 7 D4b-15 (b) / D7-11 (b): OpenRecipe() also returns JOB_RECIPE_NOT_EXIST (1013) when the .rcp load itself failed
+	//   (load serial unchanged, the previous recipe stays loaded) and '<= 0' took that as success. Hybrid runtime recipe only (segment cache > 1
+	//   or live DLL count > 1, judged before the open = the recipe that stays loaded when the load fails): refused with the existing message.
+	//   1-segment recipe: the '<= 0' test alone, unchanged. Case (b) (.rcp read, only the .alg failed - load serial changed) passes as before.
+	CRecipeEditMgr* pMmRcp = m_pAuroraMgr->GetRecipeEditMgrPtr();
+	C_OutRecipeFunc* pMmFunc = pMmRcp->GetRecipeFuncPtr();
+	// LYS 2026-10-13 Hybrid Phase 7 fix (impl review 1/2): busy (a run, a manual worker / recipe command, a recipe load) -> the segment-count cache int only,
+	//   idle -> the live DLL count (a stale cache over a 1-segment reload is a 1-segment runtime, (14)-A). 1-segment recipe (cache 1, live 1): false either way
+	bool bMmBusy = (m_pAuroraMgr->GetShareMemoryMgrPtr()->GetSys_ProcessStatus() != SPS_IDLE || CSequenceManager::GetInstance()->IsEngineCompleteAll() == false
+		|| CSystemParamShare::GetInstance()->IsCycleState() || pMmFunc == nullptr || pMmFunc->IsRcpLoadBusy() == TRUE);
+	bool bMmHybrid = bMmBusy ? (pMmRcp->GetSegCountCache() > 1) : (pMmFunc->GetSegmentLoopCount() > 1);
+	int nMmSeq = (bMmHybrid == true && pMmFunc != nullptr) ? pMmFunc->GetRcpLoadSeq() : 0;
+	int nMmRtn = pMmRcp->OpenRecipe(strFileName);
+	if (bMmHybrid == true && nMmRtn > 0 && pMmFunc != nullptr && pMmFunc->GetRcpLoadSeq() == nMmSeq)
+	{
+		CString strMmLog;
+		strMmLog.Format(_T("[HYBRID] WAD Multi recipe open refused - %s returned %d but the .rcp was not loaded (load serial %d unchanged, previous recipe kept)"), (LPCTSTR)strFileName, nMmRtn, nMmSeq);
+		CLogWrapper::GetInstance()->KMLOG(WARN, strMmLog);
+		nMmRtn = 0;	// -> the existing failure message below
+	}
+	if (nMmRtn <= 0)
 	{
 		AfxMessageBox(_T("Fail : Load Recipe"));
 		return;

@@ -579,6 +579,8 @@ copy $(OutDir)$(TargetName).pdb "$(ProjectDir)..\Bin\"
     <ClInclude Include="Manager\PositionConfigMgr.h" />
     <ClInclude Include="Manager\RecipeMgr.h" />
     <ClInclude Include="Manager\ResumeInfoMgr.h" />
+    <ClInclude Include="Manager\ResumeJournal.h" />
+    <ClInclude Include="ResumePrompt.h" />
     <ClInclude Include="Manager\WadMultiMeasMgr.h" />
     <ClInclude Include="Manager\ResultMgr.h" />
     <ClInclude Include="Manager\SACCMgr.h" />
@@ -835,6 +837,8 @@ copy $(OutDir)$(TargetName).pdb "$(ProjectDir)..\Bin\"
     <ClCompile Include="Manager\PositionConfigMgr.cpp" />
     <ClCompile Include="Manager\RecipeMgr.cpp" />
     <ClCompile Include="Manager\ResumeInfoMgr.cpp" />
+    <ClCompile Include="Manager\ResumeJournal.cpp" />
+    <ClCompile Include="ResumePrompt.cpp" />
     <ClCompile Include="Manager\WadMultiMeasMgr.cpp" />
     <ClCompile Include="Manager\ResultMgr.cpp" />
     <ClCompile Include="Manager\SACCMgr.cpp" />

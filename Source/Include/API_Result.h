@@ -137,5 +137,8 @@ void WINAPI API_Result_SetConfigPath(CString str);
 void WINAPI API_Result_SetSearchMode(int iMode);
 CWnd* WINAPI API_Result_GetReportmWnd();
 bool WINAPI API_Result_SaveResultDone();
+// LYS 2026-10-06 Hybrid Phase 5 resume replay: fast upload switch (skip the 1 s display wait) + ring depth / finished rows
+void WINAPI API_Result_SetFastUpload(bool bOn);
+void WINAPI API_Result_GetUploadState(int* pQueue, long* pDone);
 
 

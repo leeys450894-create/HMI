@@ -28,6 +28,9 @@ public:
 	int UploadData(PRSRITEMDATA result);
 	void SetSearchMode(int iMode);
 	void DataClear();
+	// LYS 2026-10-06 Hybrid Phase 5 resume replay (dResult fast upload)
+	void SetFastUpload(bool bOn);
+	void GetUploadState(int* pQueue, long* pDone);
 	CWnd* GetReportResultWnd();
 };
 

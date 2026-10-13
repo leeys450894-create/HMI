@@ -337,12 +337,56 @@ public:
 	int ManualMoveCell(int iMode, int iMove = 0);
 	int ManualMoveStick(int iStick);
 
+	// LYS 2026-10-13 Hybrid Phase 7 7a manual motion gate (p7x_plan (2-4) / (3-3) / (14)-B C F M, (15)). Each helper returns at once on a
+	//   1-segment runtime recipe (no log, no popup). In-class initializers: the constructor starts the worker thread first (AfxBeginThread)
+	enum { HYB_STEP_NONE = 0, HYB_STEP_S, HYB_STEP_P, HYB_STEP_C, HYB_STEP_T, HYB_STEP_G, HYB_STEP_PG };	// step classes of (14)-B
+	volatile LONG	m_nWorkBusy = 0;		// (14)-C worker lock: 0 free / 1 worker (DoWorkManual, ThreadRun CAS) / 2 UI segment switch (7b)
+	bool		m_bViewStamped = false;		// (2-5) view stamp: recipe ID / load serial / segment count / active segment the selection was built from
+	CString		m_strViewRcp;
+	int			m_nViewLoadSeq = -1;
+	int			m_nViewSegCount = 0;
+	int			m_nViewActive = -1;
+	int			m_nCidValSeq = -1;			// ValidateManualCellId: load serial + Glass ID of the last OPER line (the latch itself is set on every pass)
+	CString		m_strCidValGlass;
+	CString		m_strPgModelSent;			// D7-20 PG model this screen sent with RECIPE_OPEN_PG (emptied on recipe open / resync)
+	bool	IsHybridRuntime();
+	int		HybridStepClass(int nStep);
+	bool	IsMeasSetStep(int nStep);
+	bool	IsPgStep(int nStep);
+	int		PeekTargetStick(int nStep);
+	bool	CalcStickPose(int iStick, double& dStageY, double& dStageR);	// same pose formula as ManualMoveStick - change both together
+	bool	IsHybridViewStale();
+	void	StampHybridView();
+	void	ResyncHybridView();
+	CString	HybridGateDetail(int nSeg, int nSegCnt, int iStick, bool bTarget, double dTgtY, double dTgtR);
+	void	RefuseHybrid(const CString& strWarn, const CString& strPopup);
+	bool	CheckHybridGate(int nStep);
+	bool	ValidateManualCellId();
+	void	AddSegRowBase(int* pnAreaNum);
+
 	// LYS 2026-08-24 Current stick 표기. step switch가 워커 스레드에서 돌아
 	// UI 스레드로 값을 post 한다.
 	void	UpdateCurStickUI();
 	afx_msg LRESULT OnUpdateCurStick(WPARAM wParam, LPARAM lParam);
 	int MoveLoaderXYR(int iLoader);
-	int MakeMeasGroup();
+	int MakeMeasGroup(bool bKeepInnerId = false);	// LYS 2026-10-13 manual meas = CycleTest positions (review fix #7): true = legacy restore after a shared move - keeps the inner IDs of this stick / load
+	// LYS 2026-10-13 manual meas = CycleTest positions (manualpos/rca.md (5)(c) + (8)): on OCP the SPEC / QUALITY / ANGLE moves and their next cell build
+	//   the groups and the move array with the auto Measure step builders (MeasBuildGroups / MeasBuildMovePos, DoWorkGlassMeasureStep.h). REVIEW / COLOR
+	//   and HMI mode keep the legacy MakeMeasGroup / ManualMoveCell code. The stamp below says what m_vecMeasGroup holds (in-class initializers as 7a)
+	int		m_nMeasGroupMode = -1;		// M_TYPE_* of the shared groups held / -1 legacy MakeMeasGroup groups / -2 shared build refused (groups empty)
+	int		m_nMeasGroupStick = -1;	// stick the shared groups were built for
+	int		m_nMeasGroupLoadSeq = -1;	// recipe load serial they were built from
+	bool	UseSharedMeasPos(int iMode);
+	bool	IsMeasGroupCurrent(int iMode);
+	int		EnsureMeasGroup(int iMode);
+	bool	CheckManualMeasPose(int iMode);
+	int		ManualMoveCellShared(int iMode, int iMove);
+	long	RetractHeadZBeforeStage(int iStick, LPCTSTR pszWhat = nullptr);	// LYS 2026-10-13 review #6: pszWhat names a non-stick step in the log
+	long	RetractHeadZBeforeStep(LPCTSTR pszWhat);	// LYS 2026-10-13 review #6: OCP raise before a stage / probe moving step (HMI mode: no-op)
+	// LYS 2026-10-13 manual meas = CycleTest positions (review fix #7): stick / recipe load serial the inner ID array (m_pStInnerID, one slot per cell) was made for
+	int		m_nInnerIdStick = -1;
+	int		m_nInnerIdLoadSeq = -1;
+	void	SetInnerIdArea(int nNeed, bool bKeep);
 	afx_msg void OnBnClickedBtnManualMeasContactMotion4();
 	afx_msg void OnBnClickedBtnManualMeasContactMotion5();
 	afx_msg void OnBnClickedBtnManualMeasProbeMove();

@@ -6,6 +6,7 @@
 
 #include "DoWorkGlassSequenceImpl.h"
 #include "..\Manager\WadMultiMeasMgr.h"	// LYS 2026-07-23 WAD Multi Point (Phase 4)
+#include "..\Manager\ResumeJournal.h"	// LYS 2026-10-08 Hybrid Phase 5 (D5-15 resume VISION recipe wait, D5-17 OOS sim rows)
 #include "..\SystemParamShare.h"
 #include "..\Manager\SystemConfigMgr.h"
 
@@ -141,6 +142,7 @@ int CDoWorkGlassMeasureStep::MakeCellID(int* pnCellNum, bool* pbMeasProbe, TCHAR
 	CString strCellId;
 	TCHAR cCellID[df_MAX_PROBE][32];
 	ZeroMemory(cCellID, sizeof(cCellID));
+	int nLetterBase = m_pShareItem->GetRecipeEditMgrPtr()->GetCellIdLetterBase();	// LYS 2026-10-01 Hybrid Phase 4 (4-2) letter carry; -1 = 1-segment recipe -> the original "%c" lines below
 
 	for (size_t iProbe = 0; iProbe < df_MAX_PROBE; iProbe++)
 	{
@@ -150,11 +152,15 @@ int CDoWorkGlassMeasureStep::MakeCellID(int* pnCellNum, bool* pbMeasProbe, TCHAR
 
 			if (iRotate == 1) // YY, BT
 			{
+				if (nLetterBase >= 0 && nCellNum >= 0) strCellId.Format(_T("%s%02d"), (LPCTSTR)CRecipeEditMgr::CellIdLetterPrefix(nLetterBase + nCellNum), iStick + 1);	// LYS 2026-10-01 Hybrid Phase 4 (4-2) (cell -1 -> the legacy "@" line)
+				else
 				strCellId.Format(_T("%c%02d"), 65 + nCellNum, iStick + 1);
 				nMeasStick = iStick;
 			}
 			else // DG
 			{
+				if (nLetterBase >= 0) strCellId.Format(_T("%s%02d"), (LPCTSTR)CRecipeEditMgr::CellIdLetterPrefix(nLetterBase + nMaxStick - iStick - 1), nCellNum + 1);	// LYS 2026-10-01 Hybrid Phase 4 (4-2) (nMeasStick below stays segment-local, nCellStatus column = ToCellStatusStick)
+				else
 				strCellId.Format(_T("%c%02d"), 65 + nMaxStick - iStick - 1, nCellNum + 1);
 				nMeasStick = nMaxStick - iStick - 1;
 			}
@@ -183,6 +189,7 @@ void CDoWorkGlassMeasureStep::GenCellID(int* pnCellNum, bool* pbMeasProbe, TCHAR
 	CString strMeasCell;
 	strMeasCell.Empty();
 	int iTop = 0, nMaxTop = 5;
+	bool bHybridCid = (m_pShareItem->GetRecipeEditMgrPtr()->GetCellIdLetterBase() >= 0);	// LYS 2026-10-01 Hybrid Phase 4 (4-2) (false = 1-segment recipe -> original B-panel parser, no length guard)
 
 	//2022.08.26 JCY Modify
 	S_RecipeData* pRecipeData;
@@ -211,6 +218,7 @@ void CDoWorkGlassMeasureStep::GenCellID(int* pnCellNum, bool* pbMeasProbe, TCHAR
 	for (size_t nProbe = 0; nProbe < df_MAX_PROBE; nProbe++)
 	{
 		strMcrID.Empty();
+		bool bCidOverride = false;	// LYS 2026-10-01 Hybrid Phase 4b manual / derived token this slot
 
 		if (pbMeasProbe[nProbe])
 		{
@@ -224,10 +232,22 @@ void CDoWorkGlassMeasureStep::GenCellID(int* pnCellNum, bool* pbMeasProbe, TCHAR
 			// Glass Part A or B
 			CString strPart;
 			strPart.Format(_T("%s"), strGlassID.Mid(strGlassID.GetLength() - 2, 1));
+			// LYS 2026-10-01 Hybrid Phase 4b manual / derived cell token (docs/HybridGlass_Porting_Plan.md 5.7): final value, B offset already
+			//   inside -> skip the B-panel branch below. Only after the Recipe Change step validated the config (D-15 latch 1); else the original path
+			CString strCidTok;
+			bCidOverride = m_pShareItem->GetRecipeEditMgrPtr()->GetManualCellToken(strPart.CompareNoCase(_T("B")) == 0, GetMeasureStick(), pnCellNum[nProbe], strGlassID, strCidTok);
+			if (bCidOverride) strTmp = strCidTok;
 
-			if (strPart.CompareNoCase(_T("B")) == 0)	// AB
+			if (bCidOverride == false && strPart.CompareNoCase(_T("B")) == 0)	// AB (LYS 2026-10-01 Hybrid Phase 4b: an override token is final)
 			{
 				CString strBuf;
+				if (bHybridCid)	// LYS 2026-10-01 Hybrid Phase 4 (4-2) the letter prefix may be 2 letters (AA01): split letters / digits instead of Mid(0,1) / Mid(1,2)
+				{
+					int nPfx = 0;
+					while (nPfx < strTmp.GetLength() && strTmp[nPfx] >= _T('A') && strTmp[nPfx] <= _T('Z')) nPfx++;
+					strBuf.Format(_T("%s%02d"), (LPCTSTR)strTmp.Left(nPfx), nMaxTop + _ttoi(strTmp.Mid(nPfx)));
+				}
+				else
 				strBuf.Format(_T("%s%02d"), strTmp.Mid(0, 1), nMaxTop + _ttoi(strTmp.Mid(1, 2)));
 				strTmp.Format(_T("%s"), strBuf);
 			}
@@ -241,6 +261,13 @@ void CDoWorkGlassMeasureStep::GenCellID(int* pnCellNum, bool* pbMeasProbe, TCHAR
 			strMcrID.Format(_T("%s"), gf_MakeMcrID(strCellID));								    // Glass + Cell + CheckSum
 		}
 
+		if ((bHybridCid || bCidOverride) && strMcrID.GetLength() > 31)	// LYS 2026-10-01 Hybrid Phase 4b manual / derived token too	// LYS 2026-10-01 Hybrid Phase 4 (4-2) m_szCellID[..][32]: _tcscpy_s aborts on 32+ chars (2-letter prefix + long GlassID)
+		{
+			CString strCidLog;
+			strCidLog.Format(bHybridCid ? _T("[HYBRID] cell ID %s longer than 31 - cut to 31") : _T("[CELLID] cell ID %s longer than 31 - cut to 31"), (LPCTSTR)strMcrID);	// LYS 2026-10-01 Hybrid Phase 4b N=1 manual override -> [CELLID] tag (hybrid text unchanged)
+			m_pShareItem->GetLogFileAccessorPtr()->KMLOG(WARN, strCidLog);
+			strMcrID = strMcrID.Left(31);
+		}
 		TRACE(_T("GenCellID:%s %d,%d:%s\n"), strMeasCell, pnCellNum[nProbe] + 1, nProbe + 1, strMcrID);
 		_tcscpy_s(m_pMeasSeqItemEngine->GetShareMemoryMgrPtr()->GetSharedMemory()->stLotInfo.m_szCellID[nProbe], 32, strMcrID);		// CELL ID 설정
 	}
@@ -471,6 +498,478 @@ int MarkIdleHeadSafety(stMotorPosition* pPos, int nAxis, const S_MeasPos& measPo
 	return nMark;
 }
 
+//=========================================================================
+// LYS 2026-10-13 manual meas = CycleTest positions (manualpos/rca.md (5) + (8) D2 plan A, declarations in the header)
+//   MeasBuildGroups / MeasBuildMovePos = the group build and the move array of one group, moved here from the auto Measure steps
+//   WAD, VISION and ANGLE (their original blocks stay in place under #if 0, the steps now call these). CDlgSubManual_Meas
+//   (OCP SPEC / QUALITY / ANGLE) calls the same two functions, so its move buttons command exactly the CycleTest positions.
+//   Moved as is: same reads, same arithmetic and types, same evaluation order of the logging calls (MakeHeadPairByOrder summary
+//   first, then PickSingleCellHead per single cell), same slot layout. Keep these quirks - the auto steps depend on them:
+//   - VISION dHeadBackG = 0 - gantry gap (Clear() then BackG - gap). WAD re-checks a pair with the offset gap, VISION / ANGLE with dHeadGap
+//   - the cell filter pbUse is applied in the pair loop only when nArea > 1 (a 1-cell stick measures its cell unfiltered)
+//   - the CALLER zeroes the array (ZeroMemory). ANGLE first move leaves slots 0/1 as zeroed (AXIS_X 0.0) because the auto wait loop
+//     reads them; Z3/Z4 = 0 sit in slots 19/20, outside nAxis (19), and are never sent. Never ClearMotorPos the array: AXIS_NONE in
+//     slot 0/1 dereferences a null axis property in DoWork_MotionDone
+//=========================================================================
+static void MeasFillGroupPos(int nMode, S_MeasPos& measPos, const S_CellInfo& cellFirst, double dGlassConactPos, double dGantryGap,
+		const S_RecipeData* pData, double dBackZ, bool bPair)
+{
+	measPos.Clear();
+	if (nMode == 0)
+	{
+		// WAD: the BACK gantry measures, FRONT = BACK - gantry gap
+		measPos.dHeadBackG = cellFirst.m_fCellY + dGlassConactPos;
+		measPos.dHeadFrontG = measPos.dHeadBackG - dGantryGap;
+		measPos.dHeadBackZ = pData->m_sHeadZ.m_fSpecZ;
+		measPos.dHeadFrontZ = pData->m_sHeadZ.m_fQualityZ;
+	}
+	else if (nMode == 2)
+	{
+		// VISION (LYS 2026-06-30): the FRONT gantry measures. dHeadBackG = 0 - gap as the original (the move array does not read it)
+		measPos.dHeadFrontG = cellFirst.m_fCellY + dGlassConactPos;
+		measPos.dHeadBackG = measPos.dHeadBackG - dGantryGap;
+		if (bPair)
+			measPos.dHeadBackZ = pData->m_sHeadZ.m_fReviewZ;
+		else
+			measPos.dHeadBackZ = pData->m_sHeadZ.m_fAngleZ;
+		measPos.dHeadFrontZ = pData->m_sHeadZ.m_fQualityZ;
+	}
+	else
+	{
+		// ANGLE: the FRONT gantry measures, BACK = FRONT + gantry gap, back Z = dBackZ (0, LYS 2026-08-26)
+		measPos.dHeadFrontG = cellFirst.m_fCellY + dGlassConactPos;
+		measPos.dHeadBackG = measPos.dHeadFrontG + dGantryGap;
+		measPos.dHeadBackZ = dBackZ;
+		measPos.dHeadFrontZ = pData->m_sHeadZ.m_fAngleZ;
+	}
+}
+
+int MeasBuildGroups(int nMode, CPositionConfigMgr* pPosCfg, CMaintControlMgr* pMaint, S_RecipeInfo* pInfo, S_RecipeData* pData,
+		int iStick, const bool* pbUse, LPCTSTR pszTag, vector<S_MeasPos>& vecOut)
+{
+	vecOut.clear();
+	// Guards (new): the auto steps read m_vecStick[iStick] themselves before calling, so these fire only where the original
+	//   block would have crashed. The manual dialog relies on them (its stick index survives a recipe change).
+	if (nMode != 0 && nMode != 1 && nMode != 2) return 0;
+	if (pPosCfg == nullptr || pMaint == nullptr || pInfo == nullptr || pData == nullptr) return 0;
+	if (iStick < 0 || iStick >= (int)pData->m_vecStick.size()) return 0;
+
+	int nArea = (int)pData->m_vecStick[iStick].m_vecCell.size();
+
+	double dGantryGap = 0, dHeadGap = 0, dHeadGapRcp = 0;
+	if (nMode == 2)
+		pMaint->GetInterlockPos(&dGantryGap, &dHeadGap, nullptr);					// VISION: INTERLOCKHEADGAP
+	else
+		pMaint->GetInterlockPos(&dGantryGap, nullptr, nullptr, &dHeadGap);		// WAD / ANGLE: INTERLOCKHEADGAPB (2023.03.08 change)
+
+	dHeadGapRcp = pInfo->m_sOptionItem.m_fBackHeadGap;
+	if (dHeadGapRcp > dHeadGap)
+	{
+		dHeadGap = dHeadGapRcp;
+	}
+
+	// LYS 2026-09-14 pair gap with the head offset: the axis targets are cell X + HEAD_OFFSET Y, so the two heads are
+	//   (cell distance + (HEAD1_Y - HEAD2_Y)) apart and the cell distance must exceed dHeadGap - (o1 - o2).
+	double dPairGap = dHeadGap;
+	{
+		double dOffX = 0.0, dOffY1 = 0.0, dOffY2 = 0.0, dOffZ = 0.0;
+		pPosCfg->GetHeadOffset(0, nMode, &dOffX, &dOffY1, &dOffZ);
+		pPosCfg->GetHeadOffset(1, nMode, &dOffX, &dOffY2, &dOffZ);
+		dPairGap = dHeadGap - (dOffY1 - dOffY2);
+	}
+	// re-check of a pair in the group loop: WAD = the same offset gap (LYS 2026-09-21 dPairGapWad), VISION / ANGLE = dHeadGap
+	const double dPairCheckGap = (nMode == 0) ? dPairGap : dHeadGap;
+
+	// LYS 2026-06-29 (VISION 2026-06-30) gantry base = head review offset only - OCP Stage X already carries the stick
+	double dGlassConactPos = 0;
+	dGlassConactPos = pInfo->m_sMotionOffsetPos.m_fHeadReviewY;
+
+	// ANGLE back Z (LYS 2026-08-26)
+	double dBackZ = 0;
+
+	// Generate 2Head Group
+	bool* pbSet = new bool[nArea];
+	for (int iGroup = 0; iGroup < nArea; iGroup++)
+		pbSet[iGroup] = false;
+
+	S_CellInfo cellFirst, cellSecond;
+	S_MeasPos measPos;
+	cellFirst.Clear();
+	cellSecond.Clear();
+
+	// LYS 2026-09-14 pairs by order first (MakeHeadPairByOrder): k-th minus-side cell <-> k-th plus-side cell
+	int* pnPair = new int[nArea];
+	MakeHeadPairByOrder(pData->m_vecStick[iStick].m_vecCell, pbUse, nArea, dPairGap, pnPair, pszTag);
+
+	if (nArea > 1)
+	{
+		for (int iGroup = 0; iGroup < nArea; iGroup++)
+		{
+			if (pbSet[iGroup] != true)
+			{
+				cellFirst = pData->m_vecStick[iStick].m_vecCell[iGroup];
+
+				// per-cell filter (auto: aging mask + sampling, the original IsAgingCellSkip / m_nSelectCell checks; manual: none)
+				if (pbUse != nullptr && pbUse[iGroup] != true)
+				{
+					pbSet[iGroup] = true;
+					continue;
+				}
+
+				cellSecond.Clear();
+				for (int iSearch = 0; iSearch < nArea; iSearch++)
+				{
+					if (pbSet[iSearch] != true)
+					{
+						cellSecond = pData->m_vecStick[iStick].m_vecCell[iSearch];
+
+						if (pbUse != nullptr && pbUse[iSearch] != true)
+						{
+							pbSet[iSearch] = true;
+							continue;
+						}
+
+						// LYS 2026-09-14 only the pair fixed by order (pnPair)
+						if (cellFirst.m_fCellX < 0 && pnPair[iGroup] == iSearch)
+						{
+							if (fabs(cellFirst.m_fCellX - cellSecond.m_fCellX) > dPairCheckGap)
+							{
+								pbSet[iGroup] = true;
+								pbSet[iSearch] = true;
+								MeasFillGroupPos(nMode, measPos, cellFirst, dGlassConactPos, dGantryGap, pData, dBackZ, true);
+
+								if (cellFirst.m_nArea >= nArea)
+								{
+									cellFirst.m_nArea -= (nArea * iStick);
+								}
+
+								if (cellSecond.m_nArea >= nArea)
+								{
+									cellSecond.m_nArea -= (nArea * iStick);
+								}
+
+								measPos.m_sCellInfo[0] = cellFirst;
+								measPos.m_sCellInfo[1] = cellSecond;
+								vecOut.push_back(measPos);
+
+								break;
+							}
+						}
+					}
+				}
+			}
+		}
+	}
+
+	// remaining cells: single head (LYS 2026-09-18 head picked by PickSingleCellHead, WAD on the BACK gantry, VISION / ANGLE on the FRONT)
+	for (int iGroup = 0; iGroup < nArea; iGroup++)
+	{
+		if (pbSet[iGroup] != true)
+		{
+			pbSet[iGroup] = true;
+
+			cellFirst = pData->m_vecStick[iStick].m_vecCell[iGroup];
+
+			double dOffHeadP = 0.0, dOffHeadM = 0.0;
+			GetHeadOffsetY(pPosCfg, nMode, &dOffHeadP, &dOffHeadM);
+			if (PickSingleCellHead(pPosCfg, pMaint,
+				cellFirst.m_fCellX, dOffHeadP, dOffHeadM, (nMode != 0), pszTag) != 0)  // Head 2
+			{
+				MeasFillGroupPos(nMode, measPos, cellFirst, dGlassConactPos, dGantryGap, pData, dBackZ, false);
+
+				if (cellFirst.m_nArea >= nArea)
+				{
+					cellFirst.m_nArea -= (nArea * iStick);
+				}
+
+				measPos.m_sCellInfo[1] = cellFirst;
+				cellFirst.m_fCellX -= dHeadGap;
+				cellFirst.m_nArea = -1;
+				measPos.m_sCellInfo[0] = cellFirst;
+				vecOut.push_back(measPos);
+			}
+			else  // Head 1
+			{
+				MeasFillGroupPos(nMode, measPos, cellFirst, dGlassConactPos, dGantryGap, pData, dBackZ, false);
+
+				if (cellFirst.m_nArea >= nArea)
+				{
+					cellFirst.m_nArea -= (nArea * iStick);
+				}
+
+				measPos.m_sCellInfo[0] = cellFirst;
+				cellFirst.m_fCellX += dHeadGap;
+				cellFirst.m_nArea = -1;
+				measPos.m_sCellInfo[1] = cellFirst;
+				vecOut.push_back(measPos);
+			}
+		}
+	}
+
+	delete[] pbSet;
+	delete[] pnPair;
+
+	return (int)vecOut.size();
+}
+
+int MeasBuildMovePos(int nMode, const S_MeasPos& grp, int nMeasArea, bool bFirst, bool bOCP, S_RecipeInfo* pInfo, double dOffsetX,
+		stMotorPosition* pPos, int nPosSize, double* pdLeft, double* pdRight)
+{
+	// slots written on a first move: WAD 0..7, VISION 0..14, ANGLE 2..20. A short array is refused, not overrun.
+	const int nNeed = (nMode == 0) ? 8 : ((nMode == 2) ? 15 : 21);
+	if ((nMode != 0 && nMode != 1 && nMode != 2) || pPos == nullptr || nPosSize < nNeed) return 0;
+
+	int nAxis = 0;
+	double dLeft = 0., dRight = 0.;
+	double dLeft2 = 0., dRight2 = 0.;	// 2023.03.08 add
+	bool bDirLtoR = true;
+
+	if (grp.m_sCellInfo[0].m_fCellX > grp.m_sCellInfo[1].m_fCellX)
+	{
+		dLeft = grp.m_sCellInfo[0].m_fCellX;
+		dRight = grp.m_sCellInfo[1].m_fCellX;
+	}
+	else
+	{
+		dLeft = grp.m_sCellInfo[1].m_fCellX;
+		dRight = grp.m_sCellInfo[0].m_fCellX;
+
+		bDirLtoR = false;
+	}
+
+	if (nMeasArea == 1 && nMode == 2)
+	{
+		// VISION, one group: FRONT and BACK heads both spread by +-gap/2 (original note: one area -> Vision Head moves to both sides)
+		double dHeadGapRcpF = 700.0,  dHeadGapRcpB = 700.0, dMovePosF = 0.0, dMovePosB = 0.0;
+		if (pInfo != nullptr)
+		{
+			dHeadGapRcpF = pInfo->m_sOptionItem.m_fFrontHeadGap;
+			dHeadGapRcpB = pInfo->m_sOptionItem.m_fBackHeadGap;
+		}
+
+		dMovePosF = dHeadGapRcpF / 2;
+		dMovePosB = dHeadGapRcpB / 2;
+
+		if (bDirLtoR == true)	//  - -> +
+		{
+			dLeft2 = dMovePosF * -1;
+			dRight2 = dMovePosF;
+
+			dLeft  = dMovePosB * -1;
+			dRight = dMovePosB;
+		}
+		else  //  + -> -
+		{
+			dLeft2 = dMovePosF;
+			dRight2 = dMovePosF * -1;
+
+			dLeft  = dMovePosB;
+			dRight = dMovePosB * -1;
+		}
+	}
+	else if (nMeasArea == 1)
+	{
+		// WAD / ANGLE, one group: the FRONT heads spread by +-FrontHeadGap/2
+		double dHeadGapRcp = 700, dMovePos = 0;
+		if (pInfo != nullptr)
+		{
+			dHeadGapRcp = pInfo->m_sOptionItem.m_fFrontHeadGap;
+		}
+
+		dMovePos = dHeadGapRcp / 2;
+
+		if (bDirLtoR == true)	//  - -> +
+		{
+			dLeft2 = dMovePos * -1;
+			dRight2 = dMovePos;
+		}
+		else  //  + -> -
+		{
+			dLeft2 = dMovePos;
+			dRight2 = dMovePos * -1;
+		}
+	}
+	else
+	{
+		dLeft2 = dLeft;
+		dRight2 = dRight;
+	}
+
+	if (nMode == 0)
+	{
+		// ---- WAD (BACK gantry X2, heads Y1/Y2) ----
+		if (bFirst == false)	// auto: bMoveFirstDone == true -> heads only
+		{
+			pPos[0].axis = AXIS_Y1;   nAxis++;
+			pPos[0].dPosition = dLeft;
+			pPos[1].axis = AXIS_Y2;   nAxis++;
+			pPos[1].dPosition = dRight;
+		}
+		else
+		{
+			pPos[0].axis = AXIS_Y1;   nAxis++;
+			pPos[0].dPosition = dLeft;
+			pPos[1].axis = AXIS_Y2;   nAxis++;
+			pPos[1].dPosition = dRight;
+			pPos[2].axis = AXIS_Y3;   nAxis++;
+			pPos[2].dPosition = dLeft2;
+			pPos[3].axis = AXIS_Y4;   nAxis++;
+			pPos[3].dPosition = dRight2;
+			// LYS 2026-09-21 OCP: the FRONT heads Y3/Y4 of the first WAD move go to [SAFETY] (MoveCmdPosWAD ApplyIdleHeadSafetyY), not to the cells
+			if (bOCP)
+			{
+				pPos[2].dPosition = df_HEAD_Y_IDLE_SAFETY;
+				pPos[3].dPosition = df_HEAD_Y_IDLE_SAFETY;
+			}
+			// LYS 2026-07-24 WAD gantry axis = X2
+			pPos[4].axis = AXIS_X2;	nAxis++;
+			pPos[4].dPosition = grp.dHeadBackG + dOffsetX;
+			// LYS 2026-09-07 Z1 (BACK Z, unused on OCP) removed - Sub Z (Z3/Z4) instead. LYS 2026-09-10 FRONT Z2 -> -1000 (Safety)
+			pPos[5].axis = AXIS_Z2;   nAxis++;
+			pPos[5].dPosition = -1000;
+
+			// LYS 2026-08-28 Sub Z (Z3/Z4) - WAD
+			pPos[6].axis = AXIS_Z3;   nAxis++;
+			pPos[6].dPosition = (pInfo != nullptr) ? pInfo->m_sMotionSubZ.m_fWadSubzRight : 0.0;
+			pPos[7].axis = AXIS_Z4;   nAxis++;
+			pPos[7].dPosition = (pInfo != nullptr) ? pInfo->m_sMotionSubZ.m_fWadSubzLeft : 0.0;
+		}
+	}
+	else if (nMode == 2)
+	{
+		// ---- VISION (FRONT gantry X3, heads Y3/Y4) ----
+		if (bFirst == false)	// auto: bMoveFirst == true -> heads (+ FILTER, which MoveCmdPosVision does not command)
+		{
+			pPos[0].axis = AXIS_Y3;   nAxis++;
+			pPos[0].dPosition = dLeft2;
+			pPos[1].axis = AXIS_Y4;   nAxis++;
+			pPos[1].dPosition = dRight2;
+
+			pPos[2].axis = AXIS_FILTER1;   nAxis++;
+			pPos[2].dPosition = 0;
+			pPos[3].axis = AXIS_FILTER2;   nAxis++;
+			pPos[3].dPosition = 0;
+		}
+		else
+		{
+			pPos[0].axis = AXIS_Y3;   nAxis++;
+			pPos[0].dPosition = dLeft2;
+			pPos[1].axis = AXIS_Y4;   nAxis++;
+			pPos[1].dPosition = dRight2;
+
+			pPos[2].axis = AXIS_Y1;   nAxis++;
+			pPos[2].dPosition = dLeft;
+			pPos[3].axis = AXIS_Y2;   nAxis++;
+			pPos[3].dPosition = dRight;
+			// LYS 2026-09-14 OCP: the BACK heads Y1/Y2 of the first move go to [SAFETY], not to the cells
+			if (bOCP)
+			{
+				pPos[2].dPosition = df_HEAD_Y_IDLE_SAFETY;
+				pPos[3].dPosition = df_HEAD_Y_IDLE_SAFETY;
+			}
+
+			pPos[4].axis = AXIS_X3;   nAxis++;
+			pPos[4].dPosition = grp.dHeadFrontG + dOffsetX;		// LYS 2026-06-30
+
+			pPos[5].axis = AXIS_Z1;   nAxis++;
+			pPos[5].dPosition = grp.dHeadFrontZ;
+			pPos[6].axis = AXIS_Z2;   nAxis++;
+			pPos[6].dPosition = grp.dHeadFrontZ;
+
+			pPos[7].axis = AXIS_ZOOM1;   nAxis++;
+			pPos[7].dPosition = 0;
+			pPos[8].axis = AXIS_THETA1;   nAxis++;
+			pPos[8].dPosition = 0;
+			pPos[9].axis = AXIS_ZOOM2;   nAxis++;
+			pPos[9].dPosition = 0;
+			pPos[10].axis = AXIS_THETA2;   nAxis++;
+			pPos[10].dPosition = 0;
+
+			pPos[11].axis = AXIS_FILTER1;   nAxis++;
+			pPos[11].dPosition = 0;
+			pPos[12].axis = AXIS_FILTER2;   nAxis++;
+			pPos[12].dPosition = 0;
+
+			// LYS 2026-08-28 Sub Z (Z5/Z6), VISION values (LYS 2026-09-18 ANGLE has its own)
+			pPos[13].axis = AXIS_Z5;   nAxis++;
+			pPos[13].dPosition = (pInfo != nullptr) ? pInfo->m_sMotionSubZ.m_fVisionSubzRight : 0.0;
+			pPos[14].axis = AXIS_Z6;   nAxis++;
+			pPos[14].dPosition = (pInfo != nullptr) ? pInfo->m_sMotionSubZ.m_fVisionSubzLeft : 0.0;
+		}
+	}
+	else
+	{
+		// ---- ANGLE (FRONT gantry X3 on OCP / X2 on HMI, heads Y3/Y4) ----
+		if (bFirst == false)	// auto: bMoveFirstDone == true -> heads only
+		{
+			pPos[0].axis = AXIS_Y3;   nAxis++;
+			pPos[0].dPosition = dLeft2;
+			pPos[1].axis = AXIS_Y4;   nAxis++;
+			pPos[1].dPosition = dRight2;
+		}
+		else
+		{
+			// slots 0/1 are left as the caller zeroed them (see the block comment above)
+			pPos[2].axis = AXIS_Y3;   nAxis++;
+			pPos[2].dPosition = dLeft2;
+			pPos[3].axis = AXIS_Y4;   nAxis++;
+			pPos[3].dPosition = dRight2;
+
+			// LYS 2026-06-26 OCP: X3 primary axis for ANGLE
+			if (bOCP)
+				pPos[4].axis = AXIS_X3;
+			else
+				pPos[4].axis = AXIS_X2;
+			nAxis++;
+			pPos[4].dPosition = grp.dHeadFrontG + dOffsetX; // 2023.07.06 add
+			pPos[5].axis = AXIS_Z1;   nAxis++;
+			pPos[5].dPosition = grp.dHeadBackZ;
+			pPos[6].axis = AXIS_Z2;   nAxis++;
+			pPos[6].dPosition = grp.dHeadFrontZ;
+
+			// LYS 2026-08-19 Angle module optics follow the recipe (one set per module, applied on the first full move)
+			if (pInfo != nullptr)
+			{
+				pPos[7].axis = AXIS_ANGLE_SF1;	nAxis++;
+				pPos[7].dPosition = pInfo->m_sMotionAngle.m_fAngleScheimpflug1;
+				pPos[8].axis = AXIS_ANGLE_ROTATE1;	nAxis++;
+				pPos[8].dPosition = pInfo->m_sMotionAngle.m_fAngleRotate1;
+				pPos[9].axis = AXIS_ANGLE_ZOOM1;	nAxis++;
+				pPos[9].dPosition = pInfo->m_sMotionAngle.m_fAngleZoom1;
+				pPos[10].axis = AXIS_ANGLE_TILT1;	nAxis++;
+				pPos[10].dPosition = pInfo->m_sMotionAngle.m_fAngleTilt1;
+				pPos[11].axis = AXIS_ANGLE_AZM1;	nAxis++;
+				pPos[11].dPosition = pInfo->m_sMotionAngle.m_fAngleAzimuth1;
+				pPos[12].axis = AXIS_ANGLE_SF2;	nAxis++;
+				pPos[12].dPosition = pInfo->m_sMotionAngle.m_fAngleScheimpflug2;
+				pPos[13].axis = AXIS_ANGLE_ROTATE2;	nAxis++;
+				pPos[13].dPosition = pInfo->m_sMotionAngle.m_fAngleRotate2;
+				pPos[14].axis = AXIS_ANGLE_ZOOM2;	nAxis++;
+				pPos[14].dPosition = pInfo->m_sMotionAngle.m_fAngleZoom2;
+				pPos[15].axis = AXIS_ANGLE_TILT2;	nAxis++;
+				pPos[15].dPosition = pInfo->m_sMotionAngle.m_fAngleTilt2;
+				pPos[16].axis = AXIS_ANGLE_AZM2;	nAxis++;
+				pPos[16].dPosition = pInfo->m_sMotionAngle.m_fAngleAzimuth2;
+
+				// LYS 2026-08-28 / 2026-09-18 Sub Z (Z5/Z6), ANGLE values (recipe SUB Z grid ANGLE RIGHT/LEFT)
+				pPos[17].axis = AXIS_Z5;	nAxis++;
+				pPos[17].dPosition = pInfo->m_sMotionSubZ.m_fAngleSubzRight;
+				pPos[18].axis = AXIS_Z6;	nAxis++;
+				pPos[18].dPosition = pInfo->m_sMotionSubZ.m_fAngleSubzLeft;
+
+				pPos[19].axis = AXIS_Z3;	nAxis++;
+				pPos[19].dPosition = 0;
+				pPos[20].axis = AXIS_Z4;	nAxis++;
+				pPos[20].dPosition = 0;
+			}
+		}
+	}
+
+	if (pdLeft != nullptr) *pdLeft = dLeft;
+	if (pdRight != nullptr) *pdRight = dRight;
+	return nAxis;
+}
+
 bool CDoWorkGlassMeasureStep::IsAgingCellSkip(int iKind, int iCell)
 {
 	if (m_pMeasSeqItemEngine == NULL) return false;
@@ -503,6 +1002,36 @@ void CDoWorkGlassMeasureStep::LogAgingRow(int iKind, const TCHAR* szTag, int* pn
 		szTag, m_pMeasSeqItemEngine->GetAgingCurItem() + 1,
 		m_pMeasSeqItemEngine->GetAgingRepeat(iKind), GetMeasureStick(),
 		pnAreaNum[0], pnAreaNum[1], (LPCTSTR)m_pShareItem->GetRecipeEditMgrPtr()->GetSegLogTag(TRUE));
+	m_pShareItem->GetLogFileAccessorPtr()->KMLOG(SYST, strLog);
+}
+
+// LYS 2026-10-01 Hybrid Phase 4 (4-1) one line per live SetMeasUseInfo on a hybrid recipe: the rows the devices will write (segBase
+//   included), the cells, which heads really measure and the cell IDs GenMeasID just put in stLotInfo. OOS prints it too
+//   (dResult gets no rows offline). 1-segment recipe: GetSegLogTag() is empty -> no line (1-segment logs stay byte-identical).
+void CDoWorkGlassMeasureStep::LogHybridRow(const TCHAR* szKind, int* pnCell, bool* pbUse, int* pnAreaNum)
+{
+	// LYS 2026-10-08 Hybrid Phase 5 (D5-17) RESUME_JOURNAL_OOS_SIM only (key absent = 0 -> skipped, nothing else changes): offline dResult
+	//   never gets a row, so the journal gets synthetic S lines here (armed journal glasses only). Placed before the 1-segment early
+	//   return below: a RESUME_TUPLE_ALL 1-segment glass has no segment tag but keeps a journal
+	if (CResumeJournal::GetInstance()->GetSimMode() > 0)
+	{
+		const TCHAR* szSimCell[2] = { NULL, NULL };
+		if (m_pMeasSeqItemEngine != NULL && m_pMeasSeqItemEngine->GetShareMemoryMgrPtr() != NULL && m_pMeasSeqItemEngine->GetShareMemoryMgrPtr()->GetSharedMemory() != NULL)
+		{
+			szSimCell[0] = m_pMeasSeqItemEngine->GetShareMemoryMgrPtr()->GetSharedMemory()->stLotInfo.m_szCellID[0];
+			szSimCell[1] = m_pMeasSeqItemEngine->GetShareMemoryMgrPtr()->GetSharedMemory()->stLotInfo.m_szCellID[1];
+		}
+		CResumeJournal::GetInstance()->AppendSim(szKind, pnAreaNum, pbUse, szSimCell[0], szSimCell[1]);
+	}
+
+	CString strTag = m_pShareItem->GetRecipeEditMgrPtr()->GetSegLogTag(TRUE);
+	if (strTag.IsEmpty() || m_pMeasSeqItemEngine == NULL) return;
+
+	CString strLog;
+	strLog.Format(_T("[HYBRID] result row %s stick(%d) cell(%d,%d) use(%d,%d) row(%d,%d) id(%s,%s)%s"),
+		szKind, GetMeasureStick(), pnCell[0], pnCell[1], pbUse[0] ? 1 : 0, pbUse[1] ? 1 : 0, pnAreaNum[0], pnAreaNum[1],
+		m_pMeasSeqItemEngine->GetShareMemoryMgrPtr()->GetSharedMemory()->stLotInfo.m_szCellID[0],
+		m_pMeasSeqItemEngine->GetShareMemoryMgrPtr()->GetSharedMemory()->stLotInfo.m_szCellID[1], (LPCTSTR)strTag);
 	m_pShareItem->GetLogFileAccessorPtr()->KMLOG(SYST, strLog);
 }
 
@@ -2174,6 +2703,7 @@ bool CDoWorkGlassMeasureStep_Measure_WAD::Run()
 		bMeasProbe[1] = true;
 
 		int nMeasArea = 0;
+#if 0	// LYS 2026-10-13 manual meas = CycleTest positions (A2 WAD group): original, kept for reference - revert = #if 1
 		double dGantryGap = 0, dHeadGap = 0, dHeadGapRcp = 0;
 	//	m_pShareItem->GetMaintControlMgrPtr()->GetInterlockPos(&dGantryGap, &dHeadGap, nullptr);
 		m_pShareItem->GetMaintControlMgrPtr()->GetInterlockPos(&dGantryGap, nullptr, nullptr, &dHeadGap);	// 2023.03.08 change
@@ -2410,6 +2940,34 @@ bool CDoWorkGlassMeasureStep_Measure_WAD::Run()
 
 		delete[] pbSet;
 		delete[] pnPair;	// LYS 2026-09-14
+#else	// LYS 2026-10-13 manual meas = CycleTest positions (A2 WAD group): shared builder (DoWorkGlassMeasureStep.h)
+		// LYS 2026-10-13 manual meas = CycleTest positions: the group build above moved to MeasBuildGroups (mode 0), which
+		//   CDlgSubManual_Meas calls too. Same reads, same filter, same two log calls in the same order, same groups.
+		//   Locals the step uses below: pRecipeData / iStick / nArea / nMaxStick / vecMeasGroup (declared here as before).
+		S_RecipeData* pRecipeData;
+		pRecipeData = m_pShareItem->GetRecipeEditMgrPtr()->GetRecipeData();
+		int iStick = 0, nArea = 0, nMaxStick = 0;
+		iStick = GetMeasureStick();
+		nArea = pRecipeData->m_vecStick[iStick].m_vecCell.size();
+		nMaxStick = pRecipeData->m_vecStick.size();
+
+		vector <S_MeasPos>	vecMeasGroup; //MeasGroup
+		{
+			// per-cell filter of the original pair loop (aging mask [MASECELL] + sampling), same conditions as before
+			bool* pbUse = new bool[nArea];
+			for (int iCell = 0; iCell < nArea; iCell++)
+			{
+				pbUse[iCell] = true;
+				if (IsAgingCellSkip(enumAgingMeasKind_WAD, iCell))
+					pbUse[iCell] = false;
+				if (bUseSampling == true && pRecipeData->m_vecStick[iStick].m_vecCell[iCell].m_nSelectCell[M_SPEC] != 1)
+					pbUse[iCell] = false;
+			}
+			MeasBuildGroups(0, m_pShareItem->GetPositionConfigMgrPtr(), m_pShareItem->GetMaintControlMgrPtr(), pReciepInfo, pRecipeData,
+				iStick, pbUse, _T("WAD"), vecMeasGroup);
+			delete[] pbUse;
+		}
+#endif	// LYS 2026-10-13 manual meas = CycleTest positions (A2 WAD group)
 
 		long nRet = df_MOTION_RV_SUCCESSED;
 		nMeasArea = (int)vecMeasGroup.size();
@@ -2538,7 +3096,7 @@ bool CDoWorkGlassMeasureStep_Measure_WAD::Run()
 								iCellStatus == df_CELLSTATE_PTP_OPEN ||		// PTP
 								iCellStatus == df_CELLSTATE_OST_SHORT ||		// OST
 								iCellStatus == df_CELLSTATE_OST_OPEN ||		// OST
-								iCellStatus == df_CELLSTATE_AGING_NG  			// AGING
+								(iCellStatus == df_CELLSTATE_AGING_NG && m_pShareItem->GetRecipeEditMgrPtr()->IsEfaReAged(nCellNum, m_pShareItem->GetRecipeEditMgrPtr()->ToCellStatusStick(nMeasStick)) == false)	// AGING (LYS 2026-10-12 EFA T1: a re-aged T0-measured cell is measured even after AGING NG, as OCP_EFA)
 								)
 							{
 								bMeasProbe[iProbe] = false;
@@ -2594,7 +3152,7 @@ bool CDoWorkGlassMeasureStep_Measure_WAD::Run()
 					if (nRet == VTM_RV_SUCCESSED && iMeasMode != -1)
 					{
 						//2023.02.23 InnerID 초기화 (1 HEAD 만, 3점 측정시)
-						if (bOneCell) memset(m_pMeasSeqItemEngine->m_pStInnerID[nUseCELLID[0]], 0x00, sizeof(m_pMeasSeqItemEngine->m_pStInnerID[nUseCELLID[0]]));
+						if (bOneCell && nUseCELLID[0] >= 0) memset(m_pMeasSeqItemEngine->m_pStInnerID[nUseCELLID[0]], 0x00, sizeof(m_pMeasSeqItemEngine->m_pStInnerID[nUseCELLID[0]]));	// LYS 2026-10-01 Hybrid Phase 4 (4-1) D4-17 (a) every recipe: a head-2 single cell {-1,c} read m_pStInnerID[-1] (heap header) and zeroed 8 bytes there
 
 						ClearInnerIDForAging(nUseCELLID);	// LYS 2026-08-12 AgingCycle R2
 						GenMeasID(nUseCELLID, bMeasProbe, *cCellID);
@@ -2603,6 +3161,7 @@ bool CDoWorkGlassMeasureStep_Measure_WAD::Run()
 						ZeroMemory(&stPosition, sizeof(stPosition));
 						int nAxis = 0;
 
+#if 0	// LYS 2026-10-13 manual meas = CycleTest positions (A5 WAD move): original, kept for reference - revert = #if 1
 						double dLeft = 0., dRight = 0.;
 						double dLeft2 = 0., dRight2 = 0.;	// 2023.03.08 add
 						bool bDirLtoR = true;
@@ -2724,6 +3283,17 @@ bool CDoWorkGlassMeasureStep_Measure_WAD::Run()
 							stPosition[7].dPosition = (pReciepInfo != nullptr) ? pReciepInfo->m_sMotionSubZ.m_fWadSubzLeft : 0.0;
 						}
 
+#else	// LYS 2026-10-13 manual meas = CycleTest positions (A5 WAD move): shared builder (DoWorkGlassMeasureStep.h)
+						// LYS 2026-10-13 manual meas = CycleTest positions: the move array above moved to MeasBuildMovePos (mode 0), shared with
+						//   CDlgSubManual_Meas. bFirst = (bMoveFirstDone == false). The array was zeroed above as before (ZeroMemory).
+						//   dLeft / dRight come back for SetMeasPos below. The bOneCell k-sweep is not carried over: nOneCellCnt is fixed to 1
+						//   (2026-08-18), so k == 0 and its only effect was dRight = dRight - (fCellRatio * 0.0), which leaves dRight unchanged.
+						double dLeft = 0., dRight = 0.;
+						nAxis = MeasBuildMovePos(0, vecMeasGroup[i], nMeasArea, bMoveFirstDone == false,
+							(m_pShareItem->GetSystemConfigMgrPtr() && m_pShareItem->GetSystemConfigMgrPtr()->IsOCP()), pReciepInfo, dOffsetX,
+							stPosition, (int)_countof(stPosition), &dLeft, &dRight);
+
+#endif	// LYS 2026-10-13 manual meas = CycleTest positions (A5 WAD move)
 						// jsyoon 2022.05.27 add
 						pReciepInfo = m_pShareItem->GetRecipeEditMgrPtr()->GetRecipeInfo();
 						double dXPos = 0.;
@@ -2825,6 +3395,7 @@ bool CDoWorkGlassMeasureStep_Measure_WAD::Run()
 						if (m_pMeasSeqItemEngine != NULL && m_pMeasSeqItemEngine->IsAgingCycleActive())
 							nAgingRep = m_pMeasSeqItemEngine->GetAgingRepeat(enumAgingMeasKind_WAD);
 						int nAgingRow = m_pShareItem->GetRecipeEditMgrPtr()->GetGlassRowBlock(nArea, nMaxStick) * nAgingRep;
+						nAgingRow += m_pShareItem->GetRecipeEditMgrPtr()->GetResultRowBase();	// LYS 2026-10-01 Hybrid Phase 4 (4-1) segBase = rows of the segments before this one (1 segment: 0). Both branches below add nAgingRow
 
 						if (bOneCell) {
 							// LYS 2026-08-18 nOneCellCnt는 1 고정(bOneCell 폐기)이라 k는 항상 0이고
@@ -2832,6 +3403,8 @@ bool CDoWorkGlassMeasureStep_Measure_WAD::Run()
 							// (이전 주석의 "nMeasArea == 1이면 셀 1개"는 오기 - 2Head GROUP 수다.)
 							nAreaNum[0] = nUseCELLID[0] + (nArea * nMeasStick) + 1 + (nMaxStick * k) + nAgingRow;
 							nAreaNum[1] = nUseCELLID[0] + (nArea * nMeasStick) + 1 + (nMaxStick * k) + nAgingRow;
+							if (m_pShareItem->GetRecipeEditMgrPtr()->GetCellIdLetterBase() >= 0 && nUseCELLID[1] >= 0)	// LYS 2026-10-01 Hybrid Phase 4 (4-1) head 2 writes its own cell's row (1 segment: the line above, D4-16)
+								nAreaNum[1] = nUseCELLID[1] + (nArea * nMeasStick) + 1 + (nMaxStick * k) + nAgingRow;
 							//nAreaNum[1] = nUseCELLID[1] + (nArea * nMeasStick) + 1;
 
 							if (k >= 3) {
@@ -2845,6 +3418,7 @@ bool CDoWorkGlassMeasureStep_Measure_WAD::Run()
 						}
 						m_pShareItem->GetCommTcpIpFactoryMgr()->SetMeasUseInfo(bMeasProbe, nAreaNum, nTimeOut);
 						LogAgingRow(enumAgingMeasKind_WAD, _T("WAD"), nAreaNum);	// LYS 2026-08-12 AgingCycle R1
+						LogHybridRow(_T("WAD"), nUseCELLID, bMeasProbe, nAreaNum);	// LYS 2026-10-01 Hybrid Phase 4 (4-1) (1 segment: no line)
 						//
 
 						//nRet = m_pShareItem->GetCommTcpIpFactoryMgr()->DoWorkInspectStart(enumTCPIpFactorytID_WAD, iMeasMode);
@@ -3027,8 +3601,12 @@ bool CDoWorkGlassMeasureStep_Measure_WAD::Run()
 								nAreaNumM[0] = nUseCELLID[0] + (nArea * nMeasStick) + 1 + (m_pShareItem->GetRecipeEditMgrPtr()->GetGlassRowBlock(nArea, nMaxStick) * ip);
 								nAreaNumM[1] = nUseCELLID[1] + (nArea * nMeasStick) + 1 + (m_pShareItem->GetRecipeEditMgrPtr()->GetGlassRowBlock(nArea, nMaxStick) * ip);
 								}
+								// LYS 2026-10-01 Hybrid Phase 4 (4-1) segBase for both layouts above (1 segment: 0)
+								nAreaNumM[0] += m_pShareItem->GetRecipeEditMgrPtr()->GetResultRowBase();
+								nAreaNumM[1] += m_pShareItem->GetRecipeEditMgrPtr()->GetResultRowBase();
 								m_pShareItem->GetCommTcpIpFactoryMgr()->SetMeasUseInfo(bMeasProbe, nAreaNumM, nTimeOut);
 								LogAgingRow(enumAgingMeasKind_WAD, _T("WAD-MP"), nAreaNumM);	// LYS 2026-08-12 AgingCycle R1
+								LogHybridRow(_T("WAD-MP"), nUseCELLID, bMeasProbe, nAreaNumM);	// LYS 2026-10-01 Hybrid Phase 4 (4-1) (1 segment: no line)
 
 								// LYS 2026-08-18 MultiPoint trace (see the base-point log above)
 								for (int pl = 0; pl < df_MAX_PROBE; pl++)
@@ -3150,6 +3728,7 @@ bool CDoWorkGlassMeasureStep_Measure_VISION::Run()
 		bMeasProbe[1] = true;
 
 		int nMeasArea = 0;
+#if 0	// LYS 2026-10-13 manual meas = CycleTest positions (A3 VISION group): original, kept for reference - revert = #if 1
 		double dGantryGap = 0, dHeadGap = 0, dHeadGapRcp = 0;
 		m_pShareItem->GetMaintControlMgrPtr()->GetInterlockPos(&dGantryGap, &dHeadGap, nullptr);
 
@@ -3378,6 +3957,34 @@ bool CDoWorkGlassMeasureStep_Measure_VISION::Run()
 
 		delete[] pbSet;
 		delete[] pnPair;	// LYS 2026-09-14
+#else	// LYS 2026-10-13 manual meas = CycleTest positions (A3 VISION group): shared builder (DoWorkGlassMeasureStep.h)
+		// LYS 2026-10-13 manual meas = CycleTest positions: the group build above moved to MeasBuildGroups (mode 2), which
+		//   CDlgSubManual_Meas calls too. Same reads, same filter, same two log calls in the same order, same groups.
+		//   Locals the step uses below: pRecipeData / iStick / nArea / nMaxStick / vecMeasGroup (declared here as before).
+		S_RecipeData* pRecipeData;
+		pRecipeData = m_pShareItem->GetRecipeEditMgrPtr()->GetRecipeData();
+		int iStick = 0, nArea, nMaxStick = 0;
+		iStick = GetMeasureStick();
+		nArea = pRecipeData->m_vecStick[iStick].m_vecCell.size();
+		nMaxStick = pRecipeData->m_vecStick.size();
+
+		vector <S_MeasPos>	vecMeasGroup; //MeasGroup
+		{
+			// per-cell filter of the original pair loop (aging mask [MASECELL] + sampling), same conditions as before
+			bool* pbUse = new bool[nArea];
+			for (int iCell = 0; iCell < nArea; iCell++)
+			{
+				pbUse[iCell] = true;
+				if (IsAgingCellSkip(enumAgingMeasKind_VISION, iCell))
+					pbUse[iCell] = false;
+				if (bUseSampling == true && pRecipeData->m_vecStick[iStick].m_vecCell[iCell].m_nSelectCell[M_QUALITY] != 1)
+					pbUse[iCell] = false;
+			}
+			MeasBuildGroups(2, m_pShareItem->GetPositionConfigMgrPtr(), m_pShareItem->GetMaintControlMgrPtr(), pReciepInfo, pRecipeData,
+				iStick, pbUse, _T("VISION"), vecMeasGroup);
+			delete[] pbUse;
+		}
+#endif	// LYS 2026-10-13 manual meas = CycleTest positions (A3 VISION group)
 
 		double dGlassSize = 0; // 925 / 2;
 		long nRet = df_MOTION_RV_SUCCESSED;
@@ -3418,6 +4025,8 @@ bool CDoWorkGlassMeasureStep_Measure_VISION::Run()
 
 				if (nUseCELLID[0] < 0) bMeasProbe[0] = false;
 				if (nUseCELLID[1] < 0) bMeasProbe[1] = false;
+				if (nMeasArea == 1 && nUseCELLID[0] < 0 && m_pShareItem->GetRecipeEditMgrPtr()->GetCellIdLetterBase() >= 0)	// LYS 2026-10-01 Hybrid Phase 4 (4-1) (review B1)
+					nUseCELLID[0] = nUseCELLID[1];	// one VISION group: both cameras image this cell and device 0 is the master (row / cell ID / nCellStatus). Head-2 single cell left -1 here (1 segment: unchanged)
 
 
 				int nCellNum = 0;
@@ -3477,7 +4086,7 @@ bool CDoWorkGlassMeasureStep_Measure_VISION::Run()
 							iCellStatus == df_CELLSTATE_PTP_OPEN  ||		// PTP
 							iCellStatus == df_CELLSTATE_OST_SHORT ||		// OST
 							iCellStatus == df_CELLSTATE_OST_OPEN  ||		// OST
-							iCellStatus == df_CELLSTATE_AGING_NG  			// AGING
+							(iCellStatus == df_CELLSTATE_AGING_NG && m_pShareItem->GetRecipeEditMgrPtr()->IsEfaReAged(nCellNum, m_pShareItem->GetRecipeEditMgrPtr()->ToCellStatusStick(nMeasStick)) == false)	// AGING (LYS 2026-10-12 EFA T1: a re-aged T0-measured cell is measured even after AGING NG, as OCP_EFA)
 							)
 						{
 							bMeasProbe[iProbe] = false;
@@ -3601,6 +4210,7 @@ bool CDoWorkGlassMeasureStep_Measure_VISION::Run()
 					}
 					
 	
+#if 0	// LYS 2026-10-13 manual meas = CycleTest positions (A6 VISION move): original, kept for reference - revert = #if 1
 					int nAxis = 0;
 					double dLeft = 0., dRight = 0.;
 					double dLeft2 = 0., dRight2 = 0.;
@@ -3719,6 +4329,16 @@ bool CDoWorkGlassMeasureStep_Measure_VISION::Run()
 						stPosition[14].dPosition = (pReciepInfo != nullptr) ? pReciepInfo->m_sMotionSubZ.m_fVisionSubzLeft : 0.0;
 					}
 
+#else	// LYS 2026-10-13 manual meas = CycleTest positions (A6 VISION move): shared builder (DoWorkGlassMeasureStep.h)
+					// LYS 2026-10-13 manual meas = CycleTest positions: the move array above moved to MeasBuildMovePos (mode 2), shared with
+					//   CDlgSubManual_Meas. bFirst = (bMoveFirst == false). The array was zeroed above as before (ZeroMemory).
+					int nAxis = 0;
+					double dLeft = 0., dRight = 0.;
+					nAxis = MeasBuildMovePos(2, vecMeasGroup[i], nMeasArea, bMoveFirst == false,
+						(m_pShareItem->GetSystemConfigMgrPtr() && m_pShareItem->GetSystemConfigMgrPtr()->IsOCP()), pReciepInfo, dOffsetX,
+						stPosition, (int)_countof(stPosition), &dLeft, &dRight);
+
+#endif	// LYS 2026-10-13 manual meas = CycleTest positions (A6 VISION move)
 					/*!
 					* 이동시 Cross 축만 모션 완료 확인을 나중에 한다
 					*/
@@ -3842,7 +4462,8 @@ bool CDoWorkGlassMeasureStep_Measure_VISION::Run()
 					}
 
 					// Change Recipe Done
-					if (iStick == 0 && i == 0)
+					bool bResumeVisWait = (i == 0) && CResumeJournal::GetInstance()->ConsumeResumeVisionWait();	// LYS 2026-10-08 Hybrid Phase 5 (D5-15) first VISION after a journal resume waits once, whatever the stick (flag bound to the armed generation; normal runs: never set -> false, no lock)
+					if ((iStick == 0 || bResumeVisWait) && i == 0 && m_pShareItem->GetRecipeEditMgrPtr()->TakeVisionRcpWait())	// LYS 2026-10-01 Hybrid Phase 4 (4-7) hybrid: once per glass (MOT.RECIPE.CHANGE is sent once, RECIPE_CHANGE_OK auto-resets); 1 segment: every stick 0 as before
 					{
 						DWORD dwTimeOut = DEFINE_RECIPE_WAIT_TIME2; // 60; // jsyoon 2022.09.26 change Recipe Wait Time
 
@@ -3863,6 +4484,7 @@ bool CDoWorkGlassMeasureStep_Measure_VISION::Run()
 					int nAgingRow = 0;
 					if (m_pMeasSeqItemEngine != NULL && m_pMeasSeqItemEngine->IsAgingCycleActive())
 						nAgingRow = m_pShareItem->GetRecipeEditMgrPtr()->GetGlassRowBlock(nArea, nMaxStick) * m_pMeasSeqItemEngine->GetAgingRepeat(enumAgingMeasKind_VISION);
+					nAgingRow += m_pShareItem->GetRecipeEditMgrPtr()->GetResultRowBase();	// LYS 2026-10-01 Hybrid Phase 4 (4-1) segBase (1 segment: 0). Added only where a row is computed - the -1 "no row" stays -1
 					//nAreaNum[0] = cellFirst.m_nArea + (nArea * iStick);
 					//nAreaNum[1] = cellSecond.m_nArea + (nArea * iStick);
 
@@ -3888,6 +4510,11 @@ bool CDoWorkGlassMeasureStep_Measure_VISION::Run()
 					
 					m_pShareItem->GetCommTcpIpFactoryMgr()->SetMeasUseInfo(bMeasProbe, nAreaNum, nTimeOut);
 					LogAgingRow(enumAgingMeasKind_VISION, _T("VISION"), nAreaNum);	// LYS 2026-08-12 AgingCycle R1
+					{	// LYS 2026-10-01 Hybrid Phase 4 (4-1) use = this device's result is written (VISION drops row -1); one group (nMeasArea == 1): both cameras grab cell 0's slot
+						int nLogCell[2] = { nUseCELLID[0], (nMeasArea == 1) ? nUseCELLID[0] : nUseCELLID[1] };
+						bool bLogUse[2] = { bMeasProbe[0] && nAreaNum[0] >= 0, bMeasProbe[1] && nAreaNum[1] >= 0 };
+						LogHybridRow(_T("VISION"), nLogCell, bLogUse, nAreaNum);
+					}
 					//
 					if (nRet == VTM_RV_SUCCESSED)
 					{
@@ -4314,7 +4941,7 @@ bool CDoWorkGlassMeasureStep_Measure_COLOR::Run()
 								iCellStatus == df_CELLSTATE_PTP_OPEN ||		// PTP
 								iCellStatus == df_CELLSTATE_OST_SHORT ||		// OST
 								iCellStatus == df_CELLSTATE_OST_OPEN ||		// OST
-								iCellStatus == df_CELLSTATE_AGING_NG  			// AGING
+								(iCellStatus == df_CELLSTATE_AGING_NG && m_pShareItem->GetRecipeEditMgrPtr()->IsEfaReAged(nCellNum, m_pShareItem->GetRecipeEditMgrPtr()->ToCellStatusStick(nMeasStick)) == false)	// AGING (LYS 2026-10-12 EFA T1: a re-aged T0-measured cell is measured even after AGING NG, as OCP_EFA)
 								)
 							{
 								bMeasProbe[iProbe] = false;
@@ -4679,6 +5306,7 @@ bool CDoWorkGlassMeasureStep_Measure_ANGLE::Run()
 
 		int nMeasArea = 0;
 
+#if 0	// LYS 2026-10-13 manual meas = CycleTest positions (A4 ANGLE group): original, kept for reference - revert = #if 1
 		double dGantryGap = 0, dHeadGap = 0, dHeadGapRcp = 0;
 	//	m_pShareItem->GetMaintControlMgrPtr()->GetInterlockPos(&dGantryGap, &dHeadGap, nullptr);
 		m_pShareItem->GetMaintControlMgrPtr()->GetInterlockPos(&dGantryGap, nullptr, nullptr, &dHeadGap);	// 2023.03.08 change
@@ -4901,6 +5529,34 @@ bool CDoWorkGlassMeasureStep_Measure_ANGLE::Run()
 
 		delete[] pbSet;
 		delete[] pnPair;	// LYS 2026-09-14
+#else	// LYS 2026-10-13 manual meas = CycleTest positions (A4 ANGLE group): shared builder (DoWorkGlassMeasureStep.h)
+		// LYS 2026-10-13 manual meas = CycleTest positions: the group build above moved to MeasBuildGroups (mode 1), which
+		//   CDlgSubManual_Meas calls too. Same reads, same filter, same two log calls in the same order, same groups.
+		//   Locals the step uses below: pRecipeData / iStick / nArea / nMaxStick / vecMeasGroup (declared here as before).
+		S_RecipeData* pRecipeData;
+		pRecipeData = m_pShareItem->GetRecipeEditMgrPtr()->GetRecipeData();
+		int iStick = 0, nArea, nMaxStick = 0;
+		iStick = GetMeasureStick();
+		nArea = pRecipeData->m_vecStick[iStick].m_vecCell.size();
+		nMaxStick = pRecipeData->m_vecStick.size();
+
+		vector <S_MeasPos>	vecMeasGroup; //MeasGroup
+		{
+			// per-cell filter of the original pair loop (aging mask [MASECELL] + sampling), same conditions as before
+			bool* pbUse = new bool[nArea];
+			for (int iCell = 0; iCell < nArea; iCell++)
+			{
+				pbUse[iCell] = true;
+				if (IsAgingCellSkip(enumAgingMeasKind_ANGLE, iCell))
+					pbUse[iCell] = false;
+				if (bUseSampling == true && pRecipeData->m_vecStick[iStick].m_vecCell[iCell].m_nSelectCell[M_ANGLE] != 1)
+					pbUse[iCell] = false;
+			}
+			MeasBuildGroups(1, m_pShareItem->GetPositionConfigMgrPtr(), m_pShareItem->GetMaintControlMgrPtr(), pReciepInfo, pRecipeData,
+				iStick, pbUse, _T("ANGLE"), vecMeasGroup);
+			delete[] pbUse;
+		}
+#endif	// LYS 2026-10-13 manual meas = CycleTest positions (A4 ANGLE group)
 
 		double dGlassSize = 0;//925 / 2;
 		long nRet = df_MOTION_RV_SUCCESSED;
@@ -4975,7 +5631,7 @@ bool CDoWorkGlassMeasureStep_Measure_ANGLE::Run()
 							iCellStatus == df_CELLSTATE_PTP_OPEN ||		// PTP
 							iCellStatus == df_CELLSTATE_OST_SHORT ||		// OST
 							iCellStatus == df_CELLSTATE_OST_OPEN ||		// OST
-							iCellStatus == df_CELLSTATE_AGING_NG  			// AGING
+							(iCellStatus == df_CELLSTATE_AGING_NG && m_pShareItem->GetRecipeEditMgrPtr()->IsEfaReAged(nCellNum, m_pShareItem->GetRecipeEditMgrPtr()->ToCellStatusStick(nMeasStick)) == false)	// AGING (LYS 2026-10-12 EFA T1: a re-aged T0-measured cell is measured even after AGING NG, as OCP_EFA)
 							)
 						{
 							bMeasProbe[iProbe] = false;
@@ -5072,6 +5728,7 @@ bool CDoWorkGlassMeasureStep_Measure_ANGLE::Run()
 					ZeroMemory(&stPosition, sizeof(stPosition));
 					int nAxis = 0;
 
+#if 0	// LYS 2026-10-13 manual meas = CycleTest positions (A7 ANGLE move): original, kept for reference - revert = #if 1
 					double dLeft = 0., dRight = 0.;
 					double dLeft2 = 0., dRight2 = 0.;	// 2023.03.08 add
 					bool bDirLtoR = true;
@@ -5203,6 +5860,17 @@ bool CDoWorkGlassMeasureStep_Measure_ANGLE::Run()
 						}
 					}
 
+#else	// LYS 2026-10-13 manual meas = CycleTest positions (A7 ANGLE move): shared builder (DoWorkGlassMeasureStep.h)
+					// LYS 2026-10-13 manual meas = CycleTest positions: the move array above moved to MeasBuildMovePos (mode 1), shared with
+					//   CDlgSubManual_Meas. bFirst = (bMoveFirstDone == false). The array was zeroed above as before (ZeroMemory).
+					//   First move: slots 0/1 stay as zeroed (AXIS_X 0.0) - the wait loop below reads them - and Z3/Z4 = 0 in slots 19/20
+					//   stay outside nAxis (19), as in the original.
+					double dLeft = 0., dRight = 0.;
+					nAxis = MeasBuildMovePos(1, vecMeasGroup[i], nMeasArea, bMoveFirstDone == false,
+						(m_pShareItem->GetSystemConfigMgrPtr() && m_pShareItem->GetSystemConfigMgrPtr()->IsOCP()), pReciepInfo, dOffsetX,
+						stPosition, (int)_countof(stPosition), &dLeft, &dRight);
+
+#endif	// LYS 2026-10-13 manual meas = CycleTest positions (A7 ANGLE move)
 					/*!
 					* 이동시 Cross 축만 모션 완료 확인을 나중에 한다
 					*/
@@ -5294,12 +5962,14 @@ bool CDoWorkGlassMeasureStep_Measure_ANGLE::Run()
 					int nAgingRow = 0;
 					if (m_pMeasSeqItemEngine != NULL && m_pMeasSeqItemEngine->IsAgingCycleActive())
 						nAgingRow = m_pShareItem->GetRecipeEditMgrPtr()->GetGlassRowBlock(nArea, nMaxStick) * m_pMeasSeqItemEngine->GetAgingRepeat(enumAgingMeasKind_ANGLE);
+					nAgingRow += m_pShareItem->GetRecipeEditMgrPtr()->GetResultRowBase();	// LYS 2026-10-01 Hybrid Phase 4 (4-1) segBase (1 segment: 0)
 					//nAreaNum[0] = cellFirst.m_nArea + (nArea * iStick);
 					//nAreaNum[1] = cellSecond.m_nArea + (nArea * iStick);
 					nAreaNum[0] = nUseCELLID[0] + (nArea * nMeasStick) + 1 + nAgingRow;
 					nAreaNum[1] = nUseCELLID[1] + (nArea * nMeasStick) + 1 + nAgingRow;
 					m_pShareItem->GetCommTcpIpFactoryMgr()->SetMeasUseInfo(bMeasProbe, nAreaNum, nTimeOut);
 					LogAgingRow(enumAgingMeasKind_ANGLE, _T("ANGLE"), nAreaNum);	// LYS 2026-08-12 AgingCycle R1
+					LogHybridRow(_T("ANGLE"), nUseCELLID, bMeasProbe, nAreaNum);	// LYS 2026-10-01 Hybrid Phase 4 (4-1) (1 segment: no line)
 					//
 
 					nRet = m_pShareItem->GetCommTcpIpFactoryMgr()->DoWorkInspectStart(enumTCPIpFactorytID_ANGLE, iMeasMode, nTimeOut);
@@ -5777,7 +6447,7 @@ bool CDoWorkGlassMeasureStep_Measure_VISION_COLOR::Run()
 							iCellStatus == df_CELLSTATE_PTP_OPEN ||		// PTP
 							iCellStatus == df_CELLSTATE_OST_SHORT ||		// OST
 							iCellStatus == df_CELLSTATE_OST_OPEN ||		// OST
-							iCellStatus == df_CELLSTATE_AGING_NG  			// AGING
+							(iCellStatus == df_CELLSTATE_AGING_NG && m_pShareItem->GetRecipeEditMgrPtr()->IsEfaReAged(nCellNum, m_pShareItem->GetRecipeEditMgrPtr()->ToCellStatusStick(nMeasStick)) == false)	// AGING (LYS 2026-10-12 EFA T1: a re-aged T0-measured cell is measured even after AGING NG, as OCP_EFA)
 							)
 						{
 							bMeasProbe[iProbe] = false;

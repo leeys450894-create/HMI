@@ -42,6 +42,17 @@ CRecipeEditMgr::CRecipeEditMgr(stAuroraMgrPool &MgrPool)
 	m_nActiveSegCache = 0;
 	m_nSegRowBaseCache = 0;
 	m_nEfaGlassLatch = -1;	// LYS 2026-09-30 Hybrid 3c A5 not latched
+	m_nUiPass = -1;	// LYS 2026-10-12 Hybrid Phase 6 screen progress: outside the measure loop (owner = ThreadRun; RecipeChange does not reset it)
+	m_nUiPassCount = 0;
+	m_nUiSeg = -1;
+	m_nUiSegReady = 0;
+	m_nSegLetterBaseCache = 0;	// LYS 2026-10-01 Hybrid Phase 4 (4-0) cell ID letter base cache
+	m_nResultSaveLatch = -1;	// LYS 2026-10-01 Hybrid Phase 4 (4-0) result save gate not latched
+	m_nVisionRcpWaitLatch = 0;	// LYS 2026-10-01 Hybrid Phase 4 (4-7) VISION recipe-done wait not taken
+	m_nCellIdLatch = -1;	// LYS 2026-10-01 Hybrid Phase 4b not checked
+	m_nCellIdLatchSeq = 0;
+	m_nEfaCurPass = 0;	// LYS 2026-10-12 EFA T1 AGING S: no EFA pass running
+	memset(m_byEfaReAged, 0, sizeof(m_byEfaReAged));	// LYS 2026-10-12 no cell re-aged
 
 	//----------------------------------------------------------------------
 	// Thread 생성
@@ -131,12 +142,19 @@ int CRecipeEditMgr::RecipeChange(CString strRecipeID)
 
 
 //	m_pRecipeFunc = GetRecipeMgr(); //220317
+	// LYS 2026-10-01 Hybrid Phase 4b D-15 latch reset BEFORE the load (review C2): latch 1 never sits next to a config that is being replaced,
+	//   and a failed / rolled-back load leaves it cleared too (the Recipe Change step checks again)
+	m_nCellIdLatch = -1;	// LYS 2026-10-01 Hybrid Phase 4b new recipe / new glass: the Recipe Change step checks again
 	if (m_pRecipeFunc->LoadRcpFile(strRecipeID) != TRUE)
 	{
 		return  JOB_RECIPE_NOT_EXIST;
 	}
 	SyncCellStatusStickBase();	// LYS 2026-09-29 Hybrid 3b A8 LoadRcpFile activates segment 0 -> base 0
 	m_nEfaGlassLatch = -1;	// LYS 2026-09-30 Hybrid 3c A5 new recipe / new glass: the next measure start latches again
+	m_nEfaCurPass = 0;	// LYS 2026-10-12 new recipe / new glass: no EFA pass running (the measure thread sets it per pass)
+	memset(m_byEfaReAged, 0, sizeof(m_byEfaReAged));	// LYS 2026-10-12 no cell re-aged
+	m_nResultSaveLatch = -1;	// LYS 2026-10-01 Hybrid Phase 4 (4-0) new recipe / new glass: Recipe Change latches again (hybrid only)
+	m_nVisionRcpWaitLatch = 0;	// LYS 2026-10-01 Hybrid Phase 4 (4-7) new recipe / new glass: the Recipe Change step sends the VISION recipe again -> one wait again
 
 	CString strAlignRecipe;
 	strAlignRecipe.Format(_T("%s"), GetRecipeInfo()->m_sOptionItem.m_chAlignName);
@@ -350,6 +368,12 @@ void CRecipeEditMgr::SyncCellStatusStickBase()
 	m_nSegCountCache = nSegCnt;
 	m_nActiveSegCache = nActSeg;
 	m_nSegRowBaseCache = nRowBase;
+
+	// LYS 2026-10-01 Hybrid Phase 4 (4-0) cell ID letter carry (ICP BuildAutoCellIds: segment index order, not run order). <= 1 segment: nActSeg 0 -> 0
+	int nLetterBase = 0;
+	for (int k = 0; k < nActSeg && k < nSegCnt; k++)
+		nLetterBase += SegCellIdLetterExtent(m_pRecipeFunc, k);
+	m_nSegLetterBaseCache = nLetterBase;
 }
 
 int CRecipeEditMgr::ToCellStatusStick(int nLocalStick) const
@@ -379,6 +403,116 @@ CString CRecipeEditMgr::GetSegLogTag(BOOL bRowBase) const
 	if (bRowBase) strTag.Format(_T(" seg(%d/%d) rowbase(%d)"), m_nActiveSegCache + 1, m_nSegCountCache, m_nSegRowBaseCache);
 	else          strTag.Format(_T(" seg(%d/%d)"), m_nActiveSegCache + 1, m_nSegCountCache);
 	return strTag;
+}
+
+// LYS 2026-10-01 Hybrid Phase 4 (4-0) (docs/HybridGlass_Porting_Plan.md 5.7). Same guard as GetSegLogTag: int caches + vector size only,
+//   so any thread may call them and a stale cache (CDlgTestMode reload without RecipeChange) never leaks into a 1-segment recipe.
+int CRecipeEditMgr::GetResultRowBase() const
+{
+	if (m_nSegCountCache <= 1 || m_pRecipeFunc == NULL || m_pRecipeFunc->GetSegmentLoopCount() <= 1) return 0;
+	return m_nSegRowBaseCache;
+}
+
+int CRecipeEditMgr::GetCellIdLetterBase() const
+{
+	if (m_nSegCountCache <= 1 || m_pRecipeFunc == NULL || m_pRecipeFunc->GetSegmentLoopCount() <= 1) return -1;
+	return m_nSegLetterBaseCache;
+}
+
+int CRecipeEditMgr::GetResultSaveLatch() const
+{
+	if (m_nSegCountCache <= 1 || m_pRecipeFunc == NULL || m_pRecipeFunc->GetSegmentLoopCount() <= 1) return -1;
+	return m_nResultSaveLatch;
+}
+
+// LYS 2026-10-01 Hybrid Phase 4 (4-0) bijective base-26 (ICP RecipeFunc.cpp:869 CellIdLetterPrefix): 0 A .. 25 Z, 26 AA, 40 AO, 51 AZ, 52 BA, 701 ZZ, 702 AAA
+//   negative -> "@" (the legacy "%c" of 65 - 1): never a real cell's letter (review B1 - clamping to 'A' named a real cell)
+CString CRecipeEditMgr::CellIdLetterPrefix(int nIndex)
+{
+	return SegCellIdLetterPrefix(nIndex);	// LYS 2026-10-01 Hybrid Phase 4b one copy in SegmentDefine.h shared with the DLL editor (D4b-11) - same algorithm, same output
+}
+
+// LYS 2026-10-01 Hybrid Phase 4 (4-0) letters one segment uses = the MakeCellID letter axis: rotate 1 -> cells per stick (stick 0, uniform by file format),
+//   else sticks. Reads the segment vectors - sequence thread (SyncCellStatusStickBase, Recipe Change) or UI GenGlassPath only.
+int CRecipeEditMgr::SegCellIdLetterExtent(C_OutRecipeFunc* pFunc, int nSeg)
+{
+	if (pFunc == NULL) return 0;
+	return (pFunc->GetSegmentRotate(nSeg) == 1) ? pFunc->GetSegmentCellCount(nSeg) : pFunc->GetSegmentStickCount(nSeg);
+}
+
+// LYS 2026-10-01 Hybrid Phase 4 (4-7) devices any segment needs (D4-18, review B2) - same flag -> device mapping as the Recipe Change /
+//   PreMeas flag lines. Sequence thread only (reads the segment vectors). FALSE = recipe with <= 1 segment -> pbMeasMode untouched
+BOOL CRecipeEditMgr::OrSegmentMeasMode(bool* pbMeasMode, CString* pstrLog)
+{
+	if (pbMeasMode == NULL || m_pRecipeFunc == NULL || m_pRecipeFunc->GetSegmentCount() <= 1) return FALSE;
+	for (int k = 0; k < m_pRecipeFunc->GetSegmentCount(); k++)
+	{
+		S_RecipeMgr* pSeg = m_pRecipeFunc->GetSegmentMgr(k);
+		if (pSeg == NULL) continue;
+		const S_InspectItem& sItem = pSeg->m_sInfo.m_sInspectItem;
+		if (sItem.m_bUseAgingTest_2 == TRUE) pbMeasMode[enumMEASURE_MODE_AGING] = true;
+		if (sItem.m_bUseSpec_3 == TRUE)      pbMeasMode[enumMEASURE_MODE_WAD] = true;
+		if (sItem.m_bUseQuality_4 == TRUE)   pbMeasMode[enumMEASURE_MODE_VISION] = true;
+		if (sItem.m_bUseColor_5 == TRUE)     pbMeasMode[enumMEASURE_MODE_COLOR] = true;
+		if (sItem.m_bUseAngle_6 == TRUE)     pbMeasMode[enumMEASURE_MODE_ANGLE] = true;
+		if (sItem.m_bUseTSP_7 == TRUE)       pbMeasMode[enumMEASURE_MODE_TSP] = true;
+		if (sItem.m_bUsePre_0 == TRUE || sItem.m_bUseElect_1 == TRUE || sItem.m_bUseAgingTest_2 == TRUE) pbMeasMode[enumMEASURE_MODE_PG] = true;
+	}
+	if (pstrLog != NULL)
+		pstrLog->Format(_T(" PG %d AGING %d WAD %d VISION %d"), pbMeasMode[enumMEASURE_MODE_PG] ? 1 : 0, pbMeasMode[enumMEASURE_MODE_AGING] ? 1 : 0,
+			pbMeasMode[enumMEASURE_MODE_WAD] ? 1 : 0, pbMeasMode[enumMEASURE_MODE_VISION] ? 1 : 0);
+	return TRUE;
+}
+
+// LYS 2026-10-01 Hybrid Phase 4 (4-7) VISION recipe-done wait once per glass on a hybrid recipe (measure thread): the Recipe Change step sends
+//   the VISION recipe once and RECIPE_CHANGE_OK is an auto-reset event, so a second wait (stick 0 of a later segment) would end in HEAD_ACK_TIMEOUT.
+//   Recipe with <= 1 segment: always true (every stick 0 waits as before). RecipeChange resets the latch
+bool CRecipeEditMgr::TakeVisionRcpWait()
+{
+	if (m_nSegCountCache <= 1 || m_pRecipeFunc == NULL || m_pRecipeFunc->GetSegmentLoopCount() <= 1) return true;
+	if (m_nVisionRcpWaitLatch != 0) return false;
+	m_nVisionRcpWaitLatch = 1;
+	return true;
+}
+
+// LYS 2026-10-01 Hybrid Phase 4b (5.7) GenCellID hook. Manual / derived token only while the Recipe Change check (D-15) still holds:
+//   latch 1 + the same Out load serial (no CIM PPID / DLL TestMode reload since) + the same Glass ID. Latch 0 (Auto/Auto) -> false at once
+//   (HARD RULE path). A manual config that is not (or no longer) validated -> one WARN, then Auto IDs for the rest of the glass.
+//   Cell -1 (resting head) -> false (Phase 4 "@" behaviour kept)
+bool CRecipeEditMgr::GetManualCellToken(bool bPanelB, int nStick, int nCell, const CString& strGlassID, CString& strToken)
+{
+	strToken.Empty();
+	if (m_nCellIdLatch == 0 || m_nCellIdLatch == 2 || m_pRecipeFunc == NULL) return false;
+	bool bLoadRace = false;	// LYS 2026-10-01 Hybrid Phase 4b review fix: a LoadRcpFile ran (or still runs) in another thread during this read
+	if (m_nCellIdLatch == 1 && m_pRecipeFunc->GetRcpLoadSeq() == m_nCellIdLatchSeq && strGlassID == m_strCellIdLatchGlass)
+	{
+		if (nStick < 0 || nCell < 0) return false;
+		// LYS 2026-10-01 Hybrid Phase 4b review fix: a CIM PPID / DLL TestMode LoadRcpFile clears and refills the vectors ResolveCellToken walks
+		//   -> no read while one runs, and the token is dropped when a load started or ended meanwhile (try count first, then the busy count)
+		int nLoadTry = m_pRecipeFunc->GetRcpLoadTry();
+		if (m_pRecipeFunc->IsRcpLoadBusy() != TRUE)
+		{
+			int nRes = m_pRecipeFunc->ResolveCellToken(GetActiveSegment(), nStick, nCell, bPanelB ? 1 : 0, strToken);
+			if (m_pRecipeFunc->IsRcpLoadBusy() != TRUE && m_pRecipeFunc->GetRcpLoadTry() == nLoadTry && m_pRecipeFunc->GetRcpLoadSeq() == m_nCellIdLatchSeq)
+			{
+				if (nRes != 1) return false;
+				return (strToken.IsEmpty() != true);
+			}
+			strToken.Empty();	// may come from a half-written config
+		}
+		bLoadRace = true;
+	}
+	if (bLoadRace != true && m_pRecipeFunc->IsCellIdDefault()) return false;	// Auto/Auto in memory: nothing to warn about, no log
+	CString strLog;
+	if (bLoadRace)	// latch 1 = the checked config was manual: warn even when the reload brought an Auto/Auto recipe
+		strLog.Format(_T("[CELLID] recipe reload during the cell ID read (latch %d, recipe load %d/%d, GlassID %s) - Auto cell IDs from here"),
+			(int)m_nCellIdLatch, m_nCellIdLatchSeq, m_pRecipeFunc->GetRcpLoadSeq(), strGlassID.GetString());
+	else
+		strLog.Format(_T("[CELLID] manual cell ID config not validated for this glass (latch %d, recipe load %d/%d, GlassID %s/%s) - Auto cell IDs from here"),
+			(int)m_nCellIdLatch, m_nCellIdLatchSeq, m_pRecipeFunc->GetRcpLoadSeq(), m_strCellIdLatchGlass.GetString(), strGlassID.GetString());
+	CLogWrapper::GetInstance()->KMLOG(WARN, strLog);
+	m_nCellIdLatch = 2;	// once per glass (the next RecipeChange / Recipe Change step resets it)
+	return false;
 }
 
 bool CRecipeEditMgr::SaveRecipe(CString strRecipeID)
@@ -990,6 +1124,52 @@ double CRecipeEditMgr::GetStickProbeZOffset(int iStick)
 	return dOffset;
 }
 
+// LYS 2026-10-13 Hybrid Phase 7 (14)-A hybrid runtime recipe - fix stage (impl review 1): one predicate everywhere = busy ? cache > 1 : live > 1.
+//   Called only inside the command switch of ThreadRun() (this worker set SPS_CYCLETEST there, so it is the only actor). While a LoadRcpFile runs
+//   (DLL TestMode) the segment-count cache int decides; otherwise the live DLL count does: a DLL TestMode reload of a hybrid recipe over a 1-segment
+//   runtime leaves the cache at 1 (CS-3 / C-2) and is hybrid; a 1-segment reload over a hybrid runtime leaves the cache at 2 - that runtime is
+//   1-segment: the cache is re-synced silently here (no log) and the command runs unchanged.
+//   1-segment recipe (cache 1, live 1): false - every Phase 7 branch in ThreadRun() leaves here first, with no log.
+static bool IsHybridRuntimeRcp(CRecipeEditMgr* pRcp)
+{
+	if (pRcp == nullptr) return false;
+	C_OutRecipeFunc* pFunc = pRcp->GetRecipeFuncPtr();
+	if (pFunc == nullptr || pFunc->IsRcpLoadBusy() == TRUE) return (pRcp->GetSegCountCache() > 1);	// load running: the cache int only
+	if (pFunc->GetSegmentLoopCount() > 1) return true;
+	if (pRcp->GetSegCountCache() > 1) pRcp->SyncCellStatusStickBase();	// stale cache over a 1-segment reload: silent re-sync, no log
+	return false;
+}
+
+// LYS 2026-10-13 Hybrid Phase 7 D7-18 R-A for the teach moves (TestMode MOVE, STAGE_MOVE, STAGE_PROBE_MOVE; the caller checks the hybrid
+//   runtime first): dTargetR = the stage R the move gives AXIS_LOADER_R (stick R + offset R, Align coordinate, no modulo - p7x_plan (2-3)).
+//   Glass Align mark differs by > 2.0 deg -> WARN + popup, returns true (the caller ends the command with M_RUN_NG before any axis moves).
+//   No mark (no Glass Align since the last SetGlassAlignXYR / stage vacuum On/Off) -> false.
+static bool RefuseTeachMoveR(CMaintControlMgr* pMaint, LPCTSTR szCmd, double dTargetR)
+{
+	double dRefR = 0.0;
+	if (pMaint == nullptr || pMaint->GetGlassAlignRefR(&dRefR) == false) return false;
+	if (fabs(dTargetR - dRefR) <= 2.0) return false;	// D7-6 2.0 deg = motion layer rotate threshold
+	CString strLog;
+	strLog.Format(_T("[HYBRID] Recipe cmd %s refused - stick R %.3f / align R %.3f"), szCmd, dTargetR, dRefR);
+	CLogWrapper::GetInstance()->KMLOG(WARN, strLog);
+	CString strMsg;
+	strMsg.Format(_T("Glass Align은 R %.1f 방향에서 한 값입니다.\n이동 방향 R %.1f과 달라 이동하지 않습니다.\n\n수동 측정 화면에서 MOVE SAFETY 후 ALIGN 동작을 하십시오."), dRefR, dTargetR);
+	CD_DisplayMessage dlg(strMsg);
+	dlg.DoModal();
+	return true;
+}
+
+// LYS 2026-10-13 Hybrid Phase 7 D7-21 (a) TestMode PRE_CONTACT / CONTACT on a hybrid runtime recipe: refused - the contact values are the runtime
+//   active segment's m_sContactPos (not the editor segment), with no stick Z offset and no pose check (CS-4 / C-13). WARN + popup.
+static void RefuseTestModeContact(LPCTSTR szSub)
+{
+	CString strLog;
+	strLog.Format(_T("[HYBRID] Recipe cmd TEST_MODE %s refused - hybrid runtime (contact values are not per segment)"), szSub);
+	CLogWrapper::GetInstance()->KMLOG(WARN, strLog);
+	CD_DisplayMessage dlg(_T("하이브리드 레시피에서는 TestMode PRE CONTACT / CONTACT를 쓸 수 없습니다.\n(세그먼트별 컨택 높이 · 스틱 Z 오프셋 미적용)\n\n수동 측정 화면에서 스틱 이동 후 Contact 동작을 쓰십시오."));
+	dlg.DoModal();
+}
+
 UINT CRecipeEditMgr::ThreadRun(LPVOID p1)
 {
 	CRecipeEditMgr* pThis = (CRecipeEditMgr*)p1;
@@ -1565,12 +1745,26 @@ UINT CRecipeEditMgr::ThreadRun()
 					dPos[1] = dPosR;
 
 					double* pPos = nullptr;
+					// LYS 2026-10-13 Hybrid Phase 7 D7-18 R-A (hybrid runtime recipe only): dPosR (stick R + user offset R) against the Glass Align mark,
+					//   before MoveCmdPos_Stage (Probe Z up, R, X). 1-segment recipe: no check, no log.
+					if (IsHybridRuntimeRcp(this) && RefuseTeachMoveR(m_pMgrPool_link->pMaintControlMgr, _T("STAGE_MOVE"), dPosR))
+					{
+						bCmdNG = true;
+						break;
+					}
 					pPos = dPos;
 					m_pMgrPool_link->pMaintControlMgr->MoveCmdPos_Stage(pPos);
 				}
 				break;
 				case M_CMD_STAGE_PROBE_MOVE:
 				{
+					// LYS 2026-10-13 Hybrid Phase 7 D7-18 R-A (hybrid runtime recipe only): fData[1] = stick R + user offset R of the stick the editor targets,
+					//   against the Glass Align mark before any probe / Z move. 1-segment recipe: no check, no log.
+					if (IsHybridRuntimeRcp(this) && RefuseTeachMoveR(m_pMgrPool_link->pMaintControlMgr, _T("STAGE_PROBE_MOVE"), pRecipeEvent->m_sRunState.m_fData[1]))
+					{
+						bCmdNG = true;
+						break;
+					}
 					double dPos[10];
 					ZeroMemory(&dPos, sizeof(dPos)); 
 				//	dPos[0] = pRecipeEvent->m_sRunState.m_fData[0];	// Stage Y
@@ -1889,6 +2083,13 @@ UINT CRecipeEditMgr::ThreadRun()
 						//                m_fHeadReviewLeft -> dRightReview(Y2), m_fHeadReviewRight -> dLeftReview(Y1).
 						double dRightReview = pRecipeEvent->m_sRunState.m_fData[52];	// m_fHeadReviewLeft  -> AXIS_Y2
 						double dLeftReview  = pRecipeEvent->m_sRunState.m_fData[53];	// m_fHeadReviewRight -> AXIS_Y1
+						// LYS 2026-10-13 Hybrid Phase 7 D7-18 R-A (hybrid runtime recipe only): the stage R of this move (stick R + recipe offset R) against the
+						//   Glass Align mark, before the probe UnContact / SubZ / stage / head moves below. 1-segment recipe: no check, no log.
+						if (IsHybridRuntimeRcp(this) && RefuseTeachMoveR(m_pMgrPool_link->pMaintControlMgr, _T("TEST_MODE MOVE"), dStickR + dOffR))
+						{
+							bCmdNG = true;
+							break;
+						}
 
 						// 1. Probe UnContact
 						// LYS 2026-09-18 스틱이 실제로 바뀔 때만 UnContact 한다.
@@ -2317,6 +2518,13 @@ UINT CRecipeEditMgr::ThreadRun()
 						break;
 					case 1: // PRE_CONTACT
 					{
+						// LYS 2026-10-13 Hybrid Phase 7 D7-21 (a): hybrid runtime recipe -> refused (contact values are not per segment). 1-segment recipe: unchanged, no log.
+						if (IsHybridRuntimeRcp(this))
+						{
+							RefuseTestModeContact(_T("PRE_CONTACT"));
+							bCmdNG = true;
+							break;
+						}
 						S_RecipeInfo* pRI2 = GetRecipeInfo();
 						if (pRI2) {
 							double dfPre = pRI2->m_sContactPos.m_fPreContactPos;
@@ -2326,6 +2534,13 @@ UINT CRecipeEditMgr::ThreadRun()
 						break;
 					case 2: // CONTACT
 					{
+						// LYS 2026-10-13 Hybrid Phase 7 D7-21 (a): hybrid runtime recipe -> refused (contact values are not per segment). 1-segment recipe: unchanged, no log.
+						if (IsHybridRuntimeRcp(this))
+						{
+							RefuseTestModeContact(_T("CONTACT"));
+							bCmdNG = true;
+							break;
+						}
 						S_RecipeInfo* pRI2 = GetRecipeInfo();
 						if (pRI2) {
 							double dfPre = pRI2->m_sContactPos.m_fPreContactPos;

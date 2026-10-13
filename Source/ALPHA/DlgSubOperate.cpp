@@ -35,6 +35,8 @@
 #include "D_DisplayMessage.h"
 
 #include "Manager/ResumeInfoMgr.h"
+#include "Manager/ResumeJournal.h"		// LYS 2026-10-08 Hybrid Phase 5 IsTupleGlass, cell status reset counter
+#include "ResumePrompt.h"				// LYS 2026-10-08 Hybrid Phase 5 journal resume prompt + start prompt guard (D5-8/9/10/16)
 #include "D_MoveHomePosition.h"
 #include "D_MainOperateInitializing.h"
 
@@ -299,6 +301,9 @@ CDlgSubOperate::CDlgSubOperate(CAuroraMgr *pAuroraMgr, CWnd* pParent /*=NULL*/)
 	m_lMeasDoneColorColor = 0;
 	m_nHybridMapSegCnt = 0;		// LYS 2026-09-30 Hybrid Phase 6
 	m_nHybridMapFrameSeg = -2;
+	m_nHybridPathSeg = -1;	// LYS 2026-10-12 Hybrid Phase 6
+	m_nHybridPathRot = -1;
+	m_nCellDrawLegacy = -1;
 }
 
 CDlgSubOperate::~CDlgSubOperate()
@@ -573,6 +578,15 @@ BOOL CDlgSubOperate::OnInitDialog()
 	m_pParentCellMeasDlg->Create(IDD_DLG_UI_MEAS_CELL, this);
 	m_pParentCellMeasDlg->DrawChart(pCtrlRect2);
 
+	// LYS 2026-10-12 Hybrid Phase 6 cell chart capacity (D6-6 (a)): hybrid maps need more than CELL_MAX 150 (LS fixture 205 cells + frame).
+	//   Only the series count grows; the chart's draw limit keeps the configured value for the 1-segment draw, so a 1-segment recipe draws
+	//   exactly the cells it drew before. Must run before SetNProbe (InitialSetup allocates and the destructor frees by m_nMaxCell) and the
+	//   capacity must never change afterwards (a later SetNProbe frees / reallocates by the same value).
+	m_nCellDrawLegacy = m_pParentCellMeasDlg->m_chartOrbit.m_nMaxCell;
+	if (m_pParentCellMeasDlg->m_chartOrbit.m_nMaxCell < 512)
+		m_pParentCellMeasDlg->m_chartOrbit.m_nMaxCell = 512;
+	m_pParentCellMeasDlg->m_chartOrbit.m_nDrawLimit = m_nCellDrawLegacy;
+	m_pParentCellMeasDlg->m_chartOrbit.m_nClearBase = m_nCellDrawLegacy;	// every redraw clears max(configured, highest drawn): a 1-segment redraw clears the cells it cleared before
 	m_pParentCellMeasDlg->SetNProbe(1, NULL, FALSE);
 	m_pParentCellMeasDlg->SetAxisShow(FALSE);
 
@@ -604,6 +618,34 @@ BOOL CDlgSubOperate::OnInitDialog()
 		m_labelProbeContact.SetBorder(TRUE, TRUE);
 		m_labelProbeContact.ShowWindow(SW_HIDE);
 		m_bProbeContactFlashing = false;
+	}
+
+	// LYS 2026-10-12 Hybrid Phase 6 segment / pass / resume indicator (D6-1 (a)): runtime CLabel in the cell chart's top band, like the
+	//   Probe Contact label (no .rc / resource.h). Chart top +1..+19 = above the "Glass Size" text the chart draws at its y 20
+	//   (CChartOrbit::OnOC2Repaint) and the plot area (top margin 30). Hidden until UpdateHybridIndicator has text - a 1-segment recipe never shows it.
+	{
+		CRect rcCell, rcChart;
+		m_pParentCellMeasDlg->GetClientRect(&rcCell);
+		m_pParentCellMeasDlg->m_chartOrbit.GetWindowRect(&rcChart);
+		m_pParentCellMeasDlg->ScreenToClient(&rcChart);		// the host has WS_BORDER: the chart need not start at client (0, 0)
+		int nTop = (rcChart.top > 0) ? rcChart.top : 0;
+		int nLeft = ((rcChart.left > 0) ? rcChart.left : 0) + 2;
+		int nRight = ((rcChart.right < rcCell.right) ? rcChart.right : rcCell.right) - 2;
+		m_labelHybridInfo.Create(_T(""), WS_CHILD | SS_CENTER | SS_CENTERIMAGE, CRect(nLeft, nTop + 1, nRight, nTop + 19), m_pParentCellMeasDlg, 0xFFFE);
+		m_labelHybridInfo.SetInvalidate(FALSE);	// no parent erase on SetText (the host has no WS_CLIPCHILDREN): no flicker over the chart
+		CFont* pDlgFont = GetFont();				// operate dialog font (Gulim 9, HANGUL_CHARSET): a runtime CLabel starts with the raster SYSTEM_FONT
+		if (pDlgFont != NULL)
+		{
+			LOGFONT lf;
+			pDlgFont->GetLogFont(&lf);
+			m_labelHybridInfo.SetFont(lf);
+		}
+		m_labelHybridInfo.SetBkColor(RGB(0, 32, 0));
+		m_labelHybridInfo.SetTextColor(RGB(255, 255, 192));
+		m_labelHybridInfo.SetFontBold(TRUE);		// size = the dialog's 9 pt (no SetFontSize: it would rebuild by point size)
+		m_labelHybridInfo.ShowWindow(SW_HIDE);
+		m_labelHybridInfo.SetWindowPos(&CWnd::wndTop, 0, 0, 0, 0, SWP_NOMOVE | SWP_NOSIZE | SWP_NOACTIVATE);	// above the chart (created first)
+		m_pParentCellMeasDlg->m_chartOrbit.ModifyStyle(0, WS_CLIPSIBLINGS, SWP_FRAMECHANGED | SWP_NOMOVE | SWP_NOSIZE | SWP_NOZORDER);	// chart painting leaves a visible label alone (a hidden one clips nothing)
 	}
 
 	// LYS 2026-07-20 Init CIM Alarm not-report checkbox from config
@@ -1761,6 +1803,17 @@ void CDlgSubOperate::OnBnClickedButtonCycle()
 		return;
 	}
 
+	// LYS 2026-10-08 Hybrid Phase 5 (review C9/K10) a resume start prompt is open (the CIM worker popup has no owner window): refuse a second start
+	if (ResumePromptBusy())
+	{
+		CLogWrapper::GetInstance()->KMLOG(OPER, _T("Resume: another start prompt is open - CYCLE ignored"));
+		CString str;
+		CAlarmController::GetInstance()->GetAlarm(35, str);
+		CD_DisplayMessage dlg(str);
+		dlg.DoModal();
+		return;
+	}
+
 //	m_pAuroraMgr->GetRecipeEditMgrPtr()->OpenRecipe(_T("KR1_DM0"));
 
 	if (AfxMessageBox(_T("Do you want cycle Start sequence???"), MB_YESNO | MB_ICONQUESTION) == IDYES)
@@ -1768,6 +1821,16 @@ void CDlgSubOperate::OnBnClickedButtonCycle()
 		CD_MeasureCycle dlg(m_pAuroraMgr->GetRecipeEditMgrPtr(), m_pAuroraMgr->GetIOMapControlMgrPtr());
 		if (dlg.DoModal() == IDOK)
 		{
+			// LYS 2026-10-08 Hybrid Phase 5 (D5-10 a) resume check before the cycle state, buttons and START message change: CANCEL leaves everything
+			//   as it was (no alarm 35 on the next CYCLE). The prompt guard is held meanwhile (dialog START is refused while the popup is open).
+			bool bResumeOk = true;
+			{
+				CResumePromptBusy busy;
+				bResumeOk = CheckAndApplyResumeMode();
+			}
+			if (!bResumeOk)
+				return;
+
 			// cycle mode 를 진행한다.
 			CSystemParamShare::GetInstance()->SetCycleState(true);
 
@@ -1784,8 +1847,7 @@ void CDlgSubOperate::OnBnClickedButtonCycle()
 
 			// 검사 시작
 				// LYS 2026-07-07 Resume check (common function for manual and CIM paths)
-				if (!CheckAndApplyResumeMode())
-					return;
+				// LYS 2026-10-08 Hybrid Phase 5 (D5-10 a) the check moved before SetCycleState above
 
 				CSequenceManager::GetInstance()->EngineStart();
 		}
@@ -1946,6 +2008,7 @@ void CDlgSubOperate::OnTimer(UINT_PTR nIDEvent)
 	if (nIDEvent == MAIN_STATE_TIMER_ID)
 	{
 		UpdateCellStatus();
+		UpdateHybridIndicator();	// LYS 2026-10-12 Hybrid Phase 6 (1-segment recipe: returns with nothing to do)
 	}
 
 	// LYS 2026-07-01 Probe Contact blink (Show 2s, Hide 1s)
@@ -2794,7 +2857,9 @@ void CDlgSubOperate::GenGlassPath()
 			m_pAuroraMgr->GetShareMemoryMgrPtr()->GetSharedMemory()->nBFCellStatus[iX][iY] = -1;
 		}
 	}
+	CResumeJournal::GetInstance()->NoteCellStatusReset();	// LYS 2026-10-08 Hybrid Phase 5 (5-1) a journal resume restores the cell status snapshot only after this reset (counter only, no log / I/O)
 
+	BuildManualCellNameCache();	// LYS 2026-10-12 Hybrid Phase 6 1-segment manual Cell ID names (Auto/Auto or hybrid -> empty, no log)
 	// LYS 2026-09-30 Hybrid Phase 6 operate cell map: >= 2 segments -> every segment on one layout, cached for the timer.
 	//   1 segment: BuildHybridCellMap returns false without touching anything else and the code below runs unchanged.
 	if (BuildHybridCellMap() == true)
@@ -3424,6 +3489,16 @@ void CDlgSubOperate::RunStart()
 	// Measure Start
 	case TO_SERVER_MEAS_START:
 	{
+		// LYS 2026-10-08 Hybrid Phase 5 (D5-10 a) resume check first, inside the prompt guard: this popup runs on the RunStart worker without an
+		//   owner window, so CYCLE / dialog START are refused while it is open. CANCEL leaves the cycle state and buttons as they were.
+		bool bResumeOk = true;
+		{
+			CResumePromptBusy busy;
+			bResumeOk = CheckAndApplyResumeMode();
+		}
+		if (!bResumeOk)
+			break;
+
 		// cycle mode 를 진행한다.
 		CSystemParamShare::GetInstance()->SetCycleState(true);
 
@@ -3443,8 +3518,7 @@ void CDlgSubOperate::RunStart()
 		}
 
 		// LYS 2026-07-07 Resume check for CIM Online path
-		if (!CheckAndApplyResumeMode())
-			break;
+		// LYS 2026-10-08 Hybrid Phase 5 (D5-10 a) the check moved to the top of this case
 
 		CSequenceManager::GetInstance()->EngineStart();
 	}
@@ -3481,6 +3555,19 @@ void CDlgSubOperate::RunStart()
 bool CDlgSubOperate::CheckAndApplyResumeMode()
 {
 	CResumeInfoMgr* pResumeInfo = m_pAuroraMgr->GetResumeInfoMgrPtr();
+	// LYS 2026-10-08 Hybrid Phase 5 journal (Format=2) bookmark -> ResumePrompt.cpp; a format-1 bookmark of this same journal recipe is refused there (D5-16 a).
+	//   1-segment format-1 bookmark (or a format-1 bookmark of another recipe): the code below runs unchanged
+	if (pResumeInfo && m_pAuroraMgr->GetSystemConfigMgrPtr()->IsUseResumeInspection())
+	{
+		int nEntry = (GetCurrentThreadId() != AfxGetApp()->m_nThreadID) ? RESUME_ENTRY_CIM : RESUME_ENTRY_OPERATE;	// only RunStart calls this off the UI thread
+		if (pResumeInfo->IsTupleBookmark())
+			return (ResumeTuplePrompt(m_pAuroraMgr, nEntry) != RESUME_PROMPT_CANCEL);
+		if (CResumeJournal::GetInstance()->IsTupleGlass(m_pAuroraMgr->GetRecipeEditMgrPtr()->GetSegmentLoopCount())
+			&& pResumeInfo->GetRecipeID().CompareNoCase(m_pAuroraMgr->GetRecipeEditMgrPtr()->GetRecipeID()) == 0
+			&& ResumeRefuseLegacyHybrid(m_pAuroraMgr))
+			return true;
+	}
+
 	if (pResumeInfo && m_pAuroraMgr->GetSystemConfigMgrPtr()->IsUseResumeInspection()
 		&& pResumeInfo->IsResumeAvailable())
 	{
@@ -3737,6 +3824,9 @@ void CDlgSubOperate::UpdateCellStatus()
 						nStick = iY;
 					}*/
 
+					// LYS 2026-10-12 Hybrid Phase 6 manual Cell ID (panel A) cached by GenGlassPath - empty cache (Auto/Auto) keeps the name above
+					if (m_aryManualCellName.GetSize() == 100 * 50 && nCell >= 0 && nCell < 100 && nStick >= 0 && nStick < 50 && m_aryManualCellName[nCell * 50 + nStick].IsEmpty() != true)
+						_tcsncpy_s(stCell.szCellName, _countof(stCell.szCellName), m_aryManualCellName[nCell * 50 + nStick], _TRUNCATE);
 					iStatus = m_pAuroraMgr->GetShareMemoryMgrPtr()->GetSharedMemory()->nCellStatus[nCell][nStick];
 
 					m_pAuroraMgr->GetShareMemoryMgrPtr()->GetSharedMemory()->nBFCellStatus[nCell][nStick] = iStatus;
@@ -3910,6 +4000,10 @@ bool CDlgSubOperate::BuildHybridCellMap()
 		m_nHybridMapSegCnt = 0;			// 1 segment: pre-hybrid GenGlassPath / UpdateCellStatus
 		m_aryHybridMapCell.RemoveAll();
 		m_aryHybridSegBox.RemoveAll();
+		m_aryHybridSegRot.RemoveAll();	// LYS 2026-10-12 Hybrid Phase 6 PATH view / indicator caches
+		m_aryHybridSegName.RemoveAll();
+		m_nHybridPathSeg = -1;
+		m_nHybridPathRot = -1;
 		return false;
 	}
 
@@ -3924,6 +4018,8 @@ bool CDlgSubOperate::BuildHybridCellMap()
 		return true;
 	}
 
+	m_aryHybridSegRot.RemoveAll();	// LYS 2026-10-12 Hybrid Phase 6
+	m_aryHybridSegName.RemoveAll();
 	m_aryHybridMapCell.RemoveAll();
 	m_aryHybridSegBox.RemoveAll();
 	m_aryCellGroup.RemoveAll();			// the 1-segment layout is not drawn while a hybrid recipe is open
@@ -3931,11 +4027,21 @@ bool CDlgSubOperate::BuildHybridCellMap()
 
 	int nSegCnt = pFunc->GetSegmentCount();
 	int nBase = 0, nSkip = 0;
+	int nLetterBase = 0;	// LYS 2026-10-01 Hybrid Phase 4 (4-5) cell ID letters of the segments before k (same carry as CRecipeEditMgr::SyncCellStatusStickBase)
+	// LYS 2026-10-12 Hybrid Phase 6 manual Cell ID config (panel A): tokens collected per cell and applied after the loop only when no
+	//   recipe load / segment change overlapped the build. Auto/Auto: nothing collected, names / logs as before
+	int nCidLoadTry = pFunc->GetRcpLoadTry();	// try count first, then the busy count (OutRecipeFunc.h m_nRcpLoadTry)
+	BOOL bManualCid = (pFunc->IsRcpLoadBusy() != TRUE && pFunc->IsCellIdDefault() != TRUE);
+	CArray <int, int> aryCidIdx;
+	CStringArray aryCidTok;
+	CString strCidTok;
 	for (int k = 0; k < nSegCnt; k++)
 	{
 		S_RecipeMgr* pSeg = pFunc->GetSegmentMgr(k);	// valid until the next SetActiveSegment - nothing of it is kept
 		int nStick = (pSeg != nullptr) ? (int)pSeg->m_sData.m_vecStick.size() : 0;
 		int nRot = (pSeg != nullptr) ? pSeg->m_sInfo.m_sOptionItem.m_nGlsRotate : 0;
+		m_aryHybridSegRot.Add((nRot >= 0 && nRot <= 3) ? nRot : 0);	// LYS 2026-10-12 Hybrid Phase 6 PATH view of segment k (UI thread, segment 0 active)
+		m_aryHybridSegName.Add(pFunc->GetSegmentName(k));
 		bool bLong = (nRot == 1);			// MakeCellID rule: only rotate 1 is direct
 		bool bLongFoot = (nRot % 2 == 1);	// LYS 2026-09-30 geometry: rotate 1 / 3 = cells along 1500
 		double dContact = 0.0, dW = 0.0, dH = 0.0;
@@ -3970,12 +4076,17 @@ bool CDlgSubOperate::BuildHybridCellMap()
 
 				S_HybridMapCell stMap;
 				ZeroMemory(&stMap, sizeof(stMap));
-				if (sCell.m_chCellID[0] != 0)
-					_tcsncpy_s(stMap.szName, _countof(stMap.szName), sCell.m_chCellID, _TRUNCATE);
-				else if (bLong)
-					_stprintf_s(stMap.szName, _countof(stMap.szName), _T("%c%02d"), 65 + j, i + 1);	// MakeCellID
+				// LYS 2026-10-01 Hybrid Phase 4 (4-5) the transmitted cell ID (MakeCellID token + letter carry), not the recipe's per-segment
+				//   m_chCellID (every segment starts again at A there). A-panel token, no B-panel offset - as before.
+				if (bLong)
+					_stprintf_s(stMap.szName, _countof(stMap.szName), _T("%s%02d"), (LPCTSTR)CRecipeEditMgr::CellIdLetterPrefix(nLetterBase + j), i + 1);	// MakeCellID rotate 1
 				else
-					_stprintf_s(stMap.szName, _countof(stMap.szName), _T("%c%02d"), 65 + nStick - i - 1, j + 1);
+					_stprintf_s(stMap.szName, _countof(stMap.szName), _T("%s%02d"), (LPCTSTR)CRecipeEditMgr::CellIdLetterPrefix(nLetterBase + nStick - i - 1), j + 1);
+				if (bManualCid && pFunc->ResolveCellToken(k, i, j, 0, strCidTok, FALSE) == 1 && strCidTok.IsEmpty() != true)	// LYS 2026-10-12 Hybrid Phase 6 manual A token
+				{
+					aryCidIdx.Add((int)m_aryHybridMapCell.GetSize());	// index this cell gets at the Add below
+					aryCidTok.Add(strCidTok);
+				}
 				stMap.dSX = dCX - dW / 2;
 				stMap.dEX = dCX + dW / 2;
 				stMap.dSY = dCY - dH / 2;
@@ -4001,18 +4112,39 @@ bool CDlgSubOperate::BuildHybridCellMap()
 		CLogWrapper::GetInstance()->KMLOG(OPER, strLog);
 
 		nBase += nStick;
+		nLetterBase += CRecipeEditMgr::SegCellIdLetterExtent(pFunc, k);	// LYS 2026-10-01 Hybrid Phase 4 (4-5) rotate 1 -> cells per stick, else sticks
 	}
 	m_nHybridMapSegCnt = nSegCnt;
 
 	int nMaxCell = (m_pParentCellMeasDlg != nullptr) ? m_pParentCellMeasDlg->m_chartOrbit.m_nMaxCell : 0;
 	int nTotal = (int)m_aryHybridMapCell.GetSize();
 	strLog.Format(_T("[HYBRID] Cell map %d segments, %d cells, %d sticks, skipped %d (chart CELL_MAX %d)"), nSegCnt, nTotal, nBase, nSkip, nMaxCell);
-	CLogWrapper::GetInstance()->KMLOG((nSkip > 0 || nTotal > nMaxCell) ? WARN : OPER, strLog);
+	CLogWrapper::GetInstance()->KMLOG((nSkip > 0 || nTotal + 1 > nMaxCell) ? WARN : OPER, strLog);	// LYS 2026-10-12 Hybrid Phase 6 + 1 = the active-segment frame
+	if (bManualCid && aryCidIdx.GetSize() > 0)	// LYS 2026-10-12 Hybrid Phase 6 (A Auto + B Manual: nothing collected, no log)
+	{
+		if (pFunc->IsRcpLoadBusy() == TRUE || pFunc->GetRcpLoadTry() != nCidLoadTry || pRcp->GetActiveSegment() != 0)
+			CLogWrapper::GetInstance()->KMLOG(WARN, _T("[CELLID] Cell map manual names dropped - recipe reload / segment change during the build (Auto names shown)"));
+		else
+		{
+			for (int n = 0; n < aryCidIdx.GetSize(); n++)
+			{
+				int nIdx = aryCidIdx[n];
+				if (nIdx < 0 || nIdx >= m_aryHybridMapCell.GetSize())
+					continue;
+				S_HybridMapCell& stFix = m_aryHybridMapCell[nIdx];
+				_tcsncpy_s(stFix.szName, _countof(stFix.szName), aryCidTok[n], _TRUNCATE);	// hand-edited token > 31 chars is cut (_stprintf_s would abort)
+			}
+			strLog.Format(_T("[CELLID] Cell map manual names %d of %d (panel A, %d segments)"), (int)aryCidIdx.GetSize(), nTotal, nSegCnt);
+			CLogWrapper::GetInstance()->KMLOG(OPER, strLog);
+		}
+	}
 
 	// same view call as the 1-segment tail of GenGlassPath (active segment = 0 here)
 	int nRotView = pRcp->GetRecipeInfo()->m_sOptionItem.m_nGlsRotate;
 	if (nRotView < 0 || nRotView > 3) nRotView = 0;
 	RotateGlassPath(nRotView);
+	m_nHybridPathSeg = 0;	// LYS 2026-10-12 Hybrid Phase 6 the PATH outline shows segment 0 now
+	m_nHybridPathRot = nRotView;
 	return true;
 }
 
@@ -4070,12 +4202,17 @@ void CDlgSubOperate::UpdateHybridCellStatus()
 		stCell.dEDx = m_aryHybridSegBox[nFrameSeg * 4 + 2] + 8.0;
 		stCell.dEDy = m_aryHybridSegBox[nFrameSeg * 4 + 3] + 8.0;
 		stCell.color = CLR_WHITE;
-		stRecipe.arrCellLayout.Add(stCell);
+		if (nCnt + 1 > m_pParentCellMeasDlg->m_chartOrbit.m_nMaxCell)	// LYS 2026-10-12 Hybrid Phase 6 chart cannot hold every cell + frame: frame first, the last cells drop
+			stRecipe.arrCellLayout.InsertAt(0, stCell);
+		else
+			stRecipe.arrCellLayout.Add(stCell);
 	}
 
 	stRecipe.m_iVersion = 1;
 	stRecipe.m_iCellCnt = (int)stRecipe.arrCellLayout.GetSize();
+	m_pParentCellMeasDlg->m_chartOrbit.m_nDrawLimit = -1;	// LYS 2026-10-12 Hybrid Phase 6 every cached cell (chart capacity, D6-6)
 	UpdateMeasCell(&stRecipe);
+	m_pParentCellMeasDlg->m_chartOrbit.m_nDrawLimit = m_nCellDrawLegacy;	// the 1-segment draw keeps its limit
 	m_nHybridMapFrameSeg = nFrameSeg;
 }
 
@@ -4373,4 +4510,130 @@ void CDlgSubOperate::OnDestroy()
 	KillTimer(MAIN_STATE_TIMER_ID + 1);
 	KillTimer(MAIN_STATE_TIMER_ID + 2);
 	KillTimer(MAIN_LAMP_OVER_TIMER_ID);
+}
+
+// LYS 2026-10-12 Hybrid Phase 6 operate-screen indicator (D6-1/2/3/12): segment / EFA pass / journal replay text in the cell chart's top band,
+//   plus the PATH outline of the measured segment. 1 s timer, ints only: the measure-loop progress CRecipeEditMgr publishes (GetUi*),
+//   the journal replay counters and the UI caches BuildHybridCellMap filled (names, rotates). 1-segment recipe (m_nHybridMapSegCnt 0):
+//   no text, label never shown, PATH view untouched (D6-3 (a)).
+void CDlgSubOperate::UpdateHybridIndicator()
+{
+	if (m_labelHybridInfo.GetSafeHwnd() == NULL)
+		return;
+	CString strText;
+	if (m_nHybridMapSegCnt > 1)
+	{
+		CRecipeEditMgr* pRcp = m_pAuroraMgr->GetRecipeEditMgrPtr();
+		int nPass = pRcp->GetUiPass(), nPassCnt = pRcp->GetUiPassCount(), nSeg = pRcp->GetUiSeg(), nReady = pRcp->GetUiSegReady();	// pass first (SetUiProgress writes it last), seg before ready (the setter clears ready before it changes seg)
+		int nDone = 0, nTotal = 0;
+		CResumeJournal::GetInstance()->GetReplayProgress(nDone, nTotal);
+		CString strPart;
+		if (nPass >= 0 && nSeg >= 0 && nSeg < m_nHybridMapSegCnt && nSeg < m_aryHybridSegName.GetSize())
+			strPart.Format(_T("세그먼트 %d/%d [%s]%s"), nSeg + 1, m_nHybridMapSegCnt, (LPCTSTR)m_aryHybridSegName[nSeg].Left(12), (nReady == 0) ? _T(" 전환 중") : _T(""));	// 12: centred single line, a longer text loses both ends
+		else
+			strPart.Format(_T("하이브리드 레시피 %d 세그먼트"), m_nHybridMapSegCnt);
+		strText = strPart;
+		if (nPassCnt > 0 && nPass >= 0)
+		{
+			strPart.Format(_T("   |   EFA T%d (%d/%d)"), nPass, nPass + 1, nPassCnt);
+			strText += strPart;
+		}
+		if (nTotal > 0)
+		{
+			strPart.Format(_T("   |   재개 결과 복원 %d/%d"), nDone, nTotal);
+			strText += strPart;
+		}
+		SyncHybridPathView(nPass, nSeg, nReady);	// (3-4)
+	}
+	if (strText == m_strHybridInfo)
+		return;		// unchanged: no repaint
+	m_strHybridInfo = strText;
+	if (strText.IsEmpty())
+		m_labelHybridInfo.ShowWindow(SW_HIDE);
+	else
+	{
+		m_labelHybridInfo.SetText(strText);
+		m_labelHybridInfo.ShowWindow(SW_SHOWNA);
+	}
+}
+
+// LYS 2026-10-12 Hybrid Phase 6 PATH chart outline = the segment being measured once its boundary is done (D6-5 (a)): the outline turns after
+//   the stage turned and re-aligned; outside the measure loop it shows segment 0 (= the GenGlassPath view, where the next glass starts).
+//   The loader rectangle keeps showing the live R (UpdateCurCoord, 600 ms). Hybrid only, one OPER line per change.
+void CDlgSubOperate::SyncHybridPathView(int nPass, int nSeg, int nReady)
+{
+	int nSegCnt = (int)m_aryHybridSegRot.GetSize();
+	if (m_nHybridMapSegCnt <= 1 || nSegCnt != m_nHybridMapSegCnt || m_nHybridPathSeg < 0)
+		return;
+	int nTarget = m_nHybridPathSeg;
+	if (nPass < 0)
+		nTarget = 0;
+	else if (nSeg >= 0 && nReady == 1)
+		nTarget = nSeg;
+	if (nTarget < 0 || nTarget >= nSegCnt || nTarget == m_nHybridPathSeg)
+		return;
+	int nRot = m_aryHybridSegRot[nTarget];
+	if (nRot != m_nHybridPathRot)
+	{
+		RotateGlassPath(nRot);	// outline, edge cut, probe card height, "Glass Size" text (the cell chart outline is fixed)
+		UpdateCurCoord();		// SetCardSize put ACX / P5 back at x 0..210 - redraw them at the live positions now
+		m_nHybridPathRot = nRot;
+	}
+	m_nHybridPathSeg = nTarget;
+	CString strLog;
+	strLog.Format(_T("[HYBRID] Path view segment %d/%d [%s] rot=%d"), nTarget + 1, nSegCnt, (nTarget < m_aryHybridSegName.GetSize()) ? (LPCTSTR)m_aryHybridSegName[nTarget] : _T(""), nRot);
+	CLogWrapper::GetInstance()->KMLOG(OPER, strLog);
+}
+
+// LYS 2026-10-12 Hybrid Phase 6 1-segment recipe with a manual Cell ID config: panel-A tokens keyed by the status slot the 1-segment chart
+//   draws ([cell][MakeCellID stick]: rotate 1 direct, else NS-1-i). Vectors are read only here (GenGlassPath, UI thread, segment 0).
+//   Auto/Auto (IsCellIdDefault), A Auto + B Manual (no panel-A token), >= 2 segments or a load in progress: cache empty, nothing logged
+//   -> UpdateCellStatus unchanged.
+void CDlgSubOperate::BuildManualCellNameCache()
+{
+	m_aryManualCellName.RemoveAll();
+	CRecipeEditMgr* pRcp = m_pAuroraMgr->GetRecipeEditMgrPtr();
+	C_OutRecipeFunc* pFunc = (pRcp != nullptr) ? pRcp->GetRecipeFuncPtr() : nullptr;
+	if (pFunc == nullptr)
+		return;
+	int nLoadTry = pFunc->GetRcpLoadTry();	// try count first, then the busy count (OutRecipeFunc.h m_nRcpLoadTry, as GetManualCellToken)
+	if (pFunc->IsRcpLoadBusy() == TRUE || pFunc->GetSegmentLoopCount() > 1 || pFunc->IsCellIdDefault() == TRUE)
+		return;
+	S_RecipeMgr* pSeg = pFunc->GetSegmentMgr(0);	// 1 segment: the working slot (m_recipeMgr)
+	if (pSeg == nullptr)
+		return;
+	int nStick = (int)pSeg->m_sData.m_vecStick.size();
+	int nRot = pSeg->m_sInfo.m_sOptionItem.m_nGlsRotate;
+	CStringArray aryName;
+	aryName.SetSize(100 * 50);		// nCellStatus[100][50]
+	int nSet = 0, nCellTotal = 0;
+	CString strTok;
+	for (int i = 0; i < nStick; i++)
+	{
+		int nCol = (nRot == 1) ? i : (nStick - i - 1);	// UpdateCellStatus nStick (MakeCellID stick slot)
+		int nCells = (int)pSeg->m_sData.m_vecStick[i].m_vecCell.size();
+		for (int j = 0; j < nCells; j++)
+		{
+			nCellTotal++;
+			if (j >= 100 || nCol < 0 || nCol >= 50)
+				continue;
+			if (pFunc->ResolveCellToken(0, i, j, 0, strTok, FALSE) == 1 && strTok.IsEmpty() != true)
+			{
+				aryName[j * 50 + nCol] = strTok;
+				nSet++;
+			}
+		}
+	}
+	// LYS 2026-10-12 Hybrid Phase 6 fix (review correctness 1): nothing set is tested before the reload test - a 1-segment A Auto + B Manual recipe logs nothing, not even the WARN
+	if (nSet <= 0)
+		return;		// A Auto + B Manual: panel A is Auto -> nothing set, legacy names, no log
+	if (pFunc->IsRcpLoadBusy() == TRUE || pFunc->GetRcpLoadTry() != nLoadTry)
+	{
+		CLogWrapper::GetInstance()->KMLOG(WARN, _T("[CELLID] Cell map manual names dropped - recipe reload during the build (Auto names shown)"));
+		return;
+	}
+	m_aryManualCellName.Copy(aryName);
+	CString strLog;
+	strLog.Format(_T("[CELLID] Cell map manual names %d of %d (panel A, 1 segment, rot=%d)"), nSet, nCellTotal, nRot);
+	CLogWrapper::GetInstance()->KMLOG(OPER, strLog);
 }

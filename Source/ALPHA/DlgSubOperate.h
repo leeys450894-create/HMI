@@ -102,6 +102,13 @@ private:
 	CArray <double, double>	m_aryHybridSegBox;	// 4 per segment: min x, min y, max x, max y of its cells
 	int		m_nHybridMapSegCnt;		// segments in the cache, 0 = 1-segment recipe
 	int		m_nHybridMapFrameSeg;	// segment framed in the last drawing, -1 none, -2 force a redraw
+	CArray <int, int>	m_aryHybridSegRot;	// LYS 2026-10-12 Hybrid Phase 6 GLASS ROTATE (0..3) of every segment, built with the cell map (UI thread)
+	CStringArray		m_aryHybridSegName;	// LYS 2026-10-12 Hybrid Phase 6 segment names for the indicator (built with the cell map)
+	int		m_nHybridPathSeg;		// LYS 2026-10-12 Hybrid Phase 6 segment the PATH outline shows, -1 = not hybrid
+	int		m_nHybridPathRot;		// LYS 2026-10-12 Hybrid Phase 6 rotate the PATH outline was drawn with, -1 = not hybrid
+	int		m_nCellDrawLegacy;		// LYS 2026-10-12 Hybrid Phase 6 configured CELL_MAX: the 1-segment cell draw limit (D6-6)
+	CStringArray		m_aryManualCellName;	// LYS 2026-10-12 Hybrid Phase 6 1-segment manual Cell ID names [cell * 50 + status column], empty = Auto/Auto
+	CString		m_strHybridInfo;		// LYS 2026-10-12 Hybrid Phase 6 indicator text on screen ("" = hidden)
 
 	long m_lMeasDoneColorWAD;
 	long m_lMeasDoneColorVision;
@@ -183,6 +190,9 @@ public:
 	bool BuildHybridCellMap();								// LYS 2026-09-30 Hybrid Phase 6
 	void UpdateHybridCellStatus();							// LYS 2026-09-30 Hybrid Phase 6
 	void SetHybridCellLook(int iStatus, CELLLAYOUT& stCell);	// LYS 2026-09-30 Hybrid Phase 6
+	void UpdateHybridIndicator();							// LYS 2026-10-12 Hybrid Phase 6
+	void SyncHybridPathView(int nPass, int nSeg, int nReady);	// LYS 2026-10-12 Hybrid Phase 6
+	void BuildManualCellNameCache();						// LYS 2026-10-12 Hybrid Phase 6
 	afx_msg void OnBnClickedButton1();
 	void UpdateCurCoord();
 	afx_msg void OnBnClickedButtonChangeControlmode();
@@ -204,6 +214,7 @@ public:
 	void UpdateMeasColor();
 	bool		m_bThreadRun;
 	CLabel		m_labelProbeContact;	// LYS 2026-07-01 Probe Contact blinking indicator
+	CLabel		m_labelHybridInfo;	// LYS 2026-10-12 Hybrid Phase 6 segment / pass / resume indicator (cell chart top band)
 	bool		m_bProbeContactFlashing;	// LYS 2026-07-01 Flash state tracking
 	static UINT ThreadInspectEnd(LPVOID p1);
 	UINT ThreadRun();

@@ -21,12 +21,14 @@ struct S_GlassMapCell {
 	double	dX, dY;			// centre in the glass frame (mm)
 	double	dW, dH;			// extent along x / y (mm)
 	TCHAR	szID[16];
+	int		nStick, nCell;	// LYS 2026-10-12 Hybrid Phase 6 recipe vector indices (MakeCell overlay Auto carry IDs)
 };
 
 struct S_GlassMapSeg {
 	int							nRotate;	// m_nGlsRotate
 	std::vector<S_GlassMapCell>	vecCell;
-	S_GlassMapSeg () : nRotate (0) {}
+	int							nStick, nCell0;	// LYS 2026-10-12 Hybrid Phase 6 sticks / cells of stick 0 (S_CellIdSegGeo inputs, as CellId_BuildGeo)
+	S_GlassMapSeg () : nRotate (0), nStick (0), nCell0 (0) {}
 };
 
 class C_GlassMap : public CStatic

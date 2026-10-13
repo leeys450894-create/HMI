@@ -94,6 +94,8 @@ CDlgResult::CDlgResult(CWnd* pParent /*=nullptr*/)
 	m_nMaxMeasureRcpFlag = 0;
 	m_nMeasureGlassCnt = 0;
 	m_bDisplayResulted = false;
+	m_bFastUpload = false;			// LYS 2026-10-06 Hybrid Phase 5 resume replay
+	m_nUploadDoneCount = 0;
 	m_stMeasDay = _T("");
 	m_strConfigPath = _T("");
 
@@ -130,6 +132,15 @@ int	 CDlgResult::GetNBuffer()
 {
 	if (!m_bInit) return 0;
 	return (*nBuffer);
+}
+
+// LYS 2026-10-06 Hybrid Phase 5 resume replay: rows still waiting in the shared ring + rows the monitor thread finished
+void CDlgResult::GetUploadState(int* pQueue, long* pDone)
+{
+	if (pQueue != NULL)
+		*pQueue = (m_bInit && nBuffer != NULL) ? *((volatile int*)nBuffer) : 0;
+	if (pDone != NULL)
+		*pDone = InterlockedCompareExchange(&m_nUploadDoneCount, 0, 0);
 }
 
 TCHAR* CDlgResult::GetErrMsg()
@@ -325,6 +336,7 @@ void CDlgResult::CBResultMonitorBody()
 					//}
 					UploadDataDone = false;
 					UploadData(&m_RData); // 결과 데이터 디스플레이
+					InterlockedIncrement(&m_nUploadDoneCount);	// LYS 2026-10-06 Hybrid Phase 5 resume replay: finished-row counter (replay pacing)
 
 				}
 				TRACE(_T("Download %d, %s \n"), m_RData.m_iProbe, m_RData.szResultFile);
@@ -600,22 +612,26 @@ int CDlgResult::UploadData(PRSRITEMDATA result)
 
 		::PostMessage(this->m_hWnd, WM_MSG_DISPLAY_RESULT, (WPARAM)iProbe, (LPARAM)nStep);
 
-		int iLoop = 0;
-		do
+		// LYS 2026-10-06 Hybrid Phase 5 resume replay: the 1 s display wait is skipped only while fast upload is on (journal replay); off = unchanged
+		if (m_bFastUpload == false)
 		{
-			if (m_bDisplayResulted == false)
+			int iLoop = 0;
+			do
 			{
-				if (iLoop > 0)
-					TRACE("m_bDisplayResulted %d, TimeOut %d\n", iProbe + 1, iLoop);
+				if (m_bDisplayResulted == false)
+				{
+					if (iLoop > 0)
+						TRACE("m_bDisplayResulted %d, TimeOut %d\n", iProbe + 1, iLoop);
 
-				break;
-			}
+					break;
+				}
 
-			Sleep(10);
+				Sleep(10);
 
-			iLoop++;
+				iLoop++;
 
-		} while (iLoop < 100);	// 1000 msec
+			} while (iLoop < 100);	// 1000 msec
+		}
 	}
 	else
 	{

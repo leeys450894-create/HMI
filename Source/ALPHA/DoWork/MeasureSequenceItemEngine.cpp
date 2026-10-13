@@ -39,6 +39,7 @@ CMeasureSequenceItemEngine::CMeasureSequenceItemEngine(stAuroraMgrPool &MgrPool)
 	, m_nAgingMaskChecked(0)			// LYS 2026-09-30
 	, m_nAgingStick(-1)				// LYS 2026-09-30
 	, m_bAgingStickSkip(false)		// LYS 2026-09-30
+	, m_bSamplingCycleSkip(false)	// LYS 2026-10-08 Sampling stick skip
 {
 	ZeroMemory(m_nAgingRepeat, sizeof(m_nAgingRepeat));	// LYS 2026-08-12 AgingCycle R1
 
@@ -796,6 +797,7 @@ bool CMeasureSequenceItemEngine::AgingCycleBegin(int nEfaPass, int nStick)	// LY
 	m_bEfaCycle = false;	// LYS 2026-09-28 EFA
 	m_nAgingStick = nStick;		// LYS 2026-09-30 OCP nGroup < 1: items / sticks without a cell are skipped
 	m_bAgingStickSkip = false;
+	m_bSamplingCycleSkip = false;	// LYS 2026-10-08 Sampling stick skip
 	ZeroMemory(m_nAgingRepeat, sizeof(m_nAgingRepeat));	// LYS 2026-08-12 AgingCycle R1
 	m_strCycleSegTag = (GetRecipeEditMgrPtr() != nullptr) ? GetRecipeEditMgrPtr()->GetSegLogTag() : CString();	// LYS 2026-09-30 Hybrid 3c this cycle's begin/skip/end lines (1 segment: empty)
 
@@ -832,6 +834,9 @@ bool CMeasureSequenceItemEngine::AgingCycleBegin(int nEfaPass, int nStick)	// LY
 			m_pLogFileAccessor->KMLOG(OPER, strSkip);
 			return false;
 		}
+
+		// LYS 2026-10-08 Sampling stick skip (D-SS-3 b1s): the pass item has mask cells on this stick, but Sampling may select none of them
+		if (SamplingCycleSkip(nEfaPass)) return false;
 
 		CString strEfaLog;
 		strEfaLog.Format(_T("EFA: begin pass %d/%d%s"), nEfaPass + 1, m_AgingCycleInfo.GetItemCount(), m_strCycleSegTag.GetString());	// LYS 2026-09-30 Hybrid 3c seg tag
@@ -883,6 +888,9 @@ bool CMeasureSequenceItemEngine::AgingCycleBegin(int nEfaPass, int nStick)	// LY
 			return false;
 		}
 	}
+
+	// LYS 2026-10-08 Sampling stick skip (D-SS-3 b1s): USE_AGING items have mask cells on this stick, but Sampling may select none of them
+	if (m_bAgingCycleActive && m_nAgingStick >= 0 && SamplingCycleSkip(-1)) return false;
 
 	CString strLog;
 	strLog.Format(_T("AgingCycle: begin, items(%d) active(%d)%s"), m_AgingCycleInfo.GetItemCount(), (int)m_bAgingCycleActive, m_strCycleSegTag.GetString());	// LYS 2026-09-30 Hybrid 3c seg tag
@@ -1069,6 +1077,117 @@ int CMeasureSequenceItemEngine::GetAgingKindMax(int iKind) const
 	return (nMax > 0) ? nMax : 1;
 }
 
+// LYS 2026-10-08 Sampling stick skip (OCP DoWorkStartMeasOCP: nGroup < 1 -> continue, before the contact move).
+//   Standard glass only: an AgingTest item list / EFA pass decides its sticks in AgingCycleBegin (SamplingCycleSkip), ThreadRun also checks bAgingCycle.
+//   OCP (D-SS-2) + recipe Sampling on + at least one of WAD (m_bUseSpec_3 / M_SPEC), VISION (m_bUseQuality_4 / M_QUALITY), ANGLE (m_bUseAngle_6 / M_ANGLE)
+//   + no cell of the stick selected for any of them (m_nSelectCell == 1, the steps' own test) -> true: ThreadRun runs only the init step
+//   (no move, pattern search, contact, OST, R-TEST, AGING, measure). Active segment, segment-local stick, no rotation reversal.
+//   Not OCP / Sampling off / no optical item (electrical-only recipe, D-SS-7) / a 1-cell stick (D-SS-4) / stick out of range -> false, no log.
+bool CMeasureSequenceItemEngine::IsSamplingStickSkip(int nStick)
+{
+	if (m_MgrPool_link.pSystemConfigMgr == nullptr || m_MgrPool_link.pSystemConfigMgr->IsOCP() == false) return false;
+	if (m_bAgingCycleActive || m_bAgingStickSkip) return false;
+	if (GetRecipeEditMgrPtr() == nullptr) return false;
+
+	S_RecipeInfo* pInfo = GetRecipeEditMgrPtr()->GetRecipeInfo();
+	S_RecipeData* pData = GetRecipeEditMgrPtr()->GetRecipeData();
+	if (pInfo == nullptr || pData == nullptr) return false;
+	if (pInfo->m_sOptionItem.m_bUseSampling == FALSE) return false;
+
+	bool bWad = (pInfo->m_sInspectItem.m_bUseSpec_3 != FALSE);
+	bool bVis = (pInfo->m_sInspectItem.m_bUseQuality_4 != FALSE);
+	bool bAng = (pInfo->m_sInspectItem.m_bUseAngle_6 != FALSE);
+	if (bWad == false && bVis == false && bAng == false) return false;	// D-SS-7 electrical-only recipe: the stick is always contacted
+	if (nStick < 0 || nStick >= (int)pData->m_vecStick.size()) return false;
+
+	const std::vector<S_CellInfo>& vecCell = pData->m_vecStick[nStick].m_vecCell;
+	if (vecCell.size() == 1) return false;	// D-SS-4 a 1-cell stick is measured as before (the steps' remaining-cell pass); a 0-cell stick measures nothing and is skipped
+	for (size_t c = 0; c < vecCell.size(); c++)
+	{
+		if (bWad && vecCell[c].m_nSelectCell[M_SPEC] == 1)		return false;
+		if (bVis && vecCell[c].m_nSelectCell[M_QUALITY] == 1)	return false;
+		if (bAng && vecCell[c].m_nSelectCell[M_ANGLE] == 1)		return false;
+	}
+
+	CString strItems;
+	if (bWad) strItems += _T("WAD,");
+	if (bVis) strItems += _T("VISION,");
+	if (bAng) strItems += _T("ANGLE,");
+	strItems.TrimRight(_T(','));
+
+	CString strSkip;
+	strSkip.Format(_T("Sampling: stick %d skipped - no selected cell for the enabled items (%s) - no move/contact/OST/R-TEST/AGING%s"),
+		nStick + 1, strItems.GetString(), GetRecipeEditMgrPtr()->GetSegLogTag().GetString());	// 1 segment: empty tag
+	m_pLogFileAccessor->KMLOG(OPER, strSkip);	// measure_seq_item_engine log, next to the 3c "AgingCycle: stick n skipped" lines
+	return true;
+}
+
+// LYS 2026-10-08 Sampling stick skip (D-SS-3 b1s) for a cycle stick (AgingTest item list / EFA pass), called by AgingCycleBegin after the 3c test.
+//   The steps measure a cell of kind k for an item when the item uses k on the stick (flag x IsStickUse, no mask section = every stick), the cell
+//   is in the mask (IsAgingCellSkip: no section / past the row's end = in) and, with Sampling on, m_nSelectCell == 1. When no item the cycle runs
+//   on this stick (iOnlyItem = the EFA pass item; -1 = every USE_AGING item with a cell = the items AgingCycleNextItem visits) has such a cell,
+//   the cycle becomes a 3c-style stick skip: no begin / end line, one OPER line, true (the caller returns false).
+//   Sampling off / a 1-cell stick (D-SS-4) / stick out of range / no optical kind (D-SS-7) -> false: nothing changed, no log.
+//   Item order, repeat indexes and the 3c lines stay as they are (a skipped stick writes no result row; repeats restart per stick).
+bool CMeasureSequenceItemEngine::SamplingCycleSkip(int iOnlyItem)
+{
+	if (m_MgrPool_link.pSystemConfigMgr == nullptr || m_MgrPool_link.pSystemConfigMgr->IsOCP() == false) return false;	// D-SS-2 (AgingCycleBegin checks it too)
+	if (GetRecipeEditMgrPtr() == nullptr) return false;
+
+	S_RecipeInfo* pInfo = GetRecipeEditMgrPtr()->GetRecipeInfo();
+	S_RecipeData* pData = GetRecipeEditMgrPtr()->GetRecipeData();
+	if (pInfo == nullptr || pData == nullptr) return false;
+	if (pInfo->m_sOptionItem.m_bUseSampling == FALSE) return false;
+	if (m_nAgingStick < 0 || m_nAgingStick >= (int)pData->m_vecStick.size()) return false;
+
+	const std::vector<S_CellInfo>& vecCell = pData->m_vecStick[m_nAgingStick].m_vecCell;
+	if (vecCell.size() == 1) return false;	// D-SS-4 a 1-cell stick is measured as before
+
+	int nSeg = GetRecipeEditMgrPtr()->GetActiveSegment();
+	int nRows = m_AgingCycleInfo.GetStickCount(nSeg);
+	int nMaskCell = (nRows > 0) ? m_AgingCycleInfo.GetCellCount(nSeg, m_nAgingStick) : 0;
+	const int nSelMode[enumAgingMeasKind_MAX] = { M_SPEC, M_QUALITY, M_ANGLE };	// enumAgingMeasKind_WAD / _VISION / _ANGLE
+	bool bAnyKind = false;
+
+	for (int i = 0; i < m_AgingCycleInfo.GetItemCount(); i++)
+	{
+		if (iOnlyItem >= 0 && i != iOnlyItem) continue;
+		const S_AgingTest* pItem = m_AgingCycleInfo.GetItem(i);
+		if (pItem == nullptr) continue;
+		if (iOnlyItem < 0 && (pItem->m_bUseAging == FALSE || AgingItemHasCell(i) == false)) continue;
+
+		const BOOL bKind[enumAgingMeasKind_MAX] = { pItem->m_bUseProperty, pItem->m_bUseQuality, pItem->m_bUseAngle };
+		for (int k = 0; k < enumAgingMeasKind_MAX; k++)
+		{
+			if (bKind[k] == FALSE) continue;
+			if (nRows != 0 && m_AgingCycleInfo.IsStickUse(nSeg, m_nAgingStick, k) == false) continue;	// the step's bUseMeas
+			bAnyKind = true;
+			for (int c = 0; c < (int)vecCell.size(); c++)
+			{
+				bool bMask = (nRows <= 0 || c >= nMaskCell || m_AgingCycleInfo.IsCellUse(nSeg, m_nAgingStick, c, k));	// IsAgingCellSkip() == false
+				if (bMask && vecCell[c].m_nSelectCell[nSelMode[k]] == 1) return false;
+			}
+		}
+	}
+	if (bAnyKind == false) return false;	// D-SS-7 no optical kind in the cycle items: never a Sampling skip. Defensive - AgingCycleBegin calls this only after the 3c test found a used kind; in a cycle the steps read the item flags, not Spec_3 / Quality_4 / Angle_6
+
+	CString strWhat;
+	if (m_bEfaCycle) strWhat.Format(_T("EFA pass %d/%d"), iOnlyItem + 1, m_AgingCycleInfo.GetItemCount());
+	else			 strWhat = _T("AgingTest items");
+
+	m_bAgingCycleActive = false;
+	m_bEfaCycle = false;
+	m_nAgingCurItem = -1;
+	m_bAgingStickSkip = true;
+	m_bSamplingCycleSkip = true;
+
+	CString strSkip;
+	strSkip.Format(_T("Sampling: stick %d skipped - no selected cell for the cycle items in [%s] (%s) - no move/contact/OST/R-TEST/AGING%s"),
+		m_nAgingStick + 1, CAgingCycleInfo::GetMaskSection(nSeg).GetString(), strWhat.GetString(), m_strCycleSegTag.GetString());
+	m_pLogFileAccessor->KMLOG(OPER, strSkip);
+	return true;
+}
+
 void CMeasureSequenceItemEngine::AgingCycleEnd()
 {
 	if (m_bAgingCycleActive)
@@ -1081,6 +1200,7 @@ void CMeasureSequenceItemEngine::AgingCycleEnd()
 	m_bEfaCycle = false;	// LYS 2026-09-28 EFA
 	m_nAgingStick = -1;			// LYS 2026-09-30
 	m_bAgingStickSkip = false;
+	m_bSamplingCycleSkip = false;	// LYS 2026-10-08 Sampling stick skip
 
 	if (m_MgrPool_link.pShareMemoryMgr != nullptr && m_MgrPool_link.pShareMemoryMgr->GetSharedMemory() != nullptr)
 	{

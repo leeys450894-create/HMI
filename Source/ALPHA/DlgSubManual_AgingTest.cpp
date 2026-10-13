@@ -8,6 +8,7 @@
 #include "Manager\SequenceManager.h"	// LYS 2026-08-06 Phase 4
 #include "Manager\SystemConfigMgr.h"	// LYS 2026-08-18 START pre-check (IsOCP)
 #include "DoWork\AgingCycleInfo.h"		// LYS 2026-08-18 START pre-check (engine loader)
+#include "ResumePrompt.h"				// LYS 2026-10-08 Hybrid Phase 5 resume prompt on START (D5-11 a)
 #include "afxdialogex.h"
 
 #include <iostream>
@@ -356,6 +357,27 @@ void CDlgSubManual_AgingTest::OnLoadAgingInfo()
 	LoadAgingInfo();
 }
 
+// LYS 2026-10-13 Hybrid Phase 7 D7-15 (b) START on a hybrid runtime recipe (segment-count cache > 1, fix stage note below) also needs SPS_IDLE:
+//   a manual worker / recipe command (SPS_CYCLETEST) must not overlap an engine start (the engine-start backstop relies on it).
+//   Called when the status is not SPS_PROCESS, and (fix stage, impl review 7) again right before the resume prompt. 1-segment recipe:
+//   always false, no log (the SPS_PROCESS test alone, unchanged).
+//   true = refuse (WARN logged, the caller shows the existing message).
+static bool IsHybridStartNotIdle(CAuroraMgr* pMgr)
+{
+	int nSps = (int)pMgr->GetShareMemoryMgrPtr()->GetSys_ProcessStatus();
+	if (nSps == SPS_IDLE)
+		return false;
+	// LYS 2026-10-13 Hybrid Phase 7 fix (impl review 1/2): SPS is not idle here (a run, a manual worker or a recipe command), so the hybrid test reads
+	//   the segment-count cache int only - no DLL segment vector read while busy (HARD RULE 3). 1-segment recipe (cache 1): false, no log
+	CRecipeEditMgr* pRcp = pMgr->GetRecipeEditMgrPtr();
+	if (pRcp == NULL || pRcp->GetSegCountCache() <= 1)
+		return false;	// 1-segment recipe
+	CString strLog;
+	strLog.Format(_T("[HYBRID] AgingTest START refused - process status %d is not idle (manual worker / recipe command running)"), nSps);
+	CLogWrapper::GetInstance()->KMLOG(WARN, strLog);
+	return true;
+}
+
 void CDlgSubManual_AgingTest::OnAgingProcStrart()
 {
 	// LYS 2026-08-06 Phase 4: HMI 사이클 검사 경로로 에이징 사이클 테스트 시작
@@ -369,7 +391,8 @@ void CDlgSubManual_AgingTest::OnAgingProcStrart()
 	if (m_pAuroraMgr == NULL || m_pAuroraMgr->GetShareMemoryMgrPtr() == NULL ||
 		m_pAuroraMgr->GetRecipeEditMgrPtr() == NULL) return;
 
-	if (m_pAuroraMgr->GetShareMemoryMgrPtr()->GetSys_ProcessStatus() == SPS_PROCESS)
+	// LYS 2026-10-13 Hybrid Phase 7 D7-15 (b): hybrid runtime recipe -> START also needs SPS_IDLE (IsHybridStartNotIdle); 1-segment recipe: SPS_PROCESS only, unchanged
+	if (m_pAuroraMgr->GetShareMemoryMgrPtr()->GetSys_ProcessStatus() == SPS_PROCESS || IsHybridStartNotIdle(m_pAuroraMgr))
 	{
 		AfxMessageBox(_T("Process is running.\nTry again after it completes."), MB_ICONWARNING);
 		return;
@@ -471,6 +494,19 @@ void CDlgSubManual_AgingTest::OnAgingProcStrart()
 		m_vecAginList.push_back(sAgingList);
 	}
 
+	// LYS 2026-10-13 Hybrid Phase 7 fix (impl review 7): D7-15 (b) again after the confirm dialog(s) above (modal - the status may have changed),
+	//   before the resume prompt and the shared state below (nothing is changed yet). Hybrid runtime recipe only; 1-segment recipe: false, no log
+	if (IsHybridStartNotIdle(m_pAuroraMgr))
+	{
+		AfxMessageBox(_T("Process is running.\nTry again after it completes."), MB_ICONWARNING);
+		return;
+	}
+
+	// LYS 2026-10-08 Hybrid Phase 5 (D5-11 a) journal bookmark -> the same resume prompt as CYCLE (EFA mode checked for this START);
+	//   otherwise only the stale resume flag is cleared (D5-10 a). CANCEL = nothing changed.
+	if (ResumeDialogEntry(m_pAuroraMgr, RESUME_ENTRY_AGINGTEST) == RESUME_PROMPT_CANCEL)
+		return;
+
 	// shared state (OCP parity: JOB_Proc reads these in auto aging mode)
 	if (m_pAuroraMgr->GetShareMemoryMgrPtr()->GetSharedMemory() != NULL)
 	{
@@ -535,6 +571,14 @@ BOOL CDlgSubManual_AgingTest::IsOfflineStatus()
 	if (IsHybridRunBusy())
 	{
 		AfxMessageBox(_T("하이브리드 레시피 측정 중에는 이 작업을 할 수 없습니다.\n측정이 끝난 뒤 다시 시도하십시오."), MB_ICONWARNING);
+		return FALSE;
+	}
+
+	// LYS 2026-10-12 1-segment recipes too (user request): a recipe open / save / reload / START mid-run changes the running glass
+	//   (e.g. Sampling) and resets the EFA / cell ID / result latches and the cell status - blocked while any glass is being measured
+	if (CSequenceManager::GetInstance()->IsEngineCompleteAll() == false || CSystemParamShare::GetInstance()->IsCycleState())
+	{
+		AfxMessageBox(_T("측정 중에는 이 작업을 할 수 없습니다.\n측정이 끝난 뒤 다시 시도하십시오."), MB_ICONWARNING);
 		return FALSE;
 	}
 

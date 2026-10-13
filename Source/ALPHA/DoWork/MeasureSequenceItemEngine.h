@@ -101,6 +101,8 @@ public:
 public:
 	bool				AgingCycleBegin(int nEfaPass = -1, int nStick = -1);	// 게이트(bIsOCP + 레시피 m_bUseAging_Test) + 에이징 rcp 로드. nEfaPass>=0: EFA 고정 항목 (// LYS 2026-09-28 EFA)
 	bool				IsAgingStickSkip() const	{ return m_bAgingStickSkip; }	// LYS 2026-09-30 AgingCycleBegin(nStick >= 0) found no USE_AGING item with a cell on the stick
+	bool				IsSamplingStickSkip(int nStick);	// LYS 2026-10-08 Sampling stick skip: standard glass, OCP, recipe Sampling on, no cell of the stick selected for the enabled WAD/VISION/ANGLE items (a 1-cell stick never, D-SS-4; a 0-cell stick has none) -> ThreadRun skips the stick like the 3c skip (OCP nGroup < 1). Logs the skip
+	bool				IsSamplingCycleSkip() const	{ return m_bSamplingCycleSkip; }	// LYS 2026-10-08 Sampling stick skip: the last AgingCycleBegin turned its cycle stick into this skip (IsAgingStickSkip() is true as well)
 	void				AgingCycleEnd();
 	bool				AgingCycleNextItem();	// advance to next USE_AGING item. FALSE = exhausted
 	bool				IsAgingCycleActive() const	{ return m_bAgingCycleActive; }
@@ -128,6 +130,8 @@ private:
 	void				CheckAgingMaskShape();			// LYS 2026-09-30 WARN once per glass and segment when the loaded mask does not fit the recipe
 	int					m_nAgingStick;					// LYS 2026-09-30 stick of the running cycle (-1 = not given: item-only selection)
 	bool				m_bAgingStickSkip;				// LYS 2026-09-30 set by AgingCycleBegin, cleared by AgingCycleEnd
+	bool				m_bSamplingCycleSkip;			// LYS 2026-10-08 Sampling stick skip: set (with m_bAgingStickSkip) by SamplingCycleSkip, cleared by AgingCycleBegin / AgingCycleEnd
+	bool				SamplingCycleSkip(int iOnlyItem);	// LYS 2026-10-08 Sampling stick skip (D-SS-3 b1s): cycle stick without a mask cell selected by Sampling -> 3c-style stick skip + log
 	bool				AgingItemHasCell(int iItem);	// LYS 2026-09-30 same test as the WAD/VISION/ANGLE step gates
 	CString				m_strCycleSegTag;				// LYS 2026-09-30 Hybrid 3c segment tag of the running cycle (the last AgingCycleEnd logs after the segment-0 restore)
 

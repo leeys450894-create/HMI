@@ -109,4 +109,25 @@ class C_InRecipeFunc
 	// LYS 2026-09-29 ¼¿/½ºÆ½ ÁÂÇ¥ ±Û¶ó½º ¹üÀ§ °Ë»ç (MakeCell ¼¿ Á¤º¸ ¿À·ù Àç¹ß ¹æÁö)
 	public:
 		CString CheckRecipeLayout (const S_RecipeMgr *pMgr, CString strWhat);
+
+	// LYS 2026-10-01 Hybrid Phase 4b Cell ID A/B (docs/HybridGlass_Porting_Plan.md 5.7). Same rule core as C_OutRecipeFunc (CellIdRule.h);
+	//   the editor / SaveFile / MakeCell APPLY use these. Members stay at the class end.
+	public:
+		BOOL			IsCellIdDefault ();								// both panels Auto -> legacy IDs everywhere
+		int				GetCellIdMode (int nPanel);						// M_CELLID_MODE_*
+		int				ResolveCellToken (int nSeg, int nStick, int nCell, int nPanel, CString &strToken, BOOL bAutoFallback = FALSE);
+																	// 1 = manual / derived from A, 0 = Auto (strToken = Auto token only with bAutoFallback)
+		BOOL			ValidateCellIdConfig (int nGlassIdLen, std::vector<S_CellIdError> &vecErr, int *pnLongest = NULL);
+																	// SaveFile / editor pass -1 (token cap M_CELLID_TOKEN_MAX). TRUE = OK (Auto/Auto always)
+		BOOL			ResetCellIdConfig ();							// MakeCell APPLY: TRUE = a non-default config was cleared (info popup). Every call bumps m_nCellIdCfgSeq (cells rebuilt)
+		S_CellIdConfig	GetCellIdConfig ();								// editor working copy
+		void			SetCellIdConfig (const S_CellIdConfig &cfg);		// editor APPLY (Auto panels emptied, Manual panels shaped), bumps m_nCellIdCfgSeq
+		CString			GetDisplayCellId (int nSeg, int nStick, int nCell);	// DLL screens: 1-segment Auto/Auto -> m_chCellID as before, else resolved panel A (N > 1 Auto/Auto = carried letters, LYS 2026-10-12 Hybrid Phase 6 D4b-7 (b))
+		void			SaveCellIdTail (CStdioFile *pFile);
+		int				GetCellIdCfgSeq ();								// editor: refuse APPLY when the config / cells changed under it (review C1/K1)
+	protected:
+		BOOL			LoadCellIdTail (CStdioFile *pFile);
+	public:
+		S_CellIdConfig	m_sCellIdCfg;
+		int				m_nCellIdCfgSeq;								// ++ on successful LoadRcpFile, every ResetCellIdConfig, SetCellIdConfig
 };

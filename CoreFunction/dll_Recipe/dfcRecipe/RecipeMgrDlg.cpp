@@ -1,6 +1,7 @@
 #include "pch.h"
 #include "dfcRecipe.h"
 #include "RecipeMgrDlg.h"
+#include "CellIdEditDlg.h"	// LYS 2026-10-01 Hybrid Phase 4b
 #include "afxdialogex.h"
 //#include "API_RECIPE.h"  // LYS 2026-07-20 for GetRecipeMgr
 
@@ -121,6 +122,7 @@ BEGIN_MESSAGE_MAP (C_RecipeMgrDlg, CDialogEx)
 	ON_COMMAND (IDC_BUTTON_13, OnSegmentNext)
 
 	ON_COMMAND(IDC_BUTTON_TEST_MODE, OnBtnTestMode)	// LYS 2026-07-02
+	ON_COMMAND (IDC_BUTTON_14, OnCellIdEdit)	// LYS 2026-10-01 Hybrid Phase 4b
 END_MESSAGE_MAP ()
 
 void C_RecipeMgrDlg::OnDestroy()
@@ -435,6 +437,16 @@ BOOL	C_RecipeMgrDlg::SaveFile (CString strRcpName)
 	if (!strErr.IsEmpty ()) {
 		AfxMessageBox (_T("레시피 저장 불가 (하이브리드 세그먼트 검사)\n\n") + strErr, MB_ICONWARNING);
 		return FALSE;
+	}
+
+	// LYS 2026-10-01 Hybrid Phase 4b Cell ID A/B check before the file is opened (format, B derivation, A+B duplicates over all segments).
+	//   Auto/Auto (every recipe saved before 4b) is not checked - no popup, the save goes on as before
+	{
+		std::vector<S_CellIdError> vecCid;
+		if (g_inRcpInfo.ValidateCellIdConfig (-1, vecCid) != TRUE) {
+			AfxMessageBox (_T("레시피 저장 불가 (Cell ID 검사)\n\n") + C_CellIdEditDlg::FormatErrors (vecCid, 5), MB_ICONWARNING);
+			return FALSE;
+		}
 	}
 
 	CString strPath;
@@ -1650,7 +1662,7 @@ void	C_RecipeMgrDlg::SetHeadMoveData (int nStick)
 		sCell = g_inRcpInfo.GetCellItem (nStick, i);
 
 		m_gridHeadMoveData.SetItemText (i, 0, dfcStr (i + 1));
-		m_gridHeadMoveData.SetItemText (i, 3, dfcStr (sCell.m_chCellID));
+		m_gridHeadMoveData.SetItemText (i, 3, g_inRcpInfo.GetDisplayCellId (g_inRcpInfo.GetActiveSegmentIndex (), nStick, i));	// LYS 2026-10-01 Hybrid Phase 4b
 		m_gridHeadMoveData.SetItemText (i, 4, dfcStr (sCell.m_fCellY));
 		m_gridHeadMoveData.SetItemText (i, 5, dfcStr (sCell.m_fCellX));
 	}
@@ -2327,6 +2339,33 @@ void C_RecipeMgrDlg::OnBtnTestMode()
 	if (m_pTestModeDlg && !m_pTestModeDlg->IsWindowVisible()) {
 		m_pTestModeDlg->ShowWindow(SW_SHOW);
 	}
+}
+
+// LYS 2026-10-01 Hybrid Phase 4b Cell ID A/B editor (docs/HybridGlass_Porting_Plan.md 5.7). No GetRecipeView(): GetHeadMoveData would copy
+//   stick 0's HEAD Y/X into every stick (ICP 8d162da defect). Only the option grid (GLASS ROTATE) is flushed so the Auto preview matches the screen.
+void	C_RecipeMgrDlg::OnCellIdEdit ()
+{
+	AFX_MANAGE_STATE (AfxGetStaticModuleState ());	// first DLL dialog opened with DoModal (all others are modeless Create) - make the template lookup explicit
+	if (GetRecipeName ().IsEmpty ()) { AfxMessageBox (_T("로드된 레시피가 없습니다.")); return; }
+	if (g_inRcpInfo.GetSegmentStickCount (g_inRcpInfo.GetActiveSegmentIndex ()) <= 0) { AfxMessageBox (_T("Cell 정보가 없습니다.")); return; }
+	// review C1/K1: MakeCell is a modeless popup the modal editor does not disable - its RECIPE APPLY would reset the Cell ID config under the editor
+	if (m_pMakeCellDlg && m_pMakeCellDlg->IsWindowVisible ()) { AfxMessageBox (_T("MAKE CELL 창이 열려 있습니다.\nMAKE CELL 창을 닫은 뒤 CELL ID 편집기를 여십시오."), MB_ICONWARNING); return; }
+	GetInspectOptionData ();	// active segment option item only (the option grid -> g_inRcpInfo.m_recipeMgr)
+
+	C_CellIdEditDlg dlg (this);
+	INT_PTR nRet = dlg.DoModal ();
+	if (nRet == -1) {	// template / window creation failed (review C5/K7) - not the same as CLOSE
+		TRACE (_T("C_CellIdEditDlg::DoModal failed (IDD_CELL_ID_EDIT_DLG)\n"));
+		AfxMessageBox (_T("CELL ID 편집기를 열 수 없습니다. (IDD_CELL_ID_EDIT_DLG)"), MB_ICONWARNING);
+		return;
+	}
+	if (nRet != IDOK) return;
+
+	// HEAD grid CELL ID column only - SetHeadMoveData() would discard unsaved HEAD Y/X edits. The grid always shows stick 0 (SetHeadMoveData ())
+	int nSeg = g_inRcpInfo.GetActiveSegmentIndex ();
+	for (int i = 0; i < m_gridHeadMoveData.GetRowCount () && i < g_inRcpInfo.GetCellCount (0); i++)
+		m_gridHeadMoveData.SetItemText (i, 3, g_inRcpInfo.GetDisplayCellId (nSeg, 0, i));
+	m_gridHeadMoveData.Invalidate ();
 }
 
 // LYS 2026-09-29 Hybrid Phase 2 세그먼트 선택기 + 세그먼트 정보 그리드 (docs/HybridGlass_Porting_Plan.md 5.10)

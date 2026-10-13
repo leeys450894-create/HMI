@@ -140,4 +140,8 @@ public:
 	bool UploadDataToShare(PRSRITEMDATA result);
 	void DataClear();
 	bool m_bSaveResultDone;
+	// LYS 2026-10-06 Hybrid Phase 5 resume replay: fast upload switch + finished-row counter (public like m_bSaveResultDone, used by CResultManager)
+	volatile bool m_bFastUpload;					// true only during a resume journal replay: UploadData skips the 1 s display wait
+	volatile LONG m_nUploadDoneCount;				// rows the monitor thread finished (UploadData returned), never reset
+	void GetUploadState(int* pQueue, long* pDone);	// rows waiting in the shared ring / rows finished (counter above)
 };

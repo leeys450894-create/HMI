@@ -1576,6 +1576,7 @@ int CMaintControlMgr::SetGlassAlignXYR(double dX, double dY, double dR)
 	m_dGlassAlignOffset[1] = dY;
 	m_dGlassAlignOffset[2] = dR;
 	m_bGlassAlignDone = false;	// LYS 2026-09-15 오프셋이 새로 쓰이면 완료 해제 - 성공 경로(AlignGlass)가 대입 직후 다시 true
+	m_bGlassAlignRefValid = false;	// LYS 2026-10-13 Hybrid Phase 7 the Glass Align reference R mark goes with the offset (AlignGlass sets it again after success)
 
 	m_dAlignOffset[AXIS_X]		  = m_dGlassAlignOffset[0];
 	m_dAlignOffset[AXIS_Y1]       = m_dGlassAlignOffset[1];
@@ -5655,6 +5656,7 @@ int CMaintControlMgr::WaitForStageAir_OnNOffComplete(bool bOn, UINT nTimeOut)
 int CMaintControlMgr::Do_StageVac_On()
 {
 	int nRtn = VTM_RV_SUCCESSED;
+	m_bGlassAlignRefValid = false;	// LYS 2026-10-13 Hybrid Phase 7 D7-22 manual GLASS GET/PUT: drop the Glass Align reference R mark (offset unchanged)
 	CString strLog;
 
 	bool bOn = true;
@@ -5688,6 +5690,7 @@ int CMaintControlMgr::Do_StageVac_On()
 int CMaintControlMgr::Do_StageVac_Off()
 {
 	int nRtn = VTM_RV_SUCCESSED;
+	m_bGlassAlignRefValid = false;	// LYS 2026-10-13 Hybrid Phase 7 D7-22 manual GLASS GET/PUT: drop the Glass Align reference R mark (offset unchanged)
 	CString strLog;
 
 	bool bOn = false;
@@ -8996,7 +8999,21 @@ long CMaintControlMgr::MoveCmdPos_ProbeUnContact(int nAxis, double fContatZ)
 		break;
 		case AXIS_PROBE_Z5:
 		{
-			nRet = MoveCmdPosA(nAxis, dMove, true, SPEED_LOW);
+			// LYS 2026-10-12 slow lift only from below the pre-contact height (+ = down). The AXIS_ALL_Z branch has checked this since 2023-04-07,
+			//   but OCP redirects AXIS_ALL_Z here: a probe already at / above it (safety 0 after a segment boundary, a resume or SafetyAll)
+			//   went DOWN to the pre-contact height first, with no glass under it yet
+			double dCurZ = GetCurPos(nAxis);
+			double dCurZ2 = GetCurPos(nAxis);	// a failed ACS feedback read returns 0: skip the slow lift only when both reads agree
+			if (dCurZ > dMove || dCurZ2 > dMove)
+			{
+				nRet = MoveCmdPosA(nAxis, dMove, true, SPEED_LOW);
+			}
+			else if (dMove > 0.001)	// a 0 target (TestMode) has no slow leg to skip - no log
+			{
+				CString strSkip;
+				strSkip.Format(_T("MoveCmdPos_ProbeUnContact PROBE Z at %.3f is not below the slow-lift target %.3f - slow lift skipped"), dCurZ, dMove);
+				m_pMotorControlMgr->GetLogFileAccessorPtr()->KMLOG(SYST, strSkip, true);
+			}
 
 			if (nRet == df_MOTION_RV_SUCCESSED)
 			{

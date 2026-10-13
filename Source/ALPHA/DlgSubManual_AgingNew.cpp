@@ -7,6 +7,7 @@
 //   - Cycle 콤보 1..25, 패턴 콤보 0..25
 // 파일 형식은 AgingTest와 같다({rcp}.rcp INI: [COUNT] [ITEM_n] [MASECELL]) - CAgingCycleInfo가 그대로 읽는다.
 // /utf-8 없이 CP949로 컴파일되므로 사용자 메시지 문자열은 영어로 둔다(HMI/CLAUDE.md 규칙 7).
+// LYS 2026-10-12 Hybrid Phase 6 note: the English-only rule above no longer holds - user strings here are Korean CP949 bytes (3c popups, Phase 6 title suffix)
 #include "pch.h"
 #include "ALPHA.h"
 #include "DlgSubManual_AgingNew.h"
@@ -17,6 +18,7 @@
 #include "Manager\SequenceManager.h"
 #include "Manager\SystemConfigMgr.h"
 #include "DoWork\AgingCycleInfo.h"		// LYS 2026-09-30 Hybrid 3c A13 mask section names (engine loader)
+#include "ResumePrompt.h"				// LYS 2026-10-08 Hybrid Phase 5 resume prompt on START (D5-11 a)
 #include "afxdialogex.h"
 
 #include <iostream>
@@ -116,6 +118,8 @@ BOOL CDlgSubManual_AgingNew::OnInitDialog()
 	m_LabelInfo.SetBkColor(RGB(0, 32, 0));
 	m_LabelInfo.SetTextColor(RGB(255, 255, 192));
 	m_LabelInfo.SetFontBold(TRUE);
+	m_LabelInfo.GetWindowText(m_strTitleBase);	// LYS 2026-10-12 Hybrid Phase 6 rc title; the highlight timer adds a suffix only while a hybrid EFA run measures
+	m_strTitleShown = m_strTitleBase;
 
 	m_chkStop.SetImage(IDB_CHECKNO32);
 	m_chkStop.m_nFlatStyle = CMFCButton::BUTTONSTYLE_3D;
@@ -203,6 +207,33 @@ void CDlgSubManual_AgingNew::OnTimer(UINT_PTR nIDEvent)
 	// m_nAgingListCol(1=Aging 2=PTN 3=SEC 4=WAD 5=VISION 6=ANGLE)을 쓰고, 대기 중이면 0/0이다.
 	if (nIDEvent == EFA_TIMER_HIGHLIGHT)
 	{
+		// LYS 2026-10-12 Hybrid Phase 6 (D3c-14) hybrid EFA run: segment / EFA pass in the title (ints only, any start path: CYCLE / CIM / START).
+		//   1-segment recipe, idle, or a hybrid run that is not EFA (AgingTest / plain CYCLE): the rc title as before (D6-3 (a))
+		{
+			CString strTitle = m_strTitleBase;
+			CRecipeEditMgr* pRcpT = (m_pAuroraMgr != NULL) ? m_pAuroraMgr->GetRecipeEditMgrPtr() : NULL;
+			int nPassT = (pRcpT != NULL) ? pRcpT->GetUiPass() : -1;	// pass first (SetUiProgress writes it last)
+			int nCntT = (pRcpT != NULL) ? pRcpT->GetUiPassCount() : 0;
+			if (pRcpT != NULL && pRcpT->GetSegCountCache() > 1 && nPassT >= 0 && nCntT > 0)
+			{
+				CString strPart;
+				int nSegT = pRcpT->GetUiSeg();
+				strTitle += _T(" - 측정 중");
+				if (nSegT >= 0)
+				{
+					strPart.Format(_T(": 세그먼트 %d/%d%s"), nSegT + 1, pRcpT->GetSegCountCache(), (pRcpT->GetUiSegReady() == 0) ? _T(" 전환 중") : _T(""));
+					strTitle += strPart;
+				}
+				strPart.Format(_T(", EFA T%d (%d/%d)"), nPassT, nPassT + 1, nCntT);
+				strTitle += strPart;
+			}
+			if (strTitle != m_strTitleShown && m_LabelInfo.GetSafeHwnd() != NULL)
+			{
+				m_strTitleShown = strTitle;
+				m_LabelInfo.SetText(strTitle);
+			}
+		}
+
 		// LYS 2026-09-30 Hybrid 3c A13 recipe changed outside this dialog to a 1-segment recipe -> hide the selector (the stamp is cleared,
 		//   SAVE refused until LOAD / Recipe Open); hybrid run busy -> selector disabled. Engine / cycle flags and the segment count only,
 		//   never the segment contents. 1-segment recipes: the combo is hidden, so nothing here runs.
@@ -245,7 +276,9 @@ void CDlgSubManual_AgingNew::OnTimer(UINT_PTR nIDEvent)
 			if (m_pAuroraMgr->GetShareMemoryMgrPtr()->GetSharedMemory() == NULL) break;
 
 			int nRow = 0, nCol = 0;
-			if (m_pAuroraMgr->GetShareMemoryMgrPtr()->GetSys_NewAgingMode())
+			CRecipeEditMgr* pRcpHl = m_pAuroraMgr->GetRecipeEditMgrPtr();	// LYS 2026-10-12 Hybrid Phase 6 (D6-4 (b)) a hybrid EFA glass started by CYCLE / CIM recipe flag too
+			if (m_pAuroraMgr->GetShareMemoryMgrPtr()->GetSys_NewAgingMode()
+				|| (pRcpHl != NULL && pRcpHl->GetUiPassCount() > 0 && pRcpHl->GetSegCountCache() > 1))
 			{
 				nRow = m_pAuroraMgr->GetShareMemoryMgrPtr()->GetSharedMemory()->m_nAgingListRow;
 				nCol = m_pAuroraMgr->GetShareMemoryMgrPtr()->GetSharedMemory()->m_nAgingListCol;
@@ -383,6 +416,27 @@ void CDlgSubManual_AgingNew::OnLoadAgingInfo()
 	LoadAgingInfo();
 }
 
+// LYS 2026-10-13 Hybrid Phase 7 D7-15 (b) START on a hybrid runtime recipe (segment-count cache > 1, fix stage note below) also needs SPS_IDLE:
+//   a manual worker / recipe command (SPS_CYCLETEST) must not overlap an engine start (the engine-start backstop relies on it).
+//   Called when the status is not SPS_PROCESS, and (fix stage, impl review 7) again right before the resume prompt. 1-segment recipe:
+//   always false, no log (the SPS_PROCESS test alone, unchanged).
+//   true = refuse (WARN logged, the caller shows the existing message).
+static bool IsHybridStartNotIdle(CAuroraMgr* pMgr)
+{
+	int nSps = (int)pMgr->GetShareMemoryMgrPtr()->GetSys_ProcessStatus();
+	if (nSps == SPS_IDLE)
+		return false;
+	// LYS 2026-10-13 Hybrid Phase 7 fix (impl review 1/2): SPS is not idle here (a run, a manual worker or a recipe command), so the hybrid test reads
+	//   the segment-count cache int only - no DLL segment vector read while busy (HARD RULE 3). 1-segment recipe (cache 1): false, no log
+	CRecipeEditMgr* pRcp = pMgr->GetRecipeEditMgrPtr();
+	if (pRcp == NULL || pRcp->GetSegCountCache() <= 1)
+		return false;	// 1-segment recipe
+	CString strLog;
+	strLog.Format(_T("[HYBRID] EFA START refused - process status %d is not idle (manual worker / recipe command running)"), nSps);
+	CLogWrapper::GetInstance()->KMLOG(WARN, strLog);
+	return true;
+}
+
 void CDlgSubManual_AgingNew::OnAgingProcStrart()
 {
 	// HMI 사이클 검사 경로로 EFA 사이클 테스트를 시작한다
@@ -393,7 +447,8 @@ void CDlgSubManual_AgingNew::OnAgingProcStrart()
 	if (m_pAuroraMgr == NULL || m_pAuroraMgr->GetShareMemoryMgrPtr() == NULL ||
 		m_pAuroraMgr->GetRecipeEditMgrPtr() == NULL) return;
 
-	if (m_pAuroraMgr->GetShareMemoryMgrPtr()->GetSys_ProcessStatus() == SPS_PROCESS)
+	// LYS 2026-10-13 Hybrid Phase 7 D7-15 (b): hybrid runtime recipe -> START also needs SPS_IDLE (IsHybridStartNotIdle); 1-segment recipe: SPS_PROCESS only, unchanged
+	if (m_pAuroraMgr->GetShareMemoryMgrPtr()->GetSys_ProcessStatus() == SPS_PROCESS || IsHybridStartNotIdle(m_pAuroraMgr))
 	{
 		AfxMessageBox(_T("Process is running.\nTry again after it completes."), MB_ICONWARNING);
 		return;
@@ -524,6 +579,19 @@ void CDlgSubManual_AgingNew::OnAgingProcStrart()
 		m_vecAginList.push_back(sAgingList);
 	}
 
+	// LYS 2026-10-13 Hybrid Phase 7 fix (impl review 7): D7-15 (b) again after the confirm dialog(s) above (modal - the status may have changed),
+	//   before the resume prompt and the shared state below (nothing is changed yet). Hybrid runtime recipe only; 1-segment recipe: false, no log
+	if (IsHybridStartNotIdle(m_pAuroraMgr))
+	{
+		AfxMessageBox(_T("Process is running.\nTry again after it completes."), MB_ICONWARNING);
+		return;
+	}
+
+	// LYS 2026-10-08 Hybrid Phase 5 (D5-11 a) journal bookmark -> the same resume prompt as CYCLE (an EFA glass resumes here);
+	//   otherwise only the stale resume flag is cleared (D5-10 a). CANCEL = nothing changed.
+	if (ResumeDialogEntry(m_pAuroraMgr, RESUME_ENTRY_AGINGNEW) == RESUME_PROMPT_CANCEL)
+		return;
+
 	// 공유 상태: EFA와 AgingTest 모드는 동시에 켜지지 않는다 (OCP도 시작할 때마다 둘 다 리셋)
 	if (m_pAuroraMgr->GetShareMemoryMgrPtr()->GetSharedMemory() != NULL)
 	{
@@ -593,6 +661,14 @@ BOOL CDlgSubManual_AgingNew::IsOfflineStatus()
 		&& (CSequenceManager::GetInstance()->IsEngineCompleteAll() == false || CSystemParamShare::GetInstance()->IsCycleState()))
 	{
 		AfxMessageBox(_T("하이브리드 레시피 측정 중에는 이 작업을 할 수 없습니다.\n측정이 끝난 뒤 다시 시도하십시오."), MB_ICONWARNING);
+		return FALSE;
+	}
+
+	// LYS 2026-10-12 1-segment recipes too (user request): a recipe open / save / reload / START mid-run changes the running glass
+	//   (e.g. Sampling) and resets the EFA / cell ID / result latches and the cell status - blocked while any glass is being measured
+	if (CSequenceManager::GetInstance()->IsEngineCompleteAll() == false || CSystemParamShare::GetInstance()->IsCycleState())
+	{
+		AfxMessageBox(_T("측정 중에는 이 작업을 할 수 없습니다.\n측정이 끝난 뒤 다시 시도하십시오."), MB_ICONWARNING);
 		return FALSE;
 	}
 

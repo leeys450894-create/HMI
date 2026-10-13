@@ -169,6 +169,15 @@ BOOL CDlgSubManual_AutoContact::OnInitDialog()
 
 	UpdateStickList();		// LYS 2026-08-11 manual-only: stick selector
 
+	// LYS 2026-10-13 Hybrid Phase 7 D7-17 segment label, created hidden right of the recipe box (DLU 140,53-340,62 is free in IDD_DLG_SUB_MANUAL_AUTO_CONTACT,
+	//   .rc unchanged). Only UpdateAcSegLabel shows it, and only for a hybrid recipe - a 1-segment recipe never sees it
+	{
+		CRect rcAcSeg(140, 53, 340, 62);
+		MapDialogRect(&rcAcSeg);
+		if (m_stAcSeg.Create(_T(""), WS_CHILD | SS_LEFT | SS_NOPREFIX, rcAcSeg, this) != FALSE)
+			m_stAcSeg.SetFont(GetFont());
+	}
+
 	SetTimer(1, 500, NULL);	// LYS 2026-08-10 Phase 1: status refresh
 
 	return TRUE;
@@ -244,7 +253,13 @@ void CDlgSubManual_AutoContact::UpdateStatus(BOOL bEnable)
 		GetDlgItem(IDC_EDIT_1)->GetWindowText(strEditRcp);
 		if (strCurRcp != strEditRcp) GetDlgItem(IDC_EDIT_1)->SetWindowText(strCurRcp);
 	}
-	UpdateStickList();	// LYS 2026-08-11: follows recipe change (guarded by stick-count cache)
+	// LYS 2026-10-13 Hybrid Phase 7 G5 timer guard: while a hybrid recipe is being measured the measure thread rewrites the active stick list
+	//   by value (SetActiveSegment) - skip the stick-list read, ints only (HARD RULE 3). 1-segment recipe (cache 1): unchanged
+	bool bAcListBusy = (m_pAuroraMgr != NULL && m_pAuroraMgr->GetRecipeEditMgrPtr() != NULL && m_pAuroraMgr->GetRecipeEditMgrPtr()->GetSegCountCache() > 1
+		&& (CSequenceManager::GetInstance()->IsEngineCompleteAll() == false || CSystemParamShare::GetInstance()->IsCycleState()));
+	if (bAcListBusy == false)
+		UpdateStickList();	// LYS 2026-08-11: follows recipe change (guarded by stick-count cache)
+	UpdateAcSegLabel();	// LYS 2026-10-13 Hybrid Phase 7 D7-17 segment label (hybrid only; DLL read only while idle)
 
 	// LYS 2026-08-11: auto-contact progress display
 	{
@@ -320,6 +335,14 @@ void CDlgSubManual_AutoContact::OnRcpOpen()
 		&& (CSequenceManager::GetInstance()->IsEngineCompleteAll() == false || CSystemParamShare::GetInstance()->IsCycleState()))
 	{
 		AfxMessageBox(_T("하이브리드 레시피 측정 중에는 이 작업을 할 수 없습니다.\n측정이 끝난 뒤 다시 시도하십시오."), MB_ICONWARNING);
+		return;
+	}
+
+	// LYS 2026-10-12 1-segment recipes too (user request): a recipe open / save / reload / START mid-run changes the running glass
+	//   (e.g. Sampling) and resets the EFA / cell ID / result latches and the cell status - blocked while any glass is being measured
+	if (CSequenceManager::GetInstance()->IsEngineCompleteAll() == false || CSystemParamShare::GetInstance()->IsCycleState())
+	{
+		AfxMessageBox(_T("측정 중에는 이 작업을 할 수 없습니다.\n측정이 끝난 뒤 다시 시도하십시오."), MB_ICONWARNING);
 		return;
 	}
 
@@ -504,9 +527,20 @@ void CDlgSubManual_AutoContact::OnAutoContactProcStrart()
 		return;
 	}
 
+	// LYS 2026-10-13 Hybrid Phase 7 (14)-I START gate + D7-16 (a) SPS mark - hybrid runtime recipe only (1 segment: returns true, no log)
+	if (CheckHybridAcStart() == false) return;
+
 	m_bAutoCntRunning = TRUE;
 	CAutoContactInfo::GetInstance()->ClearStopRequest();
-	AfxBeginThread(AutoContactSearchThread, this);
+	CWinThread* pAcThread = AfxBeginThread(AutoContactSearchThread, this);	// LYS 2026-10-13 Hybrid Phase 7 fix (impl review 3): return value checked below
+	if (pAcThread == NULL && m_bAcSpsMarked == TRUE)	// hybrid START marked SPS but no worker (no guard) will run: undo it here. 1 segment: never marked, unchanged
+	{
+		m_bAcSpsMarked = FALSE;
+		m_bAutoCntRunning = FALSE;
+		m_pAuroraMgr->GetShareMemoryMgrPtr()->SetSys_ProcessStatus(SPS_IDLE);
+		CLogWrapper::GetInstance()->KMLOG(WARN, _T("[HYBRID] AutoContact worker thread not started - SPS_IDLE restored"));
+		AfxMessageBox(_T("AUTO CONTACT 작업 스레드를 시작하지 못했습니다.\n다시 실행하십시오."), MB_ICONWARNING);
+	}
 
 	//if (!IsOfflineStatus()) return;
 	//if (SMEM_GetSys_ProcessStatus() == SPS_PROCESS) {
@@ -735,6 +769,21 @@ void CDlgSubManual_AutoContact::SetAutoCntLog()
 	WritePrivateProfileString(m_strAutoCnttProbeID, _T("OD"), strTemp, m_strAutoLogPath);
 }
 
+// LYS 2026-10-13 Hybrid Phase 7 (14)-A hybrid runtime predicate (fix stage, impl review 1): live DLL count > 1, or the segment-count cache > 1 while a LoadRcpFile runs.
+//   The live count is read only while no LoadRcpFile runs (*pbLoadBusy); *pnLive = that count (1 while loading). No log, no write.
+static bool IsAcHybridRuntime(CRecipeEditMgr* pRcp, bool* pbLoadBusy, int* pnLive)
+{
+	if (pbLoadBusy != NULL) *pbLoadBusy = false;
+	if (pnLive != NULL) *pnLive = 1;
+	if (pRcp == NULL) return false;
+	C_OutRecipeFunc* pFunc = pRcp->GetRecipeFuncPtr();
+	bool bLoadBusy = (pFunc != NULL && pFunc->IsRcpLoadBusy() == TRUE);
+	int nLive = (pFunc != NULL && bLoadBusy == false) ? pFunc->GetSegmentLoopCount() : 1;
+	if (pbLoadBusy != NULL) *pbLoadBusy = bLoadBusy;
+	if (pnLive != NULL) *pnLive = nLive;
+	return bLoadBusy ? (pRcp->GetSegCountCache() > 1) : (nLive > 1);	// LYS 2026-10-13 Hybrid Phase 7 fix (impl review 1): a stale cache alone = 1 segment
+}
+
 // LYS 2026-08-11 수동 전용: 선택 stick(또는 ALL) 이동 + 오토 컨택 탐색.
 // stick별 흐름: 프로브 Z 상승 -> stage R/X 이동(MoveMeasureArea OCP 규칙)
 // -> PG 상태 stick 슬롯 -> DoSearch. 얼라인 체인은 미포함(정렬된 상태 전제).
@@ -745,6 +794,21 @@ UINT CDlgSubManual_AutoContact::AutoContactSearchThread(LPVOID pParam)
 
 	CAuroraMgr* pMgr = pThis->m_pAuroraMgr;
 	CAutoContactInfo* pAutoCnt = CAutoContactInfo::GetInstance();
+	// LYS 2026-10-13 Hybrid Phase 7 (14)-I: START set SPS_CYCLETEST for a hybrid recipe (m_bAcSpsMarked) - this guard restores SPS_IDLE on EVERY exit
+	//   below (the early return after the stick range check and the normal end). 1-segment recipe: nothing marked, the guard does nothing
+	struct CAcSpsGuard
+	{
+		CDlgSubManual_AutoContact* m_pDlg;
+		explicit CAcSpsGuard(CDlgSubManual_AutoContact* pDlg) : m_pDlg(pDlg) {}
+		~CAcSpsGuard()
+		{
+			if (m_pDlg->m_bAcSpsMarked != TRUE) return;
+			m_pDlg->m_bAcSpsMarked = FALSE;
+			m_pDlg->m_pAuroraMgr->GetShareMemoryMgrPtr()->SetSys_ProcessStatus(SPS_IDLE);
+			CLogWrapper::GetInstance()->KMLOG(OPER, _T("[HYBRID] AutoContact worker end - SPS_IDLE restored"));
+		}
+	} acSpsGuard(pThis);
+	bool bAcHybrid = (pThis->m_bAcSpsMarked == TRUE) || IsAcHybridRuntime(pMgr->GetRecipeEditMgrPtr(), NULL, NULL);	// LYS 2026-10-13 Hybrid Phase 7 worker backstop below
 	pAutoCnt->LoadAll();
 
 	// reset judgment moved here from the sequence (manual-only, A2)
@@ -788,6 +852,28 @@ UINT CDlgSubManual_AutoContact::AutoContactSearchThread(LPVOID pParam)
 		// stage R then X to the stick position (MoveMeasureArea OCP rule)
 		double dStageY = pRcpData->m_vecStick[iStick].m_fStageY + pRcpInfo->m_sMotionOffsetPos.m_fStageY;
 		double dStageR = pRcpData->m_vecStick[iStick].m_fStageR + pRcpInfo->m_sMotionOffsetPos.m_fStageRotate;
+
+		// LYS 2026-10-13 Hybrid Phase 7 worker backstop (R-A / R-C, hybrid only): START checked every target stick - refuse here too if the stick
+		//   list or the Glass Align mark changed since. The probe is already up (Z5 -> 0 above); no stage R / X move after a refusal. 1 segment: skipped
+		if (bAcHybrid)
+		{
+			double dAcRefR = 0.0;
+			bool bAcRef = pMgr->GetMaintControlMgr()->GetGlassAlignRefR(&dAcRefR);
+			bool bAcOri = (bAcRef && fabs(dStageR - dAcRefR) > 2.0);	// D7-6 2.0 deg, same coordinate as the MoveCmdPosA target below (no modulo)
+			if (bAcOri || (bAcRef == false && pRcpInfo->m_sOptionItem.m_bUseAlign == TRUE))
+			{
+				CString strAcLog, strAcMsg, strAcRef(_T("none")), strAcRefK(_T("없음"));
+				if (bAcRef) { strAcRef.Format(_T("%.3f"), dAcRefR); strAcRefK.Format(_T("%.1f"), dAcRefR); }
+				strAcLog.Format(_T("[HYBRID] AutoContact worker refused - %s (stick %d, target R %.3f, align R %s) - stopped before the stage move"),
+					bAcOri ? _T("orientation") : _T("align"), iStick + 1, dStageR, (LPCTSTR)strAcRef);
+				CLogWrapper::GetInstance()->KMLOG(WARN, strAcLog);
+				strAcMsg.Format(_T("Glass Align 방향(R %s)과 스틱 %d 방향(R %.1f)이 다르거나 Align이 없어 AUTO CONTACT를 멈췄습니다.\n\n수동 측정 화면에서 MOVE SAFETY 후 ALIGN 동작을 먼저 하십시오."),
+					(LPCTSTR)strAcRefK, iStick + 1, dStageR);
+				AfxMessageBox(strAcMsg, MB_ICONWARNING);
+				nRtn = VTM_RV_STOP_BY_USER;	// state 5 "Stopped", no alarm
+				break;
+			}
+		}
 
 		if (fabs(dStageR - pMgr->GetMaintControlMgr()->GetCurPos(AXIS_LOADER_R)) > 0.0001)
 		{
@@ -876,4 +962,133 @@ void CDlgSubManual_AutoContact::UpdateStickList()
 		m_comboAcStick.AddString(strNo);
 	}
 	m_comboAcStick.SetCurSel(0);
+}
+
+// LYS 2026-10-13 Hybrid Phase 7 (14)-I AutoContact START gate (p7x_plan (4-1)). UI thread, after the confirm dialog and the recipe check.
+//   1-segment runtime recipe (cache 1, live 1): returns true at once - no stick-list read, no log, no SPS mark (D7-16 (a)).
+//   Hybrid: idle re-check (CS-14, the confirm dialog was modal) -> selected stick in range (CS-1 / C-4) -> R-A for every target stick and R-C (D7-5)
+//   -> SPS_CYCLETEST + m_bAcSpsMarked (the worker guard restores SPS_IDLE). The idle re-check comes first so the stick list is read only while idle.
+bool CDlgSubManual_AutoContact::CheckHybridAcStart()
+{
+	CRecipeEditMgr* pRcp = m_pAuroraMgr->GetRecipeEditMgrPtr();
+	if (pRcp == NULL) return true;
+	// LYS 2026-10-13 Hybrid Phase 7 fix (impl review 2): the idle ints first - while busy the hybrid test reads the segment-count cache int only (HARD RULE 3),
+	//   the live DLL count only while idle (busy ? cache > 1 : live > 1, impl review 1). 1-segment recipe (cache 1, live 1): returns true, no log, no write
+	int nSps = m_pAuroraMgr->GetShareMemoryMgrPtr()->GetSys_ProcessStatus();
+	bool bEngineDone = CSequenceManager::GetInstance()->IsEngineCompleteAll();
+	bool bCycle = CSystemParamShare::GetInstance()->IsCycleState();
+	C_OutRecipeFunc* pIdleFunc = pRcp->GetRecipeFuncPtr();
+	bool bLoadBusy = (pIdleFunc != NULL && pIdleFunc->IsRcpLoadBusy() == TRUE);
+	int nLive = 1;
+	if (nSps != SPS_IDLE || bEngineDone != true || bCycle || bLoadBusy)
+	{
+		if (pRcp->GetSegCountCache() <= 1) return true;	// busy, 1 segment by the cache: unchanged path, no log
+	}
+	else if (IsAcHybridRuntime(pRcp, &bLoadBusy, &nLive) == false)
+	{
+		if (bLoadBusy == false && pRcp->GetSegCountCache() > 1)	// stale cache over a 1-segment reload: treated as 1 segment, silent re-sync (as the manual Meas gate), no log
+			pRcp->SyncCellStatusStickBase();	// UI-thread write only while idle (just checked; the confirm dialog before was modal)
+		return true;	// 1 segment: unchanged path, no log
+	}
+
+	CString strLog, strMsg;
+	// (1) idle re-check - existing English popup (the idle ints read above, after the confirm dialog; IsAcHybridRuntime may have seen a load start)
+	if (nSps != SPS_IDLE || bEngineDone != true || bCycle || bLoadBusy)
+	{
+		strLog.Format(_T("[HYBRID] AutoContact refused - process busy after the confirm dialog (SPS %d, engine complete %d, cycle %d, recipe load %d)"),
+			nSps, bEngineDone ? 1 : 0, bCycle ? 1 : 0, bLoadBusy ? 1 : 0);
+		CLogWrapper::GetInstance()->KMLOG(WARN, strLog);
+		AfxMessageBox(_T("Process is running.\n Run after the process completes."), MB_ICONWARNING);
+		return false;
+	}
+
+	S_RecipeData* pRcpData = pRcp->GetRecipeData();
+	S_RecipeInfo* pRcpInfo = pRcp->GetRecipeInfo();
+	int nStick = (pRcpData != NULL) ? (int)pRcpData->m_vecStick.size() : 0;
+	int nSeg = pRcp->GetActiveSegment() + 1;
+	// (2) the stick combo may still list another segment's sticks (the timer runs only while this screen is visible)
+	if (m_nAcSelStick >= nStick)
+	{
+		int nSel = m_nAcSelStick + 1;
+		strLog.Format(_T("[HYBRID] AutoContact refused - stick %d out of range (segment %d/%d has %d sticks) - stick list reloaded"), nSel, nSeg, nLive, nStick);
+		CLogWrapper::GetInstance()->KMLOG(WARN, strLog);
+		m_nAcStickCnt = -1;	// force the combo rebuild
+		UpdateStickList();
+		strMsg.Format(_T("선택한 스틱(%d)이 현재 세그먼트의 스틱 수(%d)를 넘습니다.\n스틱 목록을 다시 읽었습니다. 다시 선택하십시오."), nSel, nStick);
+		AfxMessageBox(strMsg, MB_ICONWARNING);
+		return false;
+	}
+
+	// (3) R-A per target stick (same R as AutoContactSearchThread dStageR: stick R + user offset R, no modulo - D7-3 / D7-6) and R-C (D7-5)
+	CMaintControlMgr* pM = m_pAuroraMgr->GetMaintControlMgr();
+	double dRef = 0.0;
+	bool bRef = (pM != NULL && pM->GetGlassAlignRefR(&dRef));
+	int nFrom = 0, nTo = nStick - 1;
+	if (m_nAcSelStick >= 0) nFrom = nTo = m_nAcSelStick;
+	int iBad = -1;
+	double dBadR = 0.0;
+	bool bAlignMissing = false;
+	if (pRcpData != NULL && pRcpInfo != NULL && nFrom <= nTo)
+	{
+		for (int i = nFrom; i <= nTo && bRef; i++)
+		{
+			double dR = pRcpData->m_vecStick[i].m_fStageR + pRcpInfo->m_sMotionOffsetPos.m_fStageRotate;
+			if (fabs(dR - dRef) > 2.0) { iBad = i; dBadR = dR; break; }
+		}
+		if (bRef == false && pRcpInfo->m_sOptionItem.m_bUseAlign == TRUE)
+		{
+			bAlignMissing = true;
+			iBad = nFrom;
+			dBadR = pRcpData->m_vecStick[nFrom].m_fStageR + pRcpInfo->m_sMotionOffsetPos.m_fStageRotate;
+		}
+	}
+	CString strRef(_T("none")), strRefK(_T("없음"));
+	if (bRef) { strRef.Format(_T("%.3f"), dRef); strRefK.Format(_T("%.1f"), dRef); }
+	if (iBad >= 0)
+	{
+		if (bAlignMissing)
+			strLog.Format(_T("[HYBRID] AutoContact refused - align (seg %d/%d stick %d, ALIGN USE on, no glass align mark, target R %.3f)"), nSeg, nLive, iBad + 1, dBadR);
+		else
+			strLog.Format(_T("[HYBRID] AutoContact refused - orientation (seg %d/%d stick %d, target R %.3f, align R %s)"), nSeg, nLive, iBad + 1, dBadR, (LPCTSTR)strRef);
+		CLogWrapper::GetInstance()->KMLOG(WARN, strLog);
+		strMsg.Format(_T("Glass Align 방향(R %s)과 스틱 방향(R %.1f)이 다르거나 Align이 없습니다.\nAUTO CONTACT를 시작하지 않습니다.\n\n수동 측정 화면에서 MOVE SAFETY 후 ALIGN 동작을 먼저 하십시오."),
+			(LPCTSTR)strRefK, dBadR);
+		AfxMessageBox(strMsg, MB_ICONWARNING);
+		return false;
+	}
+
+	// (4) D7-16 (a) mark the manual worker: the manual Meas worker, DLL recipe commands, CYCLE and AgingTest / AgingNew START refuse while SPS != IDLE
+	m_pAuroraMgr->GetShareMemoryMgrPtr()->SetSys_ProcessStatus(SPS_CYCLETEST);
+	m_bAcSpsMarked = TRUE;
+	CString strSel(_T("ALL"));
+	if (m_nAcSelStick >= 0) strSel.Format(_T("%d"), m_nAcSelStick + 1);
+	strLog.Format(_T("[HYBRID] AutoContact start - seg %d/%d stick %s (%d sticks), align R %s - SPS_CYCLETEST until the worker ends"), nSeg, nLive, (LPCTSTR)strSel, nStick, (LPCTSTR)strRef);
+	CLogWrapper::GetInstance()->KMLOG(OPER, strLog);
+	return true;
+}
+
+// LYS 2026-10-13 Hybrid Phase 7 D7-17 segment label (p7x_plan (4-1), (14)-I): "segment k/N (stick list = this segment)" for a hybrid recipe only.
+//   GetActiveSegment / GetSegmentLoopCount read the DLL segment vectors, so they are read only while idle; busy keeps the last text (CS-15).
+//   1-segment recipe: the label stays hidden and is never touched.
+void CDlgSubManual_AutoContact::UpdateAcSegLabel()
+{
+	if (m_stAcSeg.GetSafeHwnd() == NULL || m_pAuroraMgr == NULL || m_pAuroraMgr->GetRecipeEditMgrPtr() == NULL || m_pAuroraMgr->GetShareMemoryMgrPtr() == NULL) return;
+	if (m_pAuroraMgr->GetShareMemoryMgrPtr()->GetSys_ProcessStatus() != SPS_IDLE
+		|| CSequenceManager::GetInstance()->IsEngineCompleteAll() != true || CSystemParamShare::GetInstance()->IsCycleState())
+		return;	// busy (a run, CYCLE, any manual worker incl. this screen's): ints only, keep the last text
+	CRecipeEditMgr* pRcp = m_pAuroraMgr->GetRecipeEditMgrPtr();
+	bool bLoadBusy = false;
+	int nLive = 1;
+	bool bHyb = IsAcHybridRuntime(pRcp, &bLoadBusy, &nLive);
+	if (bLoadBusy) return;	// a LoadRcpFile runs in another thread: keep the last text
+	if (bHyb == false || nLive <= 1)
+	{
+		if (m_bAcSegShown == TRUE) { m_stAcSeg.ShowWindow(SW_HIDE); m_bAcSegShown = FALSE; }
+		return;
+	}
+	CString strSeg, strOld;
+	strSeg.Format(_T("세그먼트 %d/%d (스틱 목록 = 이 세그먼트)"), pRcp->GetActiveSegment() + 1, nLive);
+	m_stAcSeg.GetWindowText(strOld);
+	if (strOld != strSeg) m_stAcSeg.SetWindowText(strSeg);
+	if (m_bAcSegShown == FALSE) { m_stAcSeg.ShowWindow(SW_SHOW); m_bAcSegShown = TRUE; }
 }

@@ -10,6 +10,7 @@
 #include "..\Manager\MCCLogMgr.h"
 #include "..\Manager\ResultMgr.h"
 #include "..\Manager\ResumeInfoMgr.h"	// LYS 2026-07-07 Resume raw data reload
+#include "..\Manager\ResumeJournal.h"		// LYS 2026-10-08 Hybrid Phase 5 (MarkCellStatusReset)
 #include "common\CommonFunc.h"				// LYS 2026-07-07 PGM_MODE_* constants
 #include "..\Manager\MaintControlMgr.h"
 #include "..\Manager\SequenceManager.h"
@@ -44,6 +45,16 @@ bool CDoWorkGlassRecipeStep_None::Run()
 
 //	m_pShareItem->GetLogFileAccessorPtr()->KMLOG(SYST, _T("CDoWorkGlassSWAlignStep_None End."));
 
+	// LYS 2026-10-08 Hybrid Phase 5 journal (Format=2) bookmark: the grid is rebuilt by the journal replay at measure start (RS1 below is for
+	//   format-1 bookmarks only). The mark lets Measure restore nCellStatus only after the UI reset Recipe Change posts (GenGlassPath counter)
+	CResumeInfoMgr* pResumeT = m_pShareItem->GetResumeInfoMgrPtr();
+	if (CSystemParamShare::GetInstance()->IsResumeMode() && pResumeT != NULL && pResumeT->IsTupleBookmark())
+	{
+		CResultMgr::GetInstance()->ClearData();
+		CResumeJournal::GetInstance()->MarkCellStatusReset();
+		m_pShareItem->GetLogFileAccessorPtr()->KMLOG(OPER, _T("Resume mode (journal): result grid cleared - journal replay at measure start"));
+	}
+	else
 	// LYS 2026-07-03 Resume: skip ResultClear to preserve previous stick results
 	if (CSystemParamShare::GetInstance()->IsResumeMode())
 	{
@@ -537,6 +548,154 @@ static void CheckHybridAgingMask(CBaseSequenceImpl* pShare, C_OutRecipeFunc* pFu
 	}
 }
 
+// LYS 2026-10-01 Hybrid Phase 4 (4-3) glass-wide result items, latched once per glass on this (sequence) thread - the segment vectors
+//   are read only here (same place as CheckHybridCapacity / CheckHybridAgingMask). Hybrid recipes only.
+//   (1) result save gate (user policy 2026-09-29): any segment with an optical item (Spec_3 / Quality_4 / Color_5 / Angle_6 /
+//       TSP_7 / LCR_8) or AgingTest_2 -> save; electrical only -> no file + Unload CIM bypass. Result and Unload read the latch.
+//   (2) APD header CELL_X_CNT / CELL_Y_CNT = G x 1 (stGlassInfo -> WAD result stData[4]/[5] -> dResult): X x Y = row block size G
+//   (3) cell ID letter range and the longest ID vs m_szCellID[..][32] - log only (GenCellID cuts and warns at run time)
+//   (4) D4-14 estimate (review A2): dResult ExportAsRawDateICP merges sheets 1..4 (WAD 1 / VISION 2 / ANGLE 3) with the MaxRows of the
+//       LAST non-empty sheet, so rows above the top sheet's last row drop out of the merged sheet and the APD. Recipe flags only
+//       (AgingRcp/EFA masks, sampling and AgingCycle blocks are not counted) - WARN, nothing is refused
+//       LYS 2026-10-01 Hybrid Phase 4 (fix) loss = top sheet ends before the last row any optical sheet reaches (not G)
+static void LatchHybridResultItems(CBaseSequenceImpl* pShare, C_OutRecipeFunc* pFunc)
+{
+	CRecipeEditMgr* pRcp = pShare->GetRecipeEditMgrPtr();
+	int nSeg = pFunc->GetSegmentCount();
+
+	bool bSave = false, bSave0 = false;
+	int nLetters = 0, nRowEnd = 0;
+	int nSheetRow[4] = { 0, 0, 0, 0 };	// last reachable T0 row per dResult sheet: [1] WAD Spec_3, [2] VISION Quality_4, [3] ANGLE Angle_6
+	CString strGate = _T("[HYBRID] result save gate:"), strOne;
+	for (int k = 0; k < nSeg; k++)
+	{
+		nLetters += CRecipeEditMgr::SegCellIdLetterExtent(pFunc, k);
+		nRowEnd += pFunc->GetSegmentCellCount(k) * pFunc->GetSegmentStickCount(k);
+		S_RecipeMgr* pSeg = pFunc->GetSegmentMgr(k);
+		if (pSeg == nullptr) continue;
+		const S_InspectItem& sItem = pSeg->m_sInfo.m_sInspectItem;
+		bool bOptical = (sItem.m_bUseSpec_3 == TRUE || sItem.m_bUseQuality_4 == TRUE || sItem.m_bUseColor_5 == TRUE
+			|| sItem.m_bUseAngle_6 == TRUE || sItem.m_bUseTSP_7 == TRUE || sItem.m_bUseLCR_8 == TRUE);
+		bool bAging2 = (sItem.m_bUseAgingTest_2 == TRUE);
+		if (bOptical || bAging2) { bSave = true; if (k == 0) bSave0 = true; }
+		if (sItem.m_bUseSpec_3 == TRUE)    nSheetRow[1] = nRowEnd;
+		if (sItem.m_bUseQuality_4 == TRUE) nSheetRow[2] = nRowEnd;
+		if (sItem.m_bUseAngle_6 == TRUE)   nSheetRow[3] = nRowEnd;
+		strOne.Format(_T("%s seg%d [%s] optical %d aging2 %d"), (k > 0) ? _T(",") : _T(""), k + 1, pFunc->GetSegmentName(k).GetString(), bOptical ? 1 : 0, bAging2 ? 1 : 0);
+		strGate += strOne;
+	}
+	strGate += bSave ? _T(" -> save") : _T(" -> bypass (electrical only)");
+	if (bSave && bSave0 == false) strGate += _T(" (segment 1 alone: bypass)");
+	pRcp->SetResultSaveLatch(bSave ? 1 : 0);
+	pShare->GetLogFileAccessorPtr()->KMLOG(OPER, strGate);
+
+	int nTopSheet = 3;
+	while (nTopSheet > 0 && nSheetRow[nTopSheet] == 0) nTopSheet--;
+	// LYS 2026-10-01 Hybrid Phase 4 (fix) compare with the last row any optical sheet reaches, not G: rows past every optical
+	//   sheet (e.g. a trailing electrical-only segment) hold no WAD / VISION / ANGLE data, so the merge loses nothing there
+	int nOptEnd = (nSheetRow[1] > nSheetRow[2]) ? nSheetRow[1] : nSheetRow[2];
+	if (nSheetRow[3] > nOptEnd) nOptEnd = nSheetRow[3];
+	if (nTopSheet > 0 && nSheetRow[nTopSheet] < nOptEnd)
+	{
+		CString strMerge;
+		strMerge.Format(_T("[HYBRID] APD merge keeps rows 1..%d of %d (top sheet %s ends at row %d, dResult D4-14) - later rows miss the merged sheet / APD"),
+			nSheetRow[nTopSheet], nOptEnd, (nTopSheet == 3) ? _T("ANGLE") : (nTopSheet == 2) ? _T("VISION") : _T("WAD"), nSheetRow[nTopSheet]);
+		pShare->GetLogFileAccessorPtr()->KMLOG(WARN, strMerge);
+	}
+
+	int nG = pRcp->GetGlassRowBlock(0, 0);
+	CString strApd;
+	strApd.Format(_T("[HYBRID] APD header CELL_X_CNT %d CELL_Y_CNT 1 (glass rows G x 1; segment 1 alone %d x %d)"), nG,
+		pShare->GetShareMemoryMgrPtr()->GetSharedMemory()->stGlassInfo.m_nCellCount, pShare->GetShareMemoryMgrPtr()->GetSharedMemory()->stGlassInfo.m_nStickCount);
+	pShare->GetShareMemoryMgrPtr()->GetSharedMemory()->stGlassInfo.m_nCellCount = nG;
+	pShare->GetShareMemoryMgrPtr()->GetSharedMemory()->stGlassInfo.m_nStickCount = 1;
+	pShare->GetLogFileAccessorPtr()->KMLOG(OPER, strApd);
+
+	CString strGlassID = CSystemParamShare::GetInstance()->GetGlassID();
+	CString strLast = CRecipeEditMgr::CellIdLetterPrefix(nLetters - 1);
+	int nGidLen = strGlassID.GetLength();
+	int nLongest = ((nGidLen > 0) ? nGidLen - 1 : 0) + strLast.GetLength() + 2 + 1;	// GlassID - 1 + letters + 2 digits + checksum
+	CString strCid;
+	strCid.Format(_T("[HYBRID] cell ID letters A..%s over %d segments, longest ID %d/31 chars (GlassID length %d)"), strLast.GetString(), nSeg, nLongest, nGidLen);
+	pShare->GetLogFileAccessorPtr()->KMLOG(nLongest > 31 ? WARN : OPER, strCid);
+}
+
+// LYS 2026-10-01 Hybrid Phase 4b D-15 (docs/HybridGlass_Porting_Plan.md 5.7) English text of one Cell ID error for the GLASS log
+static CString CellIdErrText(const S_CellIdError& e, int nGlassIdLen)
+{
+	CString strWhere, strWhy;
+	strWhere.Format(_T("Segment %d Stick %d Cell %d (%c)"), e.m_nSeg + 1, e.m_nStick + 1, e.m_nCell + 1, e.m_nPanel ? _T('B') : _T('A'));
+	switch (e.m_nCode)
+	{
+	case M_CELLID_ERR_EMPTY:  strWhy = _T("empty"); break;
+	case M_CELLID_ERR_LENGTH: strWhy.Format(_T("'%s' longer than %d chars (cell ID max 31, GlassID length %d)"), e.m_strToken.GetString(), e.m_nLimit, nGlassIdLen); break;
+	case M_CELLID_ERR_FORMAT: strWhy.Format(_T("'%s' is not A-Z letters + digits"), e.m_strToken.GetString()); break;
+	case M_CELLID_ERR_DERIVE: strWhy.Format(_T("B cell ID cannot be derived from A manual ID '%s'"), e.m_strToken.GetString()); break;
+	case M_CELLID_ERR_DUP:    strWhy.Format(_T("duplicate '%s' (Segment %d Stick %d Cell %d (%c))"), e.m_strToken.GetString(),
+								  e.m_nSeg2 + 1, e.m_nStick2 + 1, e.m_nCell2 + 1, e.m_nPanel2 ? _T('B') : _T('A')); break;
+	default:                  strWhy.Format(_T("error %d"), e.m_nCode); break;
+	}
+	return strWhere + _T(": ") + strWhy;
+}
+
+// LYS 2026-10-01 Hybrid Phase 4b D-15 Cell ID A/B re-check at every auto start, right after the recipe reload (Glass ID final).
+//   Auto/Auto (every recipe saved before 4b): latch 0, no log. false = refuse without an alarm (caller SetFail(true, 0))
+static bool CheckCellIdConfig(CBaseSequenceImpl* pShare)
+{
+	CRecipeEditMgr* pRcp = pShare->GetRecipeEditMgrPtr();
+	C_OutRecipeFunc* pFunc = pRcp->GetRecipeFuncPtr();
+	// LYS 2026-10-01 Hybrid Phase 4b review fix: load serial taken BEFORE the check - a CIM PPID / DLL TestMode reload that lands after the
+	//   check must not bind latch 1 to a config nobody validated (GetManualCellToken then sees another serial -> one WARN, Auto IDs)
+	int nLoadSeq = 0, nLoadTry = 0;
+	BOOL bLoadBusy = FALSE;
+	if (pFunc != NULL)
+	{
+		nLoadTry = pFunc->GetRcpLoadTry();	// try count first, then the busy count (LoadRcpFile raises them the other way round)
+		bLoadBusy = pFunc->IsRcpLoadBusy();
+		nLoadSeq = pFunc->GetRcpLoadSeq();
+	}
+	if (pFunc == NULL || pFunc->IsCellIdDefault())
+	{
+		pRcp->SetCellIdLatch(0);
+		return true;
+	}
+	CString strGlassID = CSystemParamShare::GetInstance()->GetGlassID();
+	CString strGidLog = strGlassID.IsEmpty() ? CString(_T("(none)")) : strGlassID;	// AgingTest / AgingNew START right after boot: no Glass ID (panel A)
+	int nGid = strGlassID.GetLength(), nLongest = 0;
+	std::vector<S_CellIdError> vecErr;
+	CString strLog;
+	if (pFunc->ValidateCellIdConfig(nGid, vecErr, &nLongest) != TRUE)
+	{
+		for (size_t i = 0; i < vecErr.size() && i < 10; i++)
+			pShare->GetLogFileAccessorPtr()->KMLOG(WARN, _T("[CELLID] ") + CellIdErrText(vecErr[i], nGid));
+		if (vecErr.size() > 10)
+		{
+			strLog.Format(_T("[CELLID] ... %d more"), (int)vecErr.size() - 10);
+			pShare->GetLogFileAccessorPtr()->KMLOG(WARN, strLog);
+		}
+		strLog.Format(_T("[CELLID] cell ID check failed (%d errors, GlassID %s) - auto start refused"), (int)vecErr.size(), strGidLog.GetString());
+		pShare->GetLogFileAccessorPtr()->KMLOG(WARN, strLog);
+		pRcp->SetCellIdLatch(-1);
+		return false;
+	}
+	// LYS 2026-10-01 Hybrid Phase 4b review fix: a recipe load ran while the config was read -> what passed is unknown, refuse like a failed check
+	if (bLoadBusy == TRUE || pFunc->IsRcpLoadBusy() == TRUE || pFunc->GetRcpLoadTry() != nLoadTry)
+	{
+		strLog.Format(_T("[CELLID] recipe reloaded during the cell ID check (recipe load %d/%d, GlassID %s) - auto start refused"), nLoadSeq, pFunc->GetRcpLoadSeq(), strGidLog.GetString());
+		pShare->GetLogFileAccessorPtr()->KMLOG(WARN, strLog);
+		pRcp->SetCellIdLatch(-1);
+		return false;
+	}
+	pRcp->SetCellIdLatch(1, nLoadSeq, strGlassID);	// bound to the load the check started on + this Glass ID (GetManualCellToken compares both)
+	bool bManA = (pFunc->GetCellIdMode(0) == M_CELLID_MODE_MANUAL), bManB = (pFunc->GetCellIdMode(1) == M_CELLID_MODE_MANUAL);
+	bool bPanelB = (strGlassID.Mid(nGid - 2, 1).CompareNoCase(_T("B")) == 0);	// same rule as GenCellID
+	strLog.Format(_T("[CELLID] manual cell ID: A %s, B %s, glass panel %c (GlassID %s), longest ID %d/31 chars"),
+		bManA ? _T("MANUAL") : _T("AUTO"), bManB ? _T("MANUAL") : (bManA ? _T("AUTO (from A)") : _T("AUTO")),
+		bPanelB ? _T('B') : _T('A'), strGidLog.GetString(), ((nGid > 0) ? nGid - 1 : 0) + nLongest + 1);
+	pShare->GetLogFileAccessorPtr()->KMLOG(OPER, strLog);
+	return true;
+}
+
 bool CDoWorkGlassRecipeStep_Change::Run()
 {
 	//	CWindowEventHandler::GetInstance()->SendMessageToUI(enumWndID_FRAME, WM_MSG_UPDATE_POSITION_STATE, enumDoWorkStateID_Idle, NULL);
@@ -551,7 +710,20 @@ bool CDoWorkGlassRecipeStep_Change::Run()
 	// jsyoon 2022.07.19 add
 	CString strPPID;
 	strPPID.Format(_T("%s"), CSystemParamShare::GetInstance()->GetRecipeID());
+	// LYS 2026-10-01 Hybrid Phase 4b D4b-15 (b) the .rcp itself could not be read (missing / corrupt, e.g. a broken Cell ID trailer):
+	//   OpenRecipe left the previous in-memory recipe -> refuse instead of running it. A readable recipe (load serial advanced) keeps
+	//   the original path, including the "base .alg missing" return (JOB_RECIPE_NOT_EXIST after a good .rcp load)
+	C_OutRecipeFunc* pLoadFunc = m_pShareItem->GetRecipeEditMgrPtr()->GetRecipeFuncPtr();
+	int nLoadSeq = (pLoadFunc != NULL) ? pLoadFunc->GetRcpLoadSeq() : 0;
 	m_pShareItem->GetRecipeEditMgrPtr()->OpenRecipe(strPPID); 
+	if (pLoadFunc != NULL && strPPID.IsEmpty() != true && pLoadFunc->GetRcpLoadSeq() == nLoadSeq)
+	{
+		CString strRcpLog;
+		strRcpLog.Format(_T("[RECIPE] recipe %s could not be read (file missing or corrupt) - auto start refused, the previous in-memory recipe is not used"), strPPID.GetString());
+		m_pShareItem->GetLogFileAccessorPtr()->KMLOG(WARN, strRcpLog);
+		m_pShareItem->SetFail(true, JOB_RECIPE_NOT_EXIST);	// alarm 1013, same as the hybrid .alg refusal (:672)
+		return false;
+	}
 
 	S_RecipeInfo* pReciepInfo;
 	pReciepInfo = m_pShareItem->GetRecipeEditMgrPtr()->GetRecipeInfo();
@@ -594,12 +766,20 @@ bool CDoWorkGlassRecipeStep_Change::Run()
 			CheckHybridWadMulti(m_pShareItem, pSegFunc);
 			// LYS 2026-09-30 Hybrid 3c AgingRcp / EFA rcp mask sections per segment, A12, per-segment AGING flag - WARN only (D3c-5)
 			CheckHybridAgingMask(m_pShareItem, pSegFunc);
+			LatchHybridResultItems(m_pShareItem, pSegFunc);	// LYS 2026-10-01 Hybrid Phase 4 (4-3) save gate latch + APD header G x 1 (stGlassInfo: replaces the segment-0 values set above) + cell ID letters (hybrid only)
 			if (bAlignOK != true)
 			{
 				m_pShareItem->SetFail(true, JOB_RECIPE_NOT_EXIST);
 				return false;
 			}
 		}
+	}
+
+	// LYS 2026-10-01 Hybrid Phase 4b D-15 Cell ID A/B re-check (any segment count - the manual mode is recipe-global). Auto/Auto -> no log
+	if (CheckCellIdConfig(m_pShareItem) != true)
+	{
+		m_pShareItem->SetFail(true, 0);	// D-15: no alarm (the Alarm DLL ignores id < 1000) - WARN lines + "Fail Exit" + "The Inspection is Fail.!!"
+		return false;
 	}
 
 	// LYS 2026-09-29 측정 위치 SW 리밋 사전 검사 - 모션 전에 거부한다 (세그먼트 1을 다 잰 뒤 세그먼트 2에서 멈추던 사고 재발 방지)
@@ -681,6 +861,12 @@ bool CDoWorkGlassRecipeStep_Change::Run()
 
 	if ( (pReciepInfo->m_sInspectItem.m_bUsePre_0 == TRUE ) | (pReciepInfo->m_sInspectItem.m_bUseElect_1 == TRUE) | (pReciepInfo->m_sInspectItem.m_bUseAgingTest_2 == TRUE) )
 		bMeasMode[enumMEASURE_MODE_PG] = true;
+	// LYS 2026-10-01 Hybrid Phase 4 (4-7) open every device any segment uses (D4-18) - segment 0 alone opened no WAD / VISION for 1_OCP_TEST_Long_P1RT. 1 segment: no-op, no line
+	{
+		CString strDevLog;
+		if (m_pShareItem->GetRecipeEditMgrPtr()->OrSegmentMeasMode(bMeasMode, &strDevLog))
+			m_pShareItem->GetLogFileAccessorPtr()->KMLOG(OPER, CString(_T("[HYBRID] Recipe Change device recipe open (all segments):")) + strDevLog);
+	}
 	//	bMeasMode[enumMEASURE_MODE_LCR] = true;
 
 	// 위치 이동 하여 검사 초기화 및 해제 (Cycle 시작전, Auto Proc 시작전, 검사 종료 후)

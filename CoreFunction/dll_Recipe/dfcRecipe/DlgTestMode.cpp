@@ -165,7 +165,7 @@ void CDlgTestMode::SetViewSelectCell()
 	// Populate cell IDs and colors
 	for (int i = 0; i < nStick; i++) {
 		for (int j = 0; j < nCell; j++) {
-			m_gridGlass.SetItemText(i, j, g_inRcpInfo.GetCellID(i, j));
+			m_gridGlass.SetItemText(i, j, g_inRcpInfo.GetDisplayCellId(g_inRcpInfo.GetActiveSegmentIndex(), i, j));	// LYS 2026-10-01 Hybrid Phase 4b
 			m_gridGlass.SetItemBkColour(i, j, COLOR_WHITE);
 		}
 	}

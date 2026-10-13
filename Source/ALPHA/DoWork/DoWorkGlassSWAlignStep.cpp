@@ -1372,6 +1372,19 @@ int CDoWorkGlassSWAlignStep::AlignGlass()
 
 			pImpl->SetGlassAlignXYR(dMovX, dMovY, dMovR);
 			pImpl->SetGlassAlignDone(true);	// LYS 2026-09-15 Glass Align 완료 표시(타이틀바 파랑)
+			// LYS 2026-10-13 Hybrid Phase 7 Glass Align reference R mark (p7x_plan (2-3)): Align coordinate R = this .alg StageRotate (TZero went into the offset)
+			double dGlsRefR = pImpl->GetCurPos(AXIS_LOADER_R);
+			pImpl->SetGlassAlignRefR(dGlsRefR);
+			{	// LYS 2026-10-13 Hybrid Phase 7 (14)-H mark log - hybrid runtime recipe only (fix review 1: live DLL count > 1, or the segment cache > 1 while a LoadRcpFile runs); 1-segment recipe: no log
+				CRecipeEditMgr* pMarkRcp = m_pShareItem->GetRecipeEditMgrPtr();
+				C_OutRecipeFunc* pMarkFunc = (pMarkRcp != nullptr) ? pMarkRcp->GetRecipeFuncPtr() : nullptr;
+				if (pMarkRcp != nullptr && ((pMarkFunc == nullptr || pMarkFunc->IsRcpLoadBusy() == TRUE) ? (pMarkRcp->GetSegCountCache() > 1) : (pMarkFunc->GetSegmentLoopCount() > 1)))
+				{
+					CString strMark;
+					strMark.Format(_T("[HYBRID] glass align mark R %.3f"), dGlsRefR);
+					m_pShareItem->GetLogFileAccessorPtr()->KMLOG(OPER, strMark);
+				}
+			}
 		}
 			
 	}

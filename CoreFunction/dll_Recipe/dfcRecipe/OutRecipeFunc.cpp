@@ -1,6 +1,7 @@
 #include "pch.h"
 #include "dfcRecipe.h"
 #include "OutRecipeFunc.h"
+#include "CellIdRule.h"	// LYS 2026-10-01 Hybrid Phase 4b Cell ID rule core (shared with the other recipe class)
 #include <memory>	// LYS 2026-09-29 unique_ptr
 
 #ifdef _DEBUG 
@@ -12,6 +13,9 @@ static char THIS_FILE[] = __FILE__;
 C_OutRecipeFunc::C_OutRecipeFunc ()
 {
 	m_nActiveSegment = -1;	// LYS 2026-09-29 Hybrid Phase 1
+	m_nRcpLoadSeq = 0;	// LYS 2026-10-01 Hybrid Phase 4b
+	m_nRcpLoadBusy = 0;	// LYS 2026-10-01 Hybrid Phase 4b review fix
+	m_nRcpLoadTry = 0;
 }
 
 C_OutRecipeFunc::~C_OutRecipeFunc ()
@@ -93,6 +97,21 @@ int		C_OutRecipeFunc::GetSelectCell (int nStick, int nCell, int nMode)
 	else						   return -1;
 }
 
+// LYS 2026-10-01 Hybrid Phase 4b review fix: marks a LoadRcpFile run for the measure thread (CRecipeEditMgr::GetManualCellToken) - raised
+//   before the first write, lowered on every exit (return or exception). Busy first, then the try count (readers read them the other way round)
+namespace {
+class CRcpLoadBusyGuard
+{
+public:
+	CRcpLoadBusyGuard (volatile LONG *pBusy, volatile LONG *pTry) : m_pBusy (pBusy) { InterlockedIncrement (m_pBusy); InterlockedIncrement (pTry); }
+	~CRcpLoadBusyGuard () { InterlockedDecrement (m_pBusy); }
+private:
+	volatile LONG *m_pBusy;
+	CRcpLoadBusyGuard (const CRcpLoadBusyGuard &);
+	CRcpLoadBusyGuard &operator= (const CRcpLoadBusyGuard &);
+};
+}
+
 BOOL	C_OutRecipeFunc::LoadRcpFile (CString strRcpName)
 {
 	CString strPath;
@@ -100,6 +119,7 @@ BOOL	C_OutRecipeFunc::LoadRcpFile (CString strRcpName)
 
 	CStdioFile File;
 	if (!File.Open (strPath, CFile::modeRead)) return FALSE;
+	CRcpLoadBusyGuard busyGuard (&m_nRcpLoadBusy, &m_nRcpLoadTry);	// LYS 2026-10-01 Hybrid Phase 4b review fix: before the first write (the backups below only read)
 
 	// LYS 2026-09-29 Hybrid Phase 1 로드 전 상태 보관 - 본문/꼬리 어디서든 실패(태그 불일치, 토큰 부족 예외)하면 통째로 되돌린다
 	//                (지금까지는 GetAt 범위 초과 예외가 그대로 튀어 앱이 죽었다 - P0-3 HMI.rcp 사례)
@@ -108,6 +128,7 @@ BOOL	C_OutRecipeFunc::LoadRcpFile (CString strRcpName)
 	std::vector<S_SegmentHeader> vecBakHdr	 = m_vecSegHeader;
 	std::vector<BOOL>			 vecBakAlign = m_vecSegAlignOK;
 	int nBakActive = m_nActiveSegment;
+	S_CellIdConfig sBakCid = m_sCellIdCfg;	// LYS 2026-10-01 Hybrid Phase 4b
 	BOOL bOK = FALSE;
 
 	try {
@@ -128,8 +149,10 @@ BOOL	C_OutRecipeFunc::LoadRcpFile (CString strRcpName)
 		m_vecSegAlignOK.clear ();
 		m_nActiveSegment = -1;
 		EnsureSegments ();
+		m_sCellIdCfg.Clear ();	// LYS 2026-10-01 Hybrid Phase 4b file <= V1012 -> Auto/Auto
 
 		if (bOK && nVersion > RECIPE_FILE_V1011) bOK = LoadHybridTail (&File, nVersion);
+		if (bOK && nVersion > RECIPE_FILE_V1012) bOK = LoadCellIdTail (&File);	// LYS 2026-10-01 Hybrid Phase 4b trailer after _HYBRID_END_
 
 		File.Close ();
 	}
@@ -143,9 +166,11 @@ BOOL	C_OutRecipeFunc::LoadRcpFile (CString strRcpName)
 		m_vecSegments  = vecBakSeg;
 		m_vecSegHeader = vecBakHdr;
 		m_vecSegAlignOK = vecBakAlign;
+		m_sCellIdCfg = sBakCid;	// LYS 2026-10-01 Hybrid Phase 4b
 		m_nActiveSegment = nBakActive;
 		return FALSE;
 	}
+	m_nRcpLoadSeq++;	// LYS 2026-10-01 Hybrid Phase 4b successful load serial (D-15 latch binding, D4b-15)
 
 	return TRUE;
 }
@@ -753,4 +778,62 @@ BOOL	C_OutRecipeFunc::LoadHybridTail (CStdioFile *pFile, int nVersion)
 	m_vecSegAlignOK.assign (nSeg, FALSE);
 	m_nActiveSegment = 0;
 	return TRUE;
+}
+
+// LYS 2026-10-01 Hybrid Phase 4b Cell ID A/B (docs/HybridGlass_Porting_Plan.md 5.7, plan p4b (1-3)(3)) - thin wrappers over CellIdRule.cpp,
+//   the one rule copy shared with C_InRecipeFunc (editor / save). ALPHA calls these through the exported class. The geometry snapshot is
+//   rebuilt from the loaded segments on every call (a handful of segments - no cache that could go stale after a reload).
+BOOL	C_OutRecipeFunc::IsCellIdDefault ()
+{
+	return m_sCellIdCfg.IsDefault ();
+}
+
+int		C_OutRecipeFunc::GetCellIdMode (int nPanel)
+{
+	if (nPanel < 0 || nPanel >= M_CELLID_PANEL_MAX) return M_CELLID_MODE_AUTO;
+	return m_sCellIdCfg.m_nMode[nPanel];
+}
+
+// 1 = manual token, or panel B derived from a manual A (final token, B offset inside; "" when it cannot be derived)
+// 0 = Auto (strToken = the MakeCellID / GenCellID token only with bAutoFallback) or an index outside the recipe geometry
+int		C_OutRecipeFunc::ResolveCellToken (int nSeg, int nStick, int nCell, int nPanel, CString &strToken, BOOL bAutoFallback)
+{
+	CCellIdGeo geo;
+	CellId_BuildGeo (*this, geo);
+	return CellId_Resolve (m_sCellIdCfg, geo, nSeg, nStick, nCell, nPanel, strToken, bAutoFallback);
+}
+
+// nGlassIdLen < 0 -> token cap M_CELLID_TOKEN_MAX; else the 31-char budget of that Glass ID (ALPHA D-15). TRUE = OK (Auto/Auto always)
+BOOL	C_OutRecipeFunc::ValidateCellIdConfig (int nGlassIdLen, std::vector<S_CellIdError> &vecErr, int *pnLongest)
+{
+	CCellIdGeo geo;
+	CellId_BuildGeo (*this, geo);
+	return CellId_Validate (m_sCellIdCfg, geo, CellId_TokenMax (nGlassIdLen), vecErr, pnLongest);
+}
+
+// successful load count: the D-15 latch keeps the value it checked (review C2/K3); unchanged across OpenRecipe = the .rcp was not read (D4b-15 (b))
+int		C_OutRecipeFunc::GetRcpLoadSeq ()
+{
+	return m_nRcpLoadSeq;
+}
+
+// LYS 2026-10-01 Hybrid Phase 4b review fix: a LoadRcpFile is running in another thread right now (the vectors may be half rewritten)
+BOOL	C_OutRecipeFunc::IsRcpLoadBusy ()
+{
+	return (m_nRcpLoadBusy > 0) ? TRUE : FALSE;
+}
+
+// LYS 2026-10-01 Hybrid Phase 4b review fix: LoadRcpFile runs that started writing (success or roll-back) - unchanged across a read = no load meanwhile
+int		C_OutRecipeFunc::GetRcpLoadTry ()
+{
+	return (int)m_nRcpLoadTry;
+}
+
+// _CELL_ID_PANEL_ ... _CELL_ID_END_ right after _HYBRID_END_ (file version 1013 and later). Runs on the segments the hybrid tail just set up
+//   (m_recipeMgr = segment 0, active 0), so the shape check sees the recipe geometry. FALSE -> LoadRcpFile rolls everything back
+BOOL	C_OutRecipeFunc::LoadCellIdTail (CStdioFile *pFile)
+{
+	CCellIdGeo geo;
+	CellId_BuildGeo (*this, geo);
+	return CellId_LoadTail (pFile, geo, m_sCellIdCfg);
 }

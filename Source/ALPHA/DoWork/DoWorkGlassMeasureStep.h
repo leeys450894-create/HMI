@@ -41,6 +41,22 @@ int  PickSingleCellHead(CPositionConfigMgr* pPosCfg, CMaintControlMgr* pMaint, d
 // LYS 2026-09-18 Position.ini [HEAD_OFFSET] Y 두 개를 한 번에 (nMode : 0 WAD / 1 ANGLE / 2 VISION / 3 COLOR)
 void GetHeadOffsetY(CPositionConfigMgr* pPosCfg, int nMode, double* pdPlus, double* pdMinus);
 int MarkIdleHeadSafety(stMotorPosition* pPos, int nAxis, const S_MeasPos& measPos, double dShiftX);
+// LYS 2026-10-13 manual meas = CycleTest positions (manualpos/rca.md (5) + (8) D2 plan A): the measure groups and the move array of
+//   one group, moved out of the auto Measure steps WAD / ANGLE / VISION (originals kept there under #if 0) and shared with
+//   CDlgSubManual_Meas (OCP SPEC / ANGLE / QUALITY). nMode = HEAD_OFFSET mode as GetHeadOffsetY: 0 WAD / 1 ANGLE / 2 VISION.
+//   MeasBuildGroups : vecOut = the 2-head groups of stick iStick of pData (pbUse = per-cell filter, nullptr = all cells).
+//                     Returns the group count; 0 and an empty vecOut on a bad mode / null pointer / iStick outside m_vecStick.
+//                     Logs "[pszTag] HeadPair by order ..." (SYST) and "[pszTag] PickHead ..." when the head pick differs from the sign rule.
+//   MeasBuildMovePos: fills pPos for group grp and returns nAxis (0 = bad mode / null / nPosSize too small: WAD 8 / VISION 15 / ANGLE 21).
+//                     The caller zeroes pPos first (ZeroMemory, never ClearMotorPos). bFirst = full array (first move of a step),
+//                     false = heads only. bOCP = IsOCP(). dOffsetX = recipe m_sMotionOffsetPos.m_fStageY. pdLeft / pdRight = the head
+//                     Y targets the WAD step passes to SetMeasPos (written only when nAxis > 0). Logs nothing.
+struct S_RecipeInfo;
+struct S_RecipeData;
+int MeasBuildGroups(int nMode, CPositionConfigMgr* pPosCfg, CMaintControlMgr* pMaint, S_RecipeInfo* pInfo, S_RecipeData* pData,
+		int iStick, const bool* pbUse, LPCTSTR pszTag, vector<S_MeasPos>& vecOut);
+int MeasBuildMovePos(int nMode, const S_MeasPos& grp, int nMeasArea, bool bFirst, bool bOCP, S_RecipeInfo* pInfo, double dOffsetX,
+		stMotorPosition* pPos, int nPosSize, double* pdLeft, double* pdRight);
 class CDoWorkGlassMeasureStep
 {
 protected:
@@ -81,6 +97,7 @@ public:
 	bool IsAgingCellSkip(int iKind, int iCell);
 	// LYS 2026-09-29 Hybrid 3b A3 segment index for the AgingRcp mask = active segment (0 for 1-segment recipes)
 	int  GetAgingMaskSeg();
+	void LogHybridRow(const TCHAR* szKind, int* pnCell, bool* pbUse, int* pnAreaNum);	// LYS 2026-10-01 Hybrid Phase 4 (4-1) one line per SetMeasUseInfo (hybrid only)
 	
 
 	void ResetGlassMeasAreaInfo();

@@ -92,6 +92,9 @@ CChartOrbit::CChartOrbit()
 	ZeroMemory(&m_dGlassVcm, sizeof(m_dGlassVcm));
 
 	m_nMaxCell = 100;
+	m_nDrawLimit = -1;	// LYS 2026-10-12 Hybrid Phase 6
+	m_nClearBase = -1;
+	m_nCellHigh = 0;
 
 	m_bUseFixtuerTime = FALSE;
 	m_nCntFixtuerTime = 8;
@@ -1141,7 +1144,13 @@ void CChartOrbit::SetRemoveGlassCellLayout(int iIndex)
 	TCHAR* MM[2] = {_T(""), NULL};
 	if(iIndex == -1)
 	{
-		for(int i = 0; i < m_nMaxCell; i++)
+		int nClear = m_nMaxCell;	// LYS 2026-10-12 Hybrid Phase 6 clear bound (m_nClearBase -1 = every cell as before)
+		if (m_nClearBase >= 0)
+		{
+			nClear = (m_nCellHigh > m_nClearBase) ? m_nCellHigh : m_nClearBase;
+			if (nClear > m_nMaxCell) nClear = m_nMaxCell;
+		}
+		for(int i = 0; i < nClear; i++)
 		{
 			m_pData1->SetNPoints(m_nProbe + INT_USE_DEFAULT_DATA + i, CHART_DATA_ITEM_END);
 			m_pData1->SetXData(m_nProbe + INT_USE_DEFAULT_DATA +i, px, CHART_DATA_ITEM_END);
@@ -1150,6 +1159,7 @@ void CChartOrbit::SetRemoveGlassCellLayout(int iIndex)
 
 			m_pTextCellStatus[i]->SetStrings(MM);
 		}
+		m_nCellHigh = 0;	// LYS 2026-10-12 Hybrid Phase 6
 	}
 	else
 	{
@@ -1402,8 +1412,9 @@ BOOL CChartOrbit::SetGlassCell(int nIndex, CStringArray* strCellName, double* pp
 	{
 		for (iIndex=0; iIndex<nIndex; iIndex++)
 		{
-			if( iIndex >= m_nMaxCell)	// jsyoon 20200103 add
+			if( iIndex >= m_nMaxCell || (m_nDrawLimit >= 0 && iIndex >= m_nDrawLimit))	// jsyoon 20200103 add, LYS 2026-10-12 Hybrid Phase 6 draw limit
 				continue;
+			if (iIndex + 1 > m_nCellHigh) m_nCellHigh = iIndex + 1;	// LYS 2026-10-12 Hybrid Phase 6 clear bound
 
 			m_pData1->SetNPoints(m_nProbe + INT_USE_DEFAULT_DATA + iIndex, CHART_DATA_ITEM_END);
 			

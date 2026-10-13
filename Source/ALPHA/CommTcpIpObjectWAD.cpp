@@ -1357,6 +1357,15 @@ bool CCommTcpIpObjectWAD::TossResultFile(CString strInnerID, int nArea, int iPro
 		CResultMgr::GetInstance()->Updata_Data(&resultData);
 
 		strLog.Format(_T("[%s] : %s, %s"), GetName(), _T("TossResultFile Updata"), strInnerID);
+		// LYS 2026-10-01 Hybrid Phase 4 (4-4) hybrid: row / cell ID / segment of this upload. WAD toss runs inside the measure thread's
+		//   completion wait, so the tag is the measured segment. 1 segment: tag "" -> the line above stays byte-identical
+		CString strSegTag = (m_pRecipeEditMgr != nullptr) ? m_pRecipeEditMgr->GetSegLogTag(TRUE) : CString();
+		if (!strSegTag.IsEmpty())
+		{
+			CString strSegLog;
+			strSegLog.Format(_T(" row(%d) cell(%s)%s"), nArea, resultData.szCellData, (LPCTSTR)strSegTag);
+			strLog += strSegLog;
+		}
 		m_pLogFileAccessor->KMLOG(OPER, strLog);
 
 		bRet = true;

@@ -1,6 +1,7 @@
 #include "pch.h"
 #include "dfcRecipe.h"
 #include "MakeCellDlg.h"
+#include "CellIdRule.h"	// LYS 2026-10-12 Hybrid Phase 6 CellId_AutoToken for the overlay IDs
 #include "afxdialogex.h"
 #include <memory>	// LYS 2026-09-29 unique_ptr
 
@@ -436,6 +437,8 @@ void	C_MakeCellDlg::OnRecipeUpdate ()
 	}
 
 	if (bCollapse) g_inRcpInfo.CollapseToActiveSegment ();
+	// LYS 2026-10-01 Hybrid Phase 4b rebuilt cells are not proven to be the same physical cells (ICP 4.13, plan 5.7) -> Cell ID back to Auto/Auto
+	if (g_inRcpInfo.ResetCellIdConfig ()) AfxMessageBox (_T("셀 구성이 바뀌어 Cell ID Manual 설정(A/B 모드·수동 ID)을 초기화했습니다.\nCELL ID 편집기에서 다시 입력하십시오."), MB_ICONINFORMATION);
 
 	::SendMessage (m_hWnd->m_hWnd, WM_RECIPE_EVENT, (WPARAM)M_MAKE_CELL_SET, NULL);
 
@@ -1254,6 +1257,8 @@ void	C_MakeCellDlg::ApplyHybridRecipe ()
 		return;
 	}
 
+	// LYS 2026-10-01 Hybrid Phase 4b rebuilt cells are not proven to be the same physical cells (ICP 4.13, plan 5.7) -> Cell ID back to Auto/Auto
+	if (g_inRcpInfo.ResetCellIdConfig ()) AfxMessageBox (_T("셀 구성이 바뀌어 Cell ID Manual 설정(A/B 모드·수동 ID)을 초기화했습니다.\nCELL ID 편집기에서 다시 입력하십시오."), MB_ICONINFORMATION);
 	for (int k = 0; k < nNew; k++) m_vecSegInput[k].bOpened = FALSE;	// 다음 APPLY가 지난 입력으로 재생성하지 않도록
 	LoadSegInput (m_nSegView);
 	UpdateHybridUI ();
@@ -1314,6 +1319,23 @@ void	C_MakeCellDlg::UpdateCellOverlay ()
 		if (nSrc < nRcpSeg) C_GlassMap::BuildSeg (g_inRcpInfo.GetSegmentMgr (nSrc), vecSeg[k]);
 	}
 
+	// LYS 2026-10-12 Hybrid Phase 6 IDs the next hybrid RECIPE APPLY leaves (D6-8 (a)): slot k becomes segment k and APPLY resets any manual
+	//   Cell ID config, so every slot shows the Auto token with the Phase 4 letter carry in slot order (CellId_AutoToken = the runtime MakeCellID
+	//   copy). One slot (a 1-segment recipe after APPLY): m_chCellID as before
+	if (nSlot > 1) {
+		CCellIdGeo geo;
+		for (int k = 0; k < nSlot; k++) {
+			S_CellIdSegGeo g = { vecSeg[k].nRotate, vecSeg[k].nStick, vecSeg[k].nCell0 };	// a slot that draws nothing adds no letters
+			geo.push_back (g);
+		}
+		for (int k = 0; k < nSlot; k++) {
+			for (size_t c = 0; c < vecSeg[k].vecCell.size (); c++) {
+				S_GlassMapCell &sCell = vecSeg[k].vecCell[c];
+				CString strTok = CellId_AutoToken (geo, k, sCell.nStick, sCell.nCell, 0);
+				if (!strTok.IsEmpty ()) _tcsncpy_s (sCell.szID, _countof (sCell.szID), strTok, _TRUNCATE);
+			}
+		}
+	}
 	m_wndCellOverlay.UpdateGlassMap (vecSeg, m_nSegView);
 }
 

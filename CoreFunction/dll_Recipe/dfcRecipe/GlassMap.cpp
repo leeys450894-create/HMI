@@ -31,6 +31,7 @@ C_GlassMap::~C_GlassMap ()
 void	C_GlassMap::BuildSeg (const S_RecipeMgr *pMgr, S_GlassMapSeg &sOut)
 {
 	sOut.nRotate = 0;
+	sOut.nStick = sOut.nCell0 = 0;	// LYS 2026-10-12 Hybrid Phase 6
 	sOut.vecCell.clear ();
 	if (pMgr == NULL) return;
 
@@ -42,6 +43,8 @@ void	C_GlassMap::BuildSeg (const S_RecipeMgr *pMgr, S_GlassMapSeg &sOut)
 	double dW		= fabs (bLong ? pMgr->m_sMap.m_fCellSize.x : pMgr->m_sMap.m_fCellSize.y);
 	double dH		= fabs (bLong ? pMgr->m_sMap.m_fCellSize.y : pMgr->m_sMap.m_fCellSize.x);
 	sOut.nRotate = nRot;
+	sOut.nStick = (int)pMgr->m_sData.m_vecStick.size ();	// LYS 2026-10-12 Hybrid Phase 6 segment geometry for the overlay Auto carry IDs (CellId_BuildGeo inputs)
+	sOut.nCell0 = (sOut.nStick > 0) ? (int)pMgr->m_sData.m_vecStick[0].m_vecCell.size () : 0;
 
 	for (size_t i = 0; i < pMgr->m_sData.m_vecStick.size (); i++) {
 		const S_StickInfo &sStick = pMgr->m_sData.m_vecStick[i];
@@ -51,6 +54,8 @@ void	C_GlassMap::BuildSeg (const S_RecipeMgr *pMgr, S_GlassMapSeg &sOut)
 			const S_CellInfo &sCell = sStick.m_vecCell[j];
 
 			S_GlassMapCell sMap;
+			sMap.nStick = (int)i;	// LYS 2026-10-12 Hybrid Phase 6 recipe vector indices
+			sMap.nCell = (int)j;
 			sMap.dX = bLong ? -sCell.m_fCellX : dS;
 			sMap.dY = bLong ? -dS : -sCell.m_fCellX;
 			sMap.dW = dW;

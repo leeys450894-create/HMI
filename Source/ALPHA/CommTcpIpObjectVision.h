@@ -2,6 +2,7 @@
 #include "CommEthFunction\CommEthFunction.h"
 #include ".\Manager\CommTcpIpDefine.h"
 #include "AuroraMgrPool.h"
+#include "Manager\ResumeJournal.h"	// LYS 2026-10-08 Hybrid Phase 5 S_ResumeCtx (journal context of a VISION grab, S_QualityWait::m_sJournal)
 
 #define QUALITY_1		0
 #define QUALITY_2		1
@@ -12,6 +13,8 @@ struct S_QualityWait {
 	BOOL	m_bRunStatus;
 	CString m_strInnerID;
 	CString m_strCellID;
+	CString m_strSegTag;	// LYS 2026-10-01 Hybrid Phase 4 (4-4) segment snapshot at grab ("" = 1 segment)
+	S_ResumeCtx m_sJournal;	// LYS 2026-10-08 Hybrid Phase 5 (4-3) journal context at grab (all 0 = not armed / manual: no P / X line, toss not journaled)
 
 	int		m_nSheetRow; //Data 출력 위치
 
@@ -24,7 +27,9 @@ struct S_QualityWait {
 		m_bRunStatus = FALSE;
 		m_strInnerID = _T("");
 		m_strCellID = _T("");
+		m_strSegTag = _T("");	// LYS 2026-10-01 Hybrid Phase 4 (4-4)
 		m_nSheetRow = -1;
+		m_sJournal = S_ResumeCtx();	// LYS 2026-10-08 Hybrid Phase 5 (4-3) value-init = all 0
 	}
 };
 

@@ -7,6 +7,7 @@
 #include "..\Manager\SeqTactTimeMgr.h"
 #include "Manager/ResultMgr.h"
 #include "Recipe/RecipeEditMgr.h"
+#include "Manager/ResumeInfoMgr.h"	// LYS 2026-10-08 Hybrid Phase 5 (ResultSaved)
 
 #ifdef _DEBUG
 #define new DEBUG_NEW
@@ -70,6 +71,15 @@ bool CDoWorkGlassResultStep_CompleteCheck::Run()
     bool bUseMeas = false;
     S_RecipeInfo* pRecipeInfo;
     pRecipeInfo = m_pShareItem->GetRecipeEditMgrPtr()->GetRecipeInfo();
+    // LYS 2026-10-01 Hybrid Phase 4 (4-3) hybrid recipe: the glass save gate latched at Recipe Change (any segment optical / AgingTest_2).
+    //   -1 (1-segment recipe, or reloaded after the latch) -> the original segment-0 check below, unchanged
+    int nSaveLatch = m_pShareItem->GetRecipeEditMgrPtr()->GetResultSaveLatch();
+    if (nSaveLatch >= 0)
+    {
+        bUseMeas = (nSaveLatch > 0);
+        m_pShareItem->GetLogFileAccessorPtr()->KMLOG(OPER, bUseMeas ? _T("[HYBRID] Result: glass save gate 1 - SaveResult") : _T("[HYBRID] Result: glass save gate 0 (electrical only) - no result file"));
+    }
+    else
     if (pRecipeInfo != nullptr)
     {
         if (pRecipeInfo->m_sInspectItem.m_bUseAgingTest_2 == true)       // LYS 2026-08-06 Add
@@ -101,6 +111,15 @@ bool CDoWorkGlassResultStep_CompleteCheck::Run()
         bRet = CResultMgr::GetInstance()->SaveResult(true, true, strStartTime);
     }
 	
+
+    // LYS 2026-10-08 Hybrid Phase 5 (D5-13) journal bookmark: Result item done -> ResultSaved 1 (export started, Unload CheckSaveReuslt confirms 2).
+    //   Save gate 0 (electrical only) writes no result file -> 2 at once (review K3). Format-1 bookmarks: nothing
+    if (bRet == true)
+    {
+        CResumeInfoMgr* pResumeT = m_pShareItem->GetResumeInfoMgrPtr();
+        if (pResumeT != NULL && pResumeT->IsTupleBookmark() && m_pShareItem->GetSystemConfigMgrPtr()->IsUseResumeInspection())
+            pResumeT->MarkResultSaved(bUseMeas ? 1 : 2);
+    }
 
     return bRet;
 }

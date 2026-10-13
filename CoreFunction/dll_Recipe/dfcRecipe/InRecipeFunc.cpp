@@ -1,6 +1,7 @@
 #include "pch.h"
 #include "dfcRecipe.h"
 #include "InRecipeFunc.h"
+#include "CellIdRule.h"	// LYS 2026-10-01 Hybrid Phase 4b Cell ID rule core (shared with the other recipe class)
 
 #include <memory>	// LYS 2026-09-29 unique_ptr
 #ifdef _DEBUG 
@@ -12,6 +13,7 @@ static char THIS_FILE[] = __FILE__;
 C_InRecipeFunc::C_InRecipeFunc ()
 {
 	m_nActiveSegment = -1;	// LYS 2026-09-29 Hybrid Phase 1
+	m_nCellIdCfgSeq = 0;	// LYS 2026-10-01 Hybrid Phase 4b
 }
 
 C_InRecipeFunc::~C_InRecipeFunc ()
@@ -125,6 +127,7 @@ BOOL	C_InRecipeFunc::LoadRcpFile (CString strRcpName)
 	std::vector<S_SegmentHeader> vecBakHdr	 = m_vecSegHeader;
 	std::vector<BOOL>			 vecBakAlign = m_vecSegAlignOK;
 	int nBakActive = m_nActiveSegment;
+	S_CellIdConfig sBakCid = m_sCellIdCfg;	// LYS 2026-10-01 Hybrid Phase 4b
 	BOOL bOK = FALSE;
 
 	try {
@@ -145,8 +148,10 @@ BOOL	C_InRecipeFunc::LoadRcpFile (CString strRcpName)
 		m_vecSegAlignOK.clear ();
 		m_nActiveSegment = -1;
 		EnsureSegments ();
+		m_sCellIdCfg.Clear ();	// LYS 2026-10-01 Hybrid Phase 4b file <= V1012 -> Auto/Auto
 
 		if (bOK && nVersion > RECIPE_FILE_V1011) bOK = LoadHybridTail (&File, nVersion);
+		if (bOK && nVersion > RECIPE_FILE_V1012) bOK = LoadCellIdTail (&File);	// LYS 2026-10-01 Hybrid Phase 4b trailer after _HYBRID_END_
 
 		File.Close ();
 	}
@@ -160,9 +165,11 @@ BOOL	C_InRecipeFunc::LoadRcpFile (CString strRcpName)
 		m_vecSegments  = vecBakSeg;
 		m_vecSegHeader = vecBakHdr;
 		m_vecSegAlignOK = vecBakAlign;
+		m_sCellIdCfg = sBakCid;	// LYS 2026-10-01 Hybrid Phase 4b
 		m_nActiveSegment = nBakActive;
 		return FALSE;
 	}
+	m_nCellIdCfgSeq++;	// LYS 2026-10-01 Hybrid Phase 4b config generation (editor APPLY check)
 
 	return TRUE;
 }
@@ -1060,6 +1067,7 @@ void	C_InRecipeFunc::SaveRcpSegments (CStdioFile *pFile)
 	WriteString (pFile, _T("_HYBRID_END_"));
 
 	m_recipeMgr = *pStage;
+	SaveCellIdTail (pFile);	// LYS 2026-10-01 Hybrid Phase 4b right after _HYBRID_END_; needs the restored working slot (GetSegmentMgr(active))
 }
 
 // LYS 2026-09-29 Hybrid Phase 1 저장 전 검사. 빈 문자열 = 통과. 1세그먼트 레시피는 검사하지 않는다(기존 동작 불변).
@@ -1228,4 +1236,99 @@ CString	C_InRecipeFunc::CheckRecipeLayout (const S_RecipeMgr *pMgr, CString strW
 		}
 	}
 	return strErr;
+}
+
+// LYS 2026-10-01 Hybrid Phase 4b Cell ID A/B (docs/HybridGlass_Porting_Plan.md 5.7, plan p4b (1-3)(3)(5)) - thin wrappers over CellIdRule.cpp
+//   (the same rule copy as C_OutRecipeFunc). The geometry is rebuilt from the editor segments on every call; the active segment reads the
+//   working slot (m_recipeMgr), so an unsaved GLASS ROTATE flushed from the option grid is what the Auto preview and the checks see.
+BOOL	C_InRecipeFunc::IsCellIdDefault ()
+{
+	return m_sCellIdCfg.IsDefault ();
+}
+
+int		C_InRecipeFunc::GetCellIdMode (int nPanel)
+{
+	if (nPanel < 0 || nPanel >= M_CELLID_PANEL_MAX) return M_CELLID_MODE_AUTO;
+	return m_sCellIdCfg.m_nMode[nPanel];
+}
+
+// 1 = manual token, or panel B derived from a manual A ("" when it cannot be derived); 0 = Auto (token only with bAutoFallback) / out of range
+int		C_InRecipeFunc::ResolveCellToken (int nSeg, int nStick, int nCell, int nPanel, CString &strToken, BOOL bAutoFallback)
+{
+	CCellIdGeo geo;
+	CellId_BuildGeo (*this, geo);
+	return CellId_Resolve (m_sCellIdCfg, geo, nSeg, nStick, nCell, nPanel, strToken, bAutoFallback);
+}
+
+// SaveFile / editor pass -1 (token cap M_CELLID_TOKEN_MAX). TRUE = OK (Auto/Auto always - nothing is checked, no popup)
+BOOL	C_InRecipeFunc::ValidateCellIdConfig (int nGlassIdLen, std::vector<S_CellIdError> &vecErr, int *pnLongest)
+{
+	CCellIdGeo geo;
+	CellId_BuildGeo (*this, geo);
+	return CellId_Validate (m_sCellIdCfg, geo, CellId_TokenMax (nGlassIdLen), vecErr, pnLongest);
+}
+
+// _CELL_ID_PANEL_ ... _CELL_ID_END_ right after _HYBRID_END_ (file version 1013 and later), on the segments the hybrid tail just set up.
+//   FALSE -> LoadRcpFile rolls everything back (body, segments, Cell ID config)
+BOOL	C_InRecipeFunc::LoadCellIdTail (CStdioFile *pFile)
+{
+	CCellIdGeo geo;
+	CellId_BuildGeo (*this, geo);
+	return CellId_LoadTail (pFile, geo, m_sCellIdCfg);
+}
+
+// MakeCell RECIPE APPLY (both paths): rebuilt cells are not proven to be the same physical cells (ICP 4.13, plan 5.7) -> Auto/Auto.
+//   TRUE = a non-default config was cleared (the caller shows the info popup). The generation moves on every call, default config or not:
+//   the cells were rebuilt, so an open editor's working copy is stale (review C1/K1 - also covers a default recipe being switched to Manual)
+BOOL	C_InRecipeFunc::ResetCellIdConfig ()
+{
+	BOOL bWas = m_sCellIdCfg.IsDefault () ? FALSE : TRUE;
+	m_sCellIdCfg.Clear ();
+	m_nCellIdCfgSeq++;
+	return bWas;
+}
+
+// editor working copy (OnInitDialog)
+S_CellIdConfig	C_InRecipeFunc::GetCellIdConfig ()
+{
+	return m_sCellIdCfg;
+}
+
+// editor APPLY (validated there): Auto panels emptied, Manual panels shaped to the current geometry (values kept by index). The shaped copy
+//   is built first, so the stored config is replaced only once it is complete
+void	C_InRecipeFunc::SetCellIdConfig (const S_CellIdConfig &cfg)
+{
+	CCellIdGeo geo;
+	CellId_BuildGeo (*this, geo);
+	S_CellIdConfig sNew = cfg;
+	CellId_EnsureShape (sNew, geo);
+	m_sCellIdCfg = sNew;
+	m_nCellIdCfgSeq++;
+}
+
+// LYS 2026-10-01 Hybrid Phase 4b DLL screens: 1-segment Auto/Auto (every 1-segment recipe saved before 4b) -> the recipe's m_chCellID exactly
+//   as before (HARD RULE); N > 1 Auto/Auto -> the carried letters (LYS 2026-10-12 Hybrid Phase 6 D6-9 = D4b-7 (b); under (a) it showed m_chCellID);
+//   a manual config -> the panel-A token the runtime sends (manual A, else the MakeCellID token with the
+//   Phase 4 letter carry). nSeg = the active segment (GetCellID reads m_recipeMgr = the active segment)
+CString	C_InRecipeFunc::GetDisplayCellId (int nSeg, int nStick, int nCell)
+{
+	if (GetSegmentLoopCount () <= 1 && m_sCellIdCfg.IsDefault ()) return GetCellID (nStick, nCell);	// LYS 2026-10-12 Hybrid Phase 6 D4b-7 (b): N > 1 Auto/Auto shows the carried letters (resolver Auto token) like the editor / runtime / operate map
+	CString strTok;
+	ResolveCellToken (nSeg, nStick, nCell, 0, strTok, TRUE);
+	return strTok;
+}
+
+// Always written right after _HYBRID_END_ (N = 1 and Auto/Auto too: 5 lines). SaveRcpSegments calls it after the working slot is restored,
+//   so the geometry = the segments just written and the trailer lines / tokens always match the body
+void	C_InRecipeFunc::SaveCellIdTail (CStdioFile *pFile)
+{
+	CCellIdGeo geo;
+	CellId_BuildGeo (*this, geo);
+	CellId_SaveTail (pFile, geo, m_sCellIdCfg);
+}
+
+// editor: kept at OnInitDialog, APPLY is refused when it moved (successful load, MakeCell reset, another APPLY)
+int		C_InRecipeFunc::GetCellIdCfgSeq ()
+{
+	return m_nCellIdCfgSeq;
 }

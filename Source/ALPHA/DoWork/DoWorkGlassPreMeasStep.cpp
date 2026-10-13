@@ -710,6 +710,12 @@ bool CDoWorkGlassPreMeasStep_RcpChangeDone::Run()
 
 	if (pReciepInfo->m_sInspectItem.m_bUsePre_0 == TRUE | pReciepInfo->m_sInspectItem.m_bUseElect_1 == TRUE | pReciepInfo->m_sInspectItem.m_bUseAgingTest_2 == TRUE)
 		bMeasMode[enumMEASURE_MODE_PG] = true;
+	// LYS 2026-10-01 Hybrid Phase 4 (4-7) wait for every device the Recipe Change step opened for any segment (same OR, D4-18). 1 segment: no-op, no line
+	{
+		CString strDevLog;
+		if (m_pShareItem->GetRecipeEditMgrPtr()->OrSegmentMeasMode(bMeasMode, &strDevLog))
+			m_pShareItem->GetLogFileAccessorPtr()->KMLOG(OPER, CString(_T("[HYBRID] PreMeas recipe done wait (all segments):")) + strDevLog);
+	}
 	//	bMeasMode[enumMEASURE_MODE_LCR] = true;
 
 	// Recipe Open

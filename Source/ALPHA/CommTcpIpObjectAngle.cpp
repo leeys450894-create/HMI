@@ -852,5 +852,16 @@ BOOL CCommTcpIpObjectAngle::TossResultFile(CString strInnerID, int nArea)
 
 	CResultMgr::GetInstance()->Updata_Data(&resultData);
 
+	// LYS 2026-10-01 Hybrid Phase 4 (4-4) hybrid only: upload line with row / cell ID / segment. Receive thread, but the step waits for
+	//   INSP_COMPLETE, so the segment is the measured one. 1 segment: tag "" -> no line
+	CString strSegTag = (m_pRecipeEditMgr != nullptr) ? m_pRecipeEditMgr->GetSegLogTag(TRUE) : CString();
+	if (!strSegTag.IsEmpty())
+	{
+		CString strSegLog;
+		strSegLog.Format(_T("[%s] : TossResultFile Updata, %s row(%d) cell(%s)%s"), (LPCTSTR)GetName(), (LPCTSTR)strInnerID, nArea,
+			m_pShareMemory->GetSharedMemory()->stLotInfo.m_szCellID[m_iDeviceIndex], (LPCTSTR)strSegTag);
+		m_pLogFileAccessor->KMLOG(OPER, strSegLog);
+	}
+
 	return TRUE;
 }

@@ -155,6 +155,9 @@ public:
 	double		m_dFixtuerTimeR[8];
 
 	int			m_nMaxCell;
+	int			m_nDrawLimit;	// LYS 2026-10-12 Hybrid Phase 6 SetGlassCell draws index < m_nDrawLimit only (-1 = up to m_nMaxCell); the owner sets it per draw
+	int			m_nClearBase;	// LYS 2026-10-12 Hybrid Phase 6 SetRemoveGlassCellLayout(-1) clears max(m_nClearBase, m_nCellHigh) cells (-1 = m_nMaxCell as before)
+	int			m_nCellHigh;	// LYS 2026-10-12 Hybrid Phase 6 highest cell index drawn since the last full clear + 1
 	BOOL		m_bInvertXY;
 
 	CWnd* 	m_pParent;

@@ -28,6 +28,11 @@ public:
 	int				m_nAcStickCnt;			// LYS 2026-08-11 combo rebuild cache
 	volatile int	m_nAcSelStick;			// LYS 2026-08-11 -1=ALL, else 0-based stick
 	volatile int	m_nAcProgState;			// LYS 2026-08-11 0 idle/1 move/2 search/3 done/4 fail/5 stop
+	volatile BOOL	m_bAcSpsMarked = FALSE;	// LYS 2026-10-13 Hybrid Phase 7 D7-16 (a) START set SPS_CYCLETEST (hybrid runtime recipe only) - the worker guard restores SPS_IDLE on every exit
+	CStatic			m_stAcSeg;				// LYS 2026-10-13 Hybrid Phase 7 D7-17 runtime segment label (created hidden, shown for hybrid recipes only)
+	BOOL			m_bAcSegShown = FALSE;	// LYS 2026-10-13 Hybrid Phase 7 D7-17 label visible (1-segment recipe: stays FALSE, the label is never touched)
+	bool			CheckHybridAcStart();	// LYS 2026-10-13 Hybrid Phase 7 (14)-I START gate (hybrid only): idle re-check, stick range, R-A / R-C, SPS mark
+	void			UpdateAcSegLabel();		// LYS 2026-10-13 Hybrid Phase 7 D7-17 timer: segment label (reads the DLL only while idle)
 	volatile int	m_nAcProgCur;
 	volatile int	m_nAcProgTotal;
 	double			m_fAutoCntReady;

@@ -1533,6 +1533,11 @@ UINT	CCommTcpIpObjectVision::QualityWaitThread(LPVOID pParam)
 	while (pQuality->m_bRunThread) {
 		for (int i = 0; i < QUALITY_MAX; i++) {
 			if (pQuality->sQualityWait[i].m_bRunStatus) {
+				// LYS 2026-10-08 Hybrid Phase 5 (4-3) journal copies of this grab taken BEFORE the up-to-150 s file wait: a Recipe Change
+				//   (EXE_QUALITY_RESET) can clear the slot and the next grab reuse it meanwhile. Live behaviour below is unchanged
+				CString strInner0 = pQuality->sQualityWait[i].m_strInnerID;
+				int nRow0 = pQuality->sQualityWait[i].m_nSheetRow;
+				S_ResumeCtx ctx0 = pQuality->sQualityWait[i].m_sJournal;
 
 				//파일 찾고 나서 진행
 				strPath.Format(_T("%s\\%s.txt"), strRemotePath, pQuality->sQualityWait[i].m_strInnerID);
@@ -1541,7 +1546,26 @@ UINT	CCommTcpIpObjectVision::QualityWaitThread(LPVOID pParam)
 				if (!pQuality->m_pCommTcpIpFactoryMgr->CmFileFindTimeOut(strPath, 150000/*pQuality->m_nQualityDelay*/)) {
 					//pQuality->GetMeasData(pQuality->m_nHead, pQuality->sQualityWait[i].m_strInnerID, pQuality->sQualityWait[i].m_nSheetRow, pQuality->sQualityWait[i].m_strCellID);
 					//TossResultFile //여기 함수에서 복사하고 결과파일 정보 전달하기
+					// LYS 2026-10-08 Hybrid Phase 5 (4-3) the journal row of this toss takes the grab-time context (thread-local, read by the
+					//   CResultMgr::Updata_Data hook); a slot reused during the wait is left out of the journal (nGen 0). The toss is unchanged
+					static const S_ResumeCtx s_ctxDropped = { 0, 0, 0, 0, 0, 0 };
+					CResumeJournal::SetThreadCtx((pQuality->sQualityWait[i].m_strInnerID == strInner0) ? &ctx0 : &s_ctxDropped);
 					pQuality->TossResultFile(pQuality->sQualityWait[i].m_strInnerID, pQuality->sQualityWait[i].m_nSheetRow);
+					CResumeJournal::SetThreadCtx(NULL);
+					// LYS 2026-10-01 Hybrid Phase 4 (4-4) hybrid only: grab-time row / cell ID / segment from the slot - the file may land up to
+					//   150 s later, in the next segment. 1 segment: slot tag "" -> no line
+					if (!pQuality->sQualityWait[i].m_strSegTag.IsEmpty())
+					{
+						CString strSegLog;
+						strSegLog.Format(_T("[%s] : TossResultFile Updata, %s row(%d) cell(%s)%s"), (LPCTSTR)pQuality->GetName(), (LPCTSTR)pQuality->sQualityWait[i].m_strInnerID,
+							pQuality->sQualityWait[i].m_nSheetRow, (LPCTSTR)pQuality->sQualityWait[i].m_strCellID, (LPCTSTR)pQuality->sQualityWait[i].m_strSegTag);
+						pQuality->m_pLogFileAccessor->KMLOG(OPER, strSegLog);
+					}
+				}
+				else
+				{	// LYS 2026-10-08 Hybrid Phase 5 (4-3) no result file within 150 s: the slot is cleared below as before and the row stays empty -
+					//   an X line closes the grab's P so a resume does not pull back to it (journal glass only; nGen 0 -> nothing written)
+					CResumeJournal::GetInstance()->AppendClose(ctx0, pQuality->m_iDeviceIndex, nRow0, strInner0);
 				}
 				//
 
@@ -1593,10 +1617,22 @@ void	CCommTcpIpObjectVision::QualityWaitSet(CString strInnerID, int nSheetRow, C
 			sQualityWait[i].m_strInnerID  = strInnerID;
 			sQualityWait[i].m_strCellID	  = strCellID;
 			sQualityWait[i].m_nSheetRow	  = nSheetRow;
+			sQualityWait[i].m_strSegTag  = (m_pRecipeEditMgr != nullptr) ? m_pRecipeEditMgr->GetSegLogTag(TRUE) : CString();	// LYS 2026-10-01 Hybrid Phase 4 (4-4) grab-time segment tag (1 segment: "")
+			// LYS 2026-10-08 Hybrid Phase 5 (4-3) grab-time journal context + P line (head = m_iDeviceIndex, row = nSheetRow = the iMeasArea
+			//   TossResultFile uploads). Not armed (1-segment default, manual measure) -> nGen 0: nothing written. Offline the result file
+			//   never comes, so the P line is kept only with RESUME_JOURNAL_OOS_SIM (closed there by the S lines)
+			sQualityWait[i].m_sJournal = CResumeJournal::GetInstance()->Capture();
+			if (IsOutOfService() == false || CResumeJournal::GetInstance()->GetSimMode() > 0)
+				CResumeJournal::GetInstance()->AppendPending(sQualityWait[i].m_sJournal, m_iDeviceIndex, nSheetRow, strInnerID);
 			sQualityWait[i].m_bWaitStatus = TRUE;
 			return;
 		}
 	}
+	// LYS 2026-10-08 Hybrid Phase 5 (4-3) OOS + RESUME_JOURNAL_OOS_SIM only: offline no INSP END comes (m_bRunStatus is never set), so both
+	//   slots stay full after the first 2 grabs and every later grab lands here - keep its P line so the pull-back test sees the whole
+	//   glass. Real runs (and OOS without the sim key): no line, the grab is dropped as before
+	if (IsOutOfService() == true && CResumeJournal::GetInstance()->GetSimMode() > 0)
+		CResumeJournal::GetInstance()->AppendPending(CResumeJournal::GetInstance()->Capture(), m_iDeviceIndex, nSheetRow, strInnerID);
 }
 
 //화질검사 결과 처리 실행 (결과 데이터에서 받은 InnerID 를 토대로 설정 되었던 InnerID 비교 하여 처리)

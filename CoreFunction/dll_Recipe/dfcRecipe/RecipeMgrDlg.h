@@ -197,6 +197,7 @@ class C_RecipeMgrDlg : public C_BaseDialog
 		//afx_msg void	OnSetColorItem(NMHDR* pNMHDR, LRESULT* pResult);
 
 	afx_msg void OnBtnTestMode();	// LYS 2026-07-02 TestMode dialog
+	afx_msg void OnCellIdEdit ();	// LYS 2026-10-01 Hybrid Phase 4b Cell ID A/B editor (modal)
 
 	// LYS 2026-09-29 Hybrid Phase 2 세그먼트 선택기 + 세그먼트 정보(이름/PG/WAD)
 	protected:

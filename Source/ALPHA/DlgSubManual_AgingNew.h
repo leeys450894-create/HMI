@@ -22,6 +22,8 @@ class CDlgSubManual_AgingNew : public CDialogEx
 
 private:
 	CLabel		m_LabelInfo;
+	CString		m_strTitleBase;		// LYS 2026-10-12 Hybrid Phase 6 rc title ("EFA Test View")
+	CString		m_strTitleShown;	// title on screen now (suffix only while a hybrid EFA run measures)
 
 public:
 	CDlgSubManual_AgingNew(CAuroraMgr* pAuroraMgr, CWnd* pParent = NULL);

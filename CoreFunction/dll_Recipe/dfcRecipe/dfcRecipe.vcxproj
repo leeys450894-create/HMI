@@ -232,6 +232,8 @@ copy $(OutDir)$(TargetName).pdb "$(SolutionDir)..\Bin"
     <ClCompile Include="IniFile.cpp" />
     <ClCompile Include="MakeCellDlg.cpp" />
     <ClCompile Include="GlassMap.cpp" />
+    <ClCompile Include="CellIdRule.cpp" />
+    <ClCompile Include="CellIdEditDlg.cpp" />
     <ClCompile Include="InRecipeFunc.cpp" />
     <ClCompile Include="OutRecipeFunc.cpp" />
     <ClCompile Include="pch.cpp" />
@@ -251,6 +253,8 @@ copy $(OutDir)$(TargetName).pdb "$(SolutionDir)..\Bin"
     <ClInclude Include="IniFile.h" />
     <ClInclude Include="MakeCellDlg.h" />
     <ClInclude Include="GlassMap.h" />
+    <ClInclude Include="CellIdRule.h" />
+    <ClInclude Include="CellIdEditDlg.h" />
     <ClInclude Include="OutRecipeFunc.h" />
     <ClInclude Include="pch.h" />
     <ClInclude Include="preDefine.h" />

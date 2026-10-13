@@ -19,6 +19,7 @@
 #include "Manager/ResultMgr.h"
 #include "..\CommTcpIpObjectCIM.h"
 #include "..\Recipe\RecipeEditMgr.h"
+#include "..\Manager\ResumeInfoMgr.h"	// LYS 2026-10-08 Hybrid Phase 5 (ResultSaved)
 
 #ifdef _DEBUG
 #define new DEBUG_NEW
@@ -195,6 +196,14 @@ bool CDoWorkGlassUnloadStep_CheckSaveReuslt::Run()
 	bool bUseMeas = false;
 	S_RecipeInfo* pRecipeInfo;
 	pRecipeInfo = m_pShareItem->GetRecipeEditMgrPtr()->GetRecipeInfo();
+	// LYS 2026-10-01 Hybrid Phase 4 (4-3) the same latch as Result (AgingTest_2 counts here too for hybrid recipes). -1 -> original check below
+	int nSaveLatch = m_pShareItem->GetRecipeEditMgrPtr()->GetResultSaveLatch();
+	if (nSaveLatch >= 0)
+	{
+		bUseMeas = (nSaveLatch > 0);
+		m_pShareItem->GetLogFileAccessorPtr()->KMLOG(OPER, bUseMeas ? _T("[HYBRID] Unload: glass save gate 1 - wait SaveResultDone") : _T("[HYBRID] Unload: glass save gate 0 (electrical only) - CIM bypass (DATAJUDGE_NOTMEAS)"));
+	}
+	else
 	if (pRecipeInfo != nullptr)
 	{
 		if (pRecipeInfo->m_sInspectItem.m_bUseSpec_3 == true)
@@ -250,6 +259,12 @@ bool CDoWorkGlassUnloadStep_CheckSaveReuslt::Run()
 	else
 	{ 
 		m_pShareItem->GetLogFileAccessorPtr()->KMLOG(SYST, _T("CDoWorkGlassUnloadStep_CheckSaveReuslt End."));
+
+		// LYS 2026-10-08 Hybrid Phase 5 (D5-13, review C15) journal bookmark: SaveResultDone seen above (save gate 0: nothing to wait for) -> ResultSaved 2.
+		//   Reuses the existing 30 s wait - no timing change. Format-1 bookmarks: nothing
+		CResumeInfoMgr* pResumeT = m_pShareItem->GetResumeInfoMgrPtr();
+		if (pResumeT != NULL && pResumeT->IsTupleBookmark() && m_pShareItem->GetSystemConfigMgrPtr()->IsUseResumeInspection())
+			pResumeT->MarkResultSaved(2);
 
 		bRet = true;
 	}

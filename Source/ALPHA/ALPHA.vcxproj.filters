@@ -912,6 +912,12 @@
     <ClInclude Include="Manager\ResumeInfoMgr.h">
       <Filter>헤더 파일\Manager\HMI</Filter>
     </ClInclude>
+    <ClInclude Include="Manager\ResumeJournal.h">
+      <Filter>헤더 파일\Manager\HMI</Filter>
+    </ClInclude>
+    <ClInclude Include="ResumePrompt.h">
+      <Filter>헤더 파일\Manager\HMI</Filter>
+    </ClInclude>
     <ClInclude Include="Manager\WadMultiMeasMgr.h">
       <Filter>헤더 파일\Manager\HMI</Filter>
     </ClInclude>
@@ -1689,6 +1695,12 @@
       <Filter>소스 파일\Manager\HMI</Filter>
     </ClCompile>
     <ClCompile Include="Manager\ResumeInfoMgr.cpp">
+      <Filter>소스 파일\Manager\HMI</Filter>
+    </ClCompile>
+    <ClCompile Include="Manager\ResumeJournal.cpp">
+      <Filter>소스 파일\Manager\HMI</Filter>
+    </ClCompile>
+    <ClCompile Include="ResumePrompt.cpp">
       <Filter>소스 파일\Manager\HMI</Filter>
     </ClCompile>
     <ClCompile Include="Manager\WadMultiMeasMgr.cpp">

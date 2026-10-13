@@ -77,4 +77,28 @@ class AFX_EXT_CLASS	C_OutRecipeFunc
 		std::vector<S_SegmentHeader> m_vecSegHeader;
 		std::vector<BOOL>			 m_vecSegAlignOK;
 		int							 m_nActiveSegment;	// -1 = 아직 로드 전
+
+	// LYS 2026-10-01 Hybrid Phase 4b Cell ID A/B (docs/HybridGlass_Porting_Plan.md 5.7). Non-inline: ALPHA calls the DLL code.
+	//   Members stay at the class end: the object lives on the DLL heap only and ALPHA holds a pointer, so no offset moves.
+	public:
+		BOOL	IsCellIdDefault ();				// both panels Auto (every recipe saved before 4b) -> legacy IDs everywhere
+		int		GetCellIdMode (int nPanel);		// M_CELLID_MODE_*
+		int		ResolveCellToken (int nSeg, int nStick, int nCell, int nPanel, CString &strToken, BOOL bAutoFallback = FALSE);
+												// 1 = manual / derived from A (final token, B offset inside), 0 = Auto (strToken = Auto token only with bAutoFallback)
+		BOOL	ValidateCellIdConfig (int nGlassIdLen, std::vector<S_CellIdError> &vecErr, int *pnLongest = NULL);
+												// nGlassIdLen < 0 -> token cap M_CELLID_TOKEN_MAX; else the 31-char budget of that Glass ID. TRUE = OK (Auto/Auto always)
+		int		GetRcpLoadSeq ();				// successful LoadRcpFile count: binds the D-15 latch to the config it checked (review C2/K3), D4b-15 (b)
+	protected:
+		BOOL	LoadCellIdTail (CStdioFile *pFile);
+	public:
+		S_CellIdConfig	m_sCellIdCfg;
+		int				m_nRcpLoadSeq;			// ++ at the end of a successful LoadRcpFile only (a rolled-back load leaves it)
+	// LYS 2026-10-01 Hybrid Phase 4b review fix: LoadRcpFile in progress (CIM PPID / DLL TestMode thread) - the measure thread must not walk the
+	//   vectors while a load clears and refills them. Kept apart from m_nRcpLoadSeq (D4b-15 (b) needs a success-only serial). Members at the end
+	public:
+		BOOL	IsRcpLoadBusy ();				// TRUE while a LoadRcpFile is between its first write and its exit (return or exception)
+		int		GetRcpLoadTry ();				// LoadRcpFile runs that started writing (success or roll-back): same before / after a read = no load meanwhile
+	public:
+		volatile LONG	m_nRcpLoadBusy;			// running LoadRcpFile count, not a flag (a CIM and a TestMode load may overlap)
+		volatile LONG	m_nRcpLoadTry;			// ++ right after m_nRcpLoadBusy++ (readers take this one first, then the busy count)
 };

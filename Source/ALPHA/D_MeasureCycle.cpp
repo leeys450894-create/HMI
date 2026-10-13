@@ -220,7 +220,17 @@ void CD_MeasureCycle::OnBnClickedOk()
 	CString strSelectRecipeID;
 	m_cmbRecipeList.GetLBText(iCurSel, strSelectRecipeID);
 
-	if (0 < m_pRecipeEditMgr->OpenRecipe(strSelectRecipeID))
+	// LYS 2026-10-01 Hybrid Phase 4b D4b-15 (b) 0 < OpenRecipe() also accepted JOB_RECIPE_NOT_EXIST (1013): an unreadable .rcp closed the
+	//   dialog and the cycle ran the previous recipe. Refuse only when the .rcp load itself failed (load serial unchanged)
+	C_OutRecipeFunc* pLoadFunc = m_pRecipeEditMgr->GetRecipeFuncPtr();
+	int nLoadSeq = (pLoadFunc != NULL) ? pLoadFunc->GetRcpLoadSeq() : 0;
+	int nOpenRtn = m_pRecipeEditMgr->OpenRecipe(strSelectRecipeID);
+	if (pLoadFunc != NULL && strSelectRecipeID.IsEmpty() != true && pLoadFunc->GetRcpLoadSeq() == nLoadSeq)
+	{
+		AfxMessageBox(_T("레시피 [") + strSelectRecipeID + _T("] 파일을 읽을 수 없습니다.\n파일이 없거나 손상되었습니다. (Cell ID 트레일러 등)\n\n이전 레시피로 측정하지 않도록 시작하지 않습니다."), MB_ICONWARNING);
+		return;
+	}
+	if (0 < nOpenRtn)
 	{
 		CLogWrapper::GetInstance()->KMLOG(OPER, _T("CD_MeasureCycle::OnBnClickedOk2"));
 

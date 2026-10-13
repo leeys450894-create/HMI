@@ -17,6 +17,18 @@
 #define new DEBUG_NEW
 #endif
 
+// LYS 2026-10-12 EFA T1 AGING S: an EFA pass after T0 skips OST / R-TEST, so the stick's cells still hold their T0 measurement end state.
+//   AGING START marks them too (the AGING END check then sets AGING OK / NG). Such a cell is remembered (MarkEfaReAged) so the measure
+//   steps still measure it after an AGING NG in this pass, as OCP_EFA does (user decision 2026-10-12) - its T1 row gets T1 values.
+//   Only reached when the legacy states did not match (|| short-circuit). T0, non-EFA glasses, AgingTest repeats: pass 0 -> false.
+static bool IsEfaReAgingState(CRecipeEditMgr* pRecipeEditMgr, int nState, int nCell, int nCol)
+{
+	if (pRecipeEditMgr == nullptr || pRecipeEditMgr->GetEfaCurPass() < 1) return false;
+	if (nState != df_CELLSTATE_WAD_END && nState != df_CELLSTATE_VISION_END && nState != df_CELLSTATE_COLOR_END && nState != df_CELLSTATE_ANGLE_END) return false;
+	pRecipeEditMgr->MarkEfaReAged(nCell, nCol);
+	return true;
+}
+
 CCommTcpIpObjectPG::CCommTcpIpObjectPG(int iSeqItemIndex, stAuroraMgrPool& MgrPool)
 	: m_pSystemConfigMgr(MgrPool.pSystemConfigMgr)
 	, m_pRecipeEditMgr(MgrPool.pRecipeEditMgr)
@@ -1471,7 +1483,7 @@ void CCommTcpIpObjectPG::xNetCallbackRecieveData(LPVOID ud)
 									{
 										if (m_pShareMemoryMgr->GetSharedMemory()->nCellStatus[i][iStick] == df_CELLSTATE_ILDE || m_pShareMemoryMgr->GetSharedMemory()->nCellStatus[i][iStick] == df_CELLSTATE_PTP_NOR ||
 											m_pShareMemoryMgr->GetSharedMemory()->nCellStatus[i][iStick] == df_CELLSTATE_OST_NOR || m_pShareMemoryMgr->GetSharedMemory()->nCellStatus[i][iStick] == df_CELLSTATE_PASS ||
-											m_pShareMemoryMgr->GetSharedMemory()->nCellStatus[i][iStick] == df_CELLSTATE_AGING_NG || m_pShareMemoryMgr->GetSharedMemory()->nCellStatus[i][iStick] == df_CELLSTATE_AGING_OK)
+											m_pShareMemoryMgr->GetSharedMemory()->nCellStatus[i][iStick] == df_CELLSTATE_AGING_NG || m_pShareMemoryMgr->GetSharedMemory()->nCellStatus[i][iStick] == df_CELLSTATE_AGING_OK || IsEfaReAgingState(m_pRecipeEditMgr, m_pShareMemoryMgr->GetSharedMemory()->nCellStatus[i][iStick], (int)i, iStick))	// LYS 2026-10-12 EFA T1 AGING S
 											m_pShareMemoryMgr->GetSharedMemory()->nCellStatus[i][iStick] = df_CELLSTATE_AGING_START;
 									}
 								}
@@ -1482,7 +1494,7 @@ void CCommTcpIpObjectPG::xNetCallbackRecieveData(LPVOID ud)
 
 										if (m_pShareMemoryMgr->GetSharedMemory()->nCellStatus[i][iStick] == df_CELLSTATE_ILDE || m_pShareMemoryMgr->GetSharedMemory()->nCellStatus[i][iStick] == df_CELLSTATE_PTP_NOR ||
 											m_pShareMemoryMgr->GetSharedMemory()->nCellStatus[i][iStick] == df_CELLSTATE_OST_NOR || m_pShareMemoryMgr->GetSharedMemory()->nCellStatus[i][iStick] == df_CELLSTATE_PASS ||
-											m_pShareMemoryMgr->GetSharedMemory()->nCellStatus[i][iStick] == df_CELLSTATE_AGING_NG || m_pShareMemoryMgr->GetSharedMemory()->nCellStatus[i][iStick] == df_CELLSTATE_AGING_OK)
+											m_pShareMemoryMgr->GetSharedMemory()->nCellStatus[i][iStick] == df_CELLSTATE_AGING_NG || m_pShareMemoryMgr->GetSharedMemory()->nCellStatus[i][iStick] == df_CELLSTATE_AGING_OK || IsEfaReAgingState(m_pRecipeEditMgr, m_pShareMemoryMgr->GetSharedMemory()->nCellStatus[i][iStick], (int)i, iStick))	// LYS 2026-10-12 EFA T1 AGING S
 											m_pShareMemoryMgr->GetSharedMemory()->nCellStatus[i][iStick] = df_CELLSTATE_AGING_START;
 									}
 								}
@@ -1494,7 +1506,7 @@ void CCommTcpIpObjectPG::xNetCallbackRecieveData(LPVOID ud)
 							{
 								if (m_pShareMemoryMgr->GetSharedMemory()->nCellStatus[i][iStick] == df_CELLSTATE_ILDE || m_pShareMemoryMgr->GetSharedMemory()->nCellStatus[i][iStick] == df_CELLSTATE_PTP_NOR ||
 									m_pShareMemoryMgr->GetSharedMemory()->nCellStatus[i][iStick] == df_CELLSTATE_OST_NOR || m_pShareMemoryMgr->GetSharedMemory()->nCellStatus[i][iStick] == df_CELLSTATE_PASS ||
-									m_pShareMemoryMgr->GetSharedMemory()->nCellStatus[i][iStick] == df_CELLSTATE_AGING_NG || m_pShareMemoryMgr->GetSharedMemory()->nCellStatus[i][iStick] == df_CELLSTATE_AGING_OK)
+									m_pShareMemoryMgr->GetSharedMemory()->nCellStatus[i][iStick] == df_CELLSTATE_AGING_NG || m_pShareMemoryMgr->GetSharedMemory()->nCellStatus[i][iStick] == df_CELLSTATE_AGING_OK || IsEfaReAgingState(m_pRecipeEditMgr, m_pShareMemoryMgr->GetSharedMemory()->nCellStatus[i][iStick], (int)i, iStick))	// LYS 2026-10-12 EFA T1 AGING S
 									m_pShareMemoryMgr->GetSharedMemory()->nCellStatus[i][iStick] = df_CELLSTATE_AGING_START;
 							}
 						}
@@ -2359,7 +2371,7 @@ int	 CCommTcpIpObjectPG::_ExePGCtrl(int iEvent, int iCellNum)
 					{
 						if (m_pShareMemoryMgr->GetSharedMemory()->nCellStatus[i][iStick] == df_CELLSTATE_ILDE || m_pShareMemoryMgr->GetSharedMemory()->nCellStatus[i][iStick] == df_CELLSTATE_PTP_NOR ||
 							m_pShareMemoryMgr->GetSharedMemory()->nCellStatus[i][iStick] == df_CELLSTATE_OST_NOR || m_pShareMemoryMgr->GetSharedMemory()->nCellStatus[i][iStick] == df_CELLSTATE_PASS ||
-							m_pShareMemoryMgr->GetSharedMemory()->nCellStatus[i][iStick] == df_CELLSTATE_AGING_NG || m_pShareMemoryMgr->GetSharedMemory()->nCellStatus[i][iStick] == df_CELLSTATE_AGING_OK)
+							m_pShareMemoryMgr->GetSharedMemory()->nCellStatus[i][iStick] == df_CELLSTATE_AGING_NG || m_pShareMemoryMgr->GetSharedMemory()->nCellStatus[i][iStick] == df_CELLSTATE_AGING_OK || IsEfaReAgingState(m_pRecipeEditMgr, m_pShareMemoryMgr->GetSharedMemory()->nCellStatus[i][iStick], (int)i, iStick))	// LYS 2026-10-12 EFA T1 AGING S
 							m_pShareMemoryMgr->GetSharedMemory()->nCellStatus[i][iStick] = df_CELLSTATE_AGING_START;
 					}
 				}
@@ -2370,7 +2382,7 @@ int	 CCommTcpIpObjectPG::_ExePGCtrl(int iEvent, int iCellNum)
 				{
 						if (m_pShareMemoryMgr->GetSharedMemory()->nCellStatus[i][iStick] == df_CELLSTATE_ILDE || m_pShareMemoryMgr->GetSharedMemory()->nCellStatus[i][iStick] == df_CELLSTATE_PTP_NOR ||
 							m_pShareMemoryMgr->GetSharedMemory()->nCellStatus[i][iStick] == df_CELLSTATE_OST_NOR || m_pShareMemoryMgr->GetSharedMemory()->nCellStatus[i][iStick] == df_CELLSTATE_PASS ||
-							m_pShareMemoryMgr->GetSharedMemory()->nCellStatus[i][iStick] == df_CELLSTATE_AGING_NG || m_pShareMemoryMgr->GetSharedMemory()->nCellStatus[i][iStick] == df_CELLSTATE_AGING_OK )
+							m_pShareMemoryMgr->GetSharedMemory()->nCellStatus[i][iStick] == df_CELLSTATE_AGING_NG || m_pShareMemoryMgr->GetSharedMemory()->nCellStatus[i][iStick] == df_CELLSTATE_AGING_OK  || IsEfaReAgingState(m_pRecipeEditMgr, m_pShareMemoryMgr->GetSharedMemory()->nCellStatus[i][iStick], (int)i, iStick))	// LYS 2026-10-12 EFA T1 AGING S
 							m_pShareMemoryMgr->GetSharedMemory()->nCellStatus[i][iStick] = df_CELLSTATE_AGING_START;
 				}
 			}
@@ -2526,7 +2538,7 @@ int	 CCommTcpIpObjectPG::_ExePGCtrl(int iEvent, int iCellNum)
 					{
 						if (m_pShareMemoryMgr->GetSharedMemory()->nCellStatus[i][iStick] == df_CELLSTATE_ILDE || m_pShareMemoryMgr->GetSharedMemory()->nCellStatus[i][iStick] == df_CELLSTATE_PTP_NOR ||
 							m_pShareMemoryMgr->GetSharedMemory()->nCellStatus[i][iStick] == df_CELLSTATE_OST_NOR || m_pShareMemoryMgr->GetSharedMemory()->nCellStatus[i][iStick] == df_CELLSTATE_PASS ||
-							m_pShareMemoryMgr->GetSharedMemory()->nCellStatus[i][iStick] == df_CELLSTATE_AGING_NG || m_pShareMemoryMgr->GetSharedMemory()->nCellStatus[i][iStick] == df_CELLSTATE_AGING_OK)
+							m_pShareMemoryMgr->GetSharedMemory()->nCellStatus[i][iStick] == df_CELLSTATE_AGING_NG || m_pShareMemoryMgr->GetSharedMemory()->nCellStatus[i][iStick] == df_CELLSTATE_AGING_OK || IsEfaReAgingState(m_pRecipeEditMgr, m_pShareMemoryMgr->GetSharedMemory()->nCellStatus[i][iStick], (int)i, iStick))	// LYS 2026-10-12 EFA T1 AGING S
 							m_pShareMemoryMgr->GetSharedMemory()->nCellStatus[i][iStick] = df_CELLSTATE_AGING_START;
 					}
 					else
@@ -2538,7 +2550,7 @@ int	 CCommTcpIpObjectPG::_ExePGCtrl(int iEvent, int iCellNum)
 				{
 					if (m_pShareMemoryMgr->GetSharedMemory()->nCellStatus[i][iStick] == df_CELLSTATE_ILDE || m_pShareMemoryMgr->GetSharedMemory()->nCellStatus[i][iStick] == df_CELLSTATE_PTP_NOR ||
 						m_pShareMemoryMgr->GetSharedMemory()->nCellStatus[i][iStick] == df_CELLSTATE_OST_NOR || m_pShareMemoryMgr->GetSharedMemory()->nCellStatus[i][iStick] == df_CELLSTATE_PASS ||
-						m_pShareMemoryMgr->GetSharedMemory()->nCellStatus[i][iStick] == df_CELLSTATE_AGING_NG || m_pShareMemoryMgr->GetSharedMemory()->nCellStatus[i][iStick] == df_CELLSTATE_AGING_OK)
+						m_pShareMemoryMgr->GetSharedMemory()->nCellStatus[i][iStick] == df_CELLSTATE_AGING_NG || m_pShareMemoryMgr->GetSharedMemory()->nCellStatus[i][iStick] == df_CELLSTATE_AGING_OK || IsEfaReAgingState(m_pRecipeEditMgr, m_pShareMemoryMgr->GetSharedMemory()->nCellStatus[i][iStick], (int)i, iStick))	// LYS 2026-10-12 EFA T1 AGING S
 						m_pShareMemoryMgr->GetSharedMemory()->nCellStatus[i][iStick] = df_CELLSTATE_AGING_START;
 				}
 			}

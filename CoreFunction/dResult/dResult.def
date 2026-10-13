@@ -15,3 +15,6 @@ EXPORTS
         API_Result_SetSearchMode
         API_Result_GetReportmWnd
 		API_Result_SaveResultDone
+        ; LYS 2026-10-06 Hybrid Phase 5 resume replay (dResult fast upload)
+		API_Result_SetFastUpload
+		API_Result_GetUploadState

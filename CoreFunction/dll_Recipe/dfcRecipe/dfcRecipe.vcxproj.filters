@@ -78,10 +78,16 @@
     <ClCompile Include="GlassMap.cpp">
       <Filter>소스 파일\Dlg</Filter>
     </ClCompile>
+    <ClCompile Include="CellIdEditDlg.cpp">
+      <Filter>소스 파일\Dlg</Filter>
+    </ClCompile>
     <ClCompile Include="IniFile.cpp">
       <Filter>소스 파일</Filter>
     </ClCompile>
     <ClCompile Include="InRecipeFunc.cpp">
+      <Filter>소스 파일\Func</Filter>
+    </ClCompile>
+    <ClCompile Include="CellIdRule.cpp">
       <Filter>소스 파일\Func</Filter>
     </ClCompile>
     <ClCompile Include="OutRecipeFunc.cpp">
@@ -134,10 +140,16 @@
     <ClInclude Include="GlassMap.h">
       <Filter>헤더 파일\Dlg</Filter>
     </ClInclude>
+    <ClInclude Include="CellIdEditDlg.h">
+      <Filter>헤더 파일\Dlg</Filter>
+    </ClInclude>
     <ClInclude Include="IniFile.h">
       <Filter>헤더 파일</Filter>
     </ClInclude>
     <ClInclude Include="InRecipeFunc.h">
+      <Filter>헤더 파일\Func</Filter>
+    </ClInclude>
+    <ClInclude Include="CellIdRule.h">
       <Filter>헤더 파일\Func</Filter>
     </ClInclude>
     <ClInclude Include="OutRecipeFunc.h">

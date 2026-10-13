@@ -154,7 +154,7 @@ void	C_SelectCellDlg::SetViewSelectCell (/*m_nMode*/)
 
 	for (int i = 0; i < nStick; i++) {
 		for (int j = 0; j < nCell; j++) {
-			m_gridSelSpec.SetItemText (i, j, g_inRcpInfo.GetCellID (i, j));
+			m_gridSelSpec.SetItemText (i, j, g_inRcpInfo.GetDisplayCellId (g_inRcpInfo.GetActiveSegmentIndex (), i, j));	// LYS 2026-10-01 Hybrid Phase 4b
 
 			if (g_inRcpInfo.GetSelectCell (i, j, m_nMode)) {
 				m_gridSelSpec.SetItemBkColour (i, j, COLOR_SKYBLUE_BRIGHT);

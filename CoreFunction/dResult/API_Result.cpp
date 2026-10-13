@@ -76,3 +76,19 @@ void __stdcall API_Result_DataClear()
 
 	g_cResultManager.DataClear();
 }
+
+// LYS 2026-10-06 Hybrid Phase 5 resume replay: fast upload switch - the monitor thread skips the 1 s display wait only while on
+void __stdcall API_Result_SetFastUpload(bool bOn)
+{
+	AFX_MANAGE_STATE(AfxGetStaticModuleState());
+
+	g_cResultManager.SetFastUpload(bOn);
+}
+
+// LYS 2026-10-06 Hybrid Phase 5 resume replay: rows waiting in the shared ring (*pQueue) / rows the monitor thread finished (*pDone, monotonic)
+void __stdcall API_Result_GetUploadState(int* pQueue, long* pDone)
+{
+	AFX_MANAGE_STATE(AfxGetStaticModuleState());
+
+	g_cResultManager.GetUploadState(pQueue, pDone);
+}
