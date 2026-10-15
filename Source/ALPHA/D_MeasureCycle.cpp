@@ -119,6 +119,9 @@ BOOL CD_MeasureCycle::OnInitDialog()
 	strGlassID.Format(_T("%s"), CSystemParamShare::GetInstance()->GetGlassID());
 
 	GetDlgItem(IDC_EDIT_GLASSID)->SetWindowText(strGlassID);
+	// LYS 2026-10-14 recipe ID length (glass ID): cell ID = GlassID.Left(L-1) + 3-char token + checksum = L+3 chars into m_szCellID[..][32]
+	//   -> at most 28 chars can be typed (OnBnClickedOk checks again: the limit does not cut a longer current glass ID set above)
+	((CEdit*)GetDlgItem(IDC_EDIT_GLASSID))->SetLimitText(28);
 
 	return TRUE;  // return TRUE unless you set the focus to a control
 				  // 예외: OCX 속성 페이지는 FALSE를 반환해야 합니다.
@@ -211,6 +214,19 @@ void CD_MeasureCycle::OnBnClickedOk()
 		strGlassID.Format(_T("%s"), gf_MakeMcrID(strTemp));
 	}
 
+	// LYS 2026-10-14 recipe ID length (glass ID): the cell ID GlassID.Left(L-1) + 3-char token + checksum (L+3 chars) must fit m_szCellID[..][32]
+	//   (_tcscpy_s aborts the measure thread on 32+) -> refuse a glass ID longer than 28 chars before SetGlassID. The dialog stays open
+	if (strGlassID.GetLength() > 28)
+	{
+		CString strGlsLog;
+		strGlsLog.Format(_T("[START] Glass ID too long (%d chars, max 28): %s - cycle not started"), strGlassID.GetLength(), (LPCTSTR)strGlassID);
+		CLogWrapper::GetInstance()->KMLOG(WARN, strGlsLog);
+		CString strGlsMsg;
+		strGlsMsg.Format(_T("Glass ID가 너무 깁니다 (%d자).\nGlass ID는 28자 이하여야 합니다.\n(Cell ID = Glass ID + 셀 번호 + 체크섬, 32자 필드)\n\n[%s]\n\n시작하지 않습니다."), strGlassID.GetLength(), (LPCTSTR)strGlassID);
+		AfxMessageBox(strGlsMsg, MB_ICONWARNING);
+		return;
+	}
+
 	CSystemParamShare::GetInstance()->SetGlassID(strGlassID);
 
 	CString strLog;
@@ -220,6 +236,19 @@ void CD_MeasureCycle::OnBnClickedOk()
 	CString strSelectRecipeID;
 	m_cmbRecipeList.GetLBText(iCurSel, strSelectRecipeID);
 
+	// LYS 2026-10-14 recipe ID length: refuse a recipe ID longer than 31 chars before OpenRecipe - the MCC / result / ELP model fields are
+	//   TCHAR[32] (a 33-char ID killed the engine thread at MCCLogMgr SetMCC_Action). Same exit as the other refusals here: the dialog stays open
+	if (strSelectRecipeID.GetLength() > 31)
+	{
+		CString strLenLog;
+		strLenLog.Format(_T("[START] Recipe ID too long (%d chars, max 31): %s - cycle not started"), strSelectRecipeID.GetLength(), (LPCTSTR)strSelectRecipeID);
+		CLogWrapper::GetInstance()->KMLOG(WARN, strLenLog);
+		CString strLenMsg;
+		strLenMsg.Format(_T("레시피 이름이 너무 깁니다 (%d자).\n레시피 이름은 31자 이하여야 합니다.\n(MCC / 결과 / 장치 모델명 필드 32자 제한)\n\n[%s]\n\n시작하지 않습니다. 31자 이하 이름으로 복사한 레시피를 선택하십시오."), strSelectRecipeID.GetLength(), (LPCTSTR)strSelectRecipeID);
+		AfxMessageBox(strLenMsg, MB_ICONWARNING);
+		return;
+	}
+
 	// LYS 2026-10-01 Hybrid Phase 4b D4b-15 (b) 0 < OpenRecipe() also accepted JOB_RECIPE_NOT_EXIST (1013): an unreadable .rcp closed the
 	//   dialog and the cycle ran the previous recipe. Refuse only when the .rcp load itself failed (load serial unchanged)
 	C_OutRecipeFunc* pLoadFunc = m_pRecipeEditMgr->GetRecipeFuncPtr();
@@ -228,6 +257,18 @@ void CD_MeasureCycle::OnBnClickedOk()
 	if (pLoadFunc != NULL && strSelectRecipeID.IsEmpty() != true && pLoadFunc->GetRcpLoadSeq() == nLoadSeq)
 	{
 		AfxMessageBox(_T("레시피 [") + strSelectRecipeID + _T("] 파일을 읽을 수 없습니다.\n파일이 없거나 손상되었습니다. (Cell ID 트레일러 등)\n\n이전 레시피로 측정하지 않도록 시작하지 않습니다."), MB_ICONWARNING);
+		return;
+	}
+	// LYS 2026-10-14 Hybrid (14)-K at CYCLE START (user decision: hybrid only): the .rcp was read (load serial advanced) but the base .alg was
+	//   not, so RecipeChange returned JOB_RECIPE_NOT_EXIST before m_strRecipeID and OpenRecipe kept the global RecipeID on the previous recipe.
+	//   0 < 1013 used to start the cycle and the Recipe Change step reopened that previous recipe (or refused "UNKNOWN" after a restart).
+	//   Refuse here like manual Meas Recipe Open. 1-segment recipe: the original 0 < test below (4b D4b-15 (b))
+	if (nOpenRtn == JOB_RECIPE_NOT_EXIST && pLoadFunc != NULL && pLoadFunc->GetSegmentLoopCount() > 1)
+	{
+		CString strAlgLog;
+		strAlgLog.Format(_T("[HYBRID] CYCLE START refused - %s returned %d (.alg load failed), the previous recipe is not run"), (LPCTSTR)strSelectRecipeID, nOpenRtn);
+		CLogWrapper::GetInstance()->KMLOG(WARN, strAlgLog);
+		AfxMessageBox(_T("레시피 [") + strSelectRecipeID + _T("]의 Align 파일(.alg)을 읽지 못했습니다.\n하이브리드 레시피는 Align 파일 없이 시작하지 않습니다.\n\nAlign 파일을 확인한 뒤 다시 시작하십시오."), MB_ICONWARNING);
 		return;
 	}
 	if (0 < nOpenRtn)

@@ -1796,11 +1796,11 @@ long CMaintControlMgr::MoveCmdPosAging(stMotorPosition* pPos, int nAxis, int iSp
 			// LYS 2026-08-26 WAD와 동일한 시퀀스 계층 Z1 하강 인터락.
 			// X2가 P5 위치 안이면 모션 시작 전에 인터락 (A_Sub 검사는 백스톱).
 			if (dPos > GetOrgPos(AXIS_Z1) && m_pMotorControlMgr != nullptr
-				&& m_pMotorControlMgr->IsProbeUnitOverlapX(GetOrgPos(AXIS_X2)) == true)
+				&& m_pMotorControlMgr->IsProbeUnitOverlapX(m_pMotorControlMgr->GetOrgPos(AXIS_X2)) == true)	// LYS 2026-10-14 raw X2 (motor layer / real HW frame) - OOS GetCurPos subtracts the head offset (Short WAD 3721 RCA)
 			{
 				CString strLog;
 				strLog.Format(_T("MoveCmdPosAging Z1 DOWN NG - PROBE UNIT(X9:%.3f) vs BACK GANTRY(X2:%.3f), Z1 %.3f -> %.3f"),
-					GetOrgPos(AXIS_PROBE_X9), GetOrgPos(AXIS_X2), GetOrgPos(AXIS_Z1), dPos);
+					m_pMotorControlMgr->GetOrgPos(AXIS_PROBE_X9), m_pMotorControlMgr->GetOrgPos(AXIS_X2), GetOrgPos(AXIS_Z1), dPos);
 				m_pMotorControlMgr->GetLogFileAccessorPtr()->KMLOG(WARN, strLog, true);
 
 				nRet = MOTION_INTERLOCK_CHECK_ALARM + AXIS_PROBE_X9;
@@ -2177,11 +2177,11 @@ long CMaintControlMgr::MoveCmdPosReview(int iStick, stMotorPosition* pPos, int n
 			{
 				dPos = pPos[i].dPosition;
 				if (dPos > GetOrgPos(pPos[i].axis) && m_pMotorControlMgr != nullptr
-					&& m_pMotorControlMgr->IsProbeUnitOverlapX(GetOrgPos(AXIS_X2)) == true)
+					&& m_pMotorControlMgr->IsProbeUnitOverlapX(m_pMotorControlMgr->GetOrgPos(AXIS_X2)) == true)	// LYS 2026-10-14 raw X2 (motor layer / real HW frame) - OOS GetCurPos subtracts the head offset (Short WAD 3721 RCA)
 				{
 					CString strLog;
 					strLog.Format(_T("MoveCmdPosReview SubZ DOWN NG - PROBE UNIT(X9:%.3f) vs BACK GANTRY(X2:%.3f), AXIS %d %.3f -> %.3f"),
-						GetOrgPos(AXIS_PROBE_X9), GetOrgPos(AXIS_X2), pPos[i].axis, GetOrgPos(pPos[i].axis), dPos);
+						m_pMotorControlMgr->GetOrgPos(AXIS_PROBE_X9), m_pMotorControlMgr->GetOrgPos(AXIS_X2), pPos[i].axis, GetOrgPos(pPos[i].axis), dPos);
 					m_pMotorControlMgr->GetLogFileAccessorPtr()->KMLOG(WARN, strLog, true);
 					nRet = MOTION_INTERLOCK_CHECK_ALARM + pPos[i].axis;
 					break;
@@ -2321,7 +2321,8 @@ long CMaintControlMgr::MoveCmdPosWAD(stMotorPosition* pPos, int nAxis, int iSpee
 		if (pPos[i].axis == AXIS_X2)
 		{
 			double dTargetX2 = pPos[i].dPosition + dOffsetX[0] + dGlassOffsetX;
-			if (fabs(dTargetX2 - GetOrgPos(AXIS_X2)) > 0.1) bGantryXMove = true;
+			double dRawX2 = (m_pMotorControlMgr != nullptr) ? m_pMotorControlMgr->GetOrgPos(AXIS_X2) : GetOrgPos(AXIS_X2);	// LYS 2026-10-14 raw X2 (motor layer / real HW frame) - OOS GetCurPos subtracts the head offset (Short WAD 3721 RCA)
+			if (fabs(dTargetX2 - dRawX2) > 0.1) bGantryXMove = true;
 		}
 		else if (pPos[i].axis == AXIS_X3)
 		{
@@ -2485,11 +2486,11 @@ long CMaintControlMgr::MoveCmdPosWAD(stMotorPosition* pPos, int nAxis, int iSpee
 				{
 					dPos = pPos[i].dPosition;
 					if (dPos > GetOrgPos(pPos[i].axis) && m_pMotorControlMgr != nullptr
-						&& m_pMotorControlMgr->IsProbeUnitOverlapX(GetOrgPos(AXIS_X2)) == true)
+						&& m_pMotorControlMgr->IsProbeUnitOverlapX(m_pMotorControlMgr->GetOrgPos(AXIS_X2)) == true)	// LYS 2026-10-14 raw X2 (motor layer / real HW frame) - OOS GetCurPos subtracts the head offset (Short WAD 3721 RCA)
 					{
 						CString strLog;
 						strLog.Format(_T("MoveCmdPosWAD SubZ DOWN NG - PROBE UNIT(X9:%.3f) vs BACK GANTRY(X2:%.3f), AXIS %d %.3f -> %.3f"),
-							GetOrgPos(AXIS_PROBE_X9), GetOrgPos(AXIS_X2), pPos[i].axis, GetOrgPos(pPos[i].axis), dPos);
+							m_pMotorControlMgr->GetOrgPos(AXIS_PROBE_X9), m_pMotorControlMgr->GetOrgPos(AXIS_X2), pPos[i].axis, GetOrgPos(pPos[i].axis), dPos);
 						m_pMotorControlMgr->GetLogFileAccessorPtr()->KMLOG(WARN, strLog, true);
 						nRet = MOTION_INTERLOCK_CHECK_ALARM + pPos[i].axis;
 						break;
@@ -2522,7 +2523,7 @@ long CMaintControlMgr::MoveCmdPosWAD(stMotorPosition* pPos, int nAxis, int iSpee
 
 	return nRet;
 }
-long CMaintControlMgr::MoveCmdPosVision(stMotorPosition* pPos, int nAxis, int iSpeed, bool bDoneCheck)
+long CMaintControlMgr::MoveCmdPosVision(stMotorPosition* pPos, int nAxis, int iSpeed, bool bDoneCheck, bool bHoldSafetyX2)
 {
 	// TODO: 여기에 구현 코드 추가.
 	long nRet = df_MOTION_RV_SUCCESSED;
@@ -2728,7 +2729,9 @@ long CMaintControlMgr::MoveCmdPosVision(stMotorPosition* pPos, int nAxis, int iS
 				{ double dSafetyX2 = 0.0; GetPositionConfigMgr()->GetSafetyPosition(nullptr, &dSafetyX2, nullptr, nullptr, nullptr, nullptr, nullptr); stPositionX[nMoveX].dPosition = dSafetyX2; }
 				nMoveX++;
 				
-				m_pMotorControlMgr->SetHeadOffset(AXIS_X2, dOffsetX[0]);
+				// LYS 2026-10-14 manual (bHoldSafetyX2): no VISION head offset on the parked X2 - the offset only shifted its read-back by 100 and the
+				//   final X2 command reset it, so the BACK GANTRY readout jumped 470 <-> 570 on every 다음 CELL. Auto / TestMode: unchanged
+				m_pMotorControlMgr->SetHeadOffset(AXIS_X2, bHoldSafetyX2 ? 0. : dOffsetX[0]);
 				
 				stPositionX[nMoveX].axis = axis;
 				stPositionX[nMoveX].dPosition = dPos + dOffsetX[0] + dGlassOffsetX;
@@ -2816,6 +2819,10 @@ long CMaintControlMgr::MoveCmdPosVision(stMotorPosition* pPos, int nAxis, int iS
 				}
 				else
 				{
+					// LYS 2026-10-14 manual (bHoldSafetyX2): the parked X2 already at its safety position is not commanded again
+					if (bHoldSafetyX2 && stPositionX[0].axis == AXIS_X2 && fabs(m_pMotorControlMgr->GetOrgPos(AXIS_X2) - stPositionX[0].dPosition) < 0.01)
+						nRet = df_MOTION_RV_SUCCESSED;
+					else
 					nRet = MoveCmdPosA(stPositionX[0].axis, stPositionX[0].dPosition, true);
 				}
 			}

@@ -1928,6 +1928,17 @@ int	 CCommTcpIpObjectPG::_ExePGCtrl(int iEvent, int iCellNum)
 	// Recipe Open
 	if (iEvent == enumTCPIpFactoryt_PGEvent_0)
 	{	
+		// LYS 2026-10-14 recipe ID length: PGPROTOCOL szModel is TCHAR[100]. A segment PG model name (S_SegmentHeader m_chPGName, up to 255
+		//   chars) of 100+ chars took the CRT invalid-parameter path in the Model copy below. Refuse before anything is sent (no Turn Off) instead
+		//   of truncating (a cut name is another model): RecipeChange() -> false -> DoWorkRecipeOpen JOB_RECIPE_OPEN_FAIL_ERROR
+		CString strPgModelChk = m_pRecipeEditMgr->GetPGRecipeName();
+		if (strPgModelChk.GetLength() >= (int)_countof(stPg.szModel))
+		{
+			strLog.Format(_T("[%s] Model Change refused - PG model name [%s] is %d chars (max %d: PGPROTOCOL szModel TCHAR[100])"), (LPCTSTR)GetName(), strPgModelChk.GetString(), strPgModelChk.GetLength(), (int)_countof(stPg.szModel) - 1);
+			m_pLogFileAccessor->KMLOG(WARN, strLog);
+			return VTM_RV_FAILED;
+		}
+
 		// Turn Off
 		// LYS 2026-09-14 OCP 는 S10F3 대신 S8F1 cmd=2(Turn Off, 전체 셀) - PGEvent_8 과 동일 근거. 응답 대기 없이 보내고 1초 쉬는 기존 흐름은 유지.
 		if (IsOCP())

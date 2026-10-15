@@ -1135,6 +1135,16 @@ int  CCommTcpIpObjectWAD::_ExeMeasWAD(int iFunc, bool bWait, bool bWadRHeadUse)
 		stELP.hrd.cmd = 1;		// Ox31
 		stELP.hrd.len = 32;
 		str.Format(_T("%s"), m_pRecipeEditMgr->GetWADRecipeName());	// LYS 2026-09-29 Hybrid Phase 3 세그먼트 WAD 모델명 (공란 = RecipeID, 기존 GetRecipeID)
+		// LYS 2026-10-14 recipe ID length: ELP szModel is TCHAR[32]. A segment WAD model name (S_SegmentHeader m_chWADName, up to 255 chars)
+		//   of 32+ chars took the CRT invalid-parameter path in the copy below. Refuse the command instead of truncating (a cut name is another
+		//   device model): RecipeChange() -> false -> DoWorkRecipeOpen JOB_RECIPE_OPEN_FAIL_ERROR. A blank name falls back to the RecipeID (B2: <= 31)
+		if (str.GetLength() >= (int)_countof(stELP.szModel))
+		{
+			CString strLenLog;
+			strLenLog.Format(_T("[%s] Recipe Change refused - WAD model name [%s] is %d chars (max %d: ELP szModel TCHAR[32])"), (LPCTSTR)GetName(), str.GetString(), str.GetLength(), (int)_countof(stELP.szModel) - 1);
+			m_pLogFileAccessor->KMLOG(WARN, strLenLog);
+			return VTM_RV_FAILED;
+		}
 		_tcscpy_s(stELP.szModel, _countof(stELP.szModel), str);
 	}		
 		break;
@@ -1284,9 +1294,9 @@ bool CCommTcpIpObjectWAD::TossResultFile(CString strInnerID, int nArea, int iPro
 		resultData.nMeasMode = PGM_MODE_LUMIN; //확인 필요
 		resultData.iMeasArea = nArea;
 
-		_tcscpy(resultData.szLotID, CSystemParamShare::GetInstance()->GetLotID());
-		_tcscpy(resultData.szGlassID, CSystemParamShare::GetInstance()->GetGlassID());
-		_tcscpy(resultData.szRecipeID, CSystemParamShare::GetInstance()->GetRecipeID());
+		_tcsncpy_s(resultData.szLotID, _countof(resultData.szLotID), CSystemParamShare::GetInstance()->GetLotID(), _TRUNCATE);	// LYS 2026-10-14 recipe ID length: truncate into RSRITEMDATA szLotID[32] (unchecked _tcscpy overran into szGlassID)
+		_tcsncpy_s(resultData.szGlassID, _countof(resultData.szGlassID), CSystemParamShare::GetInstance()->GetGlassID(), _TRUNCATE);	// LYS 2026-10-14 recipe ID length: truncate into RSRITEMDATA szGlassID[32] (unchecked _tcscpy overran into szRecipeID)
+		_tcsncpy_s(resultData.szRecipeID, _countof(resultData.szRecipeID), CSystemParamShare::GetInstance()->GetRecipeID(), _TRUNCATE);	// LYS 2026-10-14 recipe ID length: truncate into RSRITEMDATA szRecipeID[32] (unchecked _tcscpy overran into szResultPath)
 
 		_tcscpy(resultData.szResultFile, strIDFile /*strInnerID*/);
 

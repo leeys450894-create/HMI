@@ -1258,6 +1258,14 @@ int CCommTcpIpObjectCIM::Process_GLSID(CString strMsg)
 			m_pLogFileAccessor->KMLOG(WARN, strLog);
 			bRet = false;
 		}
+		// LYS 2026-10-14 recipe ID length (glass ID): the cell ID is GlassID.Left(L-1) + 3-char cell token + 1 checksum digit = L+3 chars into
+		//   m_szCellID[..][32] (_tcscpy_s aborts the measure thread on 32+) -> refuse a glass ID longer than 28 chars: GLSID NG below
+		else if (strGlsId.GetLength() > 28)
+		{
+			strLog.Format(_T("GLASS ID too long (%d chars, max 28): %s - GLSID NG"), strGlsId.GetLength(), (LPCTSTR)strGlsId);
+			m_pLogFileAccessor->KMLOG(WARN, strLog);
+			bRet = false;
+		}
 		else
 		{
 			CSystemParamShare::GetInstance()->SetGlassID(strGlsId);
@@ -1414,6 +1422,17 @@ int CCommTcpIpObjectCIM::Process_PPID(CString strMsg)
 
 	int nRtn = VTM_RV_SUCCESSED;
 	nRtn = GetRecipeEditMgrPtr()->OpenRecipe(strPPID);
+
+	// LYS 2026-10-14 recipe ID length: RecipeChange refuses a PPID longer than 31 chars (B2: MCC / ELP fields are TCHAR[32]) -> answer PPID NG
+	//   (the PPIDREQ step raises CIM_RV_PPIDID_NG) and skip SetRecipeID below, so the global RecipeID keeps the previous recipe like
+	//   m_strRecipeID. Length case only: a missing .rcp keeps the existing reply (PPID OK, alarm 1013 at the Recipe Change step)
+	if (nRtn != VTM_RV_SUCCESSED && strPPID.GetLength() > 31)
+	{
+		nRet = JOB_RECIPE_NOT_EXIST;
+		CString strLenLog;
+		strLenLog.Format(_T("[CIM] PPID refused - recipe ID [%s] is %d chars (max 31) - PPID NG"), (LPCTSTR)strPPID, strPPID.GetLength());
+		m_pLogFileAccessor->KMLOG(WARN, strLenLog);
+	}
 
 	m_pShareMemory->SetSys_AutoAgingMode(false);
 	m_pShareMemory->SetSys_NewAgingMode(false);	// LYS 2026-09-28 EFA: OCP는 PPID를 받을 때마다 두 에이징 플래그를 모두 리셋한다

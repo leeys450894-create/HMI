@@ -134,6 +134,19 @@ int CRecipeEditMgr::RecipeChange(CString strRecipeID)
 		return -1;
 	}
 
+	// LYS 2026-10-14 recipe ID length: common guard for every OpenRecipe / RecipeChange caller (CYCLE START, CIM PPID, the Recipe Change step,
+	//   manual Meas / Multi Meas / AgingTest / AgingNew / AutoContact). Refused before anything is loaded or reset, so m_strRecipeID (the
+	//   WAD / LCR / TSP model name source: ELP TCHAR szModel[32], must not be truncated) and the global RecipeID (OpenRecipe sets it only on
+	//   VTM_RV_SUCCESSED) keep the previous recipe. -1 = the empty-name failure above: '== VTM_RV_SUCCESSED', '0 < ret' and '<= 0' all read it
+	//   as failure, the load serial does not advance (load-serial checks refuse too), and it is below 1000 (never raised as an alarm)
+	if (strRecipeID.GetLength() > 31)
+	{
+		CString strLenLog;
+		strLenLog.Format(_T("[RECIPE] RecipeChange refused - recipe ID [%s] is %d chars (max 31: MCC / ELP fields are TCHAR[32])"), strRecipeID.GetString(), strRecipeID.GetLength());
+		CLogWrapper::GetInstance()->KMLOG(WARN, strLenLog);
+		return -1;
+	}
+
 	//// 이미 OPEN 한 레시피 명이다. 그냥 OK 날리자.
 	//if (m_strRecipeID == strRecipeID && !GetRecipePosDeleteFlag())
 	//{

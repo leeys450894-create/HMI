@@ -134,7 +134,7 @@ public:
 	//                셀만 바뀌어 글래스가 제자리인 경우(TestMode Review)에 쓴다 - 기본값 false 라 기존 호출부는 그대로.
 	long MoveCmdPosReview(int iStick, stMotorPosition* pPos, int nAxis, int iSpeed = 0, bool bDoneCheck = true, bool bSkipSubZRetract = false);
 	long MoveCmdPosWAD(stMotorPosition* pPos, int nAxis, int iSpeed = 0, bool bDoneCheck = true);
-	long MoveCmdPosVision(stMotorPosition* pPos, int nAxis, int iSpeed = 0, bool bDoneCheck = true);
+	long MoveCmdPosVision(stMotorPosition* pPos, int nAxis, int iSpeed = 0, bool bDoneCheck = true, bool bHoldSafetyX2 = false);	// LYS 2026-10-14 bHoldSafetyX2: manual Meas keeps BACK GANTRY at safety (no head offset, no re-command when already there)
 	long MoveCmdPosColor(stMotorPosition* pPos, int nAxis, int iSpeed = 0, bool bDoneCheck = true);
 	long MoveCmdPosAngle(stMotorPosition* pPos, int nAxis, int iSpeed = 0, bool bDoneCheck = true);
 	long MoveCmdAlignPos_Glass(double *pPos);

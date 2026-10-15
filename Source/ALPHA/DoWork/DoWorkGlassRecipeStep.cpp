@@ -137,9 +137,9 @@ bool CDoWorkGlassRecipeStep_None::Run()
 							ZeroMemory(&rd, sizeof(rd));
 							rd.nMeasMode = types[t].mode;
 							rd.iMeasArea = iCell + (nCellsPerStick * nMeasStick) + 1;
-							_tcscpy_s(rd.szLotID, pResume->GetLotID());
-							_tcscpy_s(rd.szGlassID, pResume->GetGlassID());
-							_tcscpy_s(rd.szRecipeID, pResume->GetRecipeID());
+							_tcsncpy_s(rd.szLotID, _countof(rd.szLotID), pResume->GetLotID(), _TRUNCATE);	// LYS 2026-10-14 recipe ID length: truncate (a resume file / host may carry a 32+ char Lot ID)
+							_tcsncpy_s(rd.szGlassID, _countof(rd.szGlassID), pResume->GetGlassID(), _TRUNCATE);	// LYS 2026-10-14 recipe ID length: truncate (a resume file may carry a 32+ char Glass ID)
+							_tcsncpy_s(rd.szRecipeID, _countof(rd.szRecipeID), pResume->GetRecipeID(), _TRUNCATE);	// LYS 2026-10-14 recipe ID length: truncate (a resume file may carry a 32+ char ID)
 							_tcscpy_s(rd.szResultFile, arrFiles[i]);
 							_tcscpy_s(rd.szResultPath, strTypePath);
 							rd.m_nMeasAreaCnt = nPrevCells;

@@ -783,10 +783,12 @@ void CMCCLogMgr::SetMCC_Action(int iSqNum, BOOL bStart, int nStep/* = 0*/, int n
 	m_pSharedMCC->stMCCDataEQ.iStepNum = nStep;		
 	m_pSharedMCC->stMCCDataEQ.iFromto  = nFromTo;		
 
-	_tcscpy_s(m_pSharedMCC->stMCCInfoEQ.szGlassID, _countof(m_pSharedMCC->stMCCInfoEQ.szGlassID), CSystemParamShare::GetInstance()->GetGlassID());
-	_tcscpy_s(m_pSharedMCC->stMCCInfoEQ.szLotID, _countof(m_pSharedMCC->stMCCInfoEQ.szLotID), CSystemParamShare::GetInstance()->GetLotID());
-	_tcscpy_s(m_pSharedMCC->stMCCInfoEQ.szRecipeID, _countof(m_pSharedMCC->stMCCInfoEQ.szRecipeID), CSystemParamShare::GetInstance()->GetRecipeID());
-	_tcscpy_s(m_pSharedMCC->stMCCInfoEQ.szStepID, _countof(m_pSharedMCC->stMCCInfoEQ.szStepID), CSystemParamShare::GetInstance()->GetStepID());
+	// LYS 2026-10-14 recipe ID length: truncate into the 32-TCHAR MCC shared fields (MCCLog.exe layout unchanged). _tcscpy_s took the CRT invalid-parameter
+	//   path on a 32+ char ID (Debug assert -> abort on the engine thread). <= 31 chars: same bytes and return value (0) as before
+	_tcsncpy_s(m_pSharedMCC->stMCCInfoEQ.szGlassID, _countof(m_pSharedMCC->stMCCInfoEQ.szGlassID), CSystemParamShare::GetInstance()->GetGlassID(), _TRUNCATE);
+	_tcsncpy_s(m_pSharedMCC->stMCCInfoEQ.szLotID, _countof(m_pSharedMCC->stMCCInfoEQ.szLotID), CSystemParamShare::GetInstance()->GetLotID(), _TRUNCATE);
+	_tcsncpy_s(m_pSharedMCC->stMCCInfoEQ.szRecipeID, _countof(m_pSharedMCC->stMCCInfoEQ.szRecipeID), CSystemParamShare::GetInstance()->GetRecipeID(), _TRUNCATE);
+	_tcsncpy_s(m_pSharedMCC->stMCCInfoEQ.szStepID, _countof(m_pSharedMCC->stMCCInfoEQ.szStepID), CSystemParamShare::GetInstance()->GetStepID(), _TRUNCATE);
 
 	::API_MCC_AddQueue(iFlag);
 }
@@ -807,10 +809,12 @@ void CMCCLogMgr::SetMCC_Signal(int iSqNum, BOOL bStart, int nStep/* = 0*/, int n
 	m_pSharedMCC->stMCCDataEQ.iStepNum = nStep;		
 	m_pSharedMCC->stMCCDataEQ.iFromto= nFromTo;	
 
-	_tcscpy_s(m_pSharedMCC->stMCCInfoEQ.szGlassID, _countof(m_pSharedMCC->stMCCInfoEQ.szGlassID), CSystemParamShare::GetInstance()->GetGlassID());
-	_tcscpy_s(m_pSharedMCC->stMCCInfoEQ.szLotID, _countof(m_pSharedMCC->stMCCInfoEQ.szLotID), CSystemParamShare::GetInstance()->GetLotID());
-	_tcscpy_s(m_pSharedMCC->stMCCInfoEQ.szRecipeID, _countof(m_pSharedMCC->stMCCInfoEQ.szRecipeID), CSystemParamShare::GetInstance()->GetRecipeID());
-	_tcscpy_s(m_pSharedMCC->stMCCInfoEQ.szStepID, _countof(m_pSharedMCC->stMCCInfoEQ.szStepID), CSystemParamShare::GetInstance()->GetStepID());
+	// LYS 2026-10-14 recipe ID length: truncate into the 32-TCHAR MCC shared fields (MCCLog.exe layout unchanged). _tcscpy_s took the CRT invalid-parameter
+	//   path on a 32+ char ID (Debug assert -> abort on the engine thread). <= 31 chars: same bytes and return value (0) as before
+	_tcsncpy_s(m_pSharedMCC->stMCCInfoEQ.szGlassID, _countof(m_pSharedMCC->stMCCInfoEQ.szGlassID), CSystemParamShare::GetInstance()->GetGlassID(), _TRUNCATE);
+	_tcsncpy_s(m_pSharedMCC->stMCCInfoEQ.szLotID, _countof(m_pSharedMCC->stMCCInfoEQ.szLotID), CSystemParamShare::GetInstance()->GetLotID(), _TRUNCATE);
+	_tcsncpy_s(m_pSharedMCC->stMCCInfoEQ.szRecipeID, _countof(m_pSharedMCC->stMCCInfoEQ.szRecipeID), CSystemParamShare::GetInstance()->GetRecipeID(), _TRUNCATE);
+	_tcsncpy_s(m_pSharedMCC->stMCCInfoEQ.szStepID, _countof(m_pSharedMCC->stMCCInfoEQ.szStepID), CSystemParamShare::GetInstance()->GetStepID(), _TRUNCATE);
 
 	::API_MCC_AddQueue(iFlag);
 }
@@ -831,10 +835,12 @@ void CMCCLogMgr::SetMCC_Alarm(int iSqNum, BOOL bStart, int nStep/* = 0*/, int nF
 	m_pSharedMCC->stMCCDataEQ.iStepNum = nStep;
 	m_pSharedMCC->stMCCDataEQ.iFromto = nFromTo;
 
-	_tcscpy_s(m_pSharedMCC->stMCCInfoEQ.szGlassID, _countof(m_pSharedMCC->stMCCInfoEQ.szGlassID), CSystemParamShare::GetInstance()->GetGlassID());
-	_tcscpy_s(m_pSharedMCC->stMCCInfoEQ.szLotID, _countof(m_pSharedMCC->stMCCInfoEQ.szLotID), CSystemParamShare::GetInstance()->GetLotID());
-	_tcscpy_s(m_pSharedMCC->stMCCInfoEQ.szRecipeID, _countof(m_pSharedMCC->stMCCInfoEQ.szRecipeID), CSystemParamShare::GetInstance()->GetRecipeID());
-	_tcscpy_s(m_pSharedMCC->stMCCInfoEQ.szStepID, _countof(m_pSharedMCC->stMCCInfoEQ.szStepID), CSystemParamShare::GetInstance()->GetStepID());
+	// LYS 2026-10-14 recipe ID length: truncate into the 32-TCHAR MCC shared fields (MCCLog.exe layout unchanged). _tcscpy_s took the CRT invalid-parameter
+	//   path on a 32+ char ID (Debug assert -> abort on the engine thread). <= 31 chars: same bytes and return value (0) as before
+	_tcsncpy_s(m_pSharedMCC->stMCCInfoEQ.szGlassID, _countof(m_pSharedMCC->stMCCInfoEQ.szGlassID), CSystemParamShare::GetInstance()->GetGlassID(), _TRUNCATE);
+	_tcsncpy_s(m_pSharedMCC->stMCCInfoEQ.szLotID, _countof(m_pSharedMCC->stMCCInfoEQ.szLotID), CSystemParamShare::GetInstance()->GetLotID(), _TRUNCATE);
+	_tcsncpy_s(m_pSharedMCC->stMCCInfoEQ.szRecipeID, _countof(m_pSharedMCC->stMCCInfoEQ.szRecipeID), CSystemParamShare::GetInstance()->GetRecipeID(), _TRUNCATE);
+	_tcsncpy_s(m_pSharedMCC->stMCCInfoEQ.szStepID, _countof(m_pSharedMCC->stMCCInfoEQ.szStepID), CSystemParamShare::GetInstance()->GetStepID(), _TRUNCATE);
 
 	::API_MCC_AddQueue(iFlag);
 }

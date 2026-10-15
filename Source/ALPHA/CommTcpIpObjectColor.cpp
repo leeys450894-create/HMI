@@ -1281,9 +1281,9 @@ BOOL CCommTcpIpObjectColor::TossResultFile(CString strInnerID, int nArea)
 	resultData.nMeasMode = PGM_MODE_COLOR; //확인 필요
 	resultData.iMeasArea = nArea;
 
-	_tcscpy(resultData.szLotID, CSystemParamShare::GetInstance()->GetLotID());
-	_tcscpy(resultData.szGlassID, CSystemParamShare::GetInstance()->GetGlassID());
-	_tcscpy(resultData.szRecipeID, CSystemParamShare::GetInstance()->GetRecipeID());
+	_tcsncpy_s(resultData.szLotID, _countof(resultData.szLotID), CSystemParamShare::GetInstance()->GetLotID(), _TRUNCATE);	// LYS 2026-10-14 recipe ID length: truncate into RSRITEMDATA szLotID[32] (unchecked _tcscpy overran into szGlassID)
+	_tcsncpy_s(resultData.szGlassID, _countof(resultData.szGlassID), CSystemParamShare::GetInstance()->GetGlassID(), _TRUNCATE);	// LYS 2026-10-14 recipe ID length: truncate into RSRITEMDATA szGlassID[32] (unchecked _tcscpy overran into szRecipeID)
+	_tcsncpy_s(resultData.szRecipeID, _countof(resultData.szRecipeID), CSystemParamShare::GetInstance()->GetRecipeID(), _TRUNCATE);	// LYS 2026-10-14 recipe ID length: truncate into RSRITEMDATA szRecipeID[32] (unchecked _tcscpy overran into szResultPath)
 	//_tcscpy(resultData.szGlassID, CSystemParamShare::GetInstance()->GetGlassID());
 
 	_tcscpy(resultData.szResultFile, strIDFile /*strInnerID*/);

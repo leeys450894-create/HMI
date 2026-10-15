@@ -5671,7 +5671,8 @@ bool CDlgSubManual_Meas::CheckHybridGate(int nStep)
 	if (fabs(dCurY - dY) > 0.1 || fabs(dCurR - dR) > 0.02)	// R-B (D7-6: X 0.1 mm, R 0.02 deg - (14) C-11)
 	{
 		strWarn.Format(_T("[HYBRID] Manual Meas step %d refused - pose %s"), nStep, (LPCTSTR)HybridGateDetail(nAct, nLive, iStick, true, dY, dR));
-		strPop.Format(_T("스테이지가 세그먼트 %d/%d 스틱 %d 위치에 있지 않습니다.\n(현재 X %.3f R %.3f / 목표 X %.3f R %.3f)\n\n스틱 이동을 먼저 하십시오."),
+		// LYS 2026-10-14 popup: current / target position each on its own line (user request)
+		strPop.Format(_T("스테이지가 세그먼트 %d/%d 스틱 %d 위치에 있지 않습니다.\n\n현재 위치: X %.3f, R %.3f\n목표 위치: X %.3f, R %.3f\n\n스틱 이동을 먼저 하십시오."),
 			nAct + 1, nLive, iStick + 1, dCurY, dCurR, dY, dR);
 		RefuseHybrid(strWarn, strPop);
 		return false;
@@ -6003,7 +6004,8 @@ bool CDlgSubManual_Meas::CheckManualMeasPose(int iMode)
 	{
 		strWarn.Format(_T("[MANUAL] Manual Meas %s move refused - stage not at stick %d pose (X %.3f R %.3f, target X %.3f R %.3f)"),
 			ManualMeasLogName(iMode), m_iNumStick + 1, dCurY, dCurR, dY, dR);
-		strPop.Format(_T("스테이지가 스틱 %d 위치에 있지 않아 %s 위치로 이동하지 않습니다.\n(현재 X %.3f R %.3f / 목표 X %.3f R %.3f)\n\n스틱 이동을 먼저 하십시오."),
+		// LYS 2026-10-14 popup: current / target position each on its own line (user request)
+		strPop.Format(_T("스테이지가 스틱 %d 위치에 있지 않아 %s 위치로 이동하지 않습니다.\n\n현재 위치: X %.3f, R %.3f\n목표 위치: X %.3f, R %.3f\n\n스틱 이동을 먼저 하십시오."),
 			m_iNumStick + 1, ManualMeasPopupName(iMode), dCurY, dCurR, dY, dR);
 		RefuseHybrid(strWarn, strPop);
 		return false;
@@ -6044,8 +6046,8 @@ int CDlgSubManual_Meas::ManualMoveCellShared(int iMode, int iMove)
 			nRet = pMaint->MoveCmdPosWAD(stPosition, nAxis, SPEED_HIGH, false);
 		else if (nMode == 1)
 			nRet = pMaint->MoveCmdPosAngle(stPosition, nAxis, SPEED_HIGH, false);
-		else
-			nRet = pMaint->MoveCmdPosVision(stPosition, nAxis, SPEED_HIGH, false);
+		else	// LYS 2026-10-14 BACK GANTRY stays at safety (no head offset, no re-command when already there)
+			nRet = pMaint->MoveCmdPosVision(stPosition, nAxis, SPEED_HIGH, false, true);
 	}
 	if (nRet == VTM_RV_SUCCESSED)
 	{

@@ -621,8 +621,8 @@ BOOL CDlgSubOperate::OnInitDialog()
 	}
 
 	// LYS 2026-10-12 Hybrid Phase 6 segment / pass / resume indicator (D6-1 (a)): runtime CLabel in the cell chart's top band, like the
-	//   Probe Contact label (no .rc / resource.h). Chart top +1..+19 = above the "Glass Size" text the chart draws at its y 20
-	//   (CChartOrbit::OnOC2Repaint) and the plot area (top margin 30). Hidden until UpdateHybridIndicator has text - a 1-segment recipe never shows it.
+	//   Probe Contact label (no .rc / resource.h). Chart top band right of the "Glass Size" text (CChartOrbit::OnOC2Repaint) and above the plot
+	//   area (top margin 30) - placement corrected 2026-10-14 below. Hidden until UpdateHybridIndicator has text - a 1-segment recipe never shows it.
 	{
 		CRect rcCell, rcChart;
 		m_pParentCellMeasDlg->GetClientRect(&rcCell);
@@ -631,7 +631,31 @@ BOOL CDlgSubOperate::OnInitDialog()
 		int nTop = (rcChart.top > 0) ? rcChart.top : 0;
 		int nLeft = ((rcChart.left > 0) ? rcChart.left : 0) + 2;
 		int nRight = ((rcChart.right < rcCell.right) ? rcChart.right : rcCell.right) - 2;
-		m_labelHybridInfo.Create(_T(""), WS_CHILD | SS_CENTER | SS_CENTERIMAGE, CRect(nLeft, nTop + 1, nRight, nTop + 19), m_pParentCellMeasDlg, 0xFFFE);
+		// LYS 2026-10-14 Glass Size: the chart's TextOut(5, 20) puts the "Glass Size( X:.., Y:.. )" glyphs at about y 8..23, x 5..~210 (10-14 ALN run
+		//   capture), so the old full-width y 1..19 band hid them. The label now starts right of that text - a worst-case sample measured in the
+		//   label font (dialog font, bold) + margin - and runs y 1..27, still above the plot outline (~y 29). UpdateHybridIndicator wraps to 2 lines
+		int nChartLeft = (rcChart.left > 0) ? rcChart.left : 0;
+		int nLabelLeft = nChartLeft + 250;	// fallback reserve (no dialog font)
+		CFont* pMeasureFont = GetFont();
+		if (pMeasureFont != NULL)
+		{
+			LOGFONT lfMeasure;
+			pMeasureFont->GetLogFont(&lfMeasure);
+			lfMeasure.lfWeight = FW_BOLD;
+			CFont fontMeasure;
+			if (fontMeasure.CreateFontIndirect(&lfMeasure))
+			{
+				CClientDC dcMeasure(m_pParentCellMeasDlg);
+				CFont* pOldFont = dcMeasure.SelectObject(&fontMeasure);
+				nLabelLeft = nChartLeft + 5 + dcMeasure.GetTextExtent(_T("Glass Size( X:00000.0, Y:00000.0 )")).cx + 10;
+				dcMeasure.SelectObject(pOldFont);
+			}
+		}
+		if (nLabelLeft > nRight - 240)
+			nLabelLeft = nRight - 240;		// narrow chart: keep room for the text (it may then touch the Glass Size tail)
+		if (nLabelLeft < nLeft)
+			nLabelLeft = nLeft;
+		m_labelHybridInfo.Create(_T(""), WS_CHILD | SS_CENTER | SS_CENTERIMAGE, CRect(nLabelLeft, nTop + 1, nRight, nTop + 27), m_pParentCellMeasDlg, 0xFFFE);
 		m_labelHybridInfo.SetInvalidate(FALSE);	// no parent erase on SetText (the host has no WS_CLIPCHILDREN): no flicker over the chart
 		CFont* pDlgFont = GetFont();				// operate dialog font (Gulim 9, HANGUL_CHARSET): a runtime CLabel starts with the raster SYSTEM_FONT
 		if (pDlgFont != NULL)
@@ -4552,9 +4576,53 @@ void CDlgSubOperate::UpdateHybridIndicator()
 		m_labelHybridInfo.ShowWindow(SW_HIDE);
 	else
 	{
-		m_labelHybridInfo.SetText(strText);
+		// LYS 2026-10-14 Glass Size: the label sits right of the chart's Glass Size text now (narrower). A line wider than the label breaks after
+		//   the segment part (first "   |   " -> CRLF; CLabel draws a CRLF text as centred lines from the top) when two lines fit its height.
+		//   m_strHybridInfo keeps the one-line text (change key)
+		CString strShow = strText;
+		int nBreak = strText.Find(_T("   |   "));
+		CFont* pDlgFont = GetFont();
+		if (nBreak > 0 && pDlgFont != NULL)
+		{
+			LOGFONT lf;
+			pDlgFont->GetLogFont(&lf);
+			lf.lfWeight = FW_BOLD;		// = the label font (dialog font + SetFontBold)
+			CFont fontMeasure;
+			if (fontMeasure.CreateFontIndirect(&lf))
+			{
+				CRect rcLabel;
+				m_labelHybridInfo.GetClientRect(&rcLabel);
+				CClientDC dc(&m_labelHybridInfo);
+				CFont* pOldFont = dc.SelectObject(&fontMeasure);
+				TEXTMETRIC tm;
+				dc.GetTextMetrics(&tm);
+				if (dc.GetTextExtent(strText).cx > rcLabel.Width() - 8 && tm.tmHeight * 2 <= rcLabel.Height())
+					strShow = strText.Left(nBreak) + _T("\r\n") + strText.Mid(nBreak + 7);
+				dc.SelectObject(pOldFont);
+			}
+		}
+		m_labelHybridInfo.SetText(strShow);
 		m_labelHybridInfo.ShowWindow(SW_SHOWNA);
 	}
+}
+
+// LYS 2026-10-15 C3 (7_RESULT 5 s stall, 10-14 15:43:52 / 16:46:44): the OPER line of SyncHybridPathView is written by this one-shot worker,
+//   never by the UI thread. CLogWrapper::KMLOG keeps its process-wide lock while it SendMessageTimeout()s a UI window (SMTO_NOTIMEOUTIFNOTHUNG):
+//   a UI-thread KMLOG that waits for that lock is a deadlock until Windows marks the UI hung (5 s). A worker may wait for the lock - the UI
+//   keeps pumping and the holder finishes. Hybrid only (1-segment recipes never reach the caller)
+static UINT HybridPathLogThread(LPVOID pParam)
+{
+	CString* pstrLog = (CString*)pParam;
+	if (pstrLog == NULL)
+		return 0;
+	// LYS 2026-10-15 C3 review: the same deadlock with the roles swapped - this worker holds the lock and SMTOs the UI while a UI-thread
+	//   KMLOG waits for it. Right after the redraw the UI runs what was sent / posted while it pumped nothing, e.g. at glass end the engine's
+	//   CCD LIVE START (6-64 ms after the engine goes idle, OnCcdLiveMode -> KMLOG SYST) - and this thread would start in the same ms.
+	//   Taking the lock 200 ms later lets that backlog finish first (multi-glass CYCLE: still >= 0.5 s before the next glass's recipe post)
+	::Sleep(200);
+	CLogWrapper::GetInstance()->KMLOG(OPER, *pstrLog);
+	delete pstrLog;
+	return 0;
 }
 
 // LYS 2026-10-12 Hybrid Phase 6 PATH chart outline = the segment being measured once its boundary is done (D6-5 (a)): the outline turns after
@@ -4567,12 +4635,21 @@ void CDlgSubOperate::SyncHybridPathView(int nPass, int nSeg, int nReady)
 		return;
 	int nTarget = m_nHybridPathSeg;
 	if (nPass < 0)
+	{
+		// LYS 2026-10-15 C3 glass end: segment 0 comes back once the glass sequence engine is idle (Result saved, Unload done). Until then the
+		//   outline keeps the last segment, so this redraw (~0.3 s without pumping messages) no longer runs while the result save threads wait
+		//   for the UI (CLogWrapper / CLogFileAccessor GUI sends, dResult export). Lock-free bool reads (as CheckHybridAcStart). A missed restore
+		//   heals itself: GenGlassPath (recipe info / cycle start) and the segment-0 ready of the next measure loop both set segment 0
+		if (CSequenceManager::GetInstance()->IsEngineCompleteAll() != true)
+			return;
 		nTarget = 0;
+	}
 	else if (nSeg >= 0 && nReady == 1)
 		nTarget = nSeg;
 	if (nTarget < 0 || nTarget >= nSegCnt || nTarget == m_nHybridPathSeg)
 		return;
 	int nRot = m_aryHybridSegRot[nTarget];
+	ULONGLONG nDrawStart = ::GetTickCount64();	// LYS 2026-10-15 C3 redraw time (the UI pumps no messages meanwhile), logged below
 	if (nRot != m_nHybridPathRot)
 	{
 		RotateGlassPath(nRot);	// outline, edge cut, probe card height, "Glass Size" text (the cell chart outline is fixed)
@@ -4581,8 +4658,12 @@ void CDlgSubOperate::SyncHybridPathView(int nPass, int nSeg, int nReady)
 	}
 	m_nHybridPathSeg = nTarget;
 	CString strLog;
-	strLog.Format(_T("[HYBRID] Path view segment %d/%d [%s] rot=%d"), nTarget + 1, nSegCnt, (nTarget < m_aryHybridSegName.GetSize()) ? (LPCTSTR)m_aryHybridSegName[nTarget] : _T(""), nRot);
-	CLogWrapper::GetInstance()->KMLOG(OPER, strLog);
+	strLog.Format(_T("[HYBRID] Path view segment %d/%d [%s] rot=%d draw=%u ms"), nTarget + 1, nSegCnt, (nTarget < m_aryHybridSegName.GetSize()) ? (LPCTSTR)m_aryHybridSegName[nTarget] : _T(""), nRot,
+		(UINT)(::GetTickCount64() - nDrawStart));	// LYS 2026-10-15 C3 + draw time
+	// LYS 2026-10-15 C3 the line goes to a one-shot worker (HybridPathLogThread) - this UI timer path never waits for the CLogWrapper lock
+	CString* pstrLog = new CString(strLog);
+	if (AfxBeginThread(HybridPathLogThread, pstrLog) == NULL)
+		delete pstrLog;		// no thread: the line is dropped rather than written from the UI thread
 }
 
 // LYS 2026-10-12 Hybrid Phase 6 1-segment recipe with a manual Cell ID config: panel-A tokens keyed by the status slot the 1-segment chart
